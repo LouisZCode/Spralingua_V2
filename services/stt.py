@@ -14,7 +14,7 @@ def stt_deepgram():
     return DeepgramSTTService(
         api_key=deepgram_api_key,
         live_options=LiveOptions(
-            language="en",         # Language input
+            language="de",         # Language input
             model="nova-2",        # Deepgram model
             smart_format=True,     # Better formatting
             utterance_end_ms=1000, # Wait 1s after last word for utterance boundary
