@@ -3,6 +3,7 @@ Here you will find the wrapper to make the langchain create agent work with pipe
 """
 
 from .conversation import _raw_agent, CONVERSATIONAL_MODEL
+from .dynamic_prompts import Context
 
 # Wrapper function for Pipecat compatibility
 async def _astream(input_dict, config=None):
@@ -17,6 +18,7 @@ async def _astream(input_dict, config=None):
     async for token, metadata in _raw_agent.astream(
         messages,
         config=run_config,
+        context=Context(user_level="expert"),
         stream_mode="messages"
     ):
         # Only yield content from model node (not tool calls)

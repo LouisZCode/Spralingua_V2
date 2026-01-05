@@ -25,6 +25,6 @@ def tts_minimax(session):
             pitch=0,                   # -12 to 12
             volume=1.0,                # 0 to 10
             emotion="neutral",         # happy, sad, angry, fearful, disgusted, surprised, neutral, fluent
-            language=Language.DE,      # Language enum (ES, EN, DE, FR, etc.)
+            language=Language.EN,      # Language enum (ES, EN, DE, FR, etc.)
         )
     )
