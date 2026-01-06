@@ -12,8 +12,9 @@ from langchain.agents.middleware import dynamic_prompt, ModelRequest
 class Context:
     #This will come from the database in the future:
     user_name : str = "Luis"
-    topic : str = "football"
+    topic : str = "the user"
     user_level: str = "A1"
+    current_topic :str = "topic_1"
 
 
 
@@ -21,14 +22,15 @@ class Context:
 @dynamic_prompt
 def personalized_prompt(request: ModelRequest) -> str:
     ctx = request.runtime.context
-    level_config = prompts["user_level"][ctx.user_level]
+    conversation_goal = prompts["conversation_goal"][ctx.user_level][ctx.current_topic]
+
     #These ones maybe to come from the user selection in the UI? specially the last []
     agent_story = prompts["agent_story"]["happy_harry"]
-    agent_personality = prompts["agent_personality"]["happy"]
+    agent_personality = prompts["agent_personality"]["friendly"]
 
     return conversation_prompt.format(
         name = ctx.user_name,
-        user_level = level_config,
+        conversation_goal = conversation_goal,
         topic = ctx.topic,
         agent_story = agent_story,
         agent_personality = agent_personality
