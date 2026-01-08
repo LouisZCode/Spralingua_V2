@@ -1,10 +1,7 @@
-from ui import demo
 
-demo.launch
-
-""" from pipeline import pipeline
+from pipeline import pipeline
 import asyncio
 
 if __name__ == "__main__":
-    asyncio.run(pipeline()) """
+    asyncio.run(pipeline())
 
