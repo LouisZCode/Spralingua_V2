@@ -38,6 +38,11 @@ class SessionLogger:
         self._log_file = self._day_dir / f"{self._session_id}.log"
         self._file = open(self._log_file, "w", encoding="utf-8")
 
+        # Markdown transcript file
+        self._transcript_file = self._day_dir / f"{self._session_id}.md"
+        self._md_file = open(self._transcript_file, "w", encoding="utf-8")
+        self._system_prompt_written = False
+
         # Turn timing trackers
         self._user_started_ts = None
         self._user_stopped_ts = None
@@ -66,6 +71,17 @@ class SessionLogger:
 
         self._file.write("--- CONVERSATION ---\n\n")
         self._file.flush()
+
+    def write_system_prompt(self, prompt: str):
+        """Write system prompt to markdown transcript (call once, first turn)."""
+        if self._system_prompt_written:
+            return
+        self._md_file.write(f"# {self._session_id.replace('_', ' ').title()} - {self._session_start.strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+        self._md_file.write("## System Prompt\n```\n")
+        self._md_file.write(prompt)
+        self._md_file.write("\n```\n\n## Conversation\n\n")
+        self._md_file.flush()
+        self._system_prompt_written = True
 
     def _write(self, message: str):
         """Write a line to log file."""
@@ -116,8 +132,11 @@ class SessionLogger:
         # Only capture first TTS chunk timestamp (marks LLM done)
         if self._tts_started_ts is None:
             self._tts_started_ts = datetime.now()
-        # Keep updating text (last chunk has full/latest response)
-        self._agent_text = text
+        # Concatenate chunks to build full response
+        if self._agent_text is None:
+            self._agent_text = text
+        else:
+            self._agent_text += " " + text
 
     def on_bot_started_speaking(self):
         """Called when audio playback starts."""
@@ -156,6 +175,13 @@ class SessionLogger:
             self._write(f"           Agent: \"{agent_display}\"")
         self._write("")  # Blank line between turns
 
+        # Write to markdown transcript (full text, not truncated)
+        if self._user_text:
+            self._md_file.write(f"User: {self._user_text}\n\n")
+        if self._agent_text:
+            self._md_file.write(f"Harry: {self._agent_text}\n\n---\n\n")
+        self._md_file.flush()
+
     def _reset_turn(self):
         """Reset all turn tracking variables."""
         self._user_started_ts = None
@@ -177,7 +203,10 @@ class SessionLogger:
         self._file.write("=" * 70 + "\n")
         self._file.close()
 
+        self._md_file.close()
+
         print(f"Session log saved to: {self._log_file}")
+        print(f"Transcript saved to: {self._transcript_file}")
 
 
 def setup_session_logger(stt, tts, llm_model: str, log_dir: str = "logs/conversations"):

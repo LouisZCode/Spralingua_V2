@@ -19,12 +19,12 @@ def tts_minimax(session):
         group_id=minimax_group_id,
         aiohttp_session=session,
         model="speech-02-turbo",   # speech-02-turbo (fast), speech-02-hd (quality) - constructor param
-        voice_id="german_bavarian_male_v2",  # Your cloned voice or system voice, german_bavarian_female, german_bavarian_male_v2 , Calm_Woman, - constructor param
+        voice_id="English_ManWithDeepVoice",  # luis_voice_clone, german_bavarian_female, german_bavarian_male_v2 , Calm_Woman, - constructor param
         params=MiniMaxHttpTTSService.InputParams(
             speed=1.0,                 # 0.5 to 2.0
             pitch=0,                   # -12 to 12
             volume=1.0,                # 0 to 10
-            emotion="happy",         # happy, sad, angry, fearful, disgusted, surprised, neutral, fluent
+            emotion="neutral",         # happy, sad, angry, fearful, disgusted, surprised, neutral, fluent
             language=Language.EN,      # Language enum (ES, EN, DE, FR, etc.)
         )
     )

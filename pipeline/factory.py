@@ -14,6 +14,7 @@ from .converters import TranscriptionToContextConverter
 
 # Your LangChain agent
 from agents import conversation_agent
+from agents.pipecat_wrapper import set_session_logger
 
 # Session logging
 from logs import setup_session_logger
@@ -38,6 +39,7 @@ async def pipeline():
 
         # Session logger - extracts config dynamically from services
         session_logger = setup_session_logger(stt, tts, conversation_agent.model)
+        set_session_logger(session_logger)  # Enable transcript logging
 
         # Audio buffer processor for recording
         audiobuffer = AudioBufferProcessor(num_channels=1)

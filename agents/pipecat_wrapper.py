@@ -3,7 +3,15 @@ Here you will find the wrapper to make the langchain create agent work with pipe
 """
 
 from .conversation import _raw_agent, CONVERSATIONAL_MODEL
-from .dynamic_prompts import Context
+from .dynamic_prompts import Context, get_last_system_prompt
+
+# Session logger reference (set by factory.py)
+_session_logger = None
+
+def set_session_logger(logger):
+    """Set the session logger for transcript logging."""
+    global _session_logger
+    _session_logger = logger
 
 # Wrapper function for Pipecat compatibility
 async def _astream(input_dict, config=None):
@@ -24,6 +32,12 @@ async def _astream(input_dict, config=None):
         # Only yield content from model node (not tool calls)
         if hasattr(token, "content") and token.content:
             yield token.content
+
+    # After first LLM call, capture system prompt for transcript
+    if _session_logger and not _session_logger._system_prompt_written:
+        prompt = get_last_system_prompt()
+        if prompt:
+            _session_logger.write_system_prompt(prompt)
 
 
 # Export wrapper that Pipecat can use
