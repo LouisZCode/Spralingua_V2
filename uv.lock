@@ -10,6 +10,7 @@ resolution-markers = [
 name = "aenum"
 version = "3.1.16"
 source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/09/7a/61ed58e8be9e30c3fe518899cc78c284896d246d51381bab59b5db11e1f3/aenum-3.1.16.tar.gz", hash = "sha256:bfaf9589bdb418ee3a986d85750c7318d9d2839c1b1a1d6fe8fc53ec201cf140", size = 137693, upload-time = "2026-01-12T22:34:38.819Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/e3/52/6ad8f63ec8da1bf40f96996d25d5b650fdd38f5975f8c813732c47388f18/aenum-3.1.16-py3-none-any.whl", hash = "sha256:9035092855a98e41b66e3d0998bd7b96280e85ceb3a04cc035636138a1943eaf", size = 165627, upload-time = "2025-04-25T03:17:58.89Z" },
 ]
@@ -904,6 +905,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/12/3a74c22abdfddd877dfc2ee666d516f9132877fcd25eb4dd694835c59c79/langchain-1.2.0.tar.gz", hash = "sha256:a087d1e2b2969819e29a91a6d5f98302aafe31bd49ba377ecee3bf5a5dcfe14a", size = 536126, upload-time = "2025-12-15T14:51:42.24Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/23/00/4e3fa0d90f5a5c376ccb8ca983d0f0f7287783dfac48702e18f01d24673b/langchain-1.2.0-py3-none-any.whl", hash = "sha256:82f0d17aa4fbb11560b30e1e7d4aeb75e3ad71ce09b85c90ab208b181a24ffac", size = 102828, upload-time = "2025-12-15T14:51:40.802Z" },
+]
+
+[[package]]
+name = "langchain-cerebras"
+version = "0.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "langchain-core" },
+    { name = "langchain-openai" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/64/d8/76356d5361b3dd6e1febcc62cc83acc01a88f7fca43b836d4e3a72434a37/langchain_cerebras-0.8.2.tar.gz", hash = "sha256:1594f87d08955a141269d48527d9a636827f6cb60167c447d8c5969eeaa9c8c7", size = 11267, upload-time = "2025-11-24T18:14:56.356Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/fc/f9/239509fccf433f7cb34f8d2cf15885e4eda5e04f1f3110da295543fbaec5/langchain_cerebras-0.8.2-py3-none-any.whl", hash = "sha256:ca956bd8906e4760d903d3b9c614913488a87e44ee61522fafd66267dfb6582f", size = 9961, upload-time = "2025-11-24T18:14:55.305Z" },
 ]
 
 [[package]]
@@ -2258,6 +2272,7 @@ dependencies = [
     { name = "aiohttp" },
     { name = "gradio" },
     { name = "langchain" },
+    { name = "langchain-cerebras" },
     { name = "langchain-openai" },
     { name = "pipecat" },
     { name = "pipecat-ai", extra = ["deepgram", "silero"] },
@@ -2271,6 +2286,7 @@ requires-dist = [
     { name = "aiohttp", specifier = ">=3.13.2" },
     { name = "gradio", specifier = ">=6.2.0" },
     { name = "langchain", specifier = ">=1.2.0" },
+    { name = "langchain-cerebras", specifier = ">=0.8.2" },
     { name = "langchain-openai", specifier = ">=1.1.6" },
     { name = "pipecat", specifier = ">=0.3.0" },
     { name = "pipecat-ai", extras = ["deepgram", "silero"], specifier = ">=0.0.98" },

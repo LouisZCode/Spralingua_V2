@@ -1,19 +1,17 @@
 from dotenv import load_dotenv
 from langchain.agents import create_agent
+from langchain_cerebras import ChatCerebras
 from langgraph.checkpoint.memory import InMemorySaver
 from .dynamic_prompts import personalized_prompt, Context
 
 load_dotenv()
-CONVERSATIONAL_MODEL = "openai:gpt-4.1-nano-2025-04-14"
+CONVERSATIONAL_MODEL = "llama-3.3-70b"
 
-#gpt-4o-mini
-#gpt-4.1-nano-2025-04-14
+_model = ChatCerebras(model=CONVERSATIONAL_MODEL)
 
 _raw_agent = create_agent(
-    model=CONVERSATIONAL_MODEL,
+    model=_model,
     checkpointer=InMemorySaver(),
     middleware=[personalized_prompt],
     context_schema=Context
 )
-
-

@@ -1,3 +1,5 @@
+#  uvicorn main:app --reload
+
 
 from pipeline import pipeline
 import asyncio

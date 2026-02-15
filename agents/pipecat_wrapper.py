@@ -2,7 +2,7 @@
 Here you will find the wrapper to make the langchain create agent work with pipecat.
 """
 
-from .conversation import _raw_agent, CONVERSATIONAL_MODEL
+from .conversation_agent import _raw_agent, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 
 # Session logger reference (set by factory.py)
