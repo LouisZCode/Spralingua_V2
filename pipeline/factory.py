@@ -2,7 +2,7 @@ import wave
 import aiohttp
 from pydub import AudioSegment
 
-from services import stt_deepgram, tts_minimax, transport_vad
+from services import stt_deepgram, tts_minimax, transport_websocket
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
@@ -22,8 +22,8 @@ from logs import setup_session_logger
 async def pipeline():
     async with aiohttp.ClientSession() as session:
 
-        # Local mic/speaker
-        transport = transport_vad()
+        # WebSocket transport (browser clients connect on ws://0.0.0.0:8765)
+        transport = transport_websocket()
 
         # Speech-to-Text
         stt = stt_deepgram()

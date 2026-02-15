@@ -1,6 +1,6 @@
 from .stt import stt_deepgram
 from .tts import tts_minimax
-from .transport import transport_vad
+from .transport import transport_vad, transport_websocket
 
 
 print("Services module loaded...")

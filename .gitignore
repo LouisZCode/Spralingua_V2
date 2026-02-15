@@ -9,7 +9,7 @@ logs/conversations/
 # Internal
 todo_list.md
 LEARNINGS.md
-DESIGN_SPECS.md
+ARCHITECTURE.md
 
 # Logs
 *.log
