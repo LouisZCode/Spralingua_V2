@@ -5,7 +5,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from .dynamic_prompts import personalized_prompt, Context
 
 load_dotenv()
-CONVERSATIONAL_MODEL = "llama-3.3-70b"
+CONVERSATIONAL_MODEL = "gpt-oss-120b"
 
 _model = ChatCerebras(model=CONVERSATIONAL_MODEL)
 

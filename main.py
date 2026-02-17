@@ -1,3 +1,8 @@
+#for now...  Backend    python main.py
+# Front end: cd frontend && npm run dev
+
+
+
 #  uvicorn main:app --reload
 
 
