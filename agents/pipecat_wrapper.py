@@ -1,46 +1,42 @@
 """
-Here you will find the wrapper to make the langchain create agent work with pipecat.
+ClientWrapper: makes the LangChain agent compatible with Pipecat's LangchainProcessor.
+
+Each client connection gets its own ClientWrapper instance, holding:
+- agent: a fresh LangChain agent with its own InMemorySaver
+- user_id: unique thread_id for conversation memory
+- logger: per-session transcript logger
 """
 
-from .conversation_agent import _raw_agent, CONVERSATIONAL_MODEL
+from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 
-# Session logger reference (set by factory.py)
-_session_logger = None
 
-def set_session_logger(logger):
-    """Set the session logger for transcript logging."""
-    global _session_logger
-    _session_logger = logger
-
-# Wrapper function for Pipecat compatibility
-async def _astream(input_dict, config=None):
-    """Translates Pipecat format to agent format and streams tokens."""
-    text = input_dict.get("input", "")
-    messages = {"messages": [{"role": "user", "content": text}]}
-
-    # Add thread_id for InMemorySaver
-    run_config = {"configurable": {"thread_id": "voice-session"}}
-
-    # Use stream_mode="messages" for token-by-token streaming
-    async for token, metadata in _raw_agent.astream(
-        messages,
-        config=run_config,
-        context=Context(),
-        stream_mode="messages"
-    ):
-        # Only yield content from model node (not tool calls)
-        if hasattr(token, "content") and token.content:
-            yield token.content
-
-    # After first LLM call, capture system prompt for transcript
-    if _session_logger and not _session_logger._system_prompt_written:
-        prompt = get_last_system_prompt()
-        if prompt:
-            _session_logger.write_system_prompt(prompt)
-
-
-# Export wrapper that Pipecat can use
-class conversation_agent:
+class ClientWrapper:
     model = CONVERSATIONAL_MODEL
-    astream = staticmethod(_astream)
+
+    def __init__(self, user_id, logger):
+        self.user_id = user_id
+        self.logger = logger
+        self.agent = agent_assembly(user_id)
+
+    async def astream(self, input_dict, config=None):
+        """Translates Pipecat format to agent format and streams tokens."""
+        text = input_dict.get("input", "")
+        messages = {"messages": [{"role": "user", "content": text}]}
+
+        run_config = {"configurable": {"thread_id": self.user_id}}
+
+        async for token, metadata in self.agent.astream(
+            messages,
+            config=run_config,
+            context=Context(),
+            stream_mode="messages"
+        ):
+            if hasattr(token, "content") and token.content:
+                yield token.content
+
+        # After first LLM call, capture system prompt for transcript
+        if self.logger and not self.logger._system_prompt_written:
+            prompt = get_last_system_prompt()
+            if prompt:
+                self.logger.write_system_prompt(prompt)

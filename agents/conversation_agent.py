@@ -9,9 +9,11 @@ CONVERSATIONAL_MODEL = "gpt-oss-120b"
 
 _model = ChatCerebras(model=CONVERSATIONAL_MODEL)
 
-_raw_agent = create_agent(
-    model=_model,
-    checkpointer=InMemorySaver(),
-    middleware=[personalized_prompt],
-    context_schema=Context
-)
+
+def agent_assembly(user_id : int):
+    return create_agent(
+        model=_model,
+        checkpointer=InMemorySaver(),
+        middleware=[personalized_prompt],
+        context_schema=Context
+        )

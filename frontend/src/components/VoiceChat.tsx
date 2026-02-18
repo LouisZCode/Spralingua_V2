@@ -7,7 +7,9 @@ import {
   ProtobufFrameSerializer,
 } from "@pipecat-ai/websocket-transport";
 
-const WS_URL = "ws://localhost:8765";
+// Generate a random user ID per session (later: replace with auth)
+const USER_ID = crypto.randomUUID();
+const WS_URL = `ws://localhost:8765/ws/${USER_ID}`;
 
 interface LogEntry {
   time: string;

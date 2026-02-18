@@ -3,9 +3,11 @@ Here you can find all the existing agents ready to be used. Already prompt and a
 
 You can find here:
 
-_raw_agent
+ClientWrapper - per-client wrapper for Pipecat (creates agent + logger per connection)
+agent_assembly - factory function to create a fresh LangChain agent
 
 """
-from .pipecat_wrapper import conversation_agent
+from .pipecat_wrapper import ClientWrapper
+from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 
 print("Agents module loaded correctly...")

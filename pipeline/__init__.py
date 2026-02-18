@@ -1,3 +1,3 @@
-from .factory import pipeline
+from .factory import run_pipeline
 from .converters import TranscriptionToContextConverter
 

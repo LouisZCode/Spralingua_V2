@@ -2,7 +2,7 @@ import wave
 import aiohttp
 from pydub import AudioSegment
 
-from services import stt_deepgram, tts_minimax, transport_websocket
+from services import stt_deepgram, tts_minimax, transport_fastapi_ws
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
@@ -12,59 +12,48 @@ from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 
 from .converters import TranscriptionToContextConverter
 
-# Your LangChain agent
-from agents import conversation_agent
-from agents.pipecat_wrapper import set_session_logger
+from agents import ClientWrapper, CONVERSATIONAL_MODEL
 
-# Session logging
 from logs import setup_session_logger
 
-async def pipeline():
+
+async def run_pipeline(websocket, user_id: str):
+    """Builds and runs a full pipeline for a single client connection."""
     async with aiohttp.ClientSession() as session:
 
-        # WebSocket transport (browser clients connect on ws://0.0.0.0:8765)
-        transport = transport_websocket()
+        # Transport: one per client (wraps this specific websocket)
+        transport = transport_fastapi_ws(websocket)
 
-        # Speech-to-Text
+        # Fresh services per client
         stt = stt_deepgram()
-
-        # LLM (LangChain agent instead of OpenAI directly)
-        llm = LangchainProcessor(chain=conversation_agent)
-
-        # Text-to-Speech (MiniMax with custom params)
         tts = tts_minimax(session)
-
-        # Simple frame converter (agent handles memory via InMemorySaver)
         converter = TranscriptionToContextConverter()
 
-        # Session logger - extracts config dynamically from services
-        session_logger = setup_session_logger(stt, tts, conversation_agent.model)
-        set_session_logger(session_logger)  # Enable transcript logging
+        # Per-client logger
+        session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
 
-        # Audio buffer processor for recording
+        # Per-client wrapper (agent + logger inside)
+        wrapper = ClientWrapper(user_id=user_id, logger=session_logger)
+        llm = LangchainProcessor(chain=wrapper)
+
+        # Per-client audio recorder
         audiobuffer = AudioBufferProcessor(num_channels=1)
 
-        # Save audio when recording stops (WAV → MP3)
         @audiobuffer.event_handler("on_audio_data")
         async def on_audio_data(buffer, audio, sample_rate, num_channels):
             base_path = session_logger.session_dir / session_logger.session_id
             wav_path = base_path.with_suffix(".wav")
             mp3_path = base_path.with_suffix(".mp3")
 
-            # Save WAV
             with wave.open(str(wav_path), "wb") as wf:
                 wf.setnchannels(num_channels)
-                wf.setsampwidth(2)  # 16-bit
+                wf.setsampwidth(2)
                 wf.setframerate(sample_rate)
                 wf.writeframes(audio)
 
-            # Convert to MP3
             audio_segment = AudioSegment.from_wav(str(wav_path))
             audio_segment.export(str(mp3_path), format="mp3", bitrate="128k")
-
-            # Remove WAV (keep only MP3)
             wav_path.unlink()
-
             print(f"Audio saved to: {mp3_path}")
 
         pipeline = Pipeline([
@@ -74,17 +63,19 @@ async def pipeline():
             llm,
             tts,
             transport.output(),
-            audiobuffer,  # After output - captures both streams
+            audiobuffer,
         ])
 
         task = PipelineTask(pipeline)
         runner = PipelineRunner()
 
-        # Start recording
         await audiobuffer.start_recording()
+
+        print(f"Client connected: {user_id}")
 
         try:
             await runner.run(task)
         finally:
             await audiobuffer.stop_recording()
             session_logger.close()
+            print(f"Client disconnected: {user_id}")
