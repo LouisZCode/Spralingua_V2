@@ -17,7 +17,7 @@ from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from logs import setup_session_logger
 
 
-async def run_pipeline(websocket, user_id: str):
+async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: str = "introducing_yourself", voice: str = "happy_harry"):
     """Builds and runs a full pipeline for a single client connection."""
     async with aiohttp.ClientSession() as session:
 
@@ -26,14 +26,14 @@ async def run_pipeline(websocket, user_id: str):
 
         # Fresh services per client
         stt = stt_deepgram()
-        tts = tts_minimax(session)
+        tts = tts_minimax(session, voice=voice)
         converter = TranscriptionToContextConverter()
 
         # Per-client logger
         session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
 
-        # Per-client wrapper (agent + logger inside)
-        wrapper = ClientWrapper(user_id=user_id, logger=session_logger)
+        # Per-client wrapper (agent + logger + context settings inside)
+        wrapper = ClientWrapper(user_id=user_id, logger=session_logger, level=level, situation=situation, voice=voice)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder
@@ -71,7 +71,7 @@ async def run_pipeline(websocket, user_id: str):
 
         await audiobuffer.start_recording()
 
-        print(f"Client connected: {user_id}")
+        print(f"Client connected: {user_id} | level={level} situation={situation} voice={voice}")
 
         try:
             await runner.run(task)

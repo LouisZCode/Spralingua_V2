@@ -13,13 +13,23 @@ from pipecat.services.minimax.tts import MiniMaxHttpTTSService
 from config import minimax_api_key, minimax_group_id
 from pipecat.transcriptions.language import Language
 
-def tts_minimax(session):
+# Available voices: key → MiniMax voice_id
+VOICE_MAP = {
+    "happy_harry": "german_bavarian_male_v2",
+    "sophie": "german_bavarian_female",
+    "calm_woman": "Calm_Woman",
+    "luis_clone": "luis_voice_clone",
+    "German-Male": "German_PlayfulMan"
+}
+
+def tts_minimax(session, voice: str = "happy_harry"):
+    voice_id = VOICE_MAP.get(voice, "german_bavarian_male_v2")
     return MiniMaxHttpTTSService(
         api_key=minimax_api_key,
         group_id=minimax_group_id,
         aiohttp_session=session,
-        model="speech-02-turbo",   # speech-02-turbo (fast), speech-02-hd (quality) - constructor param
-        voice_id="English_ManWithDeepVoice",  # luis_voice_clone, german_bavarian_female, german_bavarian_male_v2 , Calm_Woman, - constructor param
+        model="speech-2.8-turbo",   # speech-02-turbo (fast), speech-02-hd (quality) - constructor param
+        voice_id=voice_id,
         params=MiniMaxHttpTTSService.InputParams(
             speed=1.0,                 # 0.5 to 2.0
             pitch=0,                   # -12 to 12

@@ -14,10 +14,15 @@ from .dynamic_prompts import Context, get_last_system_prompt
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
-    def __init__(self, user_id, logger):
+    def __init__(self, user_id, logger, level="A1", situation="introducing_yourself", voice="happy_harry"):
         self.user_id = user_id
         self.logger = logger
         self.agent = agent_assembly(user_id)
+        self.context = Context(
+            user_level=level,
+            situation=situation,
+            agent_voice=voice,
+        )
 
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens."""
@@ -29,7 +34,7 @@ class ClientWrapper:
         async for token, metadata in self.agent.astream(
             messages,
             config=run_config,
-            context=Context(),
+            context=self.context,
             stream_mode="messages"
         ):
             if hasattr(token, "content") and token.content:

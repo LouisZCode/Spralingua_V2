@@ -14,6 +14,12 @@ def health():
 
 
 @app.websocket("/ws/{user_id}")
-async def ws_endpoint(websocket: WebSocket, user_id: str):
+async def ws_endpoint(
+    websocket: WebSocket,
+    user_id: str,
+    level: str = "A1",
+    situation: str = "introducing_yourself",
+    voice: str = "happy_harry",
+):
     await websocket.accept()
-    await run_pipeline(websocket, user_id)
+    await run_pipeline(websocket, user_id, level, situation, voice)

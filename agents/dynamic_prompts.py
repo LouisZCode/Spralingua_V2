@@ -1,5 +1,5 @@
 """
-Here we will contruct the dynamic prompts that will be given to the AI Dynamically.
+Here we will construct the dynamic prompts that will be given to the AI Dynamically.
 """
 from .load_prompts import load_prompts
 prompts = load_prompts()
@@ -10,11 +10,12 @@ from langchain.agents.middleware import dynamic_prompt, ModelRequest
 
 @dataclass
 class Context:
-    #This will come from the database in the future:
-    user_name : str = "Luis"
-    topic : str = "the user"
+    # This will come from the database / UI selection in the future:
+    user_name: str = "Luis"
     user_level: str = "A1"
-    current_topic :str = "topic_0"
+    situation: str = "introducing_yourself"
+    agent_voice: str = "happy_harry"
+    agent_personality: str = "friendly"
 
 # Module-level variable to capture last generated prompt (for logging)
 _last_system_prompt = None
@@ -27,18 +28,19 @@ def get_last_system_prompt() -> str:
 def personalized_prompt(request: ModelRequest) -> str:
     global _last_system_prompt
     ctx = request.runtime.context
-    conversation_goal = prompts["conversation_goal"][ctx.user_level][ctx.current_topic]
 
-    #These ones maybe to come from the user selection in the UI? specially the last []
-    agent_story = prompts["agent_story"]["happy_harry"]
-    agent_personality = prompts["agent_personality"]["friendly"]
+    level = prompts["levels"][ctx.user_level]
+    language_rules = level["language_rules"]
+    situation = level["situations"][ctx.situation]
+
+    agent_story = prompts["agent_story"].get(ctx.agent_voice, "")
+    agent_personality = prompts["agent_personality"][ctx.agent_personality]
 
     prompt = conversation_prompt.format(
-        name = ctx.user_name,
-        conversation_goal = conversation_goal,
-        topic = ctx.topic,
-        agent_story = agent_story,
-        agent_personality = agent_personality
+        language_rules=language_rules,
+        situation=situation,
+        agent_story=agent_story,
+        agent_personality=agent_personality,
     )
     _last_system_prompt = prompt
     return prompt

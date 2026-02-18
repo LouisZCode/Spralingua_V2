@@ -9,7 +9,7 @@ import {
 
 // Generate a random user ID per session (later: replace with auth)
 const USER_ID = crypto.randomUUID();
-const WS_URL = `ws://localhost:8765/ws/${USER_ID}`;
+const BASE_WS = "ws://localhost:8765";
 
 interface LogEntry {
   time: string;
@@ -17,10 +17,26 @@ interface LogEntry {
   type: "user" | "bot" | "system" | "error";
 }
 
+const LEVELS: Record<string, { label: string; situations: Record<string, string> }> = {
+  A1: { label: "A1 - Beginner", situations: { introducing_yourself: "Introducing Yourself" } },
+  B2: { label: "B2 - Upper Intermediate", situations: { planning_picnic: "Planning a Picnic" } },
+};
+
+const VOICES: Record<string, string> = {
+  happy_harry: "Harry (Male)",
+  sophie: "Sophie (Female)",
+  calm_woman: "Calm Woman",
+  luis_clone: "Luis (Clone)",
+  "German-Male": "German Male",
+};
+
 export default function VoiceChat() {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Disconnected");
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [level, setLevel] = useState("A1");
+  const [situation, setSituation] = useState("introducing_yourself");
+  const [voice, setVoice] = useState("happy_harry");
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
@@ -84,12 +100,13 @@ export default function VoiceChat() {
       });
 
       clientRef.current = client;
-      await client.connect({ wsUrl: WS_URL });
+      const wsUrl = `${BASE_WS}/ws/${USER_ID}?level=${level}&situation=${situation}&voice=${voice}`;
+      await client.connect({ wsUrl });
     } catch (e) {
       log(`Connection failed: ${e}`, "error");
       setConnected(false);
     }
-  }, [log]);
+  }, [log, level, situation, voice]);
 
   const disconnect = useCallback(async () => {
     if (clientRef.current) {
@@ -121,6 +138,52 @@ export default function VoiceChat() {
         <p className="mb-4 text-center text-sm text-slate-400">
           Status: <span className="font-semibold text-slate-200">{status}</span>
         </p>
+
+        <div className="mb-4 grid grid-cols-3 gap-3">
+          <div>
+            <label className="mb-1 block text-xs text-slate-400">Level</label>
+            <select
+              value={level}
+              onChange={(e) => {
+                setLevel(e.target.value);
+                const firstSituation = Object.keys(LEVELS[e.target.value].situations)[0];
+                setSituation(firstSituation);
+              }}
+              disabled={connected}
+              className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 disabled:opacity-40"
+            >
+              {Object.entries(LEVELS).map(([key, val]) => (
+                <option key={key} value={key}>{val.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-400">Situation</label>
+            <select
+              value={situation}
+              onChange={(e) => setSituation(e.target.value)}
+              disabled={connected}
+              className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 disabled:opacity-40"
+            >
+              {Object.entries(LEVELS[level].situations).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs text-slate-400">Voice</label>
+            <select
+              value={voice}
+              onChange={(e) => setVoice(e.target.value)}
+              disabled={connected}
+              className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 disabled:opacity-40"
+            >
+              {Object.entries(VOICES).map(([key, label]) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
 
         <div className="mb-6 flex gap-3">
           <button
