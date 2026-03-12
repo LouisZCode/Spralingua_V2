@@ -28,6 +28,8 @@ const VOICES: Record<string, string> = {
   calm_woman: "Calm Woman",
   luis_clone: "Luis (Clone)",
   "German-Male": "German Male",
+  German_Female: "German Female",
+  Mexican_in_Germany: "Mexican in Germany",
 };
 
 export default function VoiceChat() {

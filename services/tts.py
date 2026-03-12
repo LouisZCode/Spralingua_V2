@@ -19,7 +19,9 @@ VOICE_MAP = {
     "sophie": "german_bavarian_female",
     "calm_woman": "Calm_Woman",
     "luis_clone": "luis_voice_clone",
-    "German-Male": "German_PlayfulMan"
+    "German-Male": "German_PlayfulMan",
+    "German_Female": "moss_audio_4872e74b-124f-11f1-841b-1e2fac512910",
+    "Mexican_in_Germany" : "moss_audio_6183d31a-126c-11f1-bfa6-763108879732"
 }
 
 def tts_minimax(session, voice: str = "happy_harry"):

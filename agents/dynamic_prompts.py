@@ -31,7 +31,19 @@ def personalized_prompt(request: ModelRequest) -> str:
 
     level = prompts["levels"][ctx.user_level]
     language_rules = level["language_rules"]
-    situation = level["situations"][ctx.situation]
+
+    situation_data = level["situations"][ctx.situation]
+    if isinstance(situation_data, dict):
+        situation = situation_data.get("description", "")
+        opening_phrase = situation_data.get("opening_phrase", "")
+        conversation_flow = situation_data.get("conversation_flow", "")
+        required_vocabulary = situation_data.get("required_vocabulary", "")
+        topic_rules = situation_data.get("topic_rules", "")
+        steering = situation_data.get("steering", "")
+    else:
+        # Backward compat: plain string
+        situation = situation_data
+        opening_phrase = conversation_flow = required_vocabulary = topic_rules = steering = ""
 
     agent_story = prompts["agent_story"].get(ctx.agent_voice, "")
     agent_personality = prompts["agent_personality"][ctx.agent_personality]
@@ -39,8 +51,13 @@ def personalized_prompt(request: ModelRequest) -> str:
     prompt = conversation_prompt.format(
         language_rules=language_rules,
         situation=situation,
+        opening_phrase=opening_phrase,
+        conversation_flow=conversation_flow,
+        required_vocabulary=required_vocabulary,
+        topic_rules=topic_rules,
         agent_story=agent_story,
         agent_personality=agent_personality,
+        steering=steering,
     )
     _last_system_prompt = prompt
     return prompt
