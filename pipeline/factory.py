@@ -67,6 +67,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         ])
 
         task = PipelineTask(pipeline)
+        wrapper._pipeline_task = task  # Let wrapper end the pipeline via EndTaskFrame
         runner = PipelineRunner()
 
         await audiobuffer.start_recording()

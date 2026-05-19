@@ -1,4 +1,4 @@
-# Backend:  uvicorn main:app --reload --host 0.0.0.0 --port 8765
+# Backend:  uvicorn main:app --host 0.0.0.0 --port 8765
 # Frontend: cd frontend && npm run dev
 
 from fastapi import FastAPI, WebSocket

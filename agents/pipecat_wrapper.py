@@ -7,8 +7,24 @@ Each client connection gets its own ClientWrapper instance, holding:
 - logger: per-session transcript logger
 """
 
+import asyncio
+
+from pipecat.frames.frames import CancelTaskFrame
+
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
-from .dynamic_prompts import Context, get_last_system_prompt
+from .dynamic_prompts import Context, get_last_system_prompt, prompts
+
+GOODBYE_PHRASES = [
+    "goodbye", "bye", "see you", "take care",
+    "nice talking", "great talking", "good talking",
+    "talk to you later", "talk soon", "have a good",
+    "have a nice", "it was nice meeting",
+]
+
+
+def _contains_goodbye(text: str) -> bool:
+    lowered = text.lower()
+    return any(phrase in lowered for phrase in GOODBYE_PHRASES)
 
 
 class ClientWrapper:
@@ -23,13 +39,21 @@ class ClientWrapper:
             situation=situation,
             agent_voice=voice,
         )
+        self._pipeline_task = None  # Set by factory after pipeline creation
+        self._end_task = None
+
+        situation_data = prompts["levels"][level]["situations"][situation]
+        self._max_exchanges = situation_data.get("number_of_exchanges", 8) if isinstance(situation_data, dict) else 8
+        self._exchange_count = 0
 
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens."""
         text = input_dict.get("input", "")
         messages = {"messages": [{"role": "user", "content": text}]}
-
         run_config = {"configurable": {"thread_id": self.user_id}}
+
+        self._exchange_count += 1
+        full_response = []
 
         async for token, metadata in self.agent.astream(
             messages,
@@ -38,10 +62,25 @@ class ClientWrapper:
             stream_mode="messages"
         ):
             if hasattr(token, "content") and token.content:
+                full_response.append(token.content)
                 yield token.content
+
+                # Detect goodbye during streaming (post-yield code is unreliable)
+                if (self._exchange_count >= self._max_exchanges
+                        and self._end_task is None
+                        and self._pipeline_task
+                        and _contains_goodbye("".join(full_response))):
+                    print(f"[END] Scheduling pipeline close (exchange {self._exchange_count}/{self._max_exchanges})")
+                    self._end_task = asyncio.create_task(self._end_pipeline())
 
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:
             prompt = get_last_system_prompt()
             if prompt:
                 self.logger.write_system_prompt(prompt)
+
+    async def _end_pipeline(self):
+        """Wait for TTS to finish the goodbye, then force-close the pipeline."""
+        await asyncio.sleep(2)
+        if self._pipeline_task:
+            await self._pipeline_task.queue_frame(CancelTaskFrame())
