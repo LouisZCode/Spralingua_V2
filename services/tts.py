@@ -14,14 +14,17 @@ from config import minimax_api_key, minimax_group_id
 from pipecat.transcriptions.language import Language
 
 # Available voices: key → MiniMax voice_id
+# Cloned voices are kept in sync with the MiniMax account.
+# See ARCHITECTURE.md → "Voice Inventory" for the source-of-truth table.
 VOICE_MAP = {
+    # System/preset voices (not in the account's cloned-voice list)
     "happy_harry": "german_bavarian_male_v2",
     "sophie": "german_bavarian_female",
     "calm_woman": "Calm_Woman",
-    "luis_clone": "luis_voice_clone",
     "German-Male": "German_PlayfulMan",
-    "German_Female": "moss_audio_4872e74b-124f-11f1-841b-1e2fac512910",
-    "Mexican_in_Germany" : "moss_audio_6183d31a-126c-11f1-bfa6-763108879732"
+    # Cloned voices (exist in the MiniMax account)
+    "luis_clone": "moss_audio_744c4375-eb2b-11f0-b8d7-fa843b4be43a",     # best Luis clone (old luis_voice_clone deleted)
+    "German_Female": "moss_audio_4872e74b-124f-11f1-841b-1e2fac512910",  # German female (won A/B vs deleted v2)
 }
 
 def tts_minimax(session, voice: str = "happy_harry"):

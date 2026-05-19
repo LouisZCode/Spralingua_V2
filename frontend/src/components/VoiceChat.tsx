@@ -22,14 +22,12 @@ const LEVELS: Record<string, { label: string; situations: Record<string, string>
   B2: { label: "B2 - Upper Intermediate", situations: { planning_picnic: "Planning a Picnic" } },
 };
 
+// Keys must match services/tts.py::VOICE_MAP. Kept in sync with the
+// MiniMax account — see ARCHITECTURE.md "Voice Inventory".
 const VOICES: Record<string, string> = {
-  happy_harry: "Harry (Male)",
-  sophie: "Sophie (Female)",
-  calm_woman: "Calm Woman",
-  luis_clone: "Luis (Clone)",
-  "German-Male": "German Male",
   German_Female: "German Female",
-  Mexican_in_Germany: "Mexican in Germany",
+  "German-Male": "German Male",
+  luis_clone: "Luis (Clone)",
 };
 
 export default function VoiceChat() {
@@ -38,7 +36,7 @@ export default function VoiceChat() {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [level, setLevel] = useState("A1");
   const [situation, setSituation] = useState("introducing_yourself");
-  const [voice, setVoice] = useState("happy_harry");
+  const [voice, setVoice] = useState("German_Female");
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);

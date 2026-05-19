@@ -56,3 +56,6 @@ coverage/
 # Claude Code files
 .claude/
 CLAUDE.md
+
+# Local voice audition / test audio (not tracked)
+voice_tests/
