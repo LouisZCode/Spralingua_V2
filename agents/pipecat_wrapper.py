@@ -70,7 +70,7 @@ class ClientWrapper:
                 "voice": self.context.agent_voice,
                 "exchange": self._exchange_count,
             },
-            "run_name": f"turn-{self._exchange_count}",
+            "run_name": f"turn-{self._exchange_count}-LLM",
         }
 
         full_response = []
