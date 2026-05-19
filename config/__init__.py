@@ -5,6 +5,10 @@ from .settings import (
     deepgram_api_key,
     openrouter_api_key,
     openrouter_base_url,
+    langfuse_public_key,
+    langfuse_secret_key,
+    langfuse_base_url,
+    langfuse_environment,
 )
 
 

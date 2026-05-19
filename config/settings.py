@@ -18,3 +18,9 @@ minimax_group_id=os.getenv("MINIMAX_GROUP_ID")
 #OpenRouter
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
+
+#Langfuse
+langfuse_public_key  = os.getenv("LANGFUSE_PUBLIC_KEY")
+langfuse_secret_key  = os.getenv("LANGFUSE_SECRET_KEY")
+langfuse_base_url    = os.getenv("LANGFUSE_BASE_URL")
+langfuse_environment = os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "dev")

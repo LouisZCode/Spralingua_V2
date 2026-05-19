@@ -13,8 +13,15 @@ from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 from .converters import TranscriptionToContextConverter
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
+from agents.observability import langfuse_client
 
 from logs import setup_session_logger
+
+
+# Live pipeline tasks keyed by user_id. Used by /say/{user_id} in main.py
+# to inject typed turns into an active session. Per-client isolation rule
+# from CLAUDE.md still holds — this is just a lookup, not shared state.
+ACTIVE_TASKS: dict[str, PipelineTask] = {}
 
 
 async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: str = "introducing_yourself", voice: str = "happy_harry"):
@@ -71,12 +78,15 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         runner = PipelineRunner()
 
         await audiobuffer.start_recording()
+        ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
 
         print(f"Client connected: {user_id} | level={level} situation={situation} voice={voice}")
 
         try:
             await runner.run(task)
         finally:
+            ACTIVE_TASKS.pop(user_id, None)
             await audiobuffer.stop_recording()
             session_logger.close()
+            langfuse_client.flush()  # drain queued spans before the process moves on
             print(f"Client disconnected: {user_id}")

@@ -13,6 +13,7 @@ from pipecat.frames.frames import CancelTaskFrame
 
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt, prompts
+from .observability import turn_callback_handler
 
 GOODBYE_PHRASES = [
     "goodbye", "bye", "see you", "take care",
@@ -50,16 +51,35 @@ class ClientWrapper:
         """Translates Pipecat format to agent format and streams tokens."""
         text = input_dict.get("input", "")
         messages = {"messages": [{"role": "user", "content": text}]}
-        run_config = {"configurable": {"thread_id": self.user_id}}
 
+        # Increment first so the handler/metadata reflect this turn's number.
         self._exchange_count += 1
+
+        # Fresh Langfuse handler per turn → fresh trace_id.
+        # session_id groups all turns of this WebSocket connection in the UI.
+        handler = turn_callback_handler()
+        run_config = {
+            "configurable": {"thread_id": self.user_id},
+            "callbacks": [handler],
+            "metadata": {
+                "langfuse_session_id": self.user_id,
+                "langfuse_user_id": self.user_id,  # random UUID today; revisit when auth lands
+                "langfuse_tags": [self.context.user_level, self.context.situation],
+                "level": self.context.user_level,
+                "situation": self.context.situation,
+                "voice": self.context.agent_voice,
+                "exchange": self._exchange_count,
+            },
+            "run_name": f"turn-{self._exchange_count}",
+        }
+
         full_response = []
 
         async for token, metadata in self.agent.astream(
             messages,
             config=run_config,
             context=self.context,
-            stream_mode="messages"
+            stream_mode="messages",
         ):
             if hasattr(token, "content") and token.content:
                 full_response.append(token.content)

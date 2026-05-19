@@ -11,6 +11,7 @@ _model = ChatOpenAI(
     model=CONVERSATIONAL_MODEL,
     base_url=openrouter_base_url,
     api_key=openrouter_api_key,
+    stream_usage=True,  # emit final usage chunk on streamed calls (needed for Langfuse token/cost)
 )
 
 

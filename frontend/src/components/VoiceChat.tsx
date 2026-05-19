@@ -10,6 +10,7 @@ import {
 // Generate a random user ID per session (later: replace with auth)
 const USER_ID = crypto.randomUUID();
 const BASE_WS = "ws://localhost:8765";
+const HTTP_BASE = "http://localhost:8765";
 
 interface LogEntry {
   time: string;
@@ -37,6 +38,7 @@ export default function VoiceChat() {
   const [level, setLevel] = useState("A1");
   const [situation, setSituation] = useState("introducing_yourself");
   const [voice, setVoice] = useState("German_Female");
+  const [draft, setDraft] = useState("");
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const logEndRef = useRef<HTMLDivElement | null>(null);
@@ -120,6 +122,25 @@ export default function VoiceChat() {
       audioRef.current.srcObject = null;
     }
   }, []);
+
+  // Type-a-turn: POSTs to /say/{user_id}; backend injects frames as if STT had
+  // produced them. The agent still replies via the normal TTS audio path.
+  const sendText = useCallback(async () => {
+    const text = draft.trim();
+    if (!text || !connected) return;
+    setDraft("");
+    log(`You (typed): ${text}`, "user");
+    try {
+      const r = await fetch(`${HTTP_BASE}/say/${USER_ID}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!r.ok) log(`Send failed: ${r.status}`, "error");
+    } catch (e) {
+      log(`Send error: ${e}`, "error");
+    }
+  }, [draft, connected, log]);
 
   const logColor: Record<LogEntry["type"], string> = {
     user: "text-blue-400",
@@ -209,6 +230,25 @@ export default function VoiceChat() {
             </div>
           ))}
           <div ref={logEndRef} />
+        </div>
+
+        <div className="mt-3 flex gap-2">
+          <input
+            type="text"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") sendText(); }}
+            disabled={!connected}
+            placeholder={connected ? "Type your turn..." : "Connect first"}
+            className="flex-1 rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 placeholder:text-slate-500 disabled:opacity-40"
+          />
+          <button
+            onClick={sendText}
+            disabled={!connected || !draft.trim()}
+            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Send
+          </button>
         </div>
 
         <audio ref={audioRef} autoPlay />
