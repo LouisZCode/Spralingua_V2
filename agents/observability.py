@@ -1,18 +1,22 @@
 """
-Langfuse observability — single client, per-turn callback handlers.
+Langfuse observability — single process-wide client.
 
-The Langfuse client is a process-wide singleton (it's a thread-safe event sender,
-not stateful per-conversation). The CallbackHandler, however, is created fresh
-per turn so each turn gets its own trace_id and stays isolated — same per-client
-isolation rule as the rest of the pipeline (see CLAUDE.md).
+Used directly by:
+- ``pipeline/observers.py::TurnTraceObserver`` for STT and TTS Generation
+  observations.
+- ``agents/pipecat_wrapper.py::ClientWrapper.astream`` for the LLM Generation.
 
-Scope: Langfuse here captures **token counts, latency, prompt/response, metadata,
-and traces grouped by session**. Per-call USD cost is deferred (see LEARNINGS.md
-2026-05-19 entry — OpenRouter doesn't ship cost on streamed responses).
+The LangChain ``CallbackHandler`` is intentionally NOT used here — we own
+all three per-turn Generations manually so each measures its model's
+time-to-first-output and exposes ``input``/``output``/``usage_details`` on
+the LLM trace. See OBS-004 plan + ``pipeline/observers.py`` docstring.
+
+Cost: deferred. ``usage_details`` is populated on the LLM Generation, so
+Langfuse will calculate costs automatically once model pricing rules are
+configured in the dashboard.
 """
 
 from langfuse import Langfuse
-from langfuse.langchain import CallbackHandler
 
 from config import (
     langfuse_public_key,
@@ -28,8 +32,3 @@ langfuse_client = Langfuse(
     host=langfuse_base_url,
     environment=langfuse_environment,
 )
-
-
-def turn_callback_handler() -> CallbackHandler:
-    """Fresh handler per turn — keeps trace_id isolated to one exchange."""
-    return CallbackHandler()
