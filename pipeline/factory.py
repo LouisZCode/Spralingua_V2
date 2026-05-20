@@ -11,7 +11,7 @@ from pipecat.processors.frameworks.langchain import LangchainProcessor
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 
 from .converters import TranscriptionToContextConverter
-from .observers import STTTraceObserver
+from .observers import STTTraceObserver, TTSTraceObserver
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.observability import langfuse_client
@@ -37,6 +37,9 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         tts = tts_minimax(session, voice=voice)
         converter = TranscriptionToContextConverter()
         stt_observer = STTTraceObserver(
+            user_id=user_id, level=level, situation=situation, voice=voice,
+        )
+        tts_observer = TTSTraceObserver(
             user_id=user_id, level=level, situation=situation, voice=voice,
         )
 
@@ -74,6 +77,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             converter,
             llm,
             tts,
+            tts_observer,      # read-only — emits a Langfuse Generation per agent reply
             transport.output(),
             audiobuffer,
         ])

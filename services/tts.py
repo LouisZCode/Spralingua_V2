@@ -13,6 +13,11 @@ from pipecat.services.minimax.tts import MiniMaxHttpTTSService
 from config import minimax_api_key, minimax_group_id
 from pipecat.transcriptions.language import Language
 
+# Single source of truth — both tts_minimax() and the TTS trace observer
+# in pipeline/observers.py read these. Keep in sync with the constructor below.
+MINIMAX_MODEL = "speech-2.8-turbo"   # speech-02-turbo (fast), speech-02-hd (quality)
+MINIMAX_PROVIDER = "minimax"
+
 # Available voices: key → MiniMax voice_id
 # Cloned voices are kept in sync with the MiniMax account.
 # See ARCHITECTURE.md → "Voice Inventory" for the source-of-truth table.
@@ -33,7 +38,7 @@ def tts_minimax(session, voice: str = "happy_harry"):
         api_key=minimax_api_key,
         group_id=minimax_group_id,
         aiohttp_session=session,
-        model="speech-2.8-turbo",   # speech-02-turbo (fast), speech-02-hd (quality) - constructor param
+        model=MINIMAX_MODEL,           # constructor param (see MiniMax TTS gotcha in CLAUDE.md)
         voice_id=voice_id,
         params=MiniMaxHttpTTSService.InputParams(
             speed=1.0,                 # 0.5 to 2.0
