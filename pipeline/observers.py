@@ -23,10 +23,10 @@ from typing import Optional
 from langfuse import propagate_attributes
 
 from pipecat.frames.frames import (
-    BotStartedSpeakingFrame,
-    BotStoppedSpeakingFrame,
     Frame,
     InterimTranscriptionFrame,
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
     TranscriptionFrame,
     TTSAudioRawFrame,
     TTSTextFrame,
@@ -157,16 +157,26 @@ class TTSTraceObserver(FrameProcessor):
     """Observe TTS frames and emit a Langfuse Generation per agent reply.
 
     Mirror of STTTraceObserver. Sits between `tts` and `transport.output()`.
-    A single agent turn typically has multiple TTSStarted/TTSStopped pairs
-    (one per sentence segment) but only one BotStarted/BotStoppedSpeaking
-    pair (wrapping the whole reply at the output transport). We bound the
-    trace by Bot* to get one clean turn-N-TTS Generation per agent reply.
 
-    Per-turn aggregation:
-    - text buffer: appended from each TTSTextFrame.text within the turn
+    Bounded by ``LLMFullResponseStartFrame`` / ``LLMFullResponseEndFrame``
+    (emitted by ``LangchainProcessor`` exactly once per LLM call), NOT by
+    ``BotStartedSpeakingFrame`` / ``BotStoppedSpeakingFrame``. Reason: an
+    agent reply often spans multiple MiniMax synthesis requests (one per
+    sentence-ish, depending on how fast LLM tokens arrive), and each one
+    produces its own Bot* pair. Using LLM-bound frames gives one clean
+    ``turn-N-TTS`` per LLM call and natural 1:1 alignment with the LLM
+    trace's turn counter — no shared counter needed.
+
+    Per-turn aggregation between Start and End:
+    - text buffer: appended from each TTSTextFrame.text
     - chunk count: increments per TTSAudioRawFrame
     - audio frames: sum of TTSAudioRawFrame.num_frames (divide by sample_rate
       for the synthesized audio duration in seconds)
+
+    Note: ``LLMFullResponseEndFrame`` fires when the LLM stops streaming, but
+    MiniMax may still emit a few TTSAudioRawFrames after that for the final
+    sentence. ``audio_duration_s`` may therefore be slightly under-reported
+    (a few hundred ms). Acceptable trade-off for clean turn alignment.
     """
 
     def __init__(self, user_id: str, level: str, situation: str, voice: str, **kwargs):
@@ -190,7 +200,7 @@ class TTSTraceObserver(FrameProcessor):
         await super().process_frame(frame, direction)
 
         try:
-            if isinstance(frame, BotStartedSpeakingFrame):
+            if isinstance(frame, LLMFullResponseStartFrame):
                 self._open_turn()
             elif isinstance(frame, TTSTextFrame):
                 # TTSTextFrame carries the text being synthesized this segment.
@@ -200,7 +210,7 @@ class TTSTraceObserver(FrameProcessor):
                 self._audio_frames += frame.num_frames
                 if self._sample_rate is None:
                     self._sample_rate = frame.sample_rate
-            elif isinstance(frame, BotStoppedSpeakingFrame):
+            elif isinstance(frame, LLMFullResponseEndFrame):
                 self._close_turn()
         except Exception as e:  # noqa: BLE001 — tracing must never break the pipeline
             print(f"[TTS trace] {type(e).__name__}: {e}")
@@ -232,7 +242,7 @@ class TTSTraceObserver(FrameProcessor):
             name="minimax_synthesize",
             as_type="generation",
             model=MINIMAX_MODEL,
-            input={"event": "bot_started_speaking"},
+            input={"event": "llm_response_start"},
             metadata={
                 "provider": MINIMAX_PROVIDER,
                 "voice": self.voice,             # frontend key
