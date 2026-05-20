@@ -4,7 +4,10 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from config import openrouter_api_key, openrouter_base_url
 from .dynamic_prompts import personalized_prompt, Context  # noqa: F401 — kept for cheap revert
-from .conversational_prompt import conversational_prompt_middleware
+from .conversational_prompt import (
+    conversational_prompt_middleware,        # noqa: F401 — V1, kept for cheap revert / A-B
+    conversational_prompt_v2_middleware,
+)
 
 CONVERSATIONAL_MODEL = "openai/gpt-oss-120b"
 
@@ -28,9 +31,11 @@ def agent_assembly(user_id: int):
     return create_agent(
         model=_model,
         checkpointer=InMemorySaver(),
-        # Active: the standalone CONVERSATIONAL_PROMPT (general conversationalist).
-        # To revert to the language-learning system prompt rendered from prompts.yaml,
-        # swap to `personalized_prompt` here. Both are imported above.
-        middleware=[conversational_prompt_middleware],
+        # Active: CONVERSATIONAL_PROMPT_V2 (adds calibrated self-disclosure on
+        # top of V1's listening discipline). To A/B back to V1, swap to
+        # `conversational_prompt_middleware`. To revert to the language-learning
+        # system prompt rendered from prompts.yaml, swap to `personalized_prompt`.
+        # All three are imported above.
+        middleware=[conversational_prompt_v2_middleware],
         context_schema=Context,
     )

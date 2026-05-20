@@ -31,8 +31,9 @@ def _contains_goodbye(text: str) -> bool:
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
-    def __init__(self, user_id, logger, level="A1", situation="introducing_yourself", voice="happy_harry"):
+    def __init__(self, user_id, session_id, logger, level="A1", situation="introducing_yourself", voice="happy_harry"):
         self.user_id = user_id
+        self.session_id = session_id
         self.logger = logger
         self.agent = agent_assembly(user_id)
         self.context = Context(
@@ -56,13 +57,14 @@ class ClientWrapper:
         self._exchange_count += 1
 
         # Fresh Langfuse handler per turn → fresh trace_id.
-        # session_id groups all turns of this WebSocket connection in the UI.
+        # session_id is per-WebSocket-connection (one Langfuse Session per
+        # Connect→Disconnect); user_id is stable across connections.
         handler = turn_callback_handler()
         run_config = {
             "configurable": {"thread_id": self.user_id},
             "callbacks": [handler],
             "metadata": {
-                "langfuse_session_id": self.user_id,
+                "langfuse_session_id": self.session_id,
                 "langfuse_user_id": self.user_id,  # random UUID today; revisit when auth lands
                 "langfuse_tags": [self.context.user_level, self.context.situation],
                 "level": self.context.user_level,

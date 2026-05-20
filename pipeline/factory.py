@@ -1,4 +1,6 @@
 import wave
+from uuid import uuid4
+
 import aiohttp
 from pydub import AudioSegment
 
@@ -27,6 +29,11 @@ ACTIVE_TASKS: dict[str, PipelineTask] = {}
 
 async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: str = "introducing_yourself", voice: str = "happy_harry"):
     """Builds and runs a full pipeline for a single client connection."""
+    # One Langfuse Session per WebSocket connection. `user_id` is stable across
+    # connections (per-tab UUID today, auth-derived later); `session_id` resets
+    # on every Connect so the Langfuse UI shows one Session per conversation.
+    session_id = uuid4().hex
+
     async with aiohttp.ClientSession() as session:
 
         # Transport: one per client (wraps this specific websocket)
@@ -37,17 +44,17 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         tts = tts_minimax(session, voice=voice)
         converter = TranscriptionToContextConverter()
         stt_observer = STTTraceObserver(
-            user_id=user_id, level=level, situation=situation, voice=voice,
+            user_id=user_id, session_id=session_id, level=level, situation=situation, voice=voice,
         )
         tts_observer = TTSTraceObserver(
-            user_id=user_id, level=level, situation=situation, voice=voice,
+            user_id=user_id, session_id=session_id, level=level, situation=situation, voice=voice,
         )
 
         # Per-client logger
         session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
 
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, logger=session_logger, level=level, situation=situation, voice=voice)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, level=level, situation=situation, voice=voice)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder
@@ -89,7 +96,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
 
-        print(f"Client connected: {user_id} | level={level} situation={situation} voice={voice}")
+        print(f"Client connected: user_id={user_id} session_id={session_id} | level={level} situation={situation} voice={voice}")
 
         try:
             await runner.run(task)

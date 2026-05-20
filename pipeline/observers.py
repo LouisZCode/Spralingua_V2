@@ -43,9 +43,10 @@ from services.tts import MINIMAX_MODEL, MINIMAX_PROVIDER, VOICE_MAP
 class STTTraceObserver(FrameProcessor):
     """Observe STT frames and emit a Langfuse Generation per spoken turn."""
 
-    def __init__(self, user_id: str, level: str, situation: str, voice: str, **kwargs):
+    def __init__(self, user_id: str, session_id: str, level: str, situation: str, voice: str, **kwargs):
         super().__init__(**kwargs)
         self.user_id = user_id
+        self.session_id = session_id
         self.level = level
         self.situation = situation
         self.voice = voice
@@ -90,7 +91,7 @@ class STTTraceObserver(FrameProcessor):
         # `propagate_attributes` is a top-level langfuse function, NOT a
         # method on the client (verified against langfuse 4.6.1).
         self._prop_ctx = propagate_attributes(
-            session_id=self.user_id,
+            session_id=self.session_id,
             user_id=self.user_id,
             tags=[self.level, self.situation, "STT"],
             trace_name=f"turn-{self._turn_count}-STT",
@@ -179,9 +180,10 @@ class TTSTraceObserver(FrameProcessor):
     (a few hundred ms). Acceptable trade-off for clean turn alignment.
     """
 
-    def __init__(self, user_id: str, level: str, situation: str, voice: str, **kwargs):
+    def __init__(self, user_id: str, session_id: str, level: str, situation: str, voice: str, **kwargs):
         super().__init__(**kwargs)
         self.user_id = user_id
+        self.session_id = session_id
         self.level = level
         self.situation = situation
         self.voice = voice  # frontend key, e.g. "German_Female"
@@ -229,7 +231,7 @@ class TTSTraceObserver(FrameProcessor):
         self._start_time = time.time()
 
         self._prop_ctx = propagate_attributes(
-            session_id=self.user_id,
+            session_id=self.session_id,
             user_id=self.user_id,
             tags=[self.level, self.situation, "TTS"],
             trace_name=f"turn-{self._turn_count}-TTS",
