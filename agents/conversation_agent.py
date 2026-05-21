@@ -3,10 +3,11 @@ from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
 from config import openrouter_api_key, openrouter_base_url
-from .dynamic_prompts import personalized_prompt, Context  # noqa: F401 — kept for cheap revert
+from .dynamic_prompts import Context
 from .conversational_prompt import (
-    conversational_prompt_middleware,        # noqa: F401 — V1, kept for cheap revert / A-B
-    conversational_prompt_v2_middleware,
+    conversational_prompt_middleware,        # noqa: F401 — V1 (standalone), kept for cheap revert / A-B
+    conversational_prompt_v2_middleware,     # noqa: F401 — V2 (standalone, no personalization), kept for cheap revert
+    layered_prompt_middleware,
 )
 
 CONVERSATIONAL_MODEL = "openai/gpt-oss-120b"
@@ -31,11 +32,11 @@ def agent_assembly(user_id: int):
     return create_agent(
         model=_model,
         checkpointer=InMemorySaver(),
-        # Active: CONVERSATIONAL_PROMPT_V2 (adds calibrated self-disclosure on
-        # top of V1's listening discipline). To A/B back to V1, swap to
-        # `conversational_prompt_middleware`. To revert to the language-learning
-        # system prompt rendered from prompts.yaml, swap to `personalized_prompt`.
-        # All three are imported above.
-        middleware=[conversational_prompt_v2_middleware],
+        # Active: layered prompt (V2 body from yaml + short-term + long-term).
+        # Reads `Context.user_level` and `Context.profile` at each call.
+        # To temporarily drop personalization and use the bare V2 prompt, swap to
+        # `conversational_prompt_v2_middleware`. To A/B back to V1, swap to
+        # `conversational_prompt_middleware`. All three are imported above.
+        middleware=[layered_prompt_middleware],
         context_schema=Context,
     )

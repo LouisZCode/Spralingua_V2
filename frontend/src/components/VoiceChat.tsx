@@ -7,8 +7,11 @@ import {
   ProtobufFrameSerializer,
 } from "@pipecat-ai/websocket-transport";
 
-// Generate a random user ID per session (later: replace with auth)
-const USER_ID = crypto.randomUUID();
+// Hardcoded while we iterate on the prompt + LLM layers. Matches the test
+// profile key in `agents/fake_profiles.py` so the layered system prompt
+// renders the real long-term profile (not the fallback). Will be replaced
+// with auth-issued ids once the backend has user accounts.
+const USER_ID = "0001";
 const BASE_WS = "ws://localhost:8765";
 const HTTP_BASE = "http://localhost:8765";
 

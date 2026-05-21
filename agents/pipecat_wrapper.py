@@ -14,8 +14,16 @@ from langfuse import propagate_attributes
 from pipecat.frames.frames import CancelTaskFrame
 
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
-from .dynamic_prompts import Context, get_last_system_prompt, prompts
+from .dynamic_prompts import Context, get_last_system_prompt
+from .fake_profiles import load_profile
 from .observability import langfuse_client
+
+# Per-client cap for goodbye detection. Once this many exchanges have
+# happened AND the agent emits a goodbye phrase, `_end_pipeline` is
+# scheduled. Previously per-situation via
+# `prompts.yaml::levels.*.situations.*.number_of_exchanges`; hoisted here
+# now that the language-learning yaml content lives in the archive.
+MAX_EXCHANGES = 8
 
 GOODBYE_PHRASES = [
     "goodbye", "bye", "see you", "take care",
@@ -42,12 +50,12 @@ class ClientWrapper:
             user_level=level,
             situation=situation,
             agent_voice=voice,
+            profile=load_profile(user_id),
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self._end_task = None
 
-        situation_data = prompts["levels"][level]["situations"][situation]
-        self._max_exchanges = situation_data.get("number_of_exchanges", 8) if isinstance(situation_data, dict) else 8
+        self._max_exchanges = MAX_EXCHANGES
         self._exchange_count = 0
 
     async def astream(self, input_dict, config=None):

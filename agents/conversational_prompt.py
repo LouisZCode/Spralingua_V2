@@ -11,9 +11,12 @@ back to `personalized_prompt`.
 transcript logger (which reads it after the first LLM call) keeps working.
 """
 
+from datetime import date
+
 from langchain.agents.middleware import ModelRequest, dynamic_prompt
 
 from . import dynamic_prompts  # for setting _last_system_prompt
+from .fake_profiles import FALLBACK_PROFILE
 
 
 CONVERSATIONAL_PROMPT = """# Role
@@ -253,3 +256,80 @@ def conversational_prompt_v2_middleware(request: ModelRequest) -> str:
     """Same shape as V1 middleware, but returns CONVERSATIONAL_PROMPT_V2."""
     dynamic_prompts._last_system_prompt = CONVERSATIONAL_PROMPT_V2
     return CONVERSATIONAL_PROMPT_V2
+
+
+# ---------------------------------------------------------------------------
+# Layered prompt — base (V2 from yaml) + short-term (today + level) +
+# long-term (StudentProfile from fake_profiles, later DB). This is the
+# active middleware wired into `conversation_agent.py::agent_assembly`.
+# ---------------------------------------------------------------------------
+
+
+def _format_interests_line(profile) -> str:
+    """Render a one-line, natural-sounding interests sentence (or empty)."""
+    items = profile.interests
+    if not items:
+        return ""
+    if len(items) == 1:
+        return f"They love {items[0]}."
+    if len(items) == 2:
+        return f"They love {items[0]} and {items[1]}."
+    return f"They love {', '.join(items[:-1])}, and {items[-1]}."
+
+
+def _format_history(profile) -> str:
+    """Combine life_events + topics_covered + difficulties into dated bullets.
+
+    All entries carry an ISO date that the agent reasons about against the
+    session `today` injected by the short-term layer. Sorted chronologically
+    so the agent can read the timeline naturally.
+    """
+    entries: list[tuple[str, str]] = []
+    for ev in profile.life_events:
+        entries.append((ev["date"], ev["fact"]))
+    for tc in profile.topics_covered:
+        text = tc["topic"]
+        notes = tc.get("notes")
+        if notes:
+            text = f"{text}, {notes}"
+        entries.append((tc["date"], text))
+    for d in profile.difficulties:
+        entries.append((d["date"], d["fact"]))
+    if not entries:
+        return "- (nothing yet — this is your first real conversation)"
+    entries.sort(key=lambda e: e[0])
+    return "\n".join(f"- {d}: {t}" for d, t in entries)
+
+
+@dynamic_prompt
+def layered_prompt_middleware(request: ModelRequest) -> str:
+    """Assemble base + short-term + long-term layers from yaml templates.
+
+    - Base: `conversational_prompt_v2` (immutable conversational behavior)
+    - Short-term: today's date + student level (from UI / WS query param)
+    - Long-term: StudentProfile (nickname, native language, interests,
+      dated life_events / topics_covered / difficulties)
+
+    `Context.situation` / `agent_voice` / `agent_personality` are intentionally
+    NOT rendered today — they stay in `Context` for UI plumbing and will be
+    re-surfaced when persona lives in DB.
+    """
+    ctx = request.runtime.context
+    profile = ctx.profile or FALLBACK_PROFILE
+
+    base = dynamic_prompts.prompts["conversational_prompt_v2"]
+    short = dynamic_prompts.prompts["short_term_template"].format(
+        today=date.today().isoformat(),
+        student_name=profile.student_name,
+        student_level=ctx.user_level,
+    )
+    long = dynamic_prompts.prompts["long_term_template"].format(
+        student_name=profile.student_name,
+        native_language=profile.native_language,
+        interests_line=_format_interests_line(profile),
+        history_bullets=_format_history(profile),
+    )
+
+    assembled = f"{base}\n---\n\n{short}\n---\n\n{long}"
+    dynamic_prompts._last_system_prompt = assembled
+    return assembled
