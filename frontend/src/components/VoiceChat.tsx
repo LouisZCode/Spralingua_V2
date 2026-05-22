@@ -34,10 +34,17 @@ const VOICES: Record<string, string> = {
   luis_clone: "Luis (Clone)",
 };
 
+// Keys must match a YAML in agents/prompts/{lesson_id}.yaml on the backend.
+const LESSONS: Record<string, string> = {
+  lesson_zero: "Lesson 0",
+  a1_l1: "A1-L1 — Sidewalk Hello",
+};
+
 export default function VoiceChat() {
   const [connected, setConnected] = useState(false);
   const [status, setStatus] = useState("Disconnected");
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [lesson, setLesson] = useState("lesson_zero");
   const [level, setLevel] = useState("A1");
   const [situation, setSituation] = useState("introducing_yourself");
   const [voice, setVoice] = useState("German_Female");
@@ -105,13 +112,13 @@ export default function VoiceChat() {
       });
 
       clientRef.current = client;
-      const wsUrl = `${BASE_WS}/ws/${USER_ID}?level=${level}&situation=${situation}&voice=${voice}`;
+      const wsUrl = `${BASE_WS}/ws/${USER_ID}?level=${level}&situation=${situation}&voice=${voice}&lesson=${lesson}`;
       await client.connect({ wsUrl });
     } catch (e) {
       log(`Connection failed: ${e}`, "error");
       setConnected(false);
     }
-  }, [log, level, situation, voice]);
+  }, [log, level, situation, voice, lesson]);
 
   const disconnect = useCallback(async () => {
     if (clientRef.current) {
@@ -162,6 +169,20 @@ export default function VoiceChat() {
         <p className="mb-4 text-center text-sm text-slate-400">
           Status: <span className="font-semibold text-slate-200">{status}</span>
         </p>
+
+        <div className="mb-3">
+          <label className="mb-1 block text-xs text-slate-400">Lesson</label>
+          <select
+            value={lesson}
+            onChange={(e) => setLesson(e.target.value)}
+            disabled={connected}
+            className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 disabled:opacity-40"
+          >
+            {Object.entries(LESSONS).map(([key, label]) => (
+              <option key={key} value={key}>{label}</option>
+            ))}
+          </select>
+        </div>
 
         <div className="mb-4 grid grid-cols-3 gap-3">
           <div>

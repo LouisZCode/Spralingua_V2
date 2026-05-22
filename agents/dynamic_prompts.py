@@ -1,23 +1,16 @@
-"""
-Per-client runtime context and the active prompt's data model.
+"""Per-client runtime context and the active prompt's data model.
 
-`prompts` (loaded once at import) is the active `agents/prompts.yaml` —
-keys `conversational_prompt_v2`, `short_term_template`, `long_term_template`.
-Consumed by `agents/conversational_prompt.py::layered_prompt_middleware`.
+The conversation system prompt is assembled per-request by
+`agents.conversational_prompt.layered_prompt_middleware`, which loads
+the lesson-specific YAML from `agents/prompts/{lesson_id}.yaml` via
+`agents.load_prompts.load_prompts`. Add a lesson by dropping a new YAML.
 
-The legacy `personalized_prompt` middleware that filled the V1
-language-learning template (situations / vocabulary / agent_story / etc.)
-has been retired; that content now lives in the gitignored
-`agents/prompts_archived.yaml`. To revert behavior temporarily, switch
-the active middleware in `agents/conversation_agent.py` back to
-`conversational_prompt_v2_middleware` (the standalone V2 path).
+The standalone V1 (`conversational_prompt_middleware`) and V2
+(`conversational_prompt_v2_middleware`) middlewares remain importable
+as revert paths — they return inline Python constants unchanged.
 """
 
 from dataclasses import dataclass, field
-
-from .load_prompts import load_prompts
-
-prompts = load_prompts()
 
 # Module-level capture of the most recent assembled system prompt, read by
 # the session transcript logger after the first LLM call. Middlewares are
@@ -52,15 +45,15 @@ class StudentProfile:
 class Context:
     """Per-client runtime context passed to LangGraph via `agent.astream(context=...)`.
 
-    Short-term fields come from the WebSocket query params (`user_level`,
-    `situation`, `agent_voice`). `profile` is attached at connect time by
-    `ClientWrapper.__init__` via `fake_profiles.load_profile(user_id)`.
-
-    `situation`, `agent_voice`, `agent_personality` stay on the dataclass
-    so the UI plumbing keeps working, but they are NOT rendered into the
-    active prompt today — the layered middleware only uses `user_level`
-    plus the profile. They will be re-surfaced when persona lives in DB.
+    `lesson_id` routes the middleware to the matching
+    `agents/prompts/{lesson_id}.yaml`. Defaults to `"lesson_zero"` (open
+    conversational mode). Short-term fields come from the WebSocket query
+    params; `profile` is attached at connect time by `ClientWrapper.__init__`
+    via `fake_profiles.load_profile(user_id)`. Only the `conversation`
+    lesson type reads the profile; `respond`-type lessons (e.g. A1-L1)
+    use just the persona prompt.
     """
+    lesson_id: str = "lesson_zero"
     user_level: str = "A1"
     situation: str = "introducing_yourself"
     agent_voice: str = "happy_harry"

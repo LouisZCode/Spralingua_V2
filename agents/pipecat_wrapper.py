@@ -41,12 +41,13 @@ def _contains_goodbye(text: str) -> bool:
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
-    def __init__(self, user_id, session_id, logger, level="A1", situation="introducing_yourself", voice="happy_harry"):
+    def __init__(self, user_id, session_id, logger, level="A1", situation="introducing_yourself", voice="happy_harry", lesson_id="lesson_zero"):
         self.user_id = user_id
         self.session_id = session_id
         self.logger = logger
         self.agent = agent_assembly(user_id)
         self.context = Context(
+            lesson_id=lesson_id,
             user_level=level,
             situation=situation,
             agent_voice=voice,

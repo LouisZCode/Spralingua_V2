@@ -35,9 +35,10 @@ async def ws_endpoint(
     level: str = "A1",
     situation: str = "introducing_yourself",
     voice: str = "happy_harry",
+    lesson: str = "lesson_zero",
 ):
     await websocket.accept()
-    await run_pipeline(websocket, user_id, level, situation, voice)
+    await run_pipeline(websocket, user_id, level, situation, voice, lesson)
 
 
 class SayBody(BaseModel):

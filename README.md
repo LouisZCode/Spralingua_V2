@@ -77,9 +77,9 @@ logs/conversations/2026-01-04/
 │   ├── factory.py          # Pipeline construction
 │   └── converters.py       # VAD-gated transcription buffering
 ├── agents/
-│   ├── conversation.py     # LangChain agent definition
-│   ├── pipecat_wrapper.py  # Pipecat ↔ LangChain adapter
-│   └── prompts.yaml        # Agent prompts
+│   ├── conversation_agent.py  # LangChain agent factory
+│   ├── pipecat_wrapper.py     # Pipecat ↔ LangChain adapter
+│   └── prompts/               # One YAML per lesson
 ├── services/
 │   ├── stt.py              # Deepgram STT config
 │   ├── tts.py              # MiniMax TTS config

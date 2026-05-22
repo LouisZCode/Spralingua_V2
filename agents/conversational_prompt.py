@@ -1,22 +1,30 @@
-"""
-Standalone general-conversationalist system prompt (experimental).
+"""Conversational and roleplay prompt middlewares.
 
-This prompt makes the agent a warm, curious, emotionally attuned conversation
-partner — independent of the language-learning structure in `prompts.yaml`.
-It's wired into `conversation_agent.py` as the active middleware. To revert
-to the language-learning path, swap the middleware in `agent_assembly()`
-back to `personalized_prompt`.
+This file holds:
 
-`_last_system_prompt` in `dynamic_prompts` is still set here so the per-session
-transcript logger (which reads it after the first LLM call) keeps working.
+- `CONVERSATIONAL_PROMPT` (V1) + `conversational_prompt_middleware`:
+  standalone, returns a hardcoded prompt. Kept as a revert path.
+- `CONVERSATIONAL_PROMPT_V2` + `conversational_prompt_v2_middleware`:
+  same shape, V2 body. Kept as a revert path.
+- `layered_prompt_middleware` (active): reads `Context.lesson_id`, loads
+  the matching `agents/prompts/{lesson_id}.yaml`, and branches on the
+  YAML's `type` field — `conversation` lessons assemble base + short-term
+  + long-term layers from the YAML templates; `respond` lessons return
+  `persona_prompt` verbatim.
+
+All middlewares publish to `dynamic_prompts._last_system_prompt` so the
+per-session transcript logger (which reads it after the first LLM call)
+keeps working.
 """
 
 from datetime import date
 
 from langchain.agents.middleware import ModelRequest, dynamic_prompt
+from loguru import logger
 
 from . import dynamic_prompts  # for setting _last_system_prompt
 from .fake_profiles import FALLBACK_PROFILE
+from .load_prompts import load_prompts
 
 
 CONVERSATIONAL_PROMPT = """# Role
@@ -303,33 +311,47 @@ def _format_history(profile) -> str:
 
 @dynamic_prompt
 def layered_prompt_middleware(request: ModelRequest) -> str:
-    """Assemble base + short-term + long-term layers from yaml templates.
+    """Lesson-aware system prompt assembly.
 
-    - Base: `conversational_prompt_v2` (immutable conversational behavior)
-    - Short-term: today's date + student level (from UI / WS query param)
-    - Long-term: StudentProfile (nickname, native language, interests,
-      dated life_events / topics_covered / difficulties)
+    Reads `Context.lesson_id` and loads `agents/prompts/{lesson_id}.yaml`.
+    Branches on the YAML's `type`:
 
-    `Context.situation` / `agent_voice` / `agent_personality` are intentionally
-    NOT rendered today — they stay in `Context` for UI plumbing and will be
-    re-surfaced when persona lives in DB.
+    - `conversation` (e.g. lesson_zero): assembles base + short_term + long_term
+      from the lesson YAML, injecting today + student name/level + the
+      StudentProfile (`Context.profile`).
+    - `respond` (e.g. a1_l1): returns `persona_prompt` verbatim — diegetic
+      roleplay, no profile/level/date injection.
+
+    Falls back to lesson_zero's base prompt on unknown types (logs a warning).
     """
     ctx = request.runtime.context
-    profile = ctx.profile or FALLBACK_PROFILE
+    lesson = load_prompts(ctx.lesson_id)
+    lesson_type = lesson.get("type")
 
-    base = dynamic_prompts.prompts["conversational_prompt_v2"]
-    short = dynamic_prompts.prompts["short_term_template"].format(
-        today=date.today().isoformat(),
-        student_name=profile.student_name,
-        student_level=ctx.user_level,
-    )
-    long = dynamic_prompts.prompts["long_term_template"].format(
-        student_name=profile.student_name,
-        native_language=profile.native_language,
-        interests_line=_format_interests_line(profile),
-        history_bullets=_format_history(profile),
-    )
+    if lesson_type == "conversation":
+        profile = ctx.profile or FALLBACK_PROFILE
+        base = lesson["base_prompt"]
+        short = lesson["short_term_template"].format(
+            today=date.today().isoformat(),
+            student_name=profile.student_name,
+            student_level=ctx.user_level,
+        )
+        long = lesson["long_term_template"].format(
+            student_name=profile.student_name,
+            native_language=profile.native_language,
+            interests_line=_format_interests_line(profile),
+            history_bullets=_format_history(profile),
+        )
+        assembled = f"{base}\n---\n\n{short}\n---\n\n{long}"
+    elif lesson_type == "respond":
+        assembled = lesson["persona_prompt"]
+    else:
+        logger.warning(
+            f"Unknown lesson type={lesson_type!r} for lesson_id={ctx.lesson_id!r}; "
+            f"falling back to lesson_zero base prompt only."
+        )
+        fallback = load_prompts("lesson_zero")
+        assembled = fallback["base_prompt"]
 
-    assembled = f"{base}\n---\n\n{short}\n---\n\n{long}"
     dynamic_prompts._last_system_prompt = assembled
     return assembled

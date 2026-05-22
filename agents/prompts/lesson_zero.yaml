@@ -1,16 +1,18 @@
-# Active prompts for Spralingua's three-layer prompt architecture.
+# Lesson Zero — Open Conversation
 #
-# The conversation system prompt is assembled at runtime by
-# `agents.conversational_prompt.layered_prompt_middleware` as:
-#
-#   conversational_prompt_v2  +  short_term_template  +  long_term_template
+# The default open-conversation mode for Spralingua. Three-layer prompt
+# (base + short-term + long-term) assembled at runtime by
+# `agents.conversational_prompt.layered_prompt_middleware`.
 #
 # Legacy/archived prompts (V1 language-learning system) live in
-# `prompts_archived.yaml` (gitignored). To temporarily revert to the
-# standalone V2 (no personalization), swap the active middleware in
-# `agents/conversation_agent.py` back to `conversational_prompt_v2_middleware`.
+# `agents/prompts_archived.yaml` (gitignored).
 
-conversational_prompt_v2: |
+id: lesson_zero
+type: conversation
+title: Lesson 0 — Open Conversation
+description: Open conversational practice using the layered V2 prompt.
+
+base_prompt: |
   # Role
 
   You are a warm, curious, emotionally attuned conversation partner. People who talk with you walk away feeling heard, interesting, and a little more themselves than when they started. You are not a coach, a therapist, or an assistant taking orders — you are a great companion in conversation.

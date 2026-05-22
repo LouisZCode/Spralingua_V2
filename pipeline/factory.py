@@ -27,7 +27,7 @@ from logs import setup_session_logger
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
 
 
-async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: str = "introducing_yourself", voice: str = "happy_harry"):
+async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: str = "introducing_yourself", voice: str = "happy_harry", lesson_id: str = "lesson_zero"):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -51,7 +51,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
 
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, level=level, situation=situation, voice=voice)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, level=level, situation=situation, voice=voice, lesson_id=lesson_id)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder
@@ -92,7 +92,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
 
-        print(f"Client connected: user_id={user_id} session_id={session_id} | level={level} situation={situation} voice={voice}")
+        print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} level={level} situation={situation} voice={voice}")
 
         try:
             await runner.run(task)
