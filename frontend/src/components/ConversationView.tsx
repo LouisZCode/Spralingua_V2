@@ -238,40 +238,43 @@ export default function ConversationView({
           Status: <span className="font-semibold text-slate-200">{status}</span>
         </p>
 
-        {phase === "briefing" && meta && (
-          <>
-            <div className="mb-3 rounded-lg bg-slate-900 p-4">
-              <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
-                Situation
-              </div>
-              <div className="whitespace-pre-line text-sm text-slate-200">
-                {meta.briefing.situation.trim()}
-              </div>
-            </div>
-            <div className="mb-3 rounded-lg bg-slate-900 p-4">
-              <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
-                Context
-              </div>
-              <div className="whitespace-pre-line text-sm text-slate-200">
-                {meta.briefing.context.trim()}
-              </div>
-            </div>
-            <div className="mb-6 rounded-lg bg-slate-900 p-4">
-              <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
-                Goal
-              </div>
-              <div className="whitespace-pre-line text-sm text-slate-200">
-                {meta.briefing.goal.trim()}
-              </div>
-            </div>
-            <button
-              onClick={startCall}
-              className="w-full rounded-lg bg-green-500 py-3 font-semibold text-slate-900 hover:bg-green-400"
-            >
-              I am ready
-            </button>
-          </>
-        )}
+        {phase === "briefing" && meta && (() => {
+          // Only render a briefing block if its content is non-empty.
+          // This lets minimal lessons (e.g. internal test tools) populate
+          // just `situation` and skip context/goal without leaving empty
+          // labeled boxes behind.
+          const blocks: Array<{ key: keyof typeof meta.briefing; label: string }> = [
+            { key: "situation", label: "Situation" },
+            { key: "context", label: "Context" },
+            { key: "goal", label: "Goal" },
+          ];
+          const filled = blocks.filter(
+            (b) => (meta.briefing[b.key] ?? "").trim().length > 0
+          );
+          return (
+            <>
+              {filled.map((b, i) => (
+                <div
+                  key={b.key}
+                  className={`${i === filled.length - 1 ? "mb-6" : "mb-3"} rounded-lg bg-slate-900 p-4`}
+                >
+                  <div className="mb-1 text-[10px] uppercase tracking-wide text-slate-500">
+                    {b.label}
+                  </div>
+                  <div className="whitespace-pre-line text-sm text-slate-200">
+                    {meta.briefing[b.key].trim()}
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={startCall}
+                className="w-full rounded-lg bg-green-500 py-3 font-semibold text-slate-900 hover:bg-green-400"
+              >
+                I am ready
+              </button>
+            </>
+          );
+        })()}
 
         {phase === "live" && (
           <>

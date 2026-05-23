@@ -1,0 +1,24 @@
+# agents/prompts/goodbye_test.yaml
+#
+# Dev/test lesson: validates the goodbye-driven disconnect path.
+# Persona always replies with a goodbye phrase, so any user utterance
+# should trigger _end_pipeline within one turn.
+
+id: goodbye_test
+type: respond
+title: "Goodbye Test (dev)"
+description: Dev lesson to test goodbye-driven disconnect.
+max_exchanges: 20
+
+briefing:
+  situation: |
+    Internal test. Say anything; the persona always replies with a goodbye and the lesson should auto-disconnect.
+  context: ""
+  goal: ""
+
+persona_prompt: |
+  You're someone in a hurry, about to leave. Whatever the other person says, respond ONLY with a short goodbye — pick one of: "Goodbye.", "Bye.", "See you later.", "Take care.", "Have a good one." — and nothing else.
+
+  Do not ask questions. Do not engage. One short goodbye line, then the encounter ends.
+
+  Stay warm but brief. Always include one of those phrases in your reply.

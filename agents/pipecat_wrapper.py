@@ -11,7 +11,7 @@ import asyncio
 import time
 
 from langfuse import propagate_attributes
-from pipecat.frames.frames import CancelTaskFrame
+from loguru import logger
 from pipecat.processors.frameworks.rtvi import (
     RTVIBotOutputMessage,
     RTVIBotOutputMessageData,
@@ -160,7 +160,14 @@ class ClientWrapper:
                                 and self._pipeline_task
                                 and (self._exchange_count >= self._max_exchanges
                                      or _contains_goodbye("".join(full_response)))):
-                            print(f"[END] Scheduling pipeline close (exchange {self._exchange_count}/{self._max_exchanges})")
+                            reason = (
+                                "max_exchanges" if self._exchange_count >= self._max_exchanges
+                                else "goodbye"
+                            )
+                            logger.info(
+                                f"[END] Scheduling pipeline close ({reason}, "
+                                f"exchange {self._exchange_count}/{self._max_exchanges})"
+                            )
                             self._end_task = asyncio.create_task(self._end_pipeline())
 
                     if getattr(token, "usage_metadata", None):
@@ -220,7 +227,16 @@ class ClientWrapper:
         self._pending_bot_text = None
 
     async def _end_pipeline(self):
-        """Wait for TTS to finish the goodbye, then force-close the pipeline."""
-        await asyncio.sleep(2)
+        """Gracefully end the pipeline once in-flight TTS audio is done streaming.
+
+        ``stop_when_done()`` queues an ``EndFrame`` at the pipeline source. The
+        frame travels downstream behind whatever is already in transit (LLM
+        text frames, TTS audio frames), so the bot's final reply finishes
+        playing before the pipeline shuts down. The earlier ``queue_frame
+        (CancelTaskFrame())`` approach didn't work — that path injects the
+        frame *downstream* from the source, but ``CancelTaskFrame`` only
+        triggers cancellation when it reaches ``PipelineTask._source_push_frame``
+        from *upstream*, so it just slid through inert.
+        """
         if self._pipeline_task:
-            await self._pipeline_task.queue_frame(CancelTaskFrame())
+            await self._pipeline_task.stop_when_done()
