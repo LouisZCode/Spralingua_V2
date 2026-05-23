@@ -10,6 +10,11 @@ from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.processors.frameworks.langchain import LangchainProcessor
+from pipecat.processors.frameworks.rtvi import (
+    RTVIObserver,
+    RTVIObserverParams,
+    RTVIProcessor,
+)
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 
 from .converters import TranscriptionToContextConverter
@@ -74,6 +79,27 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             wav_path.unlink()
             print(f"Audio saved to: {mp3_path}")
 
+        # RTVI processor + observer. The observer handles user transcripts;
+        # bot text is pushed by ClientWrapper itself (one message per turn) to
+        # avoid the framework's dual-path duplicate (LLM-side AggregatedTextFrame
+        # AND TTS-side TTSTextFrame both observed).
+        rtvi_processor = RTVIProcessor()
+        rtvi_observer = RTVIObserver(
+            rtvi=rtvi_processor,
+            params=RTVIObserverParams(
+                user_transcription_enabled=True,
+                bot_output_enabled=False,
+                bot_llm_enabled=False,
+                bot_tts_enabled=False,
+                bot_speaking_enabled=False,
+                user_speaking_enabled=False,
+                metrics_enabled=False,
+            ),
+        )
+
+        # Give the wrapper the processor reference so it can push bot output.
+        wrapper.rtvi_processor = rtvi_processor
+
         pipeline = Pipeline([
             transport.input(),
             stt,
@@ -81,11 +107,12 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             llm,
             turn_observer,     # read-only — emits one Langfuse trace per spoken turn (STT/LLM/TTS spans)
             tts,
+            rtvi_processor,    # pushes RTVI client messages assembled by rtvi_observer + ClientWrapper
             transport.output(),
             audiobuffer,
         ])
 
-        task = PipelineTask(pipeline)
+        task = PipelineTask(pipeline, observers=[rtvi_observer])
         wrapper._pipeline_task = task  # Let wrapper end the pipeline via EndTaskFrame
         runner = PipelineRunner()
 

@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
+from agents.load_prompts import load_prompts
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_TASKS
 
@@ -26,6 +27,17 @@ app.add_middleware(
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/lessons/{lesson_id}")
+def lesson_meta(lesson_id: str):
+    """Briefing copy + title for the conversation page's pre-call card.
+
+    Loader already falls back to `lesson_zero` on unknown id (with a logged
+    warning), so the frontend never gets a 404 here.
+    """
+    lesson = load_prompts(lesson_id)
+    return {"title": lesson["title"], "briefing": lesson["briefing"]}
 
 
 @app.websocket("/ws/{user_id}")

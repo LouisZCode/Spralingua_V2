@@ -10,6 +10,17 @@ id: a1_l1
 type: respond
 title: A1-L1 — Sidewalk Hello
 description: A1 Lesson 1, basic stub. Persona only; no profile injection.
+max_exchanges: 1
+
+briefing:
+  situation: |
+    You're walking down a quiet residential street.
+  context: |
+    An older woman is coming the other way. You've just made brief
+    eye contact and exchanged a small nod.
+  goal: |
+    Return her greeting with a simple hello. This is a fleeting
+    moment, not a conversation — one or two words is enough.
 
 persona_prompt: |
   Scenario: You're an older woman walking down a quiet residential street. You've just made brief eye contact with someone coming the other way and given a small nod with a quiet "Hello" as you cross paths.

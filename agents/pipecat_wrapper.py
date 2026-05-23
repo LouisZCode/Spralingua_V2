@@ -12,18 +12,20 @@ import time
 
 from langfuse import propagate_attributes
 from pipecat.frames.frames import CancelTaskFrame
+from pipecat.processors.frameworks.rtvi import (
+    RTVIBotOutputMessage,
+    RTVIBotOutputMessageData,
+)
 
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 from .fake_profiles import load_profile
+from .load_prompts import load_prompts
 from .observability import langfuse_client
 
-# Per-client cap for goodbye detection. Once this many exchanges have
-# happened AND the agent emits a goodbye phrase, `_end_pipeline` is
-# scheduled. Previously per-situation via
-# `prompts.yaml::levels.*.situations.*.number_of_exchanges`; hoisted here
-# now that the language-learning yaml content lives in the archive.
-MAX_EXCHANGES = 8
+# `max_exchanges` is now per-lesson, read from the YAML in `ClientWrapper.__init__`.
+# End-of-call fires when either the count cap is reached OR a goodbye phrase
+# appears in the agent's reply — whichever comes first.
 
 GOODBYE_PHRASES = [
     "goodbye", "bye", "see you", "take care",
@@ -54,9 +56,10 @@ class ClientWrapper:
             profile=load_profile(user_id),
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
+        self.rtvi_processor = None  # Set by factory; used to push bot output to the client
         self._end_task = None
 
-        self._max_exchanges = MAX_EXCHANGES
+        self._max_exchanges = load_prompts(lesson_id)["max_exchanges"]
         self._exchange_count = 0
 
     async def astream(self, input_dict, config=None):
@@ -117,11 +120,12 @@ class ClientWrapper:
                         full_response.append(token.content)
                         yield token.content
 
-                        # Detect goodbye during streaming (post-yield code is unreliable)
-                        if (self._exchange_count >= self._max_exchanges
-                                and self._end_task is None
+                        # End trigger: either count cap reached OR goodbye phrase
+                        # appears. Scheduled in-stream (post-yield code is unreliable).
+                        if (self._end_task is None
                                 and self._pipeline_task
-                                and _contains_goodbye("".join(full_response))):
+                                and (self._exchange_count >= self._max_exchanges
+                                     or _contains_goodbye("".join(full_response)))):
                             print(f"[END] Scheduling pipeline close (exchange {self._exchange_count}/{self._max_exchanges})")
                             self._end_task = asyncio.create_task(self._end_pipeline())
 
@@ -141,6 +145,20 @@ class ClientWrapper:
                     usage_details=usage,
                 )
                 gen.end(end_time=ttft_ns)
+
+                # Push the full reply to the RTVI client as one BotOutput
+                # message per turn. The framework's bot-text dispatch sends
+                # duplicates because the same text is observed both as an
+                # AggregatedTextFrame (LLM side) and a TTSTextFrame (TTS side);
+                # we sidestep that by emitting once from here.
+                bot_text = "".join(full_response).strip()
+                if bot_text and self.rtvi_processor is not None:
+                    msg = RTVIBotOutputMessage(
+                        data=RTVIBotOutputMessageData(
+                            text=bot_text, spoken=True, aggregated_by="turn"
+                        )
+                    )
+                    await self.rtvi_processor.push_transport_message(msg)
 
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:

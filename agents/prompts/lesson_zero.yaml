@@ -11,6 +11,17 @@ id: lesson_zero
 type: conversation
 title: Lesson 0 — Open Conversation
 description: Open conversational practice using the layered V2 prompt.
+max_exchanges: 8
+
+briefing:
+  situation: |
+    Open conversational practice with the Spralingua coach.
+  context: |
+    You can talk about whatever you'd like. The coach will adapt
+    to your level and bring up topics from past sessions.
+  goal: |
+    Have a relaxed, real conversation. Use the language as much
+    as you can — the coach will help you when you get stuck.
 
 base_prompt: |
   # Role
