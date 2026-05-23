@@ -19,6 +19,7 @@ from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
 
 from .converters import TranscriptionToContextConverter
 from .observers import TurnTraceObserver
+from .tts_duration import TTSDurationTracker
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.observability import langfuse_client
@@ -91,7 +92,10 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
                 bot_output_enabled=False,
                 bot_llm_enabled=False,
                 bot_tts_enabled=False,
-                bot_speaking_enabled=False,
+                # bot_speaking_enabled drives botStartedSpeaking / botStoppedSpeaking on
+                # the client — the frontend uses botStoppedSpeaking to delay rendering
+                # the bot bubble until after the TTS audio finishes playing.
+                bot_speaking_enabled=True,
                 user_speaking_enabled=False,
                 metrics_enabled=False,
             ),
@@ -100,6 +104,12 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         # Give the wrapper the processor reference so it can push bot output.
         wrapper.rtvi_processor = rtvi_processor
 
+        # Tracks per-turn TTS audio duration (sample-count math on TTSAudioRawFrame).
+        # Fires `wrapper.flush_bot_output` when TTS finishes the turn, which is also
+        # the moment we push the bot-output RTVI message — so message arrival on the
+        # client lines up with end-of-audio and carries the duration.
+        tts_duration = TTSDurationTracker(on_turn_complete=wrapper.flush_bot_output)
+
         pipeline = Pipeline([
             transport.input(),
             stt,
@@ -107,6 +117,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             llm,
             turn_observer,     # read-only — emits one Langfuse trace per spoken turn (STT/LLM/TTS spans)
             tts,
+            tts_duration,     # sums TTSAudioRawFrame.num_frames per turn, triggers bot-output push
             rtvi_processor,    # pushes RTVI client messages assembled by rtvi_observer + ClientWrapper
             transport.output(),
             audiobuffer,

@@ -16,6 +16,33 @@ from pipecat.processors.frameworks.rtvi import (
     RTVIBotOutputMessage,
     RTVIBotOutputMessageData,
 )
+from pydantic import ConfigDict
+
+
+class _BotOutputDataWithDuration(RTVIBotOutputMessageData):
+    """Bot-output payload that carries the turn's TTS audio duration.
+
+    Pipecat's ``RTVIBotOutputMessageData`` defaults to Pydantic's ``extra=ignore``,
+    so adding ``audio_duration_ms`` as a free field would be silently dropped on
+    serialization. ``extra="allow"`` opts in to round-tripping our extra so the
+    frontend can read it and schedule the bubble reveal after audio playback.
+    """
+
+    model_config = ConfigDict(extra="allow")
+    audio_duration_ms: float
+
+
+class _BotOutputMessageWithDuration(RTVIBotOutputMessage):
+    """Bot-output envelope whose ``data`` is typed as the duration-aware subclass.
+
+    Without this override the outer model's field type is the *base*
+    ``RTVIBotOutputMessageData`` and Pydantic uses *that* schema when serializing,
+    which strips the ``audio_duration_ms`` field even when the instance is the
+    subclass. Pointing the field at the subclass keeps the extra during
+    ``model_dump()``.
+    """
+
+    data: _BotOutputDataWithDuration
 
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
@@ -61,6 +88,13 @@ class ClientWrapper:
 
         self._max_exchanges = load_prompts(lesson_id)["max_exchanges"]
         self._exchange_count = 0
+
+        # Bot reply is buffered here at the end of each LLM stream. The push to
+        # the client happens later, when TTSDurationTracker fires its on_turn_complete
+        # callback (`flush_bot_output`) with the authoritative audio duration. That
+        # way the message arrival on the client lines up with the server-side end of
+        # audio, and the frontend can schedule the bubble reveal precisely.
+        self._pending_bot_text: str | None = None
 
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
@@ -146,25 +180,44 @@ class ClientWrapper:
                 )
                 gen.end(end_time=ttft_ns)
 
-                # Push the full reply to the RTVI client as one BotOutput
-                # message per turn. The framework's bot-text dispatch sends
-                # duplicates because the same text is observed both as an
-                # AggregatedTextFrame (LLM side) and a TTSTextFrame (TTS side);
-                # we sidestep that by emitting once from here.
-                bot_text = "".join(full_response).strip()
-                if bot_text and self.rtvi_processor is not None:
-                    msg = RTVIBotOutputMessage(
-                        data=RTVIBotOutputMessageData(
-                            text=bot_text, spoken=True, aggregated_by="turn"
-                        )
-                    )
-                    await self.rtvi_processor.push_transport_message(msg)
+                # Stash the full reply; the actual push to the client now happens
+                # in `flush_bot_output`, invoked by TTSDurationTracker once TTS has
+                # finished streaming audio (server-side end-of-speech). The framework
+                # would otherwise dispatch duplicates (AggregatedTextFrame on the LLM
+                # side AND TTSTextFrame on the TTS side); we still emit exactly one
+                # message per turn, just timed against the audio.
+                self._pending_bot_text = "".join(full_response).strip() or None
 
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:
             prompt = get_last_system_prompt()
             if prompt:
                 self.logger.write_system_prompt(prompt)
+
+    async def flush_bot_output(self, audio_duration_ms: float) -> None:
+        """Push the buffered bot reply to the RTVI client with the turn's audio duration.
+
+        Called by ``TTSDurationTracker.on_turn_complete`` after the last TTS audio
+        frame has gone out. ``audio_duration_ms`` is the authoritative server-side
+        TTS audio length; the frontend uses it (plus the ``botStartedSpeaking``
+        timestamp it captures on receive) to reveal the bubble after playback
+        finishes in the browser.
+        """
+        text = self._pending_bot_text
+        if not text or self.rtvi_processor is None:
+            self._pending_bot_text = None
+            return
+
+        msg = _BotOutputMessageWithDuration(
+            data=_BotOutputDataWithDuration(
+                text=text,
+                spoken=True,
+                aggregated_by="turn",
+                audio_duration_ms=audio_duration_ms,
+            )
+        )
+        await self.rtvi_processor.push_transport_message(msg)
+        self._pending_bot_text = None
 
     async def _end_pipeline(self):
         """Wait for TTS to finish the goodbye, then force-close the pipeline."""
