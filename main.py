@@ -31,13 +31,18 @@ def health():
 
 @app.get("/lessons/{lesson_id}")
 def lesson_meta(lesson_id: str):
-    """Briefing copy + title for the conversation page's pre-call card.
+    """Briefing copy + title (+ optional completion content) for the conversation page.
 
     Loader already falls back to `lesson_zero` on unknown id (with a logged
-    warning), so the frontend never gets a 404 here.
+    warning), so the frontend never gets a 404 here. ``completion`` may be
+    ``None`` — the frontend's ``SessionSummaryModal`` supplies defaults.
     """
     lesson = load_prompts(lesson_id)
-    return {"title": lesson["title"], "briefing": lesson["briefing"]}
+    return {
+        "title": lesson["title"],
+        "briefing": lesson["briefing"],
+        "completion": lesson.get("completion"),
+    }
 
 
 @app.websocket("/ws/{user_id}")

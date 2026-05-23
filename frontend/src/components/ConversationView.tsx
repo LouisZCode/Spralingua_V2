@@ -7,6 +7,9 @@ import {
   ProtobufFrameSerializer,
 } from "@pipecat-ai/websocket-transport";
 import type { SessionParams } from "./SetupView";
+import SessionSummaryModal, {
+  type CompletionData,
+} from "./SessionSummaryModal";
 
 // Hardcoded user id (matches `agents/fake_profiles.py::0001`). Auth-issued
 // ids replace this once user accounts land.
@@ -17,6 +20,7 @@ const HTTP_BASE = "http://localhost:8765";
 interface LessonMeta {
   title: string;
   briefing: { situation: string; context: string; goal: string };
+  completion?: CompletionData | null;
 }
 
 interface ChatMessage {
@@ -36,10 +40,17 @@ export default function ConversationView({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<string>("Loading...");
   const [draft, setDraft] = useState<string>("");
+  const [showSummary, setShowSummary] = useState(false);
+  const [endedBy, setEndedBy] = useState<"user" | "agent">("agent");
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const finishedRef = useRef(false);
+  // Tracks who ended the session. `finishLesson()` sets this to "user"
+  // before disconnecting; otherwise `handleFinish` defaults it to "agent"
+  // (covers goodbye / max_exchanges / network drop). Read by the summary
+  // modal to pick which message to show.
+  const endReasonRef = useRef<"user" | "agent" | null>(null);
   // Bot text bubble is held here until audio playback finishes in the browser.
   // The backend now pushes the RTVIBotOutputMessage only after server-side TTS is
   // done, and attaches `audio_duration_ms`. We use `botStartedTime + duration +
@@ -80,7 +91,11 @@ export default function ConversationView({
   };
 
   // Single funnel for any disconnect path (manual button, system end, error).
-  // Re-entry guard so the audio cleanup + parent callback fire exactly once.
+  // Re-entry guard so the audio cleanup + summary trigger fire exactly once.
+  // We no longer call `onFinish()` from here — the SessionSummaryModal owns
+  // the transition back to the setup view (its "Back to lessons" button
+  // calls onFinish). This gives the user a moment to read the per-lesson
+  // outcome and leaves a slot for the future evaluator widget.
   const handleFinish = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
@@ -94,7 +109,11 @@ export default function ConversationView({
         .forEach((t) => t.stop());
       audioRef.current.srcObject = null;
     }
-    onFinish();
+    // Mirror the ref into state so the modal re-renders with the right
+    // message. Reading `.current` during render trips react-hooks/refs.
+    const reason: "user" | "agent" = endReasonRef.current ?? "agent";
+    setEndedBy(reason);
+    setShowSummary(true);
   };
 
   const startCall = async () => {
@@ -189,6 +208,10 @@ export default function ConversationView({
   };
 
   const finishLesson = async () => {
+    // Mark this disconnect as user-initiated BEFORE we ask the client
+    // to disconnect — the resulting `onDisconnected` may race ahead of
+    // the `await` here, and we need handleFinish to see the right ref.
+    endReasonRef.current = "user";
     if (clientRef.current) {
       await clientRef.current.disconnect();
       clientRef.current = null;
@@ -331,6 +354,13 @@ export default function ConversationView({
 
         <audio ref={audioRef} autoPlay />
       </div>
+      <SessionSummaryModal
+        open={showSummary}
+        lessonTitle={meta?.title ?? ""}
+        completion={meta?.completion ?? null}
+        endedBy={endedBy}
+        onClose={onFinish}
+      />
     </div>
   );
 }

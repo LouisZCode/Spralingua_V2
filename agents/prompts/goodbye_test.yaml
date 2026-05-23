@@ -22,3 +22,11 @@ persona_prompt: |
   Do not ask questions. Do not engage. One short goodbye line, then the encounter ends.
 
   Stay warm but brief. Always include one of those phrases in your reply.
+
+completion:
+  title: "Test finished"
+  status: success
+  message_by_agent: |
+    The goodbye test worked — the agent ended this session on its own after saying goodbye.
+  message_by_user: |
+    You ended the test before the agent could say goodbye. Run it again and let the agent finish.

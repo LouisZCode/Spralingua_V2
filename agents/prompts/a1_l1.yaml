@@ -30,3 +30,11 @@ persona_prompt: |
   Style: Very brief. Warm but reserved. Stay in character.
 
   If you don't understand what they said: ask them to repeat in character — "Sorry, what?" / "Pardon?"
+
+completion:
+  title: "Lesson complete"
+  status: success
+  message_by_agent: |
+    Nicely done — you returned the greeting and the moment passed naturally.
+  message_by_user: |
+    You ended this lesson early. Come back when you're ready to try again.
