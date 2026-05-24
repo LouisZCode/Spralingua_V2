@@ -10,12 +10,12 @@ Each client connection gets its own ClientWrapper instance, holding:
 import asyncio
 import time
 
-from langfuse import propagate_attributes
 from loguru import logger
 from pipecat.processors.frameworks.rtvi import (
     RTVIBotOutputMessage,
     RTVIBotOutputMessageData,
 )
+from pipecat.utils.tracing.turn_context_provider import get_current_turn_context
 from pydantic import ConfigDict
 
 
@@ -48,7 +48,7 @@ from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 from .fake_profiles import load_profile
 from .load_prompts import load_prompts
-from .observability import langfuse_client
+from .observability import tracer
 
 # `max_exchanges` is now per-lesson, read from the YAML in `ClientWrapper.__init__`.
 # End-of-call fires when either the count cap is reached OR a goodbye phrase
@@ -85,6 +85,12 @@ class ClientWrapper:
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client
         self._end_task = None
+        # End-of-call is detected mid-LLM-stream but DEFERRED until the bot
+        # finishes speaking. Otherwise stop_when_done() races: the EndFrame
+        # reaches the TurnTrackingObserver and ends the turn before TTS gets
+        # the bot's last TextFrame, which orphans the final TTS span (no
+        # turn context → falls back to service-level parent → separate trace).
+        self._end_pending: bool = False
 
         self._max_exchanges = load_prompts(lesson_id)["max_exchanges"]
         self._exchange_count = 0
@@ -99,17 +105,22 @@ class ClientWrapper:
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
 
-        Owns the per-turn ``turn-N-LLM`` Langfuse Generation: opens at
-        chain dispatch with the user message as input, accumulates streamed
-        tokens into a buffer, captures the first-token timestamp (TTFT),
-        extracts the final ``usage_metadata`` chunk for token counts, and
-        on stream completion writes ``output`` + ``usage_details`` via
-        ``.update(...)`` (only valid while the span is still recording per
-        langfuse 4.6.1 ``span.py:654``), then closes with
-        ``.end(end_time=ttft_ns)`` so duration = TTFT.
+        Owns the per-turn LLM OTel span. Pipecat's built-in TurnTraceObserver
+        (enabled via ``PipelineTask(enable_tracing=True)``) opens a turn span
+        on each spoken turn and registers it with ``TurnContextProvider``; we
+        look it up here and start a child span so the LLM call nests under
+        the turn alongside the auto-emitted STT and TTS spans.
 
-        ``.end()`` accepts only ``end_time`` in 4.6.1 (``span.py:206``);
-        all other fields must be set via ``.update()`` first.
+        Attributes emitted follow OTel ``gen_ai.*`` semantic conventions so
+        Langfuse's cost engine can read ``input_tokens`` / ``output_tokens``
+        directly; ``input`` / ``output`` carry the user message and full
+        reply for evaluation; the custom block (level/situation/voice/
+        lesson_id/exchange) preserves the per-turn metadata we used to put
+        on the manual Langfuse Generation.
+
+        ``LangchainProcessor`` itself is uninstrumented (it's a
+        ``FrameProcessor``, not an ``LLMService``), so this is the only LLM
+        span on the trace.
         """
         text = input_dict.get("input", "")
         messages = {"messages": [{"role": "user", "content": text}]}
@@ -122,25 +133,33 @@ class ClientWrapper:
         ttft_ns = None
         final_usage = None
 
-        with propagate_attributes(
-            session_id=self.session_id,
-            user_id=self.user_id,
-            tags=[self.context.user_level, self.context.situation, "LLM"],
-            trace_name=f"turn-{self._exchange_count}-LLM",
-        ):
-            gen = langfuse_client.start_observation(
-                name=f"turn-{self._exchange_count}-LLM",
-                as_type="generation",
-                model=CONVERSATIONAL_MODEL,
-                input=text,
-                metadata={
-                    "service": "cerebras-via-openrouter",
-                    "level": self.context.user_level,
-                    "situation": self.context.situation,
-                    "voice": self.context.agent_voice,
-                    "exchange": self._exchange_count,
-                },
-            )
+        # ``get_current_turn_context()`` returns ``None`` if tracing is
+        # disabled OR if no turn span is active right now. Either way OTel
+        # falls back to the current context, which is the right behavior:
+        # no parent → span becomes a root span, harmless.
+        turn_ctx = get_current_turn_context()
+        span_start_ns = time.time_ns()
+
+        with tracer.start_as_current_span(
+            "llm",
+            context=turn_ctx,
+        ) as llm_span:
+            llm_span.set_attribute("gen_ai.system", "openrouter")
+            llm_span.set_attribute("gen_ai.request.model", CONVERSATIONAL_MODEL)
+            llm_span.set_attribute("gen_ai.operation.name", "chat")
+            llm_span.set_attribute("gen_ai.output.type", "text")
+            # Observation-level input — shown on the LLM observation row in Langfuse.
+            llm_span.set_attribute("langfuse.observation.input", text)
+            # Trace-level input — populates the "Input" column on the conversation
+            # trace itself. Setting on any span in the trace works; we set it here
+            # (last LLM call wins for multi-turn lessons).
+            llm_span.set_attribute("langfuse.trace.input", text)
+            llm_span.set_attribute("level", self.context.user_level)
+            llm_span.set_attribute("situation", self.context.situation)
+            llm_span.set_attribute("voice", self.context.agent_voice)
+            llm_span.set_attribute("lesson_id", self.context.lesson_id)
+            llm_span.set_attribute("exchange", self._exchange_count)
+
             try:
                 async for token, _ in self.agent.astream(
                     messages,
@@ -155,9 +174,13 @@ class ClientWrapper:
                         yield token.content
 
                         # End trigger: either count cap reached OR goodbye phrase
-                        # appears. Scheduled in-stream (post-yield code is unreliable).
-                        if (self._end_task is None
-                                and self._pipeline_task
+                        # appears. Detected in-stream (post-yield code is unreliable)
+                        # but only MARKED as pending here — the actual stop_when_done()
+                        # call happens in flush_bot_output() after BotStoppedSpeakingFrame
+                        # so the final TTS span gets to record under the turn before
+                        # EndFrame races through and closes the turn span. See
+                        # LEARNINGS.md for the race condition that motivates this.
+                        if (not self._end_pending
                                 and (self._exchange_count >= self._max_exchanges
                                      or _contains_goodbye("".join(full_response)))):
                             reason = (
@@ -165,27 +188,31 @@ class ClientWrapper:
                                 else "goodbye"
                             )
                             logger.info(
-                                f"[END] Scheduling pipeline close ({reason}, "
-                                f"exchange {self._exchange_count}/{self._max_exchanges})"
+                                f"[END] Pending pipeline close ({reason}, "
+                                f"exchange {self._exchange_count}/{self._max_exchanges}) "
+                                f"— will fire after bot finishes speaking"
                             )
-                            self._end_task = asyncio.create_task(self._end_pipeline())
+                            self._end_pending = True
 
                     if getattr(token, "usage_metadata", None):
                         final_usage = token.usage_metadata
             finally:
-                usage = None
+                output_text = "".join(full_response)
+                llm_span.set_attribute("langfuse.observation.output", output_text)
+                llm_span.set_attribute("langfuse.trace.output", output_text)
                 if final_usage:
-                    usage = {
-                        "input": final_usage.get("input_tokens"),
-                        "output": final_usage.get("output_tokens"),
-                        "total": final_usage.get("total_tokens"),
-                    }
-                # Write fields BEFORE end (post-end updates are dropped).
-                gen.update(
-                    output="".join(full_response) or None,
-                    usage_details=usage,
-                )
-                gen.end(end_time=ttft_ns)
+                    if (n := final_usage.get("input_tokens")) is not None:
+                        llm_span.set_attribute("gen_ai.usage.input_tokens", n)
+                    if (n := final_usage.get("output_tokens")) is not None:
+                        llm_span.set_attribute("gen_ai.usage.output_tokens", n)
+                if ttft_ns is not None:
+                    # Keep our existing TTFT metric as a custom attribute. Span
+                    # duration itself now covers full LLM streaming (not just
+                    # first-token), which matches what gen_ai.* conventions expect.
+                    llm_span.set_attribute(
+                        "metrics.ttft_ms",
+                        (ttft_ns - span_start_ns) / 1_000_000,
+                    )
 
                 # Stash the full reply; the actual push to the client now happens
                 # in `flush_bot_output`, invoked by TTSDurationTracker once TTS has
@@ -193,7 +220,7 @@ class ClientWrapper:
                 # would otherwise dispatch duplicates (AggregatedTextFrame on the LLM
                 # side AND TTSTextFrame on the TTS side); we still emit exactly one
                 # message per turn, just timed against the audio.
-                self._pending_bot_text = "".join(full_response).strip() or None
+                self._pending_bot_text = output_text.strip() or None
 
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:
@@ -225,6 +252,14 @@ class ClientWrapper:
         )
         await self.rtvi_processor.push_transport_message(msg)
         self._pending_bot_text = None
+
+        # If end-of-call was detected mid-LLM-stream, NOW is the safe moment
+        # to fire stop_when_done(): the bot has finished speaking, the final
+        # TTS span is closed under the turn, and the EndFrame can race through
+        # the observers without orphaning any in-flight span.
+        if self._end_pending and self._end_task is None and self._pipeline_task:
+            logger.info("[END] Bot finished speaking — closing pipeline")
+            self._end_task = asyncio.create_task(self._end_pipeline())
 
     async def _end_pipeline(self):
         """Gracefully end the pipeline once in-flight TTS audio is done streaming.
