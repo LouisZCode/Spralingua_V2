@@ -42,6 +42,7 @@ which includes user-speaking time in the TTFB metric) or change strategy.
 This only affects voice mode; typed input via ``/say`` has no STT.
 """
 
+from collections import deque
 from typing import Optional
 
 from loguru import logger
@@ -72,6 +73,8 @@ class PipelineLatencyObserver(BaseObserver):
         level: str,
         situation: str,
         voice: str,
+        tts_service=None,
+        max_frames: int = 100,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -81,6 +84,21 @@ class PipelineLatencyObserver(BaseObserver):
         self._level = level
         self._situation = situation
         self._voice = voice
+        # Optional TTS service reference. If it exposes ``reset_for_new_turn()``
+        # (our ``FirstOnlyTracedMiniMaxTTS`` does), we call it on each turn
+        # open to re-arm its one-span-per-turn gate. Without this, long bot
+        # replies would split into multiple run_tts calls and each call after
+        # the first would orphan into its own trace.
+        self._tts_service = tts_service
+
+        # Same dedup pattern Pipecat's own TurnTrackingObserver uses (see
+        # `pipecat/observers/turn_tracking_observer.py:65–89`). Pipecat's
+        # observer machinery fires `on_push_frame` once per processor edge
+        # the frame traverses, so a single UserStoppedSpeakingFrame or
+        # LLMContextFrame would trigger ~8 turn opens (one per edge of our
+        # 9-processor pipeline). Bounded set + ring buffer keeps memory flat.
+        self._processed_frames: set = set()
+        self._frame_history: deque = deque(maxlen=max_frames)
 
         self._tracer = trace.get_tracer("spralingua")
         self._turn_span: Optional[Span] = None
@@ -88,6 +106,16 @@ class PipelineLatencyObserver(BaseObserver):
 
     async def on_push_frame(self, data: FramePushed):
         frame = data.frame
+
+        # Dedup: skip if we've already seen this frame on a prior edge.
+        if frame.id in self._processed_frames:
+            return
+        self._processed_frames.add(frame.id)
+        self._frame_history.append(frame.id)
+        # Re-sync the set to the bounded history if it grew past the ring.
+        if len(self._processed_frames) > len(self._frame_history):
+            self._processed_frames = set(self._frame_history)
+
         try:
             if isinstance(frame, UserStoppedSpeakingFrame):
                 # Voice flow: VAD signals user stopped → open turn (will close
@@ -135,6 +163,9 @@ class PipelineLatencyObserver(BaseObserver):
         TurnContextProvider.get_instance().set_current_turn_context(
             self._turn_span.get_span_context()
         )
+        # Re-arm the TTS service's one-span-per-turn gate (if present).
+        if self._tts_service is not None and hasattr(self._tts_service, "reset_for_new_turn"):
+            self._tts_service.reset_for_new_turn()
 
     def _close_turn(self):
         if self._turn_span is not None:

@@ -124,7 +124,10 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         # Owns the conversation + turn spans with pipeline-TTFB semantics:
         # turn = UserStoppedSpeakingFrame → BotStartedSpeakingFrame (the "how fast
         # is our pipeline" number). Pipecat's own turn observers are suppressed
-        # via `enable_turn_tracking=False` on the PipelineTask below.
+        # via `enable_turn_tracking=False` on the PipelineTask below. The tts
+        # reference lets the observer re-arm the one-span-per-turn gate on
+        # FirstOnlyTracedMiniMaxTTS (long bot replies trigger multiple run_tts
+        # calls; we want exactly one TTS span per turn = the TTFB measurement).
         pipeline_observer = PipelineLatencyObserver(
             session_id=session_id,
             user_id=user_id,
@@ -132,6 +135,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             level=level,
             situation=situation,
             voice=voice,
+            tts_service=tts,
         )
 
         pipeline = Pipeline([

@@ -8,7 +8,9 @@ tts_minimax
 """
 import aiohttp
 import asyncio
+from typing import AsyncGenerator
 
+from pipecat.frames.frames import Frame
 from pipecat.services.minimax.tts import MiniMaxHttpTTSService
 from config import minimax_api_key, minimax_group_id
 from pipecat.transcriptions.language import Language
@@ -32,9 +34,61 @@ VOICE_MAP = {
     "German_Female": "moss_audio_4872e74b-124f-11f1-841b-1e2fac512910",  # German female (won A/B vs deleted v2)
 }
 
+class FirstOnlyTracedMiniMaxTTS(MiniMaxHttpTTSService):
+    """MiniMax TTS that emits exactly ONE ``@traced_tts`` span per turn.
+
+    For long bot replies, MiniMax splits text at sentence boundaries and
+    calls ``run_tts`` once per sentence. Each call hits Pipecat's
+    ``@traced_tts`` decorator. The first call's span lands inside the
+    active turn (good — that's the pipeline-TTFB measurement). Calls 2+
+    fire AFTER ``BotStartedSpeakingFrame`` has closed the turn span and
+    cleared ``TurnContextProvider``, so they fall back to a service-level
+    parent and become standalone orphan traces.
+
+    Fix: gate the decorator via ``self._tracing_enabled``. ``@traced_tts``
+    short-circuits without creating a span when that flag is False (see
+    ``pipecat/utils/tracing/service_decorators.py:171–173``). We toggle it
+    off for calls 2+ within a turn — audio still streams normally, just
+    no span. ``PipelineLatencyObserver`` calls ``reset_for_new_turn()`` on
+    each turn open to re-arm the gate.
+
+    The single emitted span captures the FULL synthesis time of the first
+    sentence — the TTFB-shaped measurement we want.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # True = next run_tts call is allowed to emit its span.
+        # Flipped to False after the first call this turn, re-armed by
+        # `reset_for_new_turn()` (called by PipelineLatencyObserver).
+        self._allow_tts_span = True
+
+    def reset_for_new_turn(self) -> None:
+        """Re-arm the span gate so the next ``run_tts`` call creates a span."""
+        self._allow_tts_span = True
+
+    async def run_tts(self, text: str) -> AsyncGenerator[Frame, None]:
+        if self._allow_tts_span:
+            # First call this turn — let @traced_tts behave normally.
+            self._allow_tts_span = False
+            async for item in super().run_tts(text):
+                yield item
+        else:
+            # Subsequent call — temporarily disable tracing so @traced_tts
+            # skips span creation. Restore on exit so a transient toggle
+            # doesn't bleed into other state.
+            saved = self._tracing_enabled
+            self._tracing_enabled = False
+            try:
+                async for item in super().run_tts(text):
+                    yield item
+            finally:
+                self._tracing_enabled = saved
+
+
 def tts_minimax(session, voice: str = "happy_harry"):
     voice_id = VOICE_MAP.get(voice, "german_bavarian_male_v2")
-    return MiniMaxHttpTTSService(
+    return FirstOnlyTracedMiniMaxTTS(
         api_key=minimax_api_key,
         group_id=minimax_group_id,
         aiohttp_session=session,
