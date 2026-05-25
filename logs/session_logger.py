@@ -83,6 +83,19 @@ class SessionLogger:
         self._md_file.flush()
         self._system_prompt_written = True
 
+    def write_evaluation(self, passed: bool, reason: str):
+        """Append the post-session evaluator verdict to both `.md` and `.log`.
+
+        Called from the disconnect block in `pipeline/factory.py` after the
+        EVAL-001 agent returns, while the file handles are still open.
+        """
+        badge = "PASS" if passed else "FAIL"
+        self._md_file.write(f"\n## Evaluation: {badge}\n\n{reason}\n")
+        self._md_file.flush()
+        time_str = datetime.now().strftime("%H:%M:%S")
+        self._file.write(f"\n[{time_str}] EVALUATION {badge}: {reason}\n")
+        self._file.flush()
+
     def _write(self, message: str):
         """Write a line to log file."""
         self._file.write(message + "\n")

@@ -2,6 +2,7 @@ import wave
 from uuid import uuid4
 
 import aiohttp
+from loguru import logger
 from pydub import AudioSegment
 
 from services import stt_deepgram, tts_minimax, transport_fastapi_ws
@@ -22,6 +23,8 @@ from .observers import PipelineLatencyObserver
 from .tts_duration import TTSDurationTracker
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
+from agents.evaluator import evaluate
+from agents.load_goals import load_goal
 from agents.observability import flush_traces
 
 from logs import setup_session_logger
@@ -189,6 +192,21 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         finally:
             ACTIVE_TASKS.pop(user_id, None)
             await audiobuffer.stop_recording()
+            # Post-session evaluator (EVAL-001). Best-effort: any failure here
+            # (LLM outage, missing goal entry, network) is logged and swallowed
+            # so audio export and logger close always run.
+            try:
+                goal = load_goal(lesson_id)
+                if wrapper._transcript and goal is not None:
+                    result = await evaluate(
+                        transcript=wrapper.render_transcript(),
+                        pass_criterion=goal["pass_criterion"],
+                        language=goal["language"],
+                    )
+                    session_logger.write_evaluation(result.passed, result.reason)
+                    logger.info(f"Evaluation: passed={result.passed} reason={result.reason}")
+            except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
+                logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
             session_logger.close()
             flush_traces()  # drain queued OTel spans before the process moves on
             print(f"Client disconnected: {user_id}")

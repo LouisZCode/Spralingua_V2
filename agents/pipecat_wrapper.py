@@ -102,6 +102,11 @@ class ClientWrapper:
         # audio, and the frontend can schedule the bubble reveal precisely.
         self._pending_bot_text: str | None = None
 
+        # Full per-turn transcript captured in-memory as (role, text) tuples.
+        # Consumed on disconnect by the post-session evaluator (EVAL-001) so it
+        # has the full conversation to judge against the lesson's pass_criterion.
+        self._transcript: list[tuple[str, str]] = []
+
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
 
@@ -222,11 +227,21 @@ class ClientWrapper:
                 # message per turn, just timed against the audio.
                 self._pending_bot_text = output_text.strip() or None
 
+                # Capture the turn for the post-session evaluator. Runs in the
+                # finally so even partial turns (interruptions, errors mid-stream)
+                # land in the transcript with whatever the bot managed to say.
+                self._transcript.append(("user", text))
+                self._transcript.append(("bot", output_text))
+
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:
             prompt = get_last_system_prompt()
             if prompt:
                 self.logger.write_system_prompt(prompt)
+
+    def render_transcript(self) -> str:
+        """Format the captured turns as a single string for the evaluator prompt."""
+        return "\n\n".join(f"{role.capitalize()}: {body}" for role, body in self._transcript)
 
     async def flush_bot_output(self, audio_duration_ms: float) -> None:
         """Push the buffered bot reply to the RTVI client with the turn's audio duration.
