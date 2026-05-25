@@ -83,17 +83,36 @@ class SessionLogger:
         self._md_file.flush()
         self._system_prompt_written = True
 
-    def write_evaluation(self, passed: bool, reason: str):
+    def write_evaluation(self, result):
         """Append the post-session evaluator verdict to both `.md` and `.log`.
 
         Called from the disconnect block in `pipeline/factory.py` after the
-        EVAL-001 agent returns, while the file handles are still open.
+        evaluator returns. Accepts the full ``EvaluationResult`` duck-typed:
+        ``result.score``, ``result.pass_threshold``, ``result.passed``, and
+        ``result.goals[].{goal, passed, evidence, reasoning}``.
         """
-        badge = "PASS" if passed else "FAIL"
-        self._md_file.write(f"\n## Evaluation: {badge}\n\n{reason}\n")
+        badge = "PASS" if result.passed else "FAIL"
+        header = f"{badge} ({result.score}/{result.pass_threshold})"
+
+        self._md_file.write(f"\n## Evaluation: {header}\n\n")
+        self._md_file.write("| Goal | Result | Evidence | Notes |\n")
+        self._md_file.write("|---|---|---|---|\n")
+        for g in result.goals:
+            row = "PASS" if g.passed else "FAIL"
+            evidence = g.evidence.replace("|", "\\|").replace("\n", " ")
+            reasoning = g.reasoning.replace("|", "\\|").replace("\n", " ")
+            self._md_file.write(
+                f"| {g.goal} | {row} | \"{evidence}\" | {reasoning} |\n"
+            )
         self._md_file.flush()
+
         time_str = datetime.now().strftime("%H:%M:%S")
-        self._file.write(f"\n[{time_str}] EVALUATION {badge}: {reason}\n")
+        self._file.write(f"\n[{time_str}] EVALUATION {header}\n")
+        for g in result.goals:
+            row = "PASS" if g.passed else "FAIL"
+            self._file.write(f"           ├─ [{row}] {g.goal}\n")
+            self._file.write(f"           │        Evidence: \"{g.evidence}\"\n")
+            self._file.write(f"           │        Notes:    {g.reasoning}\n")
         self._file.flush()
 
     def _write(self, message: str):

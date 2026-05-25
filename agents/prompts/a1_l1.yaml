@@ -12,6 +12,10 @@ title: A1-L1 — Sidewalk Hello
 description: A1 Lesson 1, basic stub. Persona only; no profile injection.
 max_exchanges: 1
 
+pass_threshold: 100
+goals:
+  - "Produce a recognisable greeting word (hello, hi, hey, good morning, good afternoon, good evening)"
+
 briefing:
   situation: |
     You're walking down a quiet residential street.

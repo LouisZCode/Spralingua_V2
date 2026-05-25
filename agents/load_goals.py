@@ -1,27 +1,35 @@
-"""Lesson-aware goals loader.
+"""Lesson-aware evaluator-goals loader.
 
-Each lesson's evaluator config (`language`, `goal_text`, `pass_criterion`)
-lives under its `lesson_id` key in `agents/goals.yaml`. Lessons without an
-entry skip the post-session evaluator entirely (e.g. internal dev lessons
-like `goodbye_test` — see `pipeline/factory.py` disconnect block). No
-fallback: silently judging lesson A by lesson B's criterion was a footgun,
-not a feature. The YAML is the v1 stub for the DATA-003 Postgres table;
-the call-site signature stays the same when that swap happens.
+Goal data lives alongside the rest of the lesson in
+`agents/prompts/{lesson_id}.yaml` under the top-level keys ``goals`` and
+``pass_threshold``. A lesson without those keys is intentionally not
+evaluated — `pipeline/factory.py` short-circuits on `None`.
+
+`lesson_zero` is hard-skipped regardless of YAML contents: it is the
+open-conversation default and must never be evaluated (memory rule
+"feedback-lesson-zero-untouchable").
 """
 
-from pathlib import Path
-
-import yaml
 from loguru import logger
 
-_GOALS_FILE = Path(__file__).parent / "goals.yaml"
+from .load_prompts import load_prompts
 
 
 def load_goal(lesson_id: str) -> dict | None:
-    """Load a lesson's evaluator config, or `None` if the lesson has no entry."""
-    with open(_GOALS_FILE, "r", encoding="utf-8") as f:
-        goals = yaml.safe_load(f)
-    if lesson_id not in goals:
-        logger.info(f"No evaluator goal for lesson_id={lesson_id!r}; skipping evaluation")
+    """Return `{goals, pass_threshold}` for a lesson, or `None` to skip eval.
+
+    Skip conditions:
+      - `lesson_id == "lesson_zero"` (explicit rule).
+      - The lesson YAML omits `goals` or `pass_threshold`.
+      - `goals` is empty.
+    """
+    if lesson_id == "lesson_zero":
+        logger.info("lesson_zero is unscored by design; skipping evaluation")
         return None
-    return goals[lesson_id]
+    lesson = load_prompts(lesson_id)
+    goals = lesson.get("goals")
+    pass_threshold = lesson.get("pass_threshold")
+    if not goals or pass_threshold is None:
+        logger.info(f"No evaluator goals on lesson_id={lesson_id!r}; skipping evaluation")
+        return None
+    return {"goals": goals, "pass_threshold": pass_threshold}

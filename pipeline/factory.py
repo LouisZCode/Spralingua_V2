@@ -200,11 +200,16 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
                 if wrapper._transcript and goal is not None:
                     result = await evaluate(
                         transcript=wrapper.render_transcript(),
-                        pass_criterion=goal["pass_criterion"],
-                        language=goal["language"],
+                        goals=goal["goals"],
+                        pass_threshold=goal["pass_threshold"],
                     )
-                    session_logger.write_evaluation(result.passed, result.reason)
-                    logger.info(f"Evaluation: passed={result.passed} reason={result.reason}")
+                    session_logger.write_evaluation(result)
+                    passed_count = sum(1 for g in result.goals if g.passed)
+                    logger.info(
+                        f"Evaluation: passed={result.passed} "
+                        f"score={result.score}/{result.pass_threshold} "
+                        f"goals_passed={passed_count}/{len(result.goals)}"
+                    )
             except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
                 logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
             session_logger.close()
