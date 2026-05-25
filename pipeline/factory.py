@@ -171,6 +171,25 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             ),
         )
 
+        # Push the session_id to the client as soon as the RTVI handshake
+        # completes, so the frontend can later hit GET /sessions/{id} for the
+        # post-session eval modal (EVAL-UI-001). Registering AFTER `RTVIProcessor()`
+        # and firing on `on_client_ready` guarantees the JS listener is wired —
+        # pushing earlier would silently drop the message.
+        @rtvi_processor.event_handler("on_client_ready")
+        async def _push_session_started(_processor):
+            try:
+                await rtvi_processor.send_server_message({
+                    "type": "session_started",
+                    "session_id": session_id,
+                    "lesson_id": lesson_id,
+                })
+            except Exception as e:  # noqa: BLE001 — non-fatal
+                logger.warning(
+                    f"Failed to push session_started RTVI message (non-fatal): "
+                    f"{type(e).__name__}: {e}"
+                )
+
         # Give the wrapper the processor reference so it can push bot output.
         wrapper.rtvi_processor = rtvi_processor
 

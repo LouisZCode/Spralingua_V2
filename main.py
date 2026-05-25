@@ -1,6 +1,7 @@
 # Backend:  uvicorn main:app --host 0.0.0.0 --port 8765
 # Frontend: cd frontend && npm run dev
 
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, WebSocket
@@ -12,7 +13,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts
 from config import database_url
-from database import dispose_engine, init_engine
+from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_TASKS
 
@@ -56,6 +57,36 @@ def lesson_meta(lesson_id: str):
         "title": lesson["title"],
         "briefing": lesson["briefing"],
         "completion": lesson.get("completion"),
+    }
+
+
+@app.get("/sessions/{session_id}")
+async def get_session(session_id: str):
+    """Return the activity_session row for the post-session modal to render.
+
+    ``ended_at IS NULL`` means the disconnect-side finalize step hasn't run
+    yet (evaluators + DB update happen in pipeline/factory.py's finally:
+    block, after the WS is already closed). The frontend polls this route
+    every ~1s until ``ended_at`` is set, then renders the eval blocks.
+    """
+    try:
+        session_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="invalid session_id")
+
+    async with get_sessionmaker()() as db:
+        row = await db.get(ActivitySession, session_uuid)
+    if row is None:
+        raise HTTPException(status_code=404, detail="session not found")
+    return {
+        "id": str(row.id),
+        "lesson_id": row.lesson_id,
+        "started_at": row.started_at.isoformat() if row.started_at else None,
+        "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+        "ended_by": row.ended_by,
+        "passed": row.passed,
+        "goal_eval": row.goal_eval,
+        "pron_eval": row.pron_eval,
     }
 
 

@@ -51,6 +51,12 @@ export default function ConversationView({
   // (covers goodbye / max_exchanges / network drop). Read by the summary
   // modal to pick which message to show.
   const endReasonRef = useRef<"user" | "agent" | null>(null);
+  // Backend pushes a {type: "session_started", session_id, lesson_id} RTVI
+  // server-message right after on_client_ready fires. We stash the id in
+  // state (not a ref) so it's safe to read during render when handing it
+  // to <SessionSummaryModal>. Stays null until the message arrives — modal
+  // treats null as "results unavailable" and skips polling.
+  const [sessionId, setSessionId] = useState<string | null>(null);
   // Bot text bubble is held here until audio playback finishes in the browser.
   // The backend now pushes the RTVIBotOutputMessage only after server-side TTS is
   // done, and attaches `audio_duration_ms`. We use `botStartedTime + duration +
@@ -187,6 +193,21 @@ export default function ConversationView({
             // without a scheduled timer (e.g., bot-output dropped on the wire).
             if (revealTimerRef.current == null) {
               flushPendingBot();
+            }
+          },
+          onServerMessage: (data: unknown) => {
+            // Backend's "session_started" handshake — see EVAL-UI-001.
+            // Any other server-message types are ignored here; add a switch
+            // if/when we introduce more server→client events.
+            if (
+              data &&
+              typeof data === "object" &&
+              (data as { type?: unknown }).type === "session_started"
+            ) {
+              const sid = (data as { session_id?: unknown }).session_id;
+              if (typeof sid === "string") {
+                setSessionId(sid);
+              }
             }
           },
           onError: (err: unknown) =>
@@ -354,13 +375,15 @@ export default function ConversationView({
 
         <audio ref={audioRef} autoPlay />
       </div>
-      <SessionSummaryModal
-        open={showSummary}
-        lessonTitle={meta?.title ?? ""}
-        completion={meta?.completion ?? null}
-        endedBy={endedBy}
-        onClose={onFinish}
-      />
+      {showSummary && (
+        <SessionSummaryModal
+          lessonTitle={meta?.title ?? ""}
+          completion={meta?.completion ?? null}
+          endedBy={endedBy}
+          sessionId={sessionId}
+          onClose={onFinish}
+        />
+      )}
     </div>
   );
 }
