@@ -9,7 +9,7 @@ session totals, so a session-level span would just duplicate that work).
 Hierarchy in Langfuse:
 
     Langfuse Session (one per WebSocket, soft grouping)
-    ├── Trace = turn-{lesson_id}                     ← root span = pipeline TTFB
+    ├── Trace = turn-{lesson_id}                     ← root span
     │   ├── stt observation   (Deepgram, @traced_stt)
     │   ├── llm observation   (hand-rolled in pipecat_wrapper.astream)
     │   └── tts observation   (MiniMax, @traced_tts)
@@ -19,12 +19,27 @@ Hierarchy in Langfuse:
 
 Turn boundaries (= trace boundaries):
 
-- **open** on ``UserStoppedSpeakingFrame`` (voice) OR ``LLMContextFrame``
-  (``/say`` typed input — no VAD events fire for that path)
+- **open** on ``UserStartedSpeakingFrame`` (voice) OR ``LLMContextFrame``
+  (``/say`` typed input — no VAD events fire for that path). Opening at
+  user-start (not user-stop) means ``@traced_stt`` finds a live
+  ``TurnContextProvider`` while transcribing, so STT spans nest under the
+  turn instead of becoming top-level orphans.
+- **timestamp marker** on ``UserStoppedSpeakingFrame`` — no new span. We
+  record the wall-clock ns so we can emit ``metrics.pipeline_ttfb_ms``
+  (UserStopped → BotStarted) on the turn span at close, preserving the
+  original "pipeline TTFB" number even though the turn span's own duration
+  now spans the whole user-start → bot-start window.
 - **close** on ``BotStartedSpeakingFrame`` (bot's first audio leaves the
-  transport — voice-to-voice TTFB end boundary) or on
-  ``EndFrame`` / ``CancelFrame`` if the turn somehow never produced bot
-  audio.
+  transport) or on ``EndFrame`` / ``CancelFrame`` if the turn somehow
+  never produced bot audio.
+
+Frame direction filter: ``BaseInputTransport`` emits the VAD frames via
+``broadcast_frame()`` (``frame_processor.py:742-753``), which constructs
+TWO Frame instances (one pushed DOWNSTREAM, one UPSTREAM) with distinct
+``frame.id`` values. Without filtering, both reach this observer and the
+``frame.id`` dedup misses, producing duplicate 0-duration turn spans. We
+filter to ``FrameDirection.DOWNSTREAM`` — same pattern Pipecat's own
+``user_bot_latency_log_observer.py:49-51`` uses.
 
 Pipecat's auto-attached ``TurnTrackingObserver`` + ``TurnTraceObserver``
 are disabled at the ``PipelineTask`` level (``enable_turn_tracking=False``)
@@ -33,15 +48,9 @@ of the ``TurnContextProvider`` singleton. The ``@traced_stt`` /
 ``@traced_tts`` decorators and our LLM span all look up that singleton at
 service-dispatch time to find their parent — same mechanism Pipecat's own
 ``TurnTraceObserver`` uses (``turn_trace_observer.py:189–190``).
-
-**Known limitation (voice mode):** ``@traced_stt`` on Deepgram fires per
-transcript, which happens *during* user speech — before
-``UserStoppedSpeakingFrame``. Those STT spans will be orphan (each its own
-trace) until we either open the turn earlier (``UserStartedSpeakingFrame``,
-which includes user-speaking time in the TTFB metric) or change strategy.
-This only affects voice mode; typed input via ``/say`` has no STT.
 """
 
+import time
 from collections import deque
 from typing import Optional
 
@@ -53,15 +62,19 @@ from pipecat.frames.frames import (
     CancelFrame,
     EndFrame,
     LLMContextFrame,
+    UserStartedSpeakingFrame,
     UserStoppedSpeakingFrame,
 )
 from pipecat.observers.base_observer import BaseObserver, FramePushed
+from pipecat.processors.frame_processor import FrameDirection
 from pipecat.utils.tracing.turn_context_provider import TurnContextProvider
 
 
 class PipelineLatencyObserver(BaseObserver):
-    """Open a new Langfuse trace per turn, with turn duration = pipeline TTFB
-    (UserStopped/LLMContextFrame → BotStarted). All session/user/lesson
+    """Open a new Langfuse trace per turn. Turn span duration = UserStarted
+    (or LLMContextFrame for typed input) → BotStarted. The original
+    pipeline-TTFB number (UserStopped → BotStarted) is preserved as
+    `metrics.pipeline_ttfb_ms` on the span. All session/user/lesson
     metadata is set on each turn's trace root."""
 
     def __init__(
@@ -103,8 +116,23 @@ class PipelineLatencyObserver(BaseObserver):
         self._tracer = trace.get_tracer("spralingua")
         self._turn_span: Optional[Span] = None
         self._turn_count = 0
+        # Wall-clock ns at UserStoppedSpeakingFrame. Used to compute
+        # `metrics.pipeline_ttfb_ms` (UserStopped → BotStarted) at close,
+        # preserving the original pipeline-TTFB number now that the turn
+        # span's own duration spans UserStarted → BotStarted.
+        self._user_stopped_ns: Optional[int] = None
 
     async def on_push_frame(self, data: FramePushed):
+        # Drop the upstream half of broadcast_frame() pairs. Pipecat's VAD and
+        # output transport emit UserStarted/UserStopped/BotStarted via
+        # broadcast_frame (frame_processor.py:742-753) as TWO Frame instances
+        # with distinct frame.id — without this filter the dedup below misses
+        # and we open a turn span twice (the second open closes the first as a
+        # 0-duration orphan). Pipecat's own observers use the same filter, see
+        # observers/loggers/user_bot_latency_log_observer.py:49-51.
+        if data.direction != FrameDirection.DOWNSTREAM:
+            return
+
         frame = data.frame
 
         # Dedup: skip if we've already seen this frame on a prior edge.
@@ -117,16 +145,25 @@ class PipelineLatencyObserver(BaseObserver):
             self._processed_frames = set(self._frame_history)
 
         try:
-            if isinstance(frame, UserStoppedSpeakingFrame):
-                # Voice flow: VAD signals user stopped → open turn (will close
-                # any stale half-open turn first for the interruption case).
-                self._open_turn()
+            if isinstance(frame, UserStartedSpeakingFrame):
+                # Voice flow: VAD signals user started → open turn early so
+                # @traced_stt finds the turn context while transcribing. Guard
+                # prevents VAD chatter / mid-turn interruption from creating
+                # an empty re-opened span; the direction filter above already
+                # neutralizes the broadcast-pair duplication.
+                if self._turn_span is None:
+                    self._open_turn()
+            elif isinstance(frame, UserStoppedSpeakingFrame):
+                # Marker only: capture the timestamp so we can emit the
+                # original pipeline-TTFB metric on the turn span at close.
+                # Does NOT open or close anything — the turn is already open.
+                self._user_stopped_ns = time.time_ns()
             elif isinstance(frame, LLMContextFrame):
-                # Typed-turn (`/say`) flow: there is no UserStoppedSpeakingFrame,
-                # so the LLMContextFrame is our first signal that a turn has
-                # begun. In voice flow this also fires (the converter emits it
-                # right after UserStoppedSpeakingFrame), but the turn is already
-                # open by then — guard against re-opening.
+                # Typed-turn (`/say`) flow: no VAD events fire for typed input,
+                # so the LLMContextFrame is the only signal that a turn has
+                # begun. In voice flow this also fires (converter emits it
+                # right after UserStoppedSpeakingFrame), but the turn is
+                # already open by then — guard prevents re-opening.
                 if self._turn_span is None:
                     self._open_turn()
             elif isinstance(frame, BotStartedSpeakingFrame):
@@ -143,6 +180,7 @@ class PipelineLatencyObserver(BaseObserver):
         # Defensive: if a previous turn never closed (e.g. user interrupted
         # before bot started), close it before opening a new one.
         self._close_turn()
+        self._user_stopped_ns = None  # reset per turn; set when UserStopped fires
         self._turn_count += 1
         # Root span — NO parent context, so this starts a brand-new Langfuse
         # trace. Each turn = its own trace, evaluable independently.
@@ -169,6 +207,13 @@ class PipelineLatencyObserver(BaseObserver):
 
     def _close_turn(self):
         if self._turn_span is not None:
+            # Preserve the original pipeline-TTFB metric as an attribute even
+            # though the span's own duration is now UserStarted → BotStarted.
+            # Typed-input turns (no UserStopped) skip the attribute.
+            if self._user_stopped_ns is not None:
+                ttfb_ms = (time.time_ns() - self._user_stopped_ns) / 1_000_000
+                self._turn_span.set_attribute("metrics.pipeline_ttfb_ms", ttfb_ms)
             self._turn_span.end()
             self._turn_span = None
+            self._user_stopped_ns = None
             TurnContextProvider.get_instance().set_current_turn_context(None)
