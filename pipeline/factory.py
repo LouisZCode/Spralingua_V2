@@ -1,9 +1,11 @@
 import wave
+from datetime import datetime
 from uuid import uuid4
 
 import aiohttp
 from loguru import logger
 from pydub import AudioSegment
+from sqlalchemy.exc import SQLAlchemyError
 
 from services import stt_deepgram, tts_minimax, transport_fastapi_ws
 
@@ -25,9 +27,12 @@ from .tts_duration import TTSDurationTracker
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.evaluator import evaluate
 from agents.load_goals import load_goal
+from agents.load_prompts import load_prompts
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces
+
+from database import create_session_row, finalize_session_row, get_sessionmaker
 
 from logs import setup_session_logger
 
@@ -71,6 +76,37 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
 
         # Per-client logger
         session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
+
+        # Insert the activity_session row at connect (DATA-001). Non-fatal:
+        # if the DB is down we log a warning and continue — audio export,
+        # evaluators, logger close, and OTel flush MUST still run. The row
+        # is then UPDATEd on disconnect with transcript + eval results.
+        # ``lesson_snapshot`` freezes the YAML at session start so future
+        # history UI shows what the user actually saw, even if the YAML
+        # changes later.
+        started_at = datetime.now()
+        audio_path = str(
+            (session_logger.session_dir / session_logger.session_id).with_suffix(".mp3")
+        )
+        lesson_snapshot = load_prompts(lesson_id)
+        try:
+            async with get_sessionmaker()() as db:
+                await create_session_row(
+                    db,
+                    session_id=session_id,
+                    user_id=user_id,
+                    lesson_id=lesson_id,
+                    level=level,
+                    situation=situation,
+                    voice=voice,
+                    started_at=started_at,
+                    audio_path=audio_path,
+                    lesson_snapshot=lesson_snapshot,
+                )
+        except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
+            logger.warning(
+                f"DB session insert failed (non-fatal): {type(e).__name__}: {e}"
+            )
 
         # Per-client wrapper (agent + logger + context settings inside)
         wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, level=level, situation=situation, voice=voice, lesson_id=lesson_id)
@@ -207,8 +243,20 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
 
         print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} level={level} situation={situation} voice={voice}")
 
+        # Hoisted out of the inner try-blocks so the DB finalize step below
+        # can read them. They stay None when the corresponding evaluator
+        # didn't run (no goals / no locale / evaluator crashed).
+        result = None
+        pron_result = None
+        # Captures any exception from runner.run so the DB finalize can record
+        # ended_by="crash". We re-raise immediately so the caller (the WS endpoint)
+        # still sees the failure.
+        exception_during_run = None
         try:
             await runner.run(task)
+        except BaseException as e:
+            exception_during_run = e
+            raise
         finally:
             ACTIVE_TASKS.pop(user_id, None)
             await audiobuffer.stop_recording()
@@ -252,6 +300,37 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
                     )
             except Exception as e:  # noqa: BLE001 — pronunciation must not block cleanup
                 logger.warning(f"Pronunciation assessment failed (non-fatal): {type(e).__name__}: {e}")
+            # Finalize the activity_session row (DATA-001). Runs after both
+            # evaluators so their results land in the same UPDATE. Same non-fatal
+            # contract: a DB outage logs a warning and we proceed to logger
+            # close + OTel flush.
+            try:
+                if exception_during_run is not None:
+                    ended_by = "crash"
+                elif wrapper._end_pending:
+                    ended_by = "agent"
+                else:
+                    # User clicked Finish, tab closed, or network dropped —
+                    # the server can't tell these apart, see plan §Risks.
+                    ended_by = "user"
+                goal_eval_dict = result.model_dump() if result is not None else None
+                pron_eval_dict = pron_result.model_dump() if pron_result is not None else None
+                passed = goal_eval_dict["passed"] if goal_eval_dict is not None else None
+                async with get_sessionmaker()() as db:
+                    await finalize_session_row(
+                        db,
+                        session_id=session_id,
+                        ended_at=datetime.now(),
+                        ended_by=ended_by,
+                        transcript=wrapper.render_transcript() if wrapper._transcript else None,
+                        goal_eval=goal_eval_dict,
+                        pron_eval=pron_eval_dict,
+                        passed=passed,
+                    )
+            except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
+                logger.warning(
+                    f"DB session finalize failed (non-fatal): {type(e).__name__}: {e}"
+                )
             session_logger.close()
             flush_traces()  # drain queued OTel spans before the process moves on
             print(f"Client disconnected: {user_id}")

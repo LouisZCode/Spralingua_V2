@@ -1,6 +1,8 @@
 # Backend:  uvicorn main:app --host 0.0.0.0 --port 8765
 # Frontend: cd frontend && npm run dev
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -9,10 +11,22 @@ from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts
+from config import database_url
+from database import dispose_engine, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_TASKS
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Fail-loud: if Postgres is unreachable, init_engine raises here and
+    # uvicorn exits non-zero. Saves us from silent broken-persistence builds.
+    await init_engine(database_url)
+    yield
+    await dispose_engine()
+
+
+app = FastAPI(lifespan=lifespan)
 
 # Frontend dev server lives on :3000; WebSocket isn't subject to CORS, but
 # the /say HTTP endpoint is. Keep this explicit (no wildcard) for clarity.

@@ -11,6 +11,7 @@ from .settings import (
     langfuse_environment,
     azure_speech_key,
     azure_speech_region,
+    database_url,
 )
 
 

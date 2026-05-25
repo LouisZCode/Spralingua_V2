@@ -28,3 +28,7 @@ langfuse_environment = os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "dev")
 #Azure Speech (Pronunciation Assessment, PRON-001)
 azure_speech_key    = os.getenv("AZURE_SPEECH_KEY")
 azure_speech_region = os.getenv("AZURE_SPEECH_REGION", "eastus")
+
+#Postgres (DATA-001). No default — absence raises at startup (fail-loud).
+# Form: postgresql+asyncpg://user:password@host:port/dbname
+database_url = os.getenv("DATABASE_URL")
