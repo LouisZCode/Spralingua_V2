@@ -9,6 +9,8 @@ from .settings import (
     langfuse_secret_key,
     langfuse_base_url,
     langfuse_environment,
+    azure_speech_key,
+    azure_speech_region,
 )
 
 

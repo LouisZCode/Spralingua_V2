@@ -115,6 +115,54 @@ class SessionLogger:
             self._file.write(f"           │        Notes:    {g.reasoning}\n")
         self._file.flush()
 
+    def write_pronunciation(self, result):
+        """Append the post-session pronunciation report (PRON-001) to both
+        `.md` and `.log`. Called from `pipeline/factory.py` after
+        ``assess_pronunciation`` returns. Duck-typed on ``PronunciationResult``.
+        """
+        agg = result.aggregate
+        prosody_str = f"{agg.prosody_score:.1f}" if agg.prosody_score is not None else "n/a"
+        header = (
+            f"Pronunciation [{result.locale}] — Pron {agg.pron_score:.1f} | "
+            f"Acc {agg.accuracy_score:.1f} | Flu {agg.fluency_score:.1f} | "
+            f"Comp {agg.completeness_score:.1f} | Pros {prosody_str} "
+            f"({agg.turns_assessed} turn{'s' if agg.turns_assessed != 1 else ''})"
+        )
+
+        self._md_file.write(f"\n## {header}\n\n")
+        self._md_file.write("| # | Said | Recognized | Pron | Acc | Flu | Comp | Pros | Errors |\n")
+        self._md_file.write("|---|---|---|---|---|---|---|---|---|\n")
+        for i, t in enumerate(result.turns, 1):
+            said = t.text.replace("|", "\\|").replace("\n", " ")
+            recog = (t.recognized or "").replace("|", "\\|").replace("\n", " ")
+            pros = f"{t.prosody_score:.0f}" if t.prosody_score is not None else "n/a"
+            bad = [w for w in t.words if w.error_type not in ("None", "ErrorType.None")]
+            errors = ", ".join(f"{w.word}({w.error_type})" for w in bad) or "—"
+            errors = errors.replace("|", "\\|")
+            self._md_file.write(
+                f"| {i} | \"{said}\" | \"{recog}\" | {t.pron_score:.0f} | "
+                f"{t.accuracy_score:.0f} | {t.fluency_score:.0f} | "
+                f"{t.completeness_score:.0f} | {pros} | {errors} |\n"
+            )
+        self._md_file.flush()
+
+        time_str = datetime.now().strftime("%H:%M:%S")
+        self._file.write(f"\n[{time_str}] PRONUNCIATION {header}\n")
+        for i, t in enumerate(result.turns, 1):
+            pros = f"{t.prosody_score:.0f}" if t.prosody_score is not None else "n/a"
+            self._file.write(
+                f"           ├─ Turn {i}: Pron {t.pron_score:.0f} | "
+                f"Acc {t.accuracy_score:.0f} | Flu {t.fluency_score:.0f} | "
+                f"Comp {t.completeness_score:.0f} | Pros {pros}\n"
+            )
+            self._file.write(f"           │        Said:       \"{t.text}\"\n")
+            self._file.write(f"           │        Recognized: \"{t.recognized}\"\n")
+            bad = [w for w in t.words if w.error_type not in ("None", "ErrorType.None")]
+            if bad:
+                errs = ", ".join(f"{w.word}({w.error_type})" for w in bad)
+                self._file.write(f"           │        Errors:     {errs}\n")
+        self._file.flush()
+
     def _write(self, message: str):
         """Write a line to log file."""
         self._file.write(message + "\n")

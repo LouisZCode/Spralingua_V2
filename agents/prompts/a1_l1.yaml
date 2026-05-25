@@ -16,6 +16,8 @@ pass_threshold: 100
 goals:
   - "Produce a recognisable greeting word (hello, hi, hey, good morning, good afternoon, good evening)"
 
+locale: en-US
+
 briefing:
   situation: |
     You're walking down a quiet residential street.

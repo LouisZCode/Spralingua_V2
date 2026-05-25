@@ -107,6 +107,13 @@ class ClientWrapper:
         # has the full conversation to judge against the lesson's pass_criterion.
         self._transcript: list[tuple[str, str]] = []
 
+        # Per-turn user audio, one entry per UserStoppedSpeakingFrame, captured
+        # by the AudioBufferProcessor's on_user_turn_audio_data event (wired in
+        # pipeline/factory.py). Consumed on disconnect by the pronunciation
+        # evaluator (PRON-001); paired with the user-side turns of `_transcript`
+        # by index in `iter_user_turn_audio`.
+        self._user_turn_audio: list[tuple[bytes, int]] = []
+
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
 
@@ -242,6 +249,36 @@ class ClientWrapper:
     def render_transcript(self) -> str:
         """Format the captured turns as a single string for the evaluator prompt."""
         return "\n\n".join(f"{role.capitalize()}: {body}" for role, body in self._transcript)
+
+    def append_user_turn_audio(self, audio: bytes, sample_rate: int) -> None:
+        """Buffer one user turn's audio. Called by the audiobuffer's
+        on_user_turn_audio_data event handler in `pipeline/factory.py`."""
+        self._user_turn_audio.append((audio, sample_rate))
+
+    def has_user_turn_audio(self) -> bool:
+        return bool(self._user_turn_audio)
+
+    def iter_user_turn_audio(self):
+        """Yield ``(text, audio_bytes, sample_rate)`` for each user turn that has both.
+
+        Pairs the user-side entries of ``_transcript`` with captured audio
+        clips by index. Audio events with no matching text (e.g. cough or
+        breath that VAD detected but Deepgram produced no transcript for)
+        are dropped with a warning — the count mismatch is rare in practice
+        but the tail-drop is intentional so the assessor always gets
+        text-and-audio pairs.
+        """
+        user_texts = [t for r, t in self._transcript if r == "user"]
+        clips = self._user_turn_audio
+        if len(clips) != len(user_texts):
+            logger.warning(
+                f"User turn count mismatch: {len(user_texts)} text vs {len(clips)} audio. "
+                f"Pairing first {min(len(clips), len(user_texts))} only."
+            )
+        n = min(len(user_texts), len(clips))
+        for i in range(n):
+            audio, sr = clips[i]
+            yield user_texts[i], audio, sr
 
     async def flush_bot_output(self, audio_duration_ms: float) -> None:
         """Push the buffered bot reply to the RTVI client with the turn's audio duration.

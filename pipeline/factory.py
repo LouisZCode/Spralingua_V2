@@ -25,6 +25,8 @@ from .tts_duration import TTSDurationTracker
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.evaluator import evaluate
 from agents.load_goals import load_goal
+from agents.load_pronunciation import load_pronunciation_locale
+from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces
 
 from logs import setup_session_logger
@@ -74,8 +76,17 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, level=level, situation=situation, voice=voice, lesson_id=lesson_id)
         llm = LangchainProcessor(chain=wrapper)
 
-        # Per-client audio recorder
-        audiobuffer = AudioBufferProcessor(num_channels=1)
+        # Per-client audio recorder.
+        # `sample_rate=16000` matches Deepgram nova-2 (no resampling cost) and
+        # is what Azure Pronunciation Assessment expects natively.
+        # `enable_turn_audio=True` activates the `_process_turn_recording` code
+        # path that fires `on_user_turn_audio_data` on each UserStoppedSpeakingFrame
+        # — that event drives the post-session pronunciation evaluator (PRON-001).
+        audiobuffer = AudioBufferProcessor(
+            num_channels=1,
+            sample_rate=16000,
+            enable_turn_audio=True,
+        )
 
         @audiobuffer.event_handler("on_audio_data")
         async def on_audio_data(buffer, audio, sample_rate, num_channels):
@@ -93,6 +104,15 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             audio_segment.export(str(mp3_path), format="mp3", bitrate="128k")
             wav_path.unlink()
             print(f"Audio saved to: {mp3_path}")
+
+        @audiobuffer.event_handler("on_user_turn_audio_data")
+        async def on_user_turn_audio(_buffer, audio, sample_rate, num_channels):
+            """Stash the user's just-completed turn audio on the wrapper for
+            the post-session pronunciation evaluator (PRON-001). Fires on
+            UserStoppedSpeakingFrame; verified at
+            `.venv/.../pipecat/processors/audio/audio_buffer_processor.py:248`.
+            """
+            wrapper.append_user_turn_audio(bytes(audio), sample_rate)
 
         # RTVI processor + observer. The observer handles user transcripts;
         # bot text is pushed by ClientWrapper itself (one message per turn) to
@@ -212,6 +232,26 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
                     )
             except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
                 logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
+            # Post-session pronunciation assessment (PRON-001). Same non-fatal
+            # contract as the goal evaluator above: any failure (missing key,
+            # Azure outage, count mismatch) is logged and swallowed so audio
+            # export and logger close still run.
+            try:
+                locale = load_pronunciation_locale(lesson_id)
+                if locale is not None and wrapper.has_user_turn_audio():
+                    pron_result = await assess_pronunciation(
+                        user_turns=wrapper.iter_user_turn_audio(),
+                        locale=locale,
+                    )
+                    session_logger.write_pronunciation(pron_result)
+                    logger.info(
+                        f"Pronunciation: locale={pron_result.locale} "
+                        f"pron={pron_result.aggregate.pron_score:.1f} "
+                        f"acc={pron_result.aggregate.accuracy_score:.1f} "
+                        f"turns_assessed={pron_result.aggregate.turns_assessed}"
+                    )
+            except Exception as e:  # noqa: BLE001 — pronunciation must not block cleanup
+                logger.warning(f"Pronunciation assessment failed (non-fatal): {type(e).__name__}: {e}")
             session_logger.close()
             flush_traces()  # drain queued OTel spans before the process moves on
             print(f"Client disconnected: {user_id}")

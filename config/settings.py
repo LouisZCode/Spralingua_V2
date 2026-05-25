@@ -24,3 +24,7 @@ langfuse_public_key  = os.getenv("LANGFUSE_PUBLIC_KEY")
 langfuse_secret_key  = os.getenv("LANGFUSE_SECRET_KEY")
 langfuse_base_url    = os.getenv("LANGFUSE_BASE_URL")
 langfuse_environment = os.getenv("LANGFUSE_TRACING_ENVIRONMENT", "dev")
+
+#Azure Speech (Pronunciation Assessment, PRON-001)
+azure_speech_key    = os.getenv("AZURE_SPEECH_KEY")
+azure_speech_region = os.getenv("AZURE_SPEECH_REGION", "eastus")

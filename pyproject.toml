@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "aiohttp>=3.13.2",
+    "azure-cognitiveservices-speech>=1.50.0",
     "gradio>=6.2.0",
     "langchain>=1.2.0",
     "langchain-cerebras>=0.8.2",
