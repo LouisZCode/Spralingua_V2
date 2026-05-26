@@ -1,26 +1,96 @@
 "use client";
 
-import { useState } from "react";
+import { Fragment, useState } from "react";
+
+type PathKey = "A1" | "B1" | "DEV";
+
+type LessonNode = {
+  id: string;
+  number: string;
+  title: string;
+  subtitle: string;
+  tag?: string;
+};
+
+type Path = {
+  key: PathKey;
+  label: string;
+  sublabel: string;
+  level: "A1" | "B2";
+  lessons: LessonNode[];
+};
+
+const PATHS: Path[] = [
+  {
+    key: "A1",
+    label: "A1",
+    sublabel: "Beginner",
+    level: "A1",
+    lessons: [
+      {
+        id: "a1_l1",
+        number: "01",
+        title: "Sidewalk Hello",
+        subtitle: "First encounters · introducing yourself",
+        tag: "respond",
+      },
+    ],
+  },
+  {
+    key: "B1",
+    label: "B1",
+    sublabel: "Intermediate",
+    level: "B2",
+    lessons: [
+      {
+        id: "b1_l1",
+        number: "01",
+        title: "Waiting Room Run-In",
+        subtitle: "Small talk while you both wait",
+        tag: "respond",
+      },
+    ],
+  },
+  {
+    key: "DEV",
+    label: "Developer",
+    sublabel: "Internal tools",
+    level: "A1",
+    lessons: [
+      {
+        id: "lesson_zero",
+        number: "00",
+        title: "Warmup",
+        subtitle: "Open conversation, no goal",
+        tag: "conversation",
+      },
+      {
+        id: "goodbye_test",
+        number: "✕",
+        title: "Goodbye Test",
+        subtitle: "Pipeline shutdown drill",
+        tag: "respond",
+      },
+    ],
+  },
+];
+
+const VOICES: Record<string, { label: string; meta: string }> = {
+  German_Female: { label: "Female", meta: "Berlin · clear" },
+  "German-Male": { label: "Male", meta: "Munich · warm" },
+  luis_clone: { label: "Luis", meta: "Cloned · personal" },
+};
 
 const LEVELS = {
-  A1: { label: "A1 - Beginner", situations: { introducing_yourself: "Introducing Yourself" } },
-  B2: { label: "B2 - Upper Intermediate", situations: { planning_picnic: "Planning a Picnic" } },
+  A1: {
+    label: "A1 · Beginner",
+    situations: { introducing_yourself: "Introducing Yourself" },
+  },
+  B2: {
+    label: "B2 · Upper Intermediate",
+    situations: { planning_picnic: "Planning a Picnic" },
+  },
 } as const;
-
-// Keys must match services/tts.py::VOICE_MAP on the backend.
-const VOICES: Record<string, string> = {
-  German_Female: "German Female",
-  "German-Male": "German Male",
-  luis_clone: "Luis (Clone)",
-};
-
-// Keys must match a YAML in agents/prompts/{lesson_id}.yaml on the backend.
-const LESSONS: Record<string, string> = {
-  lesson_zero: "Lesson 0",
-  goodbye_test: "Goodbye Test (dev)",
-  a1_l1: "A1-L1 — Sidewalk Hello",
-  b1_l1: "B1-L1 — Waiting Room Run-In",
-};
 
 export interface SessionParams {
   lesson: string;
@@ -34,92 +104,409 @@ export default function SetupView({
 }: {
   onSubmit: (params: SessionParams) => void;
 }) {
-  const [lesson, setLesson] = useState<string>("lesson_zero");
-  const [level, setLevel] = useState<keyof typeof LEVELS>("A1");
-  const [situation, setSituation] = useState<string>("introducing_yourself");
+  const [pathKey, setPathKey] = useState<PathKey>("A1");
+  const path = PATHS.find((p) => p.key === pathKey)!;
+
+  const [lessonId, setLessonId] = useState<string>(path.lessons[0].id);
   const [voice, setVoice] = useState<string>("German_Female");
+  const [level, setLevel] = useState<keyof typeof LEVELS>(path.level);
+  const [situation, setSituation] = useState<string>(
+    Object.keys(LEVELS[path.level].situations)[0],
+  );
+
+  const switchPath = (key: PathKey) => {
+    const next = PATHS.find((p) => p.key === key)!;
+    setPathKey(key);
+    setLessonId(next.lessons[0].id);
+    setLevel(next.level);
+    setSituation(Object.keys(LEVELS[next.level].situations)[0]);
+  };
+
+  const handleStart = () => {
+    onSubmit({ lesson: lessonId, level, situation, voice });
+  };
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-md rounded-xl bg-slate-800 p-8">
-        <h1 className="mb-2 text-center text-2xl font-bold">
-          Spralingua
-        </h1>
-        <p className="mb-6 text-center text-sm text-slate-400">
-          Select your class for today.
-        </p>
+    <main className="relative min-h-screen overflow-hidden bg-white text-ink">
+      {/* Bauhaus decorations */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-44 -right-44 h-[30rem] w-[30rem] rounded-full bg-flag-gold/35"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rotate-6 bg-flag-red/85"
+        style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-[42%] -right-2 h-4 w-44 rotate-[18deg] bg-ink"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-24 -left-6 h-24 w-24 rotate-12 border-[3px] border-ink"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-paper-grid opacity-60"
+      />
 
-        <div className="mb-3">
-          <label className="mb-1 block text-xs text-slate-400">Lesson</label>
-          <select
-            value={lesson}
-            onChange={(e) => setLesson(e.target.value)}
-            className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200"
-          >
-            {Object.entries(LESSONS).map(([key, label]) => (
-              <option key={key} value={key}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </div>
+      {/* Content column */}
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-6 py-10">
+        {/* Header */}
+        <header className="rise-in" style={{ animationDelay: "0ms" }}>
+          <div className="flex items-start justify-between">
+            <div>
+              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+                Voice · Deutsch · v1
+              </p>
+              <h1 className="mt-2 font-display text-[52px] leading-[0.95] font-black tracking-tight text-ink">
+                <span className="highlighter-gold pr-2">Spralingua</span>
+              </h1>
+              <p className="mt-3 font-body text-[15px] text-ink-soft">
+                Pick a path, choose your class, hold the room.
+              </p>
+            </div>
+            <div className="mt-3 flex items-center gap-2 rounded-full border-2 border-ink bg-white px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink">
+              <span className="inline-block h-2 w-2 rounded-full bg-flag-red beacon-pulse" />
+              Live
+            </div>
+          </div>
+        </header>
 
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          <div>
-            <label className="mb-1 block text-xs text-slate-400">Level</label>
-            <select
-              value={level}
-              onChange={(e) => {
-                const v = e.target.value as keyof typeof LEVELS;
-                setLevel(v);
-                setSituation(Object.keys(LEVELS[v].situations)[0]);
-              }}
-              className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200"
-            >
-              {Object.entries(LEVELS).map(([key, val]) => (
-                <option key={key} value={key}>
-                  {val.label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-400">Situation</label>
-            <select
-              value={situation}
-              onChange={(e) => setSituation(e.target.value)}
-              className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200"
-            >
-              {Object.entries(LEVELS[level].situations).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-slate-400">Voice</label>
-            <select
-              value={voice}
-              onChange={(e) => setVoice(e.target.value)}
-              className="w-full rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200"
-            >
-              {Object.entries(VOICES).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <button
-          onClick={() => onSubmit({ lesson, level, situation, voice })}
-          className="w-full rounded-lg bg-green-500 py-3 font-semibold text-slate-900 hover:bg-green-400"
+        {/* Path tabs */}
+        <nav
+          className="rise-in mt-9 flex gap-2"
+          style={{ animationDelay: "80ms" }}
+          aria-label="Lesson paths"
         >
-          Continue
+          {PATHS.map((p) => {
+            const active = p.key === pathKey;
+            const isDev = p.key === "DEV";
+            return (
+              <button
+                key={p.key}
+                onClick={() => switchPath(p.key)}
+                className={`btn-3d flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
+                  active
+                    ? "bg-ink text-white"
+                    : isDev
+                      ? "bg-white text-ink hover:bg-paper"
+                      : "bg-white text-ink hover:bg-paper-warm"
+                }`}
+                style={
+                  {
+                    ["--shadow-color"]: active
+                      ? "var(--color-ink)"
+                      : "var(--color-ink)",
+                  } as React.CSSProperties
+                }
+              >
+                <span className="block font-display text-[20px] font-black leading-none">
+                  {p.label}
+                </span>
+                <span
+                  className={`mt-1 block font-body text-[10px] font-semibold uppercase tracking-[0.18em] ${
+                    active ? "text-white/70" : "text-ink-muted"
+                  }`}
+                >
+                  {p.sublabel}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Path canvas */}
+        <section
+          key={pathKey}
+          className="rise-in relative mt-10"
+          style={{ animationDelay: "160ms" }}
+          aria-label={`Class ${path.label} lessons`}
+        >
+          <div className="mb-4 flex items-center gap-3">
+            <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
+              Class · {path.label}
+            </span>
+            <span className="h-px flex-1 bg-rule" />
+            <span className="font-body text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
+              {path.lessons.length} lesson{path.lessons.length === 1 ? "" : "s"}
+            </span>
+          </div>
+
+          <div className="flex flex-col">
+            {path.lessons.map((lesson, i) => {
+              const selected = lesson.id === lessonId;
+              const flip = i % 2 === 1;
+              return (
+                <Fragment key={lesson.id}>
+                  {i > 0 && (
+                    <div
+                      aria-hidden
+                      className="dot-connector mx-auto h-10 w-1"
+                    />
+                  )}
+                  <div
+                    className={`flex items-center gap-5 ${
+                      flip ? "flex-row-reverse" : ""
+                    }`}
+                    style={{
+                      transform: flip ? "translateX(28px)" : "translateX(-28px)",
+                    }}
+                  >
+                    <NodeTile
+                      lesson={lesson}
+                      selected={selected}
+                      onClick={() => setLessonId(lesson.id)}
+                    />
+                    <NodeLabel
+                      lesson={lesson}
+                      selected={selected}
+                      flip={flip}
+                    />
+                  </div>
+                </Fragment>
+              );
+            })}
+          </div>
+        </section>
+
+        {/* Spacer that grows so footer hugs bottom */}
+        <div className="flex-1" />
+
+        {/* Controls — voice (primary) + DEV (level, situation) */}
+        <section
+          className="rise-in mt-10 rounded-[28px] border-[3px] border-ink bg-paper-warm p-5"
+          style={{ animationDelay: "220ms" }}
+        >
+          <div className="flex items-center justify-between">
+            <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink">
+              Voice
+            </span>
+            <span className="font-body text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
+              speaks back to you
+            </span>
+          </div>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {Object.entries(VOICES).map(([key, v]) => {
+              const active = key === voice;
+              return (
+                <button
+                  key={key}
+                  onClick={() => setVoice(key)}
+                  className={`btn-3d rounded-2xl border-[3px] border-ink px-2 py-3 transition-colors ${
+                    active
+                      ? "bg-flag-gold text-ink"
+                      : "bg-white text-ink hover:bg-paper"
+                  }`}
+                  style={
+                    {
+                      ["--shadow-color"]: active
+                        ? "var(--color-flag-gold-deep)"
+                        : "var(--color-ink)",
+                    } as React.CSSProperties
+                  }
+                >
+                  <span className="block font-display text-[15px] font-bold leading-none">
+                    {v.label}
+                  </span>
+                  <span className="mt-1 block font-body text-[10px] font-medium uppercase tracking-[0.14em] text-ink-soft">
+                    {v.meta}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* DEV plumbing — temporary controls until profile lands */}
+          <details className="group mt-4">
+            <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border-2 border-dashed border-ink-faint bg-white/60 px-3 py-2 text-ink-muted">
+              <span className="font-body text-[10px] font-bold uppercase tracking-[0.28em]">
+                Dev · level &amp; situation
+              </span>
+              <span className="font-display text-base leading-none transition-transform group-open:rotate-45">
+                +
+              </span>
+            </summary>
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <SelectField
+                label="Level"
+                value={level}
+                onChange={(v) => {
+                  const next = v as keyof typeof LEVELS;
+                  setLevel(next);
+                  setSituation(Object.keys(LEVELS[next].situations)[0]);
+                }}
+                options={Object.entries(LEVELS).map(([k, val]) => [
+                  k,
+                  val.label,
+                ])}
+              />
+              <SelectField
+                label="Situation"
+                value={situation}
+                onChange={setSituation}
+                options={Object.entries(LEVELS[level].situations).map(
+                  ([k, label]) => [k, label],
+                )}
+              />
+            </div>
+            <p className="mt-2 font-body text-[10px] leading-relaxed text-ink-muted">
+              Temporary. These will be inferred from your profile + the
+              lesson&apos;s YAML once profiles land.
+            </p>
+          </details>
+        </section>
+
+        {/* CTA */}
+        <button
+          onClick={handleStart}
+          className="btn-3d rise-in mt-5 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-white"
+          style={
+            {
+              ["--shadow-color"]: "var(--color-flag-red-deep)",
+              animationDelay: "300ms",
+            } as React.CSSProperties
+          }
+        >
+          <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
+            <path d="M6 4 L20 12 L6 20 Z" />
+          </svg>
+          Start lesson
         </button>
+
+        <p
+          className="rise-in mt-3 text-center font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted"
+          style={{ animationDelay: "340ms" }}
+        >
+          Mic on · 15-min cap · auto-ends on goodbye
+        </p>
       </div>
+    </main>
+  );
+}
+
+function NodeTile({
+  lesson,
+  selected,
+  onClick,
+}: {
+  lesson: LessonNode;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <div className="relative">
+      {selected && (
+        <span
+          aria-hidden
+          className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border-2 border-ink bg-flag-gold px-2 py-0.5 font-body text-[9px] font-bold uppercase tracking-[0.22em] text-ink"
+        >
+          Selected
+        </span>
+      )}
+      <button
+        onClick={onClick}
+        aria-pressed={selected}
+        className={`btn-3d relative grid h-24 w-24 place-items-center rounded-full border-[4px] transition-colors ${
+          selected
+            ? "border-flag-red-deep bg-flag-red text-white"
+            : "border-ink bg-white text-ink hover:bg-paper-warm"
+        }`}
+        style={
+          {
+            ["--shadow-color"]: selected
+              ? "var(--color-flag-red-deep)"
+              : "var(--color-ink)",
+          } as React.CSSProperties
+        }
+      >
+        <span className="font-display text-[26px] font-black leading-none">
+          {lesson.number}
+        </span>
+      </button>
     </div>
+  );
+}
+
+function NodeLabel({
+  lesson,
+  selected,
+  flip,
+}: {
+  lesson: LessonNode;
+  selected: boolean;
+  flip: boolean;
+}) {
+  return (
+    <div
+      className={`max-w-[220px] ${flip ? "text-right" : "text-left"}`}
+    >
+      <h3
+        className={`font-display text-[19px] font-bold leading-tight transition-colors ${
+          selected ? "text-ink" : "text-ink-soft"
+        }`}
+      >
+        {lesson.title}
+      </h3>
+      <p
+        className={`mt-1 font-body text-[13px] leading-snug ${
+          selected ? "text-ink-soft" : "text-ink-muted"
+        }`}
+      >
+        {lesson.subtitle}
+      </p>
+      {lesson.tag && (
+        <span
+          className={`mt-2 inline-block rounded-full border px-2 py-0.5 font-body text-[9px] font-bold uppercase tracking-[0.22em] ${
+            selected
+              ? "border-flag-red bg-flag-red-soft text-flag-red-deep"
+              : "border-ink-faint bg-paper text-ink-muted"
+          }`}
+        >
+          {lesson.tag}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: Array<[string, string]>;
+}) {
+  return (
+    <label className="block">
+      <span className="block font-body text-[10px] font-bold uppercase tracking-[0.24em] text-ink-muted">
+        {label}
+      </span>
+      <div className="relative mt-1.5">
+        <select
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-full cursor-pointer appearance-none rounded-xl border-2 border-ink bg-white px-3 py-2.5 pr-8 font-display text-[13px] font-semibold text-ink focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+        >
+          {options.map(([k, lbl]) => (
+            <option key={k} value={k}>
+              {lbl}
+            </option>
+          ))}
+        </select>
+        <svg
+          aria-hidden
+          viewBox="0 0 16 16"
+          className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 fill-ink"
+        >
+          <path d="M3 6 L8 11 L13 6 Z" />
+        </svg>
+      </div>
+    </label>
   );
 }
