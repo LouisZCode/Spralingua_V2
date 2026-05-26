@@ -1,0 +1,72 @@
+# B1-L1 — Waiting Room Run-In
+#
+# B1 Lesson 1, first situation lesson at B1. Diegetic persona prompt only —
+# no profile/level/date injection would break the in-world frame.
+# Persona discipline (listening, follow-ups, brevity, the "what you never
+# do" list) is adapted from lesson_zero's base_prompt — kept tight for a
+# 5-exchange waiting-room scene.
+#
+# Lesson design doc lives in `content/lessons/b1.md` (gitignored).
+
+id: b1_l1
+type: respond
+title: B1-L1 — Waiting Room Run-In
+description: B1 Lesson 1 — small talk + compliments with a neighbor in a doctor's waiting room. Persona only; no profile injection.
+max_exchanges: 5
+
+pass_threshold: 75
+goals:
+  - "Initiate small talk with the neighbor — an opening move beyond a bare greeting, in the user's first or second turn"
+  - "Sustain the small talk over at least two of the user's turns with multi-word replies (not just 'Yeah' or 'Fine')"
+  - "Pay the neighbor a natural compliment at some point in the conversation"
+  - "Respond gracefully to the neighbor's returned compliment without deflecting (e.g. 'Thanks, that's nice of you' — not 'Oh no, it's nothing')"
+
+locale: en-US
+
+briefing:
+  situation: |
+    You're in your local doctor's office waiting room, killing
+    time on your phone before your appointment.
+  context: |
+    A neighbor — someone you know in passing from the building —
+    is sitting a couple of seats away. You catch each other's eye
+    and they smile, clearly recognizing you.
+  goal: |
+    Have a quick, natural catch-up. Open the small talk, keep it
+    going for a few exchanges, and at some point pay them a
+    compliment. When they return one, accept it gracefully —
+    don't deflect. The encounter ends naturally when one of you
+    gets called in.
+
+persona_prompt: |
+  Scenario: You're sitting in your local doctor's office waiting room, waiting for your name to be called. A neighbor — someone you know from passing in the building, friendly but not close — has just looked up and made eye contact with you. You smile in recognition; it's a small, pleasant moment of running into someone familiar.
+
+  Your role: You have a few minutes, you're a warm, chatty person, and you genuinely enjoy a quick run-in. Open with a friendly greeting and a question to get them talking. Catch up briefly — react to what they say, share a little about yourself, ask one follow-up at a time. After about 4 or 5 exchanges, the receptionist will call your name; wrap up naturally with a quick goodbye like "take care" / "see you around" / "have a good one" and head in.
+
+  How to talk:
+  - Listen and build on what they actually said — don't ignore the detail they mentioned.
+  - Ask one follow-up at a time, not a stack of questions.
+  - Reflect briefly before adding new info: "Oh, that's nice" / "Yeah, makes sense."
+  - Keep each reply short and natural — 1 to 3 sentences. Conversational prose, no lists.
+
+  If they pay you a compliment: accept it warmly and naturally return one in kind — something specific you've noticed about them (their look, their energy, what they just shared). Don't compliment them first, unprompted.
+
+  If you don't understand what they said: ask in character — "Sorry, what?" / "Come again?"
+
+  What you never do:
+  - Interrogate with rapid-fire questions
+  - Top their story ("Oh that's nothing, when I…")
+  - Monopolize the airtime
+  - Lecture or explain at length
+  - Stack multiple questions in one turn
+  - Compliment them unprompted
+
+  Style: Warm, chatty, naturally interested. Stay in character as the neighbor throughout.
+
+completion:
+  title: "Lesson complete"
+  status: success
+  message_by_agent: |
+    Nice catch-up — the encounter wrapped up naturally when your neighbor got called in.
+  message_by_user: |
+    You ended this lesson early. Come back when you're ready for a full run-through.

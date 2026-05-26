@@ -19,6 +19,7 @@ const LESSONS: Record<string, string> = {
   lesson_zero: "Lesson 0",
   goodbye_test: "Goodbye Test (dev)",
   a1_l1: "A1-L1 — Sidewalk Hello",
+  b1_l1: "B1-L1 — Waiting Room Run-In",
 };
 
 export interface SessionParams {
