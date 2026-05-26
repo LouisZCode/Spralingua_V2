@@ -115,10 +115,12 @@ class SessionLogger:
             self._file.write(f"           │        Notes:    {g.reasoning}\n")
         self._file.flush()
 
-    def write_pronunciation(self, result):
+    def write_pronunciation(self, result, dropped_audio: int = 0):
         """Append the post-session pronunciation report (PRON-001) to both
         `.md` and `.log`. Called from `pipeline/factory.py` after
         ``assess_pronunciation`` returns. Duck-typed on ``PronunciationResult``.
+        ``dropped_audio`` is the count of audio chunks dropped by the
+        audio↔text pairing (silent VAD / STT miss) — see BUG-002.
         """
         agg = result.aggregate
         prosody_str = f"{agg.prosody_score:.1f}" if agg.prosody_score is not None else "n/a"
@@ -144,6 +146,11 @@ class SessionLogger:
                 f"{t.accuracy_score:.0f} | {t.fluency_score:.0f} | "
                 f"{t.completeness_score:.0f} | {pros} | {errors} |\n"
             )
+        if dropped_audio:
+            self._md_file.write(
+                f"\n*({dropped_audio} audio turn{'s' if dropped_audio != 1 else ''} "
+                f"dropped — no matching transcript; silent VAD or STT miss)*\n"
+            )
         self._md_file.flush()
 
         time_str = datetime.now().strftime("%H:%M:%S")
@@ -161,6 +168,11 @@ class SessionLogger:
             if bad:
                 errs = ", ".join(f"{w.word}({w.error_type})" for w in bad)
                 self._file.write(f"           │        Errors:     {errs}\n")
+        if dropped_audio:
+            self._file.write(
+                f"           └─ ({dropped_audio} audio turn(s) dropped — "
+                f"no matching transcript)\n"
+            )
         self._file.flush()
 
     def _write(self, message: str):

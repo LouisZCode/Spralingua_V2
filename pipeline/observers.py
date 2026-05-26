@@ -87,6 +87,7 @@ class PipelineLatencyObserver(BaseObserver):
         situation: str,
         voice: str,
         tts_service=None,
+        wrapper=None,
         max_frames: int = 100,
         **kwargs,
     ):
@@ -103,6 +104,12 @@ class PipelineLatencyObserver(BaseObserver):
         # replies would split into multiple run_tts calls and each call after
         # the first would orphan into its own trace.
         self._tts_service = tts_service
+        # ClientWrapper reference. The observer is the sole tick site for the
+        # per-VAD-stop sequence number that pairs audio↔text at disconnect.
+        # If wrapper is None (older test callers), the tick is skipped — but
+        # then `iter_user_turn_audio` will pair everything to seq=0 and
+        # silently reproduce BUG-002. Factory.py passes this explicitly.
+        self._wrapper = wrapper
 
         # Same dedup pattern Pipecat's own TurnTrackingObserver uses (see
         # `pipecat/observers/turn_tracking_observer.py:65–89`). Pipecat's
@@ -158,6 +165,13 @@ class PipelineLatencyObserver(BaseObserver):
                 # original pipeline-TTFB metric on the turn span at close.
                 # Does NOT open or close anything — the turn is already open.
                 self._user_stopped_ns = time.time_ns()
+                # Tick the wrapper's VAD-stop seq so audio (stamped from the
+                # audiobuffer event downstream of this observer) and text
+                # (stamped in astream's finally) both pair to the same id at
+                # disconnect. Single tick per real UF: frame.id dedup above
+                # plus the direction filter ensure this.
+                if self._wrapper is not None:
+                    self._wrapper.vad_stop()
             elif isinstance(frame, LLMContextFrame):
                 # Typed-turn (`/say`) flow: no VAD events fire for typed input,
                 # so the LLMContextFrame is the only signal that a turn has

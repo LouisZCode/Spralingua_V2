@@ -107,12 +107,16 @@ class ClientWrapper:
         # has the full conversation to judge against the lesson's pass_criterion.
         self._transcript: list[tuple[str, str]] = []
 
-        # Per-turn user audio, one entry per UserStoppedSpeakingFrame, captured
-        # by the AudioBufferProcessor's on_user_turn_audio_data event (wired in
-        # pipeline/factory.py). Consumed on disconnect by the pronunciation
-        # evaluator (PRON-001); paired with the user-side turns of `_transcript`
-        # by index in `iter_user_turn_audio`.
-        self._user_turn_audio: list[tuple[bytes, int]] = []
+        # Per-turn audio + text are captured separately and paired at
+        # disconnect via this shared counter. Drift here corrupts every
+        # downstream pronunciation score — see LEARNINGS.md 2026-05-26.
+        # Counter is ticked by PipelineLatencyObserver on every
+        # UserStoppedSpeakingFrame; audio stamps in `append_user_turn_audio`
+        # (called from factory.py), text stamps in `astream`'s finally below.
+        self._current_vad_seq: int = 0
+        self._user_turn_audio: list[tuple[int, bytes, int]] = []
+        self._user_turn_text: list[tuple[int, str]] = []
+        self._dropped_audio_count: int = 0
 
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
@@ -239,6 +243,13 @@ class ClientWrapper:
                 # land in the transcript with whatever the bot managed to say.
                 self._transcript.append(("user", text))
                 self._transcript.append(("bot", output_text))
+                # Stamp the user text with the current VAD-stop seq so the
+                # pronunciation evaluator can pair it with the matching audio
+                # at disconnect (BUG-002). Empty/whitespace inputs are skipped
+                # — `/say` injection or the (extremely rare) all-whitespace
+                # transcript shouldn't reach Azure as a reference text anyway.
+                if text.strip():
+                    self._user_turn_text.append((self._current_vad_seq, text))
 
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:
@@ -250,35 +261,44 @@ class ClientWrapper:
         """Format the captured turns as a single string for the evaluator prompt."""
         return "\n\n".join(f"{role.capitalize()}: {body}" for role, body in self._transcript)
 
+    def vad_stop(self) -> None:
+        """Tick the VAD-stop sequence number. Called by
+        ``PipelineLatencyObserver`` on every ``UserStoppedSpeakingFrame``.
+        The counter is the shared identifier that pairs audio (stamped in
+        ``append_user_turn_audio``) with text (stamped in ``astream``'s
+        finally block) at disconnect — see LEARNINGS.md 2026-05-26 (BUG-002).
+        """
+        self._current_vad_seq += 1
+
     def append_user_turn_audio(self, audio: bytes, sample_rate: int) -> None:
-        """Buffer one user turn's audio. Called by the audiobuffer's
-        on_user_turn_audio_data event handler in `pipeline/factory.py`."""
-        self._user_turn_audio.append((audio, sample_rate))
+        """Buffer one user turn's audio with the current VAD-stop seq.
+        Called by the audiobuffer's ``on_user_turn_audio_data`` event handler
+        in ``pipeline/factory.py``."""
+        self._user_turn_audio.append((self._current_vad_seq, audio, sample_rate))
 
     def has_user_turn_audio(self) -> bool:
         return bool(self._user_turn_audio)
 
     def iter_user_turn_audio(self):
-        """Yield ``(text, audio_bytes, sample_rate)`` for each user turn that has both.
+        """Yield ``(text, audio_bytes, sample_rate)`` for each user turn that
+        has both a captured audio clip and a non-empty transcript.
 
-        Pairs the user-side entries of ``_transcript`` with captured audio
-        clips by index. Audio events with no matching text (e.g. cough or
-        breath that VAD detected but Deepgram produced no transcript for)
-        are dropped with a warning — the count mismatch is rare in practice
-        but the tail-drop is intentional so the assessor always gets
-        text-and-audio pairs.
+        Pairs via the shared VAD-stop seq stamped on both sides during the
+        session. Orphan audio (silent VAD trigger, breath, mic glitch, or an
+        STT miss where Deepgram produced no transcript) is dropped silently
+        and counted in ``_dropped_audio_count`` for the session log.
         """
-        user_texts = [t for r, t in self._transcript if r == "user"]
-        clips = self._user_turn_audio
-        if len(clips) != len(user_texts):
-            logger.warning(
-                f"User turn count mismatch: {len(user_texts)} text vs {len(clips)} audio. "
-                f"Pairing first {min(len(clips), len(user_texts))} only."
+        text_by_seq = {seq: t for seq, t in self._user_turn_text if t.strip()}
+        for seq, audio, sr in self._user_turn_audio:
+            if seq in text_by_seq:
+                yield text_by_seq[seq], audio, sr
+            else:
+                self._dropped_audio_count += 1
+        if self._dropped_audio_count:
+            logger.info(
+                f"Dropped {self._dropped_audio_count} audio chunk(s) with no "
+                f"matching transcript (silent VAD / STT miss)"
             )
-        n = min(len(user_texts), len(clips))
-        for i in range(n):
-            audio, sr = clips[i]
-            yield user_texts[i], audio, sr
 
     async def flush_bot_output(self, audio_duration_ms: float) -> None:
         """Push the buffered bot reply to the RTVI client with the turn's audio duration.

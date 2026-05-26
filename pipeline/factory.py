@@ -214,6 +214,9 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             situation=situation,
             voice=voice,
             tts_service=tts,
+            # Required for BUG-002 audio↔text pairing: observer ticks the
+            # wrapper's VAD-stop seq on every UserStoppedSpeakingFrame.
+            wrapper=wrapper,
         )
 
         pipeline = Pipeline([
@@ -310,7 +313,10 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
                         user_turns=wrapper.iter_user_turn_audio(),
                         locale=locale,
                     )
-                    session_logger.write_pronunciation(pron_result)
+                    session_logger.write_pronunciation(
+                        pron_result,
+                        dropped_audio=wrapper._dropped_audio_count,
+                    )
                     logger.info(
                         f"Pronunciation: locale={pron_result.locale} "
                         f"pron={pron_result.aggregate.pron_score:.1f} "
