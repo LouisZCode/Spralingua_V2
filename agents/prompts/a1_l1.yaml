@@ -21,12 +21,11 @@ locale: en-US
 briefing:
   situation: |
     You're walking down a quiet residential street.
-  context: |
+  context: >
     An older woman is coming the other way. You've just made brief
     eye contact and exchanged a small nod.
   goal: |
-    Return her greeting with a simple hello. This is a fleeting
-    moment, not a conversation — one or two words is enough.
+    Return her greeting with a simple hello!
 
 persona_prompt: |
   Scenario: You're an older woman walking down a quiet residential street. You've just made brief eye contact with someone coming the other way and given a small nod with a quiet "Hello" as you cross paths.
