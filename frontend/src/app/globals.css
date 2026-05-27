@@ -20,6 +20,11 @@
   --color-flag-gold-deep: #b8860b;
   --color-flag-gold-soft: #fef3c7;
 
+  /* Universal status — used only for pass/fail badges. Not a brand
+     color, sits outside the German-flag palette by design. */
+  --color-success: #16a34a;
+  --color-success-soft: #dcfce7;
+
   /* Typography */
   --font-display: var(--font-display);
   --font-body: var(--font-body);

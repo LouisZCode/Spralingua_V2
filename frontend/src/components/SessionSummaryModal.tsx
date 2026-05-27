@@ -2,15 +2,13 @@
 
 // Post-session summary modal. Mounted by ConversationView once the
 // WebSocket has closed (whether the agent ended the call or the user
-// clicked Finish Lesson). Designed to be reusable — a future Profile
-// view should be able to render the same content inline without the
-// modal wrapper, just by extracting the inner card.
+// clicked Finish Lesson).
 //
-// EVAL-UI-001: the modal now also polls GET /sessions/{sessionId} for
-// the goal + pronunciation evaluator results captured at disconnect.
-// Polling is driven by the WS-vs-finalize race: backend evaluators run
-// in pipeline/factory.py's finally: block AFTER the WS closes, so the
-// row's `ended_at` is briefly NULL when the modal opens. We poll until
+// EVAL-UI-001: the modal polls GET /sessions/{sessionId} for the goal
+// + pronunciation evaluator results captured at disconnect. Polling is
+// driven by the WS-vs-finalize race: backend evaluators run in
+// pipeline/factory.py's finally: block AFTER the WS closes, so the row's
+// `ended_at` is briefly NULL when the modal opens. We poll until
 // `ended_at` is set (or 30s timeout) and then render.
 
 import { useEffect, useState } from "react";
@@ -82,8 +80,8 @@ type EvalStatus = "loading" | "ready" | "timeout" | "no-id";
 
 // CEFR-level → which pronunciation sub-scores + per-word details to render.
 // Sub-scores like Prosody are unreliable on the short utterances A1 learners
-// produce (Azure can't grade intonation from a single word), so we hide them
-// until the level produces enough audio for the score to mean something.
+// produce, so we hide them until the level produces enough audio for the
+// score to mean something.
 type Level = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
 interface PronSchema {
@@ -94,16 +92,15 @@ interface PronSchema {
 
 const PRON_SCHEMA: Record<Level, PronSchema> = {
   A1: { showFluency: false, showCompleteness: false, showProsody: false },
-  A2: { showFluency: true,  showCompleteness: false, showProsody: false },
-  B1: { showFluency: true,  showCompleteness: true,  showProsody: false },
-  B2: { showFluency: true,  showCompleteness: true,  showProsody: true  },
-  C1: { showFluency: true,  showCompleteness: true,  showProsody: true  },
-  C2: { showFluency: true,  showCompleteness: true,  showProsody: true  },
+  A2: { showFluency: true, showCompleteness: false, showProsody: false },
+  B1: { showFluency: true, showCompleteness: true, showProsody: false },
+  B2: { showFluency: true, showCompleteness: true, showProsody: true },
+  C1: { showFluency: true, showCompleteness: true, showProsody: true },
+  C2: { showFluency: true, showCompleteness: true, showProsody: true },
 };
 
-// Per-word callout thresholds — surface only the standouts, not every word.
-const BEST_THRESHOLD = 80;   // top word shown only if its accuracy >= this
-const WORST_THRESHOLD = 30;  // worst word shown only if its accuracy < this
+const BEST_THRESHOLD = 80;
+const WORST_THRESHOLD = 30;
 
 function parseLevel(lessonId: string): Level {
   const m = lessonId.match(/^([abc][12])_/i);
@@ -124,30 +121,32 @@ const STATUS_STYLES: Record<
   CompletionStatus,
   { dot: string; text: string }
 > = {
-  success: { dot: "bg-green-400", text: "text-green-400" },
-  info: { dot: "bg-blue-400", text: "text-blue-400" },
-  warning: { dot: "bg-amber-400", text: "text-amber-400" },
+  success: { dot: "bg-success", text: "text-success" },
+  info: { dot: "bg-ink", text: "text-ink" },
+  warning: { dot: "bg-flag-gold-deep", text: "text-flag-gold-deep" },
 };
 
 export default function SessionSummaryModal({
   lessonTitle,
+  briefingGoal,
   completion,
   endedBy,
   sessionId,
   onClose,
 }: {
   lessonTitle: string;
+  // Briefing goal can be: a single sentence (string), a list mirroring
+  // the eval goals 1:1 (string[]), or absent (null → fall back to eval
+  // criteria text per row).
+  briefingGoal?: string | string[] | null;
   completion: CompletionData | null;
   endedBy: "user" | "agent";
   sessionId: string | null;
   onClose: () => void;
 }) {
-  // The parent (ConversationView) only mounts this component when
-  // showSummary flips true, so an unmount/remount handles state reset for
-  // free — no need for an open-transition guard.
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [evalStatus, setEvalStatus] = useState<EvalStatus>(() =>
-    sessionId ? "loading" : "no-id"
+    sessionId ? "loading" : "no-id",
   );
 
   useEffect(() => {
@@ -175,7 +174,7 @@ export default function SessionSummaryModal({
       }
     };
 
-    void tick(); // immediate first fetch; the row might already be finalized
+    void tick();
     intervalId = setInterval(() => void tick(), POLL_INTERVAL_MS);
     timeoutId = setTimeout(() => {
       cancelled = true;
@@ -194,46 +193,55 @@ export default function SessionSummaryModal({
   const status = completion?.status ?? DEFAULT_STATUS;
   const message =
     endedBy === "user"
-      ? completion?.message_by_user ?? DEFAULT_MESSAGE_BY_USER
-      : completion?.message_by_agent ?? DEFAULT_MESSAGE_BY_AGENT;
-  const endedByLabel =
-    endedBy === "user" ? "Ended by you." : "Ended by the agent.";
+      ? (completion?.message_by_user ?? DEFAULT_MESSAGE_BY_USER)
+      : (completion?.message_by_agent ?? DEFAULT_MESSAGE_BY_AGENT);
   const styles = STATUS_STYLES[status];
 
   return (
-    // Backdrop locks the chat underneath — no click-through, no Esc, no
-    // X icon. Single explicit action below. We keep dismissal explicit
-    // because the eval block below the message is what the user came to
-    // read.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl bg-slate-800 p-8 shadow-2xl">
-        {lessonTitle && (
-          <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
-            {lessonTitle}
+    // Backdrop locks the chat underneath. No click-through, no Esc, no
+    // X icon — single explicit action below.
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-[2px]">
+      <div className="max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-ink bg-paper-warm shadow-[0_8px_0_var(--color-ink)]">
+        <div className="px-7 py-8">
+          {lessonTitle && (
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink-muted">
+              {lessonTitle}
+            </p>
+          )}
+
+          <div className="mt-3 flex items-center gap-3">
+            <span className={`inline-block h-3 w-3 rounded-full ${styles.dot}`} />
+            <h2
+              className={`font-display text-[32px] font-black leading-tight ${styles.text}`}
+            >
+              {title}
+            </h2>
           </div>
-        )}
 
-        <div className="mb-4 flex items-center gap-2">
-          <span className={`h-2.5 w-2.5 rounded-full ${styles.dot}`} />
-          <h2 className={`text-xl font-bold ${styles.text}`}>{title}</h2>
+          <p className="mt-4 whitespace-pre-line font-body text-[17px] leading-[1.55] text-ink-soft">
+            {message.trim()}
+          </p>
+
+          <div className="mt-7">
+            <EvalSection
+              status={evalStatus}
+              data={sessionData}
+              briefingGoal={briefingGoal ?? null}
+            />
+          </div>
+
+          <button
+            onClick={onClose}
+            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-white"
+            style={
+              {
+                ["--shadow-color"]: "var(--color-flag-red-deep)",
+              } as React.CSSProperties
+            }
+          >
+            ← Back to lessons
+          </button>
         </div>
-
-        <p className="mb-3 text-xs uppercase tracking-wide text-slate-500">
-          {endedByLabel}
-        </p>
-
-        <p className="mb-6 whitespace-pre-line text-base text-slate-200">
-          {message.trim()}
-        </p>
-
-        <EvalSection status={evalStatus} data={sessionData} />
-
-        <button
-          onClick={onClose}
-          className="mt-8 w-full rounded-lg bg-green-500 py-3 font-semibold text-slate-900 hover:bg-green-400"
-        >
-          Back to lessons
-        </button>
       </div>
     </div>
   );
@@ -242,15 +250,17 @@ export default function SessionSummaryModal({
 function EvalSection({
   status,
   data,
+  briefingGoal,
 }: {
   status: EvalStatus;
   data: SessionData | null;
+  briefingGoal: string | string[] | null;
 }) {
   if (status === "loading") {
     return (
-      <div className="rounded-lg bg-slate-900 p-4">
-        <div className="flex items-center gap-3 text-sm text-slate-400">
-          <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-500 border-t-slate-200" />
+      <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
+        <div className="flex items-center gap-3 font-body text-[14px] text-ink-soft">
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-ink" />
           Analyzing your session…
         </div>
       </div>
@@ -259,13 +269,12 @@ function EvalSection({
 
   if (status === "no-id" || status === "timeout") {
     return (
-      <div className="rounded-lg bg-slate-900 p-4 text-sm text-slate-400">
+      <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4 font-body text-[14px] text-ink-muted">
         Results unavailable right now.
       </div>
     );
   }
 
-  // status === "ready"
   if (!data) return null;
 
   const hasGoals = data.goal_eval !== null;
@@ -274,13 +283,18 @@ function EvalSection({
   return (
     <div className="space-y-4">
       {hasGoals ? (
-        <GoalEvalBlock evalData={data.goal_eval as GoalEval} />
+        <GoalEvalBlock
+          evalData={data.goal_eval as GoalEval}
+          briefingGoal={briefingGoal}
+        />
       ) : (
-        <div className="rounded-lg bg-slate-900 p-4 text-sm text-slate-300">
-          <div className="mb-1 text-xs uppercase tracking-wide text-slate-500">
+        <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
             Evaluation
-          </div>
-          Not evaluated — this lesson isn&apos;t scored.
+          </p>
+          <p className="mt-2 font-body text-[14px] text-ink-soft">
+            Not evaluated — this lesson isn&apos;t scored.
+          </p>
         </div>
       )}
       {hasPron && (
@@ -293,57 +307,118 @@ function EvalSection({
   );
 }
 
-function GoalEvalBlock({ evalData }: { evalData: GoalEval }) {
-  const passBadge = evalData.passed
-    ? { dot: "bg-green-400", text: "text-green-400", label: "Passed" }
-    : { dot: "bg-red-400", text: "text-red-400", label: "Not passed" };
+function GoalEvalBlock({
+  evalData,
+  briefingGoal,
+}: {
+  evalData: GoalEval;
+  briefingGoal: string | string[] | null;
+}) {
+  const passed = evalData.passed;
+
+  // Resolve the per-tile display text. Briefing copy is user-friendly;
+  // eval g.goal is the technical criterion. Use briefing when shape matches:
+  //   - briefingGoal is a string → use for the single eval goal (1:1)
+  //   - briefingGoal is a list with same length as eval goals → use per index
+  //   - else → fall back to g.goal for that row
+  const displayGoalAt = (i: number, fallback: string): string => {
+    if (
+      Array.isArray(briefingGoal) &&
+      briefingGoal.length === evalData.goals.length
+    ) {
+      const item = briefingGoal[i]?.trim();
+      if (item) return item;
+    } else if (
+      typeof briefingGoal === "string" &&
+      briefingGoal.trim().length > 0 &&
+      evalData.goals.length === 1
+    ) {
+      return briefingGoal.trim();
+    }
+    return fallback;
+  };
 
   return (
-    <div className="rounded-lg bg-slate-900 p-4">
-      <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">
-        Goal evaluation
-      </div>
-      <div className="mb-4 flex items-center gap-3">
-        <span className="text-lg font-semibold text-slate-100">
-          {evalData.score} / 100
+    <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-5">
+      <div className="flex items-center gap-3">
+        <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
+          Goal evaluation
         </span>
-        <span className="flex items-center gap-1.5 text-sm">
-          <span className={`h-2 w-2 rounded-full ${passBadge.dot}`} />
-          <span className={passBadge.text}>{passBadge.label}</span>
+        <span className="h-px flex-1 bg-rule" />
+      </div>
+
+      <div className="mt-3 flex items-baseline gap-3">
+        <span className="font-display text-[44px] font-black leading-none text-ink">
+          {evalData.score}
+        </span>
+        <span className="font-display text-[18px] font-bold text-ink-muted">
+          / 100
+        </span>
+        <span className="ml-2">
+          <PassBadge passed={passed} />
         </span>
       </div>
 
-      <ul className="space-y-3">
-        {evalData.goals.map((g, i) => (
-          <li key={i} className="border-l-2 border-slate-700 pl-3">
-            <div className="mb-1 flex items-start gap-2">
-              <span
-                className={
-                  g.passed ? "text-green-400" : "text-red-400"
-                }
-                aria-hidden
-              >
-                {g.passed ? "✓" : "✗"}
-              </span>
-              <span className="text-sm font-medium text-slate-100">
-                {g.goal}
-              </span>
-            </div>
-            <div className="ml-5 text-sm text-slate-400">
-              <span className="text-slate-500">You said: </span>
-              {formatEvidence(g.evidence)}
-            </div>
-            {/* Reasoning is the "what to fix" hint — only useful when the
-                goal failed. On a pass, the evidence already tells the story. */}
-            {!g.passed && g.reasoning && (
-              <div className="ml-5 mt-1 text-xs italic text-slate-400">
-                {g.reasoning}
+      <ul className="mt-5 space-y-5">
+        {evalData.goals.map((g, i) => {
+          const displayGoal = displayGoalAt(i, g.goal);
+          return (
+            <li
+              key={i}
+              className={`rounded-2xl border-2 px-5 py-4 ${
+                g.passed
+                  ? "border-success/35 bg-success-soft/40"
+                  : "border-flag-red/45 bg-flag-red-soft/45"
+              }`}
+            >
+              <p className="font-body text-[16px] font-semibold leading-snug text-ink">
+                {displayGoal}
+              </p>
+              <div className="mt-4 flex items-start gap-3">
+                <span
+                  aria-hidden
+                  className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
+                    g.passed
+                      ? "bg-success text-white"
+                      : "bg-flag-red text-white"
+                  }`}
+                >
+                  {g.passed ? "✓" : "✗"}
+                </span>
+                <span className="font-body text-[16px] leading-snug text-ink">
+                  <span className="text-ink-muted">You said:</span>{" "}
+                  {formatEvidence(g.evidence)}
+                </span>
               </div>
-            )}
-          </li>
-        ))}
+              {!g.passed && g.reasoning && (
+                <div className="mt-2 ml-9 font-body text-[13px] italic text-ink-muted">
+                  {g.reasoning}
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
+  );
+}
+
+function PassBadge({ passed }: { passed: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 font-display text-[11px] font-black uppercase tracking-[0.2em] ${
+        passed
+          ? "border-success bg-success text-white"
+          : "border-flag-red bg-flag-red text-white"
+      }`}
+    >
+      <span
+        className={`inline-block h-1.5 w-1.5 rounded-full ${
+          passed ? "bg-white" : "bg-white"
+        }`}
+      />
+      {passed ? "Passed" : "Not passed"}
+    </span>
   );
 }
 
@@ -359,8 +434,6 @@ function PronEvalBlock({
 
   const allWords = evalData.turns.flatMap((t) => t.words);
 
-  // Only surface standouts. With a single word the headline IS that word's
-  // score, so showing a duplicate "best/worst" line is pointless.
   let bestWord: PronWord | null = null;
   let worstWord: PronWord | null = null;
   if (allWords.length > 1) {
@@ -376,17 +449,28 @@ function PronEvalBlock({
   const hasSubScores =
     schema.showFluency || schema.showCompleteness || schema.showProsody;
 
+  const score = Math.round(agg.accuracy_score);
+
   return (
-    <div className="rounded-lg bg-slate-900 p-4">
-      <div className="mb-2 text-xs uppercase tracking-wide text-slate-500">
-        Pronunciation
+    <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-5">
+      <div className="flex items-center gap-3">
+        <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
+          Pronunciation
+        </span>
+        <span className="h-px flex-1 bg-rule" />
       </div>
-      <div className="mb-3 text-lg font-semibold text-slate-100">
-        {Math.round(agg.accuracy_score)} / 100
+
+      <div className="mt-3 flex items-baseline gap-3">
+        <span className="font-display text-[44px] font-black leading-none text-ink">
+          {score}
+        </span>
+        <span className="font-display text-[18px] font-bold text-ink-muted">
+          / 100
+        </span>
       </div>
 
       {hasSubScores && (
-        <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-slate-400">
+        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 font-body text-[13px] text-ink-soft">
           {schema.showFluency && (
             <SubScore label="Fluency" value={agg.fluency_score} />
           )}
@@ -400,25 +484,29 @@ function PronEvalBlock({
       )}
 
       {(bestWord || worstWord) && (
-        <ul className="space-y-1 text-sm">
+        <ul className="mt-4 space-y-2 font-body text-[14px]">
           {bestWord && (
-            <li className="flex items-center justify-between text-slate-200">
-              <span>
-                <span className="text-slate-500">Top word: </span>
-                {bestWord.word}
+            <li className="flex items-center justify-between rounded-xl border-2 border-success/35 bg-success-soft/40 px-3 py-2">
+              <span className="text-ink">
+                <span className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+                  Top word ·{" "}
+                </span>
+                <span className="font-semibold">{bestWord.word}</span>
               </span>
-              <span className="text-slate-400">
+              <span className="font-display text-[14px] font-bold text-ink">
                 {Math.round(bestWord.accuracy_score)} / 100
               </span>
             </li>
           )}
           {worstWord && (
-            <li className="flex items-center justify-between text-slate-200">
-              <span>
-                <span className="text-slate-500">Worst word: </span>
-                {worstWord.word}
+            <li className="flex items-center justify-between rounded-xl border-2 border-flag-red/45 bg-flag-red-soft/45 px-3 py-2">
+              <span className="text-ink">
+                <span className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+                  Watch ·{" "}
+                </span>
+                <span className="font-semibold">{worstWord.word}</span>
               </span>
-              <span className="text-slate-400">
+              <span className="font-display text-[14px] font-bold text-ink">
                 {Math.round(worstWord.accuracy_score)} / 100
               </span>
             </li>
@@ -426,28 +514,32 @@ function PronEvalBlock({
         </ul>
       )}
 
-      <div className="mt-3 text-xs italic text-slate-500">
+      <p className="mt-4 font-body text-[12px] italic text-ink-muted">
         Anything above 80 is great.
-      </div>
+      </p>
     </div>
   );
 }
 
 function SubScore({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between">
-      <span>{label}</span>
-      <span className="text-slate-300">{Math.round(value)}</span>
+    <div className="flex items-baseline gap-2">
+      <span className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+        {label}
+      </span>
+      <span className="font-display text-[16px] font-bold text-ink">
+        {Math.round(value)}
+      </span>
     </div>
   );
 }
 
 function formatEvidence(evidence: string): React.ReactNode {
-  // The evaluator emits the literal string "none" when there's no relevant
-  // student turn for a goal — render that as a softer placeholder.
   const trimmed = evidence.trim();
   if (!trimmed || trimmed.toLowerCase() === "none") {
-    return <span className="italic text-slate-500">(no attempt)</span>;
+    return <span className="italic text-ink-muted">(no attempt)</span>;
   }
-  return <span className="text-slate-300">&ldquo;{trimmed}&rdquo;</span>;
+  return (
+    <span className="text-ink">&ldquo;{trimmed}&rdquo;</span>
+  );
 }

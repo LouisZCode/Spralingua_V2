@@ -17,9 +17,17 @@ const USER_ID = "0001";
 const BASE_WS = "ws://localhost:8765";
 const HTTP_BASE = "http://localhost:8765";
 
+// Briefing field values are either a single prose string OR a list of
+// short items (renders as bullets). Authors pick per field per lesson.
+type BriefingValue = string | string[];
+
 interface LessonMeta {
   title: string;
-  briefing: { situation: string; context: string; goal: string };
+  briefing: {
+    situation: BriefingValue;
+    context: BriefingValue;
+    goal: BriefingValue;
+  };
   completion?: CompletionData | null;
 }
 
@@ -358,6 +366,7 @@ export default function ConversationView({
       {showSummary && (
         <SessionSummaryModal
           lessonTitle={meta?.title ?? ""}
+          briefingGoal={meta?.briefing?.goal ?? null}
           completion={meta?.completion ?? null}
           endedBy={endedBy}
           sessionId={sessionId}
@@ -390,9 +399,11 @@ function BriefingPhase({
     { key: "context", label: "Context" },
     { key: "goal", label: "Goal", spotlight: true },
   ];
-  const filled = meta
-    ? blocks.filter((b) => (meta.briefing[b.key] ?? "").trim().length > 0)
-    : [];
+  const hasContent = (v: BriefingValue | undefined): boolean => {
+    if (Array.isArray(v)) return v.some((item) => item.trim().length > 0);
+    return (v ?? "").trim().length > 0;
+  };
+  const filled = meta ? blocks.filter((b) => hasContent(meta.briefing[b.key])) : [];
 
   return (
     <>
@@ -422,7 +433,7 @@ function BriefingPhase({
             >
               <div className="flex items-center gap-3">
                 {b.spotlight ? (
-                  <span className="goal-shimmer font-display text-[24px] font-black uppercase tracking-[0.08em]">
+                  <span className="goal-shimmer font-display text-[24px] font-black uppercase tracking-[-0.04em]">
                     {b.label}
                   </span>
                 ) : (
@@ -432,9 +443,7 @@ function BriefingPhase({
                 )}
                 <span className="h-px flex-1 bg-rule" />
               </div>
-              <div className="mt-3 whitespace-pre-line font-body text-[18px] leading-[1.5] text-ink-soft">
-                {meta!.briefing[b.key].trim()}
-              </div>
+              <BriefingBody value={meta!.briefing[b.key]} />
             </div>
           ))}
         </div>
@@ -472,6 +481,31 @@ function BriefingPhase({
         </span>
       </div>
     </>
+  );
+}
+
+function BriefingBody({ value }: { value: BriefingValue }) {
+  if (Array.isArray(value)) {
+    return (
+      <ul className="mt-3 space-y-3">
+        {value.map((item, i) => (
+          <li key={i} className="flex items-start gap-3">
+            <span
+              aria-hidden
+              className="mt-2.5 inline-block h-2 w-2 shrink-0 rounded-full bg-ink"
+            />
+            <span className="font-body text-[18px] leading-[1.5] text-ink-soft">
+              {item}
+            </span>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+  return (
+    <div className="mt-3 whitespace-pre-line font-body text-[18px] leading-[1.5] text-ink-soft">
+      {value.trim()}
+    </div>
   );
 }
 

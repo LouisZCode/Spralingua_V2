@@ -31,12 +31,11 @@ briefing:
     A neighbor — someone you know in passing from the building —
     is sitting a couple of seats away. You catch each other's eye
     and they smile, clearly recognizing you.
-  goal: |
-    Have a quick, natural catch-up. Open the small talk, keep it
-    going for a few exchanges, and at some point pay them a
-    compliment. When they return one, accept it gracefully —
-    don't deflect. The encounter ends naturally when one of you
-    gets called in.
+  goal:
+    - Open the small talk
+    - Keep it going for a few exchanges
+    - Pay them a compliment
+    - Accept theirs back gracefully — don't deflect
 
 persona_prompt: |
   Scenario: You're sitting in your local doctor's office waiting room, waiting for your name to be called. A neighbor — someone you know from passing in the building, friendly but not close — has just looked up and made eye contact with you. You smile in recognition; it's a small, pleasant moment of running into someone familiar.

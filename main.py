@@ -1,6 +1,7 @@
 # Backend:  uvicorn main:app --host 0.0.0.0 --port 8765
 # Frontend: cd frontend && npm run dev
 
+import re
 import uuid
 from contextlib import asynccontextmanager
 
@@ -44,6 +45,34 @@ def health():
     return {"status": "ok"}
 
 
+_PARAGRAPH_MARKER = "\x00PARA\x00"
+
+
+def _normalize_briefing_text(s: str) -> str:
+    """Collapse author wrap-for-readability into flowing prose.
+
+    YAML briefing copy is authored as wrapped paragraphs — `|` (literal)
+    preserves every wrap as a hard newline, and the frontend's
+    ``whitespace-pre-line`` renders each as a visible break. Authors
+    shouldn't have to remember `|` vs `>` scalar styles to get clean
+    output, so we normalize here:
+
+    - Runs of 2+ newlines (intentional paragraph break) survive as one
+      newline (still renders as a paragraph gap via whitespace-pre-line).
+    - Single newlines (wrap-for-readability) collapse to a space.
+    - Runs of horizontal whitespace collapse to one space.
+
+    Applies to ``/lessons/{id}`` response only; raw text is preserved in
+    ``lesson_snapshot`` and prompt assembly for fidelity.
+    """
+    if not isinstance(s, str) or not s:
+        return s
+    text = re.sub(r"\n\s*\n+", _PARAGRAPH_MARKER, s.strip())
+    text = text.replace("\n", " ")
+    text = re.sub(r"[ \t]+", " ", text)
+    return text.replace(_PARAGRAPH_MARKER, "\n\n")
+
+
 @app.get("/lessons/{lesson_id}")
 def lesson_meta(lesson_id: str):
     """Briefing copy + title (+ optional completion content) for the conversation page.
@@ -51,11 +80,26 @@ def lesson_meta(lesson_id: str):
     Loader already falls back to `lesson_zero` on unknown id (with a logged
     warning), so the frontend never gets a 404 here. ``completion`` may be
     ``None`` — the frontend's ``SessionSummaryModal`` supplies defaults.
+    Briefing strings are normalized so authored YAML wrap-for-readability
+    doesn't leak into the rendered briefing card.
     """
     lesson = load_prompts(lesson_id)
+    briefing_raw = lesson.get("briefing") or {}
+    # Briefing values can be either a string (prose) or a list of strings
+    # (bulleted goals). Normalize each item either way.
+    def _normalize_value(v):
+        if isinstance(v, str):
+            return _normalize_briefing_text(v)
+        if isinstance(v, list):
+            return [
+                _normalize_briefing_text(item) if isinstance(item, str) else item
+                for item in v
+            ]
+        return v
+    briefing = {k: _normalize_value(v) for k, v in briefing_raw.items()}
     return {
         "title": lesson["title"],
-        "briefing": lesson["briefing"],
+        "briefing": briefing,
         "completion": lesson.get("completion"),
     }
 
