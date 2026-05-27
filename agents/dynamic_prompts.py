@@ -47,15 +47,14 @@ class Context:
 
     `lesson_id` routes the middleware to the matching
     `agents/prompts/{lesson_id}.yaml`. Defaults to `"lesson_zero"` (open
-    conversational mode). Short-term fields come from the WebSocket query
-    params; `profile` is attached at connect time by `ClientWrapper.__init__`
-    via `fake_profiles.load_profile(user_id)`. Only the `conversation`
-    lesson type reads the profile; `respond`-type lessons (e.g. A1-L1)
-    use just the persona prompt.
+    conversational mode). `profile` is attached at connect time by
+    `ClientWrapper.__init__` via `fake_profiles.load_profile(user_id)`.
+    Only the `conversation` lesson type reads the profile; `respond`-type
+    lessons (e.g. A1-L1) use just the persona prompt. Student CEFR level
+    is no longer carried on Context — the conversation middleware reads
+    `default_level` directly from the lesson YAML until user profiles land.
     """
     lesson_id: str = "lesson_zero"
-    user_level: str = "A1"
-    situation: str = "introducing_yourself"
     agent_voice: str = "happy_harry"
     agent_personality: str = "friendly"
     profile: StudentProfile | None = None

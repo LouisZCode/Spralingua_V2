@@ -13,6 +13,10 @@ title: Lesson 0 — Open Conversation
 description: Open conversational practice using the layered V2 prompt.
 max_exchanges: 8
 
+# Sourced into {student_level} of short_term_template by
+# agents/conversational_prompt.py. Pre-profile placeholder.
+default_level: A1
+
 briefing:
   situation: |
     Open conversational practice with the Spralingua coach.

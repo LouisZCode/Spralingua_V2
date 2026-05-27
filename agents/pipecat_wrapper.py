@@ -70,15 +70,13 @@ def _contains_goodbye(text: str) -> bool:
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
-    def __init__(self, user_id, session_id, logger, level="A1", situation="introducing_yourself", voice="happy_harry", lesson_id="lesson_zero"):
+    def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero"):
         self.user_id = user_id
         self.session_id = session_id
         self.logger = logger
         self.agent = agent_assembly(user_id)
         self.context = Context(
             lesson_id=lesson_id,
-            user_level=level,
-            situation=situation,
             agent_voice=voice,
             profile=load_profile(user_id),
         )
@@ -130,9 +128,9 @@ class ClientWrapper:
         Attributes emitted follow OTel ``gen_ai.*`` semantic conventions so
         Langfuse's cost engine can read ``input_tokens`` / ``output_tokens``
         directly; ``input`` / ``output`` carry the user message and full
-        reply for evaluation; the custom block (level/situation/voice/
-        lesson_id/exchange) preserves the per-turn metadata we used to put
-        on the manual Langfuse Generation.
+        reply for evaluation; the custom block (voice/lesson_id/exchange)
+        preserves the per-turn metadata we used to put on the manual
+        Langfuse Generation.
 
         ``LangchainProcessor`` itself is uninstrumented (it's a
         ``FrameProcessor``, not an ``LLMService``), so this is the only LLM
@@ -170,8 +168,6 @@ class ClientWrapper:
             # trace itself. Setting on any span in the trace works; we set it here
             # (last LLM call wins for multi-turn lessons).
             llm_span.set_attribute("langfuse.trace.input", text)
-            llm_span.set_attribute("level", self.context.user_level)
-            llm_span.set_attribute("situation", self.context.situation)
             llm_span.set_attribute("voice", self.context.agent_voice)
             llm_span.set_attribute("lesson_id", self.context.lesson_id)
             llm_span.set_attribute("exchange", self._exchange_count)

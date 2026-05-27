@@ -334,7 +334,7 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         short = lesson["short_term_template"].format(
             today=date.today().isoformat(),
             student_name=profile.student_name,
-            student_level=ctx.user_level,
+            student_level=lesson.get("default_level", "A1"),
         )
         long = lesson["long_term_template"].format(
             student_name=profile.student_name,

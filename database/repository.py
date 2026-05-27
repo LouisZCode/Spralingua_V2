@@ -29,8 +29,6 @@ async def create_session_row(
     session_id: str,
     user_id: str,
     lesson_id: str,
-    level: str | None,
-    situation: str | None,
     voice: str | None,
     started_at: datetime,
     audio_path: str,
@@ -40,7 +38,10 @@ async def create_session_row(
 
     ``session_id`` is the 32-char hex string from ``uuid4().hex`` at
     ``pipeline/factory.py:60``; we cast to ``UUID`` here so the column type
-    stays native ``uuid``.
+    stays native ``uuid``. ``activity_session.level`` and ``.situation``
+    columns are left in the schema for now (nullable) and simply not
+    written — they were the runtime knobs we removed in favor of YAML
+    ``default_level``. Migration to drop them can come with the next batch.
     """
     try:
         # Idempotent user upsert — repeat connects with same user_id are a no-op.
@@ -54,8 +55,6 @@ async def create_session_row(
                 id=UUID(session_id),
                 user_id=user_id,
                 lesson_id=lesson_id,
-                level=level,
-                situation=situation,
                 voice=voice,
                 started_at=started_at,
                 audio_path=audio_path,

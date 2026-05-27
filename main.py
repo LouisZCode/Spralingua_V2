@@ -94,13 +94,11 @@ async def get_session(session_id: str):
 async def ws_endpoint(
     websocket: WebSocket,
     user_id: str,
-    level: str = "A1",
-    situation: str = "introducing_yourself",
     voice: str = "happy_harry",
     lesson: str = "lesson_zero",
 ):
     await websocket.accept()
-    await run_pipeline(websocket, user_id, level, situation, voice, lesson)
+    await run_pipeline(websocket, user_id, voice, lesson)
 
 
 class SayBody(BaseModel):

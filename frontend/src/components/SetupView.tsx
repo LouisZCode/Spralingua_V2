@@ -16,7 +16,6 @@ type Path = {
   key: PathKey;
   label: string;
   sublabel: string;
-  level: "A1" | "B2";
   lessons: LessonNode[];
 };
 
@@ -25,7 +24,6 @@ const PATHS: Path[] = [
     key: "A1",
     label: "A1",
     sublabel: "Beginner",
-    level: "A1",
     lessons: [
       {
         id: "a1_l1",
@@ -40,7 +38,6 @@ const PATHS: Path[] = [
     key: "B1",
     label: "B1",
     sublabel: "Intermediate",
-    level: "B2",
     lessons: [
       {
         id: "b1_l1",
@@ -55,7 +52,6 @@ const PATHS: Path[] = [
     key: "DEV",
     label: "Developer",
     sublabel: "Internal tools",
-    level: "A1",
     lessons: [
       {
         id: "lesson_zero",
@@ -81,21 +77,8 @@ const VOICES: Record<string, { label: string; meta: string }> = {
   luis_clone: { label: "Luis", meta: "Cloned · personal" },
 };
 
-const LEVELS = {
-  A1: {
-    label: "A1 · Beginner",
-    situations: { introducing_yourself: "Introducing Yourself" },
-  },
-  B2: {
-    label: "B2 · Upper Intermediate",
-    situations: { planning_picnic: "Planning a Picnic" },
-  },
-} as const;
-
 export interface SessionParams {
   lesson: string;
-  level: string;
-  situation: string;
   voice: string;
 }
 
@@ -109,21 +92,15 @@ export default function SetupView({
 
   const [lessonId, setLessonId] = useState<string>(path.lessons[0].id);
   const [voice, setVoice] = useState<string>("German_Female");
-  const [level, setLevel] = useState<keyof typeof LEVELS>(path.level);
-  const [situation, setSituation] = useState<string>(
-    Object.keys(LEVELS[path.level].situations)[0],
-  );
 
   const switchPath = (key: PathKey) => {
     const next = PATHS.find((p) => p.key === key)!;
     setPathKey(key);
     setLessonId(next.lessons[0].id);
-    setLevel(next.level);
-    setSituation(Object.keys(LEVELS[next.level].situations)[0]);
   };
 
   const handleStart = () => {
-    onSubmit({ lesson: lessonId, level, situation, voice });
+    onSubmit({ lesson: lessonId, voice });
   };
 
   return (
@@ -155,23 +132,15 @@ export default function SetupView({
       <div className="relative mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-6 py-10">
         {/* Header */}
         <header className="rise-in" style={{ animationDelay: "0ms" }}>
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-                Voice · Deutsch · v1
-              </p>
-              <h1 className="mt-2 font-display text-[52px] leading-[0.95] font-black tracking-tight text-ink">
-                <span className="highlighter-gold pr-2">Spralingua</span>
-              </h1>
-              <p className="mt-3 font-body text-[15px] text-ink-soft">
-                Pick a path, choose your class, hold the room.
-              </p>
-            </div>
-            <div className="mt-3 flex items-center gap-2 rounded-full border-2 border-ink bg-white px-3 py-1.5 font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink">
-              <span className="inline-block h-2 w-2 rounded-full bg-flag-red beacon-pulse" />
-              Live
-            </div>
-          </div>
+          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+            Voice · Deutsch · v1
+          </p>
+          <h1 className="mt-2 font-display text-[52px] leading-[0.95] font-black tracking-tight text-ink">
+            <span className="highlighter-gold pr-2">Spralingua</span>
+          </h1>
+          <p className="mt-3 font-body text-[15px] text-ink-soft">
+            Pick a path, choose your class, hold the room.
+          </p>
         </header>
 
         {/* Path tabs */}
@@ -182,23 +151,19 @@ export default function SetupView({
         >
           {PATHS.map((p) => {
             const active = p.key === pathKey;
-            const isDev = p.key === "DEV";
             return (
               <button
                 key={p.key}
                 onClick={() => switchPath(p.key)}
-                className={`btn-3d flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
+                aria-pressed={active}
+                className={`flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
                   active
-                    ? "bg-ink text-white"
-                    : isDev
-                      ? "bg-white text-ink hover:bg-paper"
-                      : "bg-white text-ink hover:bg-paper-warm"
+                    ? "cursor-default bg-ink text-white"
+                    : "btn-3d bg-white text-ink hover:bg-paper-warm"
                 }`}
                 style={
                   {
-                    ["--shadow-color"]: active
-                      ? "var(--color-ink)"
-                      : "var(--color-ink)",
+                    ["--shadow-color"]: "var(--color-ink)",
                   } as React.CSSProperties
                 }
               >
@@ -274,7 +239,7 @@ export default function SetupView({
         {/* Spacer that grows so footer hugs bottom */}
         <div className="flex-1" />
 
-        {/* Controls — voice (primary) + DEV (level, situation) */}
+        {/* Voice picker */}
         <section
           className="rise-in mt-10 rounded-[28px] border-[3px] border-ink bg-paper-warm p-5"
           style={{ animationDelay: "220ms" }}
@@ -294,16 +259,14 @@ export default function SetupView({
                 <button
                   key={key}
                   onClick={() => setVoice(key)}
-                  className={`btn-3d rounded-2xl border-[3px] border-ink px-2 py-3 transition-colors ${
+                  className={`rounded-2xl border-[3px] border-ink px-2 py-3 transition-colors ${
                     active
-                      ? "bg-flag-gold text-ink"
-                      : "bg-white text-ink hover:bg-paper"
+                      ? "cursor-default bg-flag-gold text-ink"
+                      : "btn-3d bg-white text-ink hover:bg-paper"
                   }`}
                   style={
                     {
-                      ["--shadow-color"]: active
-                        ? "var(--color-flag-gold-deep)"
-                        : "var(--color-ink)",
+                      ["--shadow-color"]: "var(--color-ink)",
                     } as React.CSSProperties
                   }
                 >
@@ -317,45 +280,6 @@ export default function SetupView({
               );
             })}
           </div>
-
-          {/* DEV plumbing — temporary controls until profile lands */}
-          <details className="group mt-4">
-            <summary className="flex cursor-pointer list-none items-center justify-between rounded-xl border-2 border-dashed border-ink-faint bg-white/60 px-3 py-2 text-ink-muted">
-              <span className="font-body text-[10px] font-bold uppercase tracking-[0.28em]">
-                Dev · level &amp; situation
-              </span>
-              <span className="font-display text-base leading-none transition-transform group-open:rotate-45">
-                +
-              </span>
-            </summary>
-            <div className="mt-3 grid grid-cols-2 gap-3">
-              <SelectField
-                label="Level"
-                value={level}
-                onChange={(v) => {
-                  const next = v as keyof typeof LEVELS;
-                  setLevel(next);
-                  setSituation(Object.keys(LEVELS[next].situations)[0]);
-                }}
-                options={Object.entries(LEVELS).map(([k, val]) => [
-                  k,
-                  val.label,
-                ])}
-              />
-              <SelectField
-                label="Situation"
-                value={situation}
-                onChange={setSituation}
-                options={Object.entries(LEVELS[level].situations).map(
-                  ([k, label]) => [k, label],
-                )}
-              />
-            </div>
-            <p className="mt-2 font-body text-[10px] leading-relaxed text-ink-muted">
-              Temporary. These will be inferred from your profile + the
-              lesson&apos;s YAML once profiles land.
-            </p>
-          </details>
         </section>
 
         {/* CTA */}
@@ -468,45 +392,5 @@ function NodeLabel({
         </span>
       )}
     </div>
-  );
-}
-
-function SelectField({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: Array<[string, string]>;
-}) {
-  return (
-    <label className="block">
-      <span className="block font-body text-[10px] font-bold uppercase tracking-[0.24em] text-ink-muted">
-        {label}
-      </span>
-      <div className="relative mt-1.5">
-        <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-full cursor-pointer appearance-none rounded-xl border-2 border-ink bg-white px-3 py-2.5 pr-8 font-display text-[13px] font-semibold text-ink focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
-        >
-          {options.map(([k, lbl]) => (
-            <option key={k} value={k}>
-              {lbl}
-            </option>
-          ))}
-        </select>
-        <svg
-          aria-hidden
-          viewBox="0 0 16 16"
-          className="pointer-events-none absolute top-1/2 right-2.5 h-4 w-4 -translate-y-1/2 fill-ink"
-        >
-          <path d="M3 6 L8 11 L13 6 Z" />
-        </svg>
-      </div>
-    </label>
   );
 }

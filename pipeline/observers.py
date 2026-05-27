@@ -83,8 +83,6 @@ class PipelineLatencyObserver(BaseObserver):
         session_id: str,
         user_id: str,
         lesson_id: str,
-        level: str,
-        situation: str,
         voice: str,
         tts_service=None,
         wrapper=None,
@@ -95,8 +93,6 @@ class PipelineLatencyObserver(BaseObserver):
         self._session_id = session_id
         self._user_id = user_id
         self._lesson_id = lesson_id
-        self._level = level
-        self._situation = situation
         self._voice = voice
         # Optional TTS service reference. If it exposes ``reset_for_new_turn()``
         # (our ``FirstOnlyTracedMiniMaxTTS`` does), we call it on each turn
@@ -205,8 +201,6 @@ class PipelineLatencyObserver(BaseObserver):
         self._turn_span.set_attribute("langfuse.session.id", self._session_id)
         self._turn_span.set_attribute("user.id", self._user_id)
         self._turn_span.set_attribute("lesson_id", self._lesson_id)
-        self._turn_span.set_attribute("level", self._level)
-        self._turn_span.set_attribute("situation", self._situation)
         self._turn_span.set_attribute("voice", self._voice)
         self._turn_span.set_attribute("turn.number", self._turn_count)
         # Push context for @traced_stt / @traced_tts and our hand-rolled LLM

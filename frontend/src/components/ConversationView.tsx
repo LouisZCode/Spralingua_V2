@@ -218,9 +218,7 @@ export default function ConversationView({
       clientRef.current = client;
       const wsUrl =
         `${BASE_WS}/ws/${USER_ID}` +
-        `?level=${params.level}` +
-        `&situation=${params.situation}` +
-        `&voice=${params.voice}` +
+        `?voice=${params.voice}` +
         `&lesson=${params.lesson}`;
       await client.connect({ wsUrl });
     } catch (e) {

@@ -55,7 +55,7 @@ class _NoOpTurnTraceObserver:
         pass
 
 
-async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: str = "introducing_yourself", voice: str = "happy_harry", lesson_id: str = "lesson_zero"):
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero"):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -96,8 +96,6 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
                     session_id=session_id,
                     user_id=user_id,
                     lesson_id=lesson_id,
-                    level=level,
-                    situation=situation,
                     voice=voice,
                     started_at=started_at,
                     audio_path=audio_path,
@@ -109,7 +107,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             )
 
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, level=level, situation=situation, voice=voice, lesson_id=lesson_id)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
@@ -210,8 +208,6 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
             session_id=session_id,
             user_id=user_id,
             lesson_id=lesson_id,
-            level=level,
-            situation=situation,
             voice=voice,
             tts_service=tts,
             # Required for BUG-002 audio↔text pairing: observer ticks the
@@ -263,7 +259,7 @@ async def run_pipeline(websocket, user_id: str, level: str = "A1", situation: st
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
 
-        print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} level={level} situation={situation} voice={voice}")
+        print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
 
         # Hoisted out of the inner try-blocks so the DB finalize step below
         # can read them. They stay None when the corresponding evaluator
