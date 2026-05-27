@@ -60,29 +60,20 @@ body {
   );
 }
 
-/* 3D chunky press button (Duolingo lift) */
+/* 3D chunky press button (Duolingo lift).
+   Uses box-shadow (not ::after) so the hover transform's stacking
+   context can't put the shadow on top of the button's own bg. */
 .btn-3d {
-  position: relative;
+  box-shadow: 0 6px 0 var(--shadow-color, var(--color-flag-red-deep));
   transition: transform 110ms ease, box-shadow 110ms ease;
-}
-.btn-3d::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  z-index: -1;
-  transform: translateY(6px);
-  background: var(--shadow-color, var(--color-flag-red-deep));
-  transition: transform 110ms ease;
 }
 .btn-3d:hover {
   transform: translateY(-1px);
+  box-shadow: 0 7px 0 var(--shadow-color, var(--color-flag-red-deep));
 }
 .btn-3d:active {
   transform: translateY(4px);
-}
-.btn-3d:active::after {
-  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--shadow-color, var(--color-flag-red-deep));
 }
 
 /* Selected node beacon pulse */

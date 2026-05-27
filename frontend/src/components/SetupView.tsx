@@ -138,9 +138,6 @@ export default function SetupView({
           <h1 className="mt-2 font-display text-[52px] leading-[0.95] font-black tracking-tight text-ink">
             <span className="highlighter-gold pr-2">Spralingua</span>
           </h1>
-          <p className="mt-3 font-body text-[15px] text-ink-soft">
-            Pick a path, choose your class, hold the room.
-          </p>
         </header>
 
         {/* Path tabs */}
@@ -156,10 +153,10 @@ export default function SetupView({
                 key={p.key}
                 onClick={() => switchPath(p.key)}
                 aria-pressed={active}
-                className={`flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
+                className={`group flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
                   active
                     ? "cursor-default bg-ink text-white"
-                    : "btn-3d bg-white text-ink hover:bg-paper-warm"
+                    : "btn-3d bg-white text-ink hover:bg-ink hover:text-white"
                 }`}
                 style={
                   {
@@ -172,7 +169,9 @@ export default function SetupView({
                 </span>
                 <span
                   className={`mt-1 block font-body text-[10px] font-semibold uppercase tracking-[0.18em] ${
-                    active ? "text-white/70" : "text-ink-muted"
+                    active
+                      ? "text-white/70"
+                      : "text-ink-muted group-hover:text-white/70"
                   }`}
                 >
                   {p.sublabel}
@@ -185,20 +184,10 @@ export default function SetupView({
         {/* Path canvas */}
         <section
           key={pathKey}
-          className="rise-in relative mt-10"
+          className="rise-in relative mt-20"
           style={{ animationDelay: "160ms" }}
-          aria-label={`Class ${path.label} lessons`}
+          aria-label={`${path.label} path lessons`}
         >
-          <div className="mb-4 flex items-center gap-3">
-            <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
-              Class · {path.label}
-            </span>
-            <span className="h-px flex-1 bg-rule" />
-            <span className="font-body text-[10px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
-              {path.lessons.length} lesson{path.lessons.length === 1 ? "" : "s"}
-            </span>
-          </div>
-
           <div className="flex flex-col">
             {path.lessons.map((lesson, i) => {
               const selected = lesson.id === lessonId;
@@ -262,7 +251,7 @@ export default function SetupView({
                   className={`rounded-2xl border-[3px] border-ink px-2 py-3 transition-colors ${
                     active
                       ? "cursor-default bg-flag-gold text-ink"
-                      : "btn-3d bg-white text-ink hover:bg-paper"
+                      : "btn-3d bg-white text-ink hover:bg-flag-gold"
                   }`}
                   style={
                     {
