@@ -148,15 +148,21 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             """
             wrapper.append_user_turn_audio(bytes(audio), sample_rate)
 
-        # RTVI processor + observer. The observer handles user transcripts;
-        # bot text is pushed by ClientWrapper itself (one message per turn) to
-        # avoid the framework's dual-path duplicate (LLM-side AggregatedTextFrame
-        # AND TTS-side TTSTextFrame both observed).
+        # RTVI processor + observer. Both user transcripts and bot text are
+        # pushed once-per-turn by our own code, not by the observer:
+        #   - user transcripts: TranscriptionToContextConverter pushes one
+        #     consolidated bubble on UserStoppedSpeakingFrame (the same joined
+        #     string it hands the LLM). So user_transcription_enabled is OFF —
+        #     otherwise the observer would also forward every Deepgram segment,
+        #     producing several stacked bubbles per spoken utterance.
+        #   - bot text: ClientWrapper pushes one message per turn to avoid the
+        #     framework's dual-path duplicate (LLM-side AggregatedTextFrame AND
+        #     TTS-side TTSTextFrame both observed).
         rtvi_processor = RTVIProcessor()
         rtvi_observer = RTVIObserver(
             rtvi=rtvi_processor,
             params=RTVIObserverParams(
-                user_transcription_enabled=True,
+                user_transcription_enabled=False,
                 bot_output_enabled=False,
                 bot_llm_enabled=False,
                 bot_tts_enabled=False,
@@ -190,6 +196,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
 
         # Give the wrapper the processor reference so it can push bot output.
         wrapper.rtvi_processor = rtvi_processor
+        # Same for the converter, so it can push the consolidated user bubble
+        # once per turn (one message on UserStoppedSpeakingFrame, mirroring how
+        # the wrapper pushes bot text once per turn).
+        converter.rtvi_processor = rtvi_processor
 
         # Tracks per-turn TTS audio duration (sample-count math on TTSAudioRawFrame).
         # Fires `wrapper.flush_bot_output` when TTS finishes the turn, which is also

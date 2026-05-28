@@ -51,8 +51,10 @@ from .load_prompts import load_prompts
 from .observability import tracer
 
 # `max_exchanges` is now per-lesson, read from the YAML in `ClientWrapper.__init__`.
-# End-of-call fires when either the count cap is reached OR a goodbye phrase
-# appears in the agent's reply — whichever comes first.
+# End-of-call fires when either the count cap (max_exchanges) is reached OR a
+# goodbye phrase appears in the agent's reply — whichever comes first. Goodbye
+# detection is only armed in the lesson's final exchange (see _goodbye_after),
+# so an opening line like "great to see you" can't end the call on turn 1.
 
 GOODBYE_PHRASES = [
     "goodbye", "bye", "see you", "take care",
@@ -92,6 +94,13 @@ class ClientWrapper:
 
         self._max_exchanges = load_prompts(lesson_id)["max_exchanges"]
         self._exchange_count = 0
+        # Goodbye detection is only armed in the lesson's final exchange (the
+        # count cap minus one, floored at 1 for single-turn lessons). This
+        # prevents the persona's OPENING line — e.g. "great to see you!"
+        # matching the "see you" goodbye phrase — from ending the call on turn 1.
+        # Scales with each lesson: a1_l1 (max 1) is armed from the start, b1_l1
+        # (max 5) only from exchange 4.
+        self._goodbye_after = max(1, self._max_exchanges - 1)
 
         # Bot reply is buffered here at the end of each LLM stream. The push to
         # the client happens later, when TTSDurationTracker fires its on_turn_complete
@@ -185,8 +194,9 @@ class ClientWrapper:
                         full_response.append(token.content)
                         yield token.content
 
-                        # End trigger: either count cap reached OR goodbye phrase
-                        # appears. Detected in-stream (post-yield code is unreliable)
+                        # End trigger: count cap reached, OR a goodbye phrase appears
+                        # once armed (final exchange — see _goodbye_after). Detected
+                        # in-stream (post-yield code is unreliable)
                         # but only MARKED as pending here — the actual stop_when_done()
                         # call happens in flush_bot_output() after BotStoppedSpeakingFrame
                         # so the final TTS span gets to record under the turn before
@@ -194,7 +204,8 @@ class ClientWrapper:
                         # LEARNINGS.md for the race condition that motivates this.
                         if (not self._end_pending
                                 and (self._exchange_count >= self._max_exchanges
-                                     or _contains_goodbye("".join(full_response)))):
+                                     or (self._exchange_count >= self._goodbye_after
+                                         and _contains_goodbye("".join(full_response))))):
                             reason = (
                                 "max_exchanges" if self._exchange_count >= self._max_exchanges
                                 else "goodbye"
