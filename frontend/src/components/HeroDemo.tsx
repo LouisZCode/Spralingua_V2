@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PipecatClient } from "@pipecat-ai/client-js";
 import {
   WebSocketTransport,
@@ -37,6 +37,45 @@ const STATE_LABEL: Record<SpeakerState, string> = {
 interface ChatMessage {
   speaker: "you" | "bot";
   text: string;
+}
+
+// The voice agent says "lugz.dev/projects/spralingua" out loud (clean to
+// pronounce) — map that mention to the canonical write-up URL. Requires a path
+// segment so bare brand names like "Babbel.com" are left as plain text.
+const LINK_RE = /\b(?:https?:\/\/)?[a-z0-9.-]+\.[a-z]{2,}\/[^\s)]*[^\s).,!?]/gi;
+
+function hrefFor(raw: string): string {
+  const lower = raw.toLowerCase();
+  if (lower.includes("lugz.dev/projects/spralingua")) {
+    return "https://www.lugz.dev/projects/spralingua.html";
+  }
+  if (lower.startsWith("http://") || lower.startsWith("https://")) return raw;
+  return `https://${raw}`;
+}
+
+function renderWithLinks(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  LINK_RE.lastIndex = 0;
+  let m: RegExpExecArray | null;
+  while ((m = LINK_RE.exec(text)) !== null) {
+    if (m.index > last) nodes.push(text.slice(last, m.index));
+    const raw = m[0];
+    nodes.push(
+      <a
+        key={m.index}
+        href={hrefFor(raw)}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="underline underline-offset-2"
+      >
+        {raw}
+      </a>
+    );
+    last = m.index + raw.length;
+  }
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
 }
 
 export default function HeroDemo() {
@@ -94,6 +133,7 @@ export default function HeroDemo() {
     cleanupAudio();
     setMode("idle");
     setSpeakerState("idle");
+    setMessages([]);
     stoppingRef.current = false;
   }, [cleanupAudio]);
 
@@ -354,7 +394,7 @@ export default function HeroDemo() {
                         m.speaker === "you" ? "bubble-you" : "bubble-them"
                       }`}
                     >
-                      {m.text}
+                      {renderWithLinks(m.text)}
                     </div>
                   </div>
                 ))
