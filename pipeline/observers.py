@@ -9,11 +9,11 @@ session totals, so a session-level span would just duplicate that work).
 Hierarchy in Langfuse:
 
     Langfuse Session (one per WebSocket, soft grouping)
-    ├── Trace = turn-{lesson_id}                     ← root span
+    ├── Trace = turn-{N}-{lesson_id}                     ← root span
     │   ├── stt observation   (Deepgram, @traced_stt)
     │   ├── llm observation   (hand-rolled in pipecat_wrapper.astream)
     │   └── tts observation   (MiniMax, @traced_tts)
-    ├── Trace = turn-{lesson_id}   ← next turn, next trace
+    ├── Trace = turn-{N}-{lesson_id}   ← next turn, next trace
     │   └── ...
     └── ...
 
@@ -194,7 +194,7 @@ class PipelineLatencyObserver(BaseObserver):
         self._turn_count += 1
         # Root span — NO parent context, so this starts a brand-new Langfuse
         # trace. Each turn = its own trace, evaluable independently.
-        self._turn_span = self._tracer.start_span(f"turn-{self._lesson_id}")
+        self._turn_span = self._tracer.start_span(f"turn-{self._turn_count}-{self._lesson_id}")
         # All trace-level metadata lives here since this IS the trace root.
         # `langfuse.session.id` is what makes Langfuse's Sessions view group
         # this trace with the other turns from the same WebSocket.
