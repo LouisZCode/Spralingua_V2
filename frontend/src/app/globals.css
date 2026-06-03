@@ -157,7 +157,9 @@ body {
   position: relative;
   display: grid;
   place-items: center;
-  box-shadow: 0 8px 0 var(--color-ink);
+  /* Soft ambient float — deliberately NOT the .btn-3d hard offset lip, so the
+     orb reads as a living status indicator, not a control you press. */
+  box-shadow: 0 18px 40px -16px rgba(11, 11, 15, 0.32);
   transition: background-color 280ms ease, color 280ms ease;
 }
 .orb-idle {
@@ -201,6 +203,16 @@ body {
 }
 .orb-dot:nth-child(2) { animation-delay: 0.15s; }
 .orb-dot:nth-child(3) { animation-delay: 0.3s; }
+
+/* Floating mic — gentle bob so the glyph hovers along with the orb. The soft
+   ambient shadow already de-buttons the orb, so the mic is safe to keep. */
+@keyframes mic-float {
+  0%, 100% { transform: translateY(-3px); }
+  50% { transform: translateY(3px); }
+}
+.orb-mic {
+  animation: mic-float 3.2s ease-in-out infinite;
+}
 
 /* ─── Chat bubbles ────────────────────────────────────────────── */
 

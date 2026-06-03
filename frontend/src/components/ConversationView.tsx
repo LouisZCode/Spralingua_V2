@@ -44,7 +44,7 @@ type SpeakerState =
 
 const STATE_LABEL: Record<SpeakerState, string> = {
   idle: "Speak now",
-  your_turn: "Your turn",
+  your_turn: "Listening…",
   agent_thinking: "Thinking",
   agent_speaking: "Speaking",
 };
@@ -67,7 +67,7 @@ export default function ConversationView({
   const [typeOpen, setTypeOpen] = useState(false);
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
-  const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const transcriptRef = useRef<HTMLElement | null>(null);
   const typeInputRef = useRef<HTMLInputElement | null>(null);
   const finishedRef = useRef(false);
   const endReasonRef = useRef<"user" | "agent" | null>(null);
@@ -88,8 +88,11 @@ export default function ConversationView({
       .catch((e) => setStatus(`Failed to load: ${e}`));
   }, [params.lesson]);
 
+  // Scroll the transcript box, not the window — scrollIntoView would scroll
+  // the whole page and push the header + Finish button off-screen.
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const box = transcriptRef.current;
+    if (box) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   }, [messages]);
 
   // Slash-key opens the type-a-turn overlay; Escape closes it. Only active
@@ -306,7 +309,7 @@ export default function ConversationView({
             title={meta?.title ?? ""}
             messages={messages}
             speakerState={speakerState}
-            chatEndRef={chatEndRef}
+            transcriptRef={transcriptRef}
             onFinish={finishLesson}
           />
         )}
@@ -515,13 +518,13 @@ function LivePhase({
   title,
   messages,
   speakerState,
-  chatEndRef,
+  transcriptRef,
   onFinish,
 }: {
   title: string;
   messages: ChatMessage[];
   speakerState: SpeakerState;
-  chatEndRef: React.RefObject<HTMLDivElement | null>;
+  transcriptRef: React.RefObject<HTMLElement | null>;
   onFinish: () => void;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
@@ -570,19 +573,24 @@ function LivePhase({
               <span className="orb-dot" />
               <span className="orb-dot" />
             </div>
-          ) : (
+          ) : speakerState === "agent_speaking" ? (
             <svg
               viewBox="0 0 24 24"
               className="h-12 w-12 fill-current"
               aria-hidden
             >
-              {speakerState === "agent_speaking" ? (
-                /* speech bubble */
-                <path d="M4 5 H20 A2 2 0 0 1 22 7 V15 A2 2 0 0 1 20 17 H10 L6 21 V17 H4 A2 2 0 0 1 2 15 V7 A2 2 0 0 1 4 5 Z" />
-              ) : (
-                /* mic */
-                <path d="M12 3 A3 3 0 0 1 15 6 V12 A3 3 0 0 1 9 12 V6 A3 3 0 0 1 12 3 Z M6 11 V12 A6 6 0 0 0 18 12 V11 H20 V12 A8 8 0 0 1 13 19.9 V22 H11 V19.9 A8 8 0 0 1 4 12 V11 Z" />
-              )}
+              {/* speech bubble */}
+              <path d="M4 5 H20 A2 2 0 0 1 22 7 V15 A2 2 0 0 1 20 17 H10 L6 21 V17 H4 A2 2 0 0 1 2 15 V7 A2 2 0 0 1 4 5 Z" />
+            </svg>
+          ) : (
+            /* idle + your-turn: floating mic (soft shadow already de-buttons it) */
+            <svg
+              viewBox="0 0 24 24"
+              className="orb-mic h-12 w-12 fill-current"
+              aria-hidden
+            >
+              {/* mic */}
+              <path d="M12 3 A3 3 0 0 1 15 6 V12 A3 3 0 0 1 9 12 V6 A3 3 0 0 1 12 3 Z M6 11 V12 A6 6 0 0 0 18 12 V11 H20 V12 A8 8 0 0 1 13 19.9 V22 H11 V19.9 A8 8 0 0 1 4 12 V11 Z" />
             </svg>
           )}
         </div>
@@ -593,6 +601,7 @@ function LivePhase({
 
       {/* Transcript — caps at ~35vh so the orb stays the hero */}
       <section
+        ref={transcriptRef}
         className="rise-in mt-4 flex flex-col gap-3 overflow-y-auto pr-1"
         style={{ animationDelay: "160ms", maxHeight: "35vh" }}
         aria-label="Conversation transcript"
@@ -614,7 +623,6 @@ function LivePhase({
             </div>
           </div>
         ))}
-        <div ref={chatEndRef} />
       </section>
 
       {/* Slash hint */}
