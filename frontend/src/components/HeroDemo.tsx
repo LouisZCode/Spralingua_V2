@@ -227,15 +227,31 @@ export default function HeroDemo() {
         : STATE_LABEL[speakerState];
 
   return (
-    <div className="relative mx-auto w-full max-w-[380px]">
+    <div className="relative mx-auto w-full max-w-[420px]">
       <div
         aria-hidden
         className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-flag-gold/30"
       />
-      <div className="relative rounded-[36px] border-[3px] border-ink bg-paper-warm p-7 shadow-[0_8px_0_var(--color-ink)]">
+      <div className="relative rounded-[36px] border-[3px] border-ink bg-paper-warm p-8 shadow-[0_8px_0_var(--color-ink)]">
+        {(mode === "connecting" || mode === "live") && (
+          <button
+            type="button"
+            onClick={() => void stop()}
+            aria-label="End demo"
+            title="End demo"
+            className="absolute right-5 top-5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-ink bg-white text-ink transition-colors hover:border-flag-red-deep hover:bg-flag-red hover:text-white"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              className="h-3.5 w-3.5 fill-current"
+              aria-hidden
+            >
+              <rect x="6" y="6" width="12" height="12" rx="2" />
+            </svg>
+          </button>
+        )}
         {resting ? (
-          <div className="flex min-h-[400px] flex-col justify-center gap-5">
-            <div className="bubble bubble-them">Schön, dich wiederzusehen!</div>
+          <div className="flex min-h-[440px] flex-col items-center justify-center">
             <OrbButton
               orbClass={orbClass}
               speakerState={speakerState}
@@ -243,10 +259,9 @@ export default function HeroDemo() {
               disabled={false}
               onClick={onOrbClick}
             />
-            <div className="bubble bubble-you">Ja — freut mich auch!</div>
           </div>
         ) : (
-          <div className="flex min-h-[400px] flex-col items-center gap-4">
+          <div className="flex min-h-[440px] flex-col items-center gap-4">
             <OrbButton
               orbClass={orbClass}
               speakerState={speakerState}
