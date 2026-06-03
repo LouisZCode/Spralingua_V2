@@ -99,9 +99,6 @@ const PRON_SCHEMA: Record<Level, PronSchema> = {
   C2: { showFluency: true, showCompleteness: true, showProsody: true },
 };
 
-const BEST_THRESHOLD = 80;
-const WORST_THRESHOLD = 30;
-
 function parseLevel(lessonId: string): Level {
   const m = lessonId.match(/^([abc][12])_/i);
   if (!m) return "A1";
@@ -432,19 +429,15 @@ function PronEvalBlock({
   const schema = PRON_SCHEMA[parseLevel(lessonId)];
   const agg = evalData.aggregate;
 
-  const allWords = evalData.turns.flatMap((t) => t.words);
-
-  let bestWord: PronWord | null = null;
-  let worstWord: PronWord | null = null;
-  if (allWords.length > 1) {
-    const sorted = [...allWords].sort(
-      (a, b) => b.accuracy_score - a.accuracy_score,
-    );
-    const top = sorted[0];
-    const bottom = sorted[sorted.length - 1];
-    if (top.accuracy_score >= BEST_THRESHOLD) bestWord = top;
-    if (bottom.accuracy_score < WORST_THRESHOLD) worstWord = bottom;
-  }
+  // Best / toughest turn by accuracy — Azure scores each turn on its own, so
+  // no threshold gating, which keeps this meaningful at every level. A single
+  // turn has nothing to contrast against, so we show only the best.
+  const sortedTurns = [...evalData.turns].sort(
+    (a, b) => b.accuracy_score - a.accuracy_score,
+  );
+  const bestTurn = sortedTurns[0] ?? null;
+  const worstTurn =
+    sortedTurns.length > 1 ? sortedTurns[sortedTurns.length - 1] : null;
 
   const hasSubScores =
     schema.showFluency || schema.showCompleteness || schema.showProsody;
@@ -483,39 +476,39 @@ function PronEvalBlock({
         </div>
       )}
 
-      {(bestWord || worstWord) && (
+      {(bestTurn || worstTurn) && (
         <ul className="mt-4 space-y-2 font-body text-[14px]">
-          {bestWord && (
-            <li className="flex items-center justify-between rounded-xl border-2 border-success/35 bg-success-soft/40 px-3 py-2">
-              <span className="text-ink">
+          {bestTurn && (
+            <li className="rounded-xl border-2 border-success/35 bg-success-soft/40 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3">
                 <span className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-                  Top word ·{" "}
+                  Best phrase
                 </span>
-                <span className="font-semibold">{bestWord.word}</span>
-              </span>
-              <span className="font-display text-[14px] font-bold text-ink">
-                {Math.round(bestWord.accuracy_score)} / 100
-              </span>
+                <span className="shrink-0 font-display text-[14px] font-bold text-ink">
+                  {Math.round(bestTurn.accuracy_score)} / 100
+                </span>
+              </div>
+              <p className="mt-1 leading-snug text-ink">“{bestTurn.text}”</p>
             </li>
           )}
-          {worstWord && (
-            <li className="flex items-center justify-between rounded-xl border-2 border-flag-red/45 bg-flag-red-soft/45 px-3 py-2">
-              <span className="text-ink">
+          {worstTurn && (
+            <li className="rounded-xl border-2 border-flag-gold/55 bg-flag-gold-soft/55 px-3 py-2.5">
+              <div className="flex items-center justify-between gap-3">
                 <span className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-                  Watch ·{" "}
+                  Toughest phrase
                 </span>
-                <span className="font-semibold">{worstWord.word}</span>
-              </span>
-              <span className="font-display text-[14px] font-bold text-ink">
-                {Math.round(worstWord.accuracy_score)} / 100
-              </span>
+                <span className="shrink-0 font-display text-[14px] font-bold text-ink">
+                  {Math.round(worstTurn.accuracy_score)} / 100
+                </span>
+              </div>
+              <p className="mt-1 leading-snug text-ink">“{worstTurn.text}”</p>
             </li>
           )}
         </ul>
       )}
 
       <p className="mt-4 font-body text-[12px] italic text-ink-muted">
-        Anything above 80 is great.
+        Remember: Everything above 80 is great!
       </p>
     </div>
   );
