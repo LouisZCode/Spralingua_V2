@@ -7,13 +7,15 @@ import {
   ProtobufFrameSerializer,
 } from "@pipecat-ai/websocket-transport";
 
-// Prototype config — reuses the live app's backend + the open-conversation
-// lesson. Hardcoded user id matches the app (agents/fake_profiles.py::0001).
-// Deferred hardening (cookies / login gate / per-visitor turn caps / ephemeral
-// demo user id / WSS for public) tracked separately — see notes.
+// Front-page voice demo — the Spralingua "welcome" concierge (a `respond`
+// lesson, no evaluator). Reuses the live backend over WS. Each tap mints a
+// fresh ephemeral `demo-<uuid>` user id so concurrent visitors never share
+// conversation memory or collide in the backend's ACTIVE_TASKS map. Deferred
+// for public launch: per-visitor rate limits, WSS + origin allowlist, and
+// tuning the lesson's max_exchanges cap.
 const BASE_WS = "ws://localhost:8765";
-const USER_ID = "0001";
-const DEMO_LESSON = "lesson_zero";
+const HTTP_BASE = "http://localhost:8765";
+const DEMO_LESSON = "welcome";
 const DEMO_VOICE = "German_Female";
 
 // Reveal the bot bubble when its audio finishes playing in the browser
@@ -42,10 +44,14 @@ export default function HeroDemo() {
   const [speakerState, setSpeakerState] = useState<SpeakerState>("idle");
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [note, setNote] = useState<string>("");
+  const [draft, setDraft] = useState<string>("");
+  const [typeOpen, setTypeOpen] = useState(false);
 
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const typeInputRef = useRef<HTMLInputElement | null>(null);
+  const demoUserIdRef = useRef<string | null>(null);
   const pendingBotRef = useRef<string | null>(null);
   const botStartedTimeRef = useRef<number | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -95,6 +101,8 @@ export default function HeroDemo() {
     setMode("connecting");
     setNote("");
     setMessages([]);
+    setDraft("");
+    setTypeOpen(false);
     pendingBotRef.current = null;
     botStartedTimeRef.current = null;
     if (revealTimerRef.current) {
@@ -179,7 +187,9 @@ export default function HeroDemo() {
       });
 
       clientRef.current = client;
-      const wsUrl = `${BASE_WS}/ws/${USER_ID}?voice=${DEMO_VOICE}&lesson=${DEMO_LESSON}`;
+      const demoUserId = `demo-${crypto.randomUUID()}`;
+      demoUserIdRef.current = demoUserId;
+      const wsUrl = `${BASE_WS}/ws/${demoUserId}?voice=${DEMO_VOICE}&lesson=${DEMO_LESSON}`;
       await client.connect({ wsUrl });
     } catch {
       setNote("Couldn't connect — is the backend running?");
@@ -189,6 +199,29 @@ export default function HeroDemo() {
       setSpeakerState("idle");
     }
   }, [cleanupAudio, flushBot]);
+
+  // Typed-turn fallback (quiet room / no mic): inject text into the live
+  // pipeline via /say, targeting this session's ephemeral demo id. The agent
+  // still replies with voice — typing only spares you from speaking.
+  const sendText = useCallback(async () => {
+    const text = draft.trim();
+    const userId = demoUserIdRef.current;
+    if (!text || mode !== "live" || !userId) return;
+    setDraft("");
+    setTypeOpen(false);
+    setMessages((prev) => [...prev, { speaker: "you", text }]);
+    setSpeakerState("agent_thinking");
+    try {
+      const r = await fetch(`${HTTP_BASE}/say/${userId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!r.ok) setNote(`Couldn't send your message (${r.status}).`);
+    } catch {
+      setNote("Couldn't send your message — is the backend running?");
+    }
+  }, [draft, mode]);
 
   // Disconnect if the visitor leaves while a demo is live.
   useEffect(() => {
@@ -204,6 +237,36 @@ export default function HeroDemo() {
     const box = transcriptRef.current;
     if (box) box.scrollTo({ top: box.scrollHeight, behavior: "smooth" });
   }, [messages]);
+
+  // Press "/" to open the type-a-turn overlay (quiet-room / no-mic fallback);
+  // Escape closes it. Only while a demo is live, and skip when focus is already
+  // in a field so typing isn't intercepted.
+  useEffect(() => {
+    if (mode !== "live") return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      const isTyping =
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.isContentEditable);
+      if (e.key === "/" && !isTyping) {
+        e.preventDefault();
+        setTypeOpen(true);
+      } else if (e.key === "Escape" && typeOpen) {
+        e.preventDefault();
+        setTypeOpen(false);
+        setDraft("");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mode, typeOpen]);
+
+  // Focus the input when the overlay opens.
+  useEffect(() => {
+    if (typeOpen) typeInputRef.current?.focus();
+  }, [typeOpen]);
 
   const onOrbClick = () => {
     if (mode === "idle") void start();
@@ -297,6 +360,15 @@ export default function HeroDemo() {
                 ))
               )}
             </div>
+            {mode === "live" && (
+              <p className="text-center font-body text-[10px] uppercase tracking-[0.28em] text-ink-faint">
+                press{" "}
+                <kbd className="rounded border border-ink-faint bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
+                  /
+                </kbd>{" "}
+                to type instead
+              </p>
+            )}
           </div>
         )}
         {note && (
@@ -306,6 +378,57 @@ export default function HeroDemo() {
         )}
       </div>
       <audio ref={audioRef} autoPlay />
+
+      {/* Type-a-turn overlay (press /) — slides up from the bottom. Lets you
+          send a turn by text when you can't speak; the agent still replies in
+          voice. */}
+      {mode === "live" && typeOpen && (
+        <div
+          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/40 backdrop-blur-[1px]"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setTypeOpen(false);
+              setDraft("");
+            }
+          }}
+        >
+          <div className="type-overlay w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-paper-warm px-5 pt-5 pb-6 shadow-[0_-12px_30px_rgba(15,15,16,0.18)]">
+            <div className="flex items-center justify-between">
+              <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
+                Dev · type a turn
+              </span>
+              <span className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+                Esc to close
+              </span>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                ref={typeInputRef}
+                type="text"
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") void sendText();
+                }}
+                placeholder="Hi! What is Spralingua?"
+                className="flex-1 rounded-2xl border-[3px] border-ink bg-white px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+              />
+              <button
+                onClick={() => void sendText()}
+                disabled={!draft.trim()}
+                className="btn-3d rounded-2xl border-[3px] border-ink bg-ink px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.18em] text-white disabled:cursor-not-allowed disabled:opacity-50"
+                style={
+                  {
+                    ["--shadow-color"]: "var(--color-ink)",
+                  } as React.CSSProperties
+                }
+              >
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
