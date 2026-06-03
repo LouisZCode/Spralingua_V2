@@ -62,6 +62,7 @@ export default function ConversationView({
   const [status, setStatus] = useState<string>("Loading...");
   const [draft, setDraft] = useState<string>("");
   const [showSummary, setShowSummary] = useState(false);
+  const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [endedBy, setEndedBy] = useState<"user" | "agent">("agent");
   const [speakerState, setSpeakerState] = useState<SpeakerState>("idle");
   const [typeOpen, setTypeOpen] = useState(false);
@@ -107,18 +108,21 @@ export default function ConversationView({
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.isContentEditable);
-      if (e.key === "/" && !isTyping) {
+      if (e.key === "/" && !isTyping && !showFinishConfirm) {
         e.preventDefault();
         setTypeOpen(true);
       } else if (e.key === "Escape" && typeOpen) {
         e.preventDefault();
         setTypeOpen(false);
         setDraft("");
+      } else if (e.key === "Escape" && showFinishConfirm) {
+        e.preventDefault();
+        setShowFinishConfirm(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, typeOpen]);
+  }, [phase, typeOpen, showFinishConfirm]);
 
   // When the overlay opens, focus its input.
   useEffect(() => {
@@ -150,6 +154,13 @@ export default function ConversationView({
       audioRef.current.srcObject = null;
     }
     const reason: "user" | "agent" = endReasonRef.current ?? "agent";
+    setShowFinishConfirm(false);
+    // User-initiated finish → no results; go straight back to the lesson list.
+    // The summary (with eval results) is only for lessons the agent completes.
+    if (reason === "user") {
+      onFinish();
+      return;
+    }
     setEndedBy(reason);
     setShowSummary(true);
   };
@@ -250,7 +261,8 @@ export default function ConversationView({
     }
   };
 
-  const finishLesson = async () => {
+  const confirmFinish = async () => {
+    setShowFinishConfirm(false);
     endReasonRef.current = "user";
     if (clientRef.current) {
       await clientRef.current.disconnect();
@@ -310,7 +322,7 @@ export default function ConversationView({
             messages={messages}
             speakerState={speakerState}
             transcriptRef={transcriptRef}
-            onFinish={finishLesson}
+            onFinish={() => setShowFinishConfirm(true)}
           />
         )}
 
@@ -375,6 +387,38 @@ export default function ConversationView({
           sessionId={sessionId}
           onClose={onFinish}
         />
+      )}
+
+      {showFinishConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-[2px]">
+          <div className="w-full max-w-[420px] rounded-[28px] border-[3px] border-ink bg-paper-warm px-7 py-8 shadow-[0_8px_0_var(--color-ink)]">
+            <h2 className="font-display text-[26px] font-black leading-tight text-ink">
+              Finish the lesson?
+            </h2>
+            <div className="mt-7 flex gap-3">
+              <button
+                onClick={() => setShowFinishConfirm(false)}
+                className="btn-3d flex-1 rounded-2xl border-[3px] border-ink bg-white px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.16em] text-ink"
+                style={
+                  { ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties
+                }
+              >
+                Keep going
+              </button>
+              <button
+                onClick={confirmFinish}
+                className="btn-3d flex-1 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-5 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
+                style={
+                  {
+                    ["--shadow-color"]: "var(--color-flag-red-deep)",
+                  } as React.CSSProperties
+                }
+              >
+                Yes, finish
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );
