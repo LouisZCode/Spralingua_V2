@@ -10,10 +10,8 @@ import type { SessionParams } from "./SetupView";
 import SessionSummaryModal, {
   type CompletionData,
 } from "./SessionSummaryModal";
+import { useAuth } from "./auth/AuthContext";
 
-// Hardcoded user id (matches `agents/fake_profiles.py::0001`). Auth-issued
-// ids replace this once user accounts land.
-const USER_ID = "0001";
 const BASE_WS = "ws://localhost:8765";
 const HTTP_BASE = "http://localhost:8765";
 
@@ -56,6 +54,9 @@ export default function ConversationView({
   params: SessionParams;
   onFinish: () => void;
 }) {
+  // Guaranteed non-null here: VoiceChat only mounts this view once a token is
+  // in hand. We still guard before each network call to keep TypeScript happy.
+  const { token, user } = useAuth();
   const [phase, setPhase] = useState<"briefing" | "live">("briefing");
   const [meta, setMeta] = useState<LessonMeta | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -166,6 +167,7 @@ export default function ConversationView({
   };
 
   const startCall = async () => {
+    if (!token || !user) return;
     setPhase("live");
     setStatus("Connecting...");
     try {
@@ -251,10 +253,14 @@ export default function ConversationView({
       });
 
       clientRef.current = client;
+      // The session JWT rides as a query param — browsers can't set custom
+      // headers on a WS handshake. The backend derives identity from the token's
+      // subject, so the path id is informational only.
       const wsUrl =
-        `${BASE_WS}/ws/${USER_ID}` +
+        `${BASE_WS}/ws/${encodeURIComponent(user.id)}` +
         `?voice=${params.voice}` +
-        `&lesson=${params.lesson}`;
+        `&lesson=${params.lesson}` +
+        `&token=${encodeURIComponent(token)}`;
       await client.connect({ wsUrl });
     } catch (e) {
       setStatus(`Connection failed: ${e}`);
@@ -273,15 +279,18 @@ export default function ConversationView({
 
   const sendText = async () => {
     const text = draft.trim();
-    if (!text || phase !== "live") return;
+    if (!text || phase !== "live" || !token || !user) return;
     setDraft("");
     setTypeOpen(false);
     setMessages((prev) => [...prev, { speaker: "you", text }]);
     setSpeakerState("agent_thinking");
     try {
-      const r = await fetch(`${HTTP_BASE}/say/${USER_ID}`, {
+      const r = await fetch(`${HTTP_BASE}/say/${encodeURIComponent(user.id)}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({ text }),
       });
       if (!r.ok) setStatus(`Send failed: ${r.status}`);

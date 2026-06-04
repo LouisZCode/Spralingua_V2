@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import Providers from "@/components/auth/Providers";
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-display",
@@ -34,7 +35,7 @@ export default function RootLayout({
       <body
         className={`${bricolage.variable} ${outfit.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

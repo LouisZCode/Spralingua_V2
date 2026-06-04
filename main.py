@@ -13,7 +13,7 @@ from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts
-from auth import router as auth_router
+from auth import AuthError, decode_session_jwt, router as auth_router
 from config import database_url
 from config.settings import demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
@@ -152,9 +152,24 @@ async def ws_endpoint(
     user_id: str,
     voice: str = "happy_harry",
     lesson: str = "lesson_zero",
+    token: str = "",
 ):
+    """Authenticated learn socket (AUTH-001, P-3).
+
+    Browsers can't set custom headers on a WebSocket handshake, so the session
+    JWT rides as a ``?token=`` query param. We verify it and close *before*
+    accept on a bad/absent token (1008 policy) so the browser's onError fires
+    cleanly. The token's subject is authoritative for identity — the path
+    ``user_id`` is ignored, so a client can't drive an arbitrary id by editing
+    the URL.
+    """
+    try:
+        sub = decode_session_jwt(token)
+    except AuthError:
+        await websocket.close(code=1008)
+        return
     await websocket.accept()
-    await run_pipeline(websocket, user_id, voice, lesson)
+    await run_pipeline(websocket, sub, voice, lesson)
 
 
 # Demo user ids are minted client-side as `demo-<uuid4>`; pin the shape so the
@@ -207,6 +222,22 @@ class SayBody(BaseModel):
     text: str
 
 
+def _bearer_subject(request: Request) -> str | None:
+    """Verify the session JWT from an ``Authorization: Bearer`` header.
+
+    Returns the token subject (user_id) on success, or ``None`` if the header is
+    absent/malformed or the token fails verification.
+    """
+    auth = request.headers.get("authorization", "")
+    scheme, _, raw = auth.partition(" ")
+    if scheme.lower() != "bearer" or not raw.strip():
+        return None
+    try:
+        return decode_session_jwt(raw.strip())
+    except AuthError:
+        return None
+
+
 @app.post("/say/{user_id}")
 async def say(user_id: str, body: SayBody, request: Request):
     """Inject a typed turn into an active pipeline.
@@ -218,21 +249,37 @@ async def say(user_id: str, body: SayBody, request: Request):
     unchanged via its else branch. TTS / audio playback / Langfuse / goodbye
     detection / exchange count all fire identically to a spoken turn.
 
-    World-facing (the demo's no-mic fallback posts here), so it carries the same
-    guards as the demo socket: Origin allowlist, per-IP rate limit, and a length
-    cap that bounds LLM token cost. These are harmless for the authenticated
-    /learn flow — its frontend sends the allowed Origin and types under the cap.
+    Two callers, two gates (the path id picks the branch):
+
+    - ``demo-*`` ids — the public demo's no-mic fallback (SEC-001). Token-free,
+      so it carries the same world-facing guards as the demo socket: Origin
+      allowlist + per-IP rate limit. The id shape is pinned by the regex.
+    - real ids — the authenticated /learn flow (AUTH-001). Requires an
+      ``Authorization: Bearer`` session JWT whose subject equals the path id, so
+      one signed-in user can't inject turns into another's active session.
+
+    A length cap bounds LLM token cost for both.
     """
-    if not origin_allowed(request.headers.get("origin")):
-        raise HTTPException(status_code=403, detail="origin not allowed")
-    if not say_try_admit(client_ip(request)):
-        raise HTTPException(status_code=429, detail="too many requests")
+    if _DEMO_USER_ID_RE.match(user_id):
+        if not origin_allowed(request.headers.get("origin")):
+            raise HTTPException(status_code=403, detail="origin not allowed")
+        if not say_try_admit(client_ip(request)):
+            raise HTTPException(status_code=429, detail="too many requests")
+        target_id = user_id
+    else:
+        sub = _bearer_subject(request)
+        if sub is None:
+            raise HTTPException(status_code=401, detail="missing or invalid token")
+        if sub != user_id:
+            raise HTTPException(status_code=403, detail="token does not match user")
+        target_id = sub
+
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is empty")
     if len(text) > say_max_chars:
         raise HTTPException(status_code=413, detail="text too long")
-    task = ACTIVE_TASKS.get(user_id)
+    task = ACTIVE_TASKS.get(target_id)
     if task is None:
         raise HTTPException(status_code=404, detail="No active session for that user_id")
 

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
-import Link from "next/link";
 import HeroDemo from "./HeroDemo";
+import StartCta from "./auth/StartCta";
 
 type Accent = "red" | "gold" | "ink";
 
@@ -85,12 +85,9 @@ export default function LandingPage() {
           <span className="font-display text-[22px] font-black tracking-tight text-ink">
             Spralingua
           </span>
-          <Link
-            href="/learn"
-            className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
-          >
+          <StartCta className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red">
             Start →
-          </Link>
+          </StartCta>
         </div>
       </header>
 
@@ -119,8 +116,7 @@ export default function LandingPage() {
                 Practice real situations, get immediate feedback.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-                <Link
-                  href="/learn"
+                <StartCta
                   className="btn-3d inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-white"
                   style={redShadow}
                 >
@@ -128,7 +124,7 @@ export default function LandingPage() {
                     <path d="M6 4 L20 12 L6 20 Z" />
                   </svg>
                   Start a lesson
-                </Link>
+                </StartCta>
                 <a
                   href="#how"
                   className="btn-3d inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-white px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-ink"
@@ -255,8 +251,7 @@ export default function LandingPage() {
                   Pick a scenario and start speaking. Mic on, 15-minute cap,
                   ends naturally when you say goodbye.
                 </p>
-                <Link
-                  href="/learn"
+                <StartCta
                   className="btn-3d mt-8 inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-8 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-white"
                   style={redShadow}
                 >
@@ -264,7 +259,7 @@ export default function LandingPage() {
                     <path d="M6 4 L20 12 L6 20 Z" />
                   </svg>
                   Start a lesson
-                </Link>
+                </StartCta>
               </div>
             </div>
           </section>
