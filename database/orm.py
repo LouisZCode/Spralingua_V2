@@ -2,10 +2,14 @@
 
 Two tables this iteration:
 
-- ``users`` — keyed on a plain ``TEXT`` id. Today the FastAPI WS path receives
-  a hardcoded ``"0001"`` from the frontend; real ids land here once auth ships.
+- ``users`` — keyed on a plain ``TEXT`` id that is the identity-provider
+  subject id: the Google ``sub`` for authenticated users (AUTH-001), or the
+  literal ``"demo"`` sentinel that anchors anonymous front-page demo sessions.
+  Carries the OAuth profile (``email`` / ``name`` / ``picture``) and login
+  timestamps; all profile fields are nullable so the ``"demo"`` row can exist
+  without one.
 - ``activity_session`` — one row per WebSocket connect. The session id is
-  the same ``uuid4().hex`` minted in ``pipeline/factory.py`` at line 60 and
+  the same ``uuid4().hex`` minted in ``pipeline/factory.py`` at line 81 and
   used as the Langfuse session id, so trace ↔ DB correlation is implicit.
   The two evaluator results (goal eval and pronunciation eval) and a frozen
   snapshot of the lesson YAML at session start all live in JSONB columns.
@@ -17,7 +21,15 @@ Indexes match the two access patterns we already know we'll need:
 
 from datetime import datetime
 
-from sqlalchemy import ForeignKey, Index, Text, TIMESTAMP, Boolean, text
+from sqlalchemy import (
+    Boolean,
+    ForeignKey,
+    Index,
+    Text,
+    TIMESTAMP,
+    UniqueConstraint,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -30,10 +42,21 @@ class Base(DeclarativeBase):
 class User(Base):
     __tablename__ = "users"
 
+    # Identity-provider subject id: Google ``sub`` for authed users (AUTH-001),
+    # or the ``"demo"`` sentinel for anonymous demo sessions.
     id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # OAuth profile (AUTH-001). All nullable: the ``"demo"`` user carries none
+    # of these, and Postgres treats multiple NULL emails as distinct, so the
+    # unique-email constraint never collides on profile-less rows.
+    email: Mapped[str | None] = mapped_column(Text, nullable=True)
+    name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    picture: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, nullable=False, server_default=text("now()")
     )
+    last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
+
+    __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 
 
 class ActivitySession(Base):

@@ -8,7 +8,7 @@ from .connection import (
     init_engine,
 )
 from .orm import ActivitySession, Base, User
-from .repository import create_session_row, finalize_session_row
+from .repository import create_session_row, finalize_session_row, upsert_user
 
 __all__ = [
     "ActivitySession",
@@ -21,4 +21,5 @@ __all__ = [
     "get_engine",
     "get_sessionmaker",
     "init_engine",
+    "upsert_user",
 ]

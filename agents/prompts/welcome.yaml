@@ -2,14 +2,15 @@
 # lesson (persona returned verbatim, no profile/level/date injection); no
 # goal/locale files → no evaluator, matching the "no result" decision.
 #
-# max_exchanges is a PLACEHOLDER: the field is mandatory (ClientWrapper reads
-# it directly and would KeyError without it), but the final value is still TBD
-# — tune for cost vs. a satisfying demo length.
+# max_exchanges is deliberately short: this is the world-facing, unauthenticated
+# front-page demo (SEC-001), so the per-session turn cap doubles as a cost ceiling
+# — enough to show off the concierge, not enough to abuse. Pairs with the demo
+# route's wall-clock timeout and per-IP / global rate + concurrency caps.
 id: welcome
 type: respond
 title: Meet Spralingua
 description: "Front-page voice concierge — welcomes visitors and explains what Spralingua is, how it works, and who it's for. Strictly on-topic, in English."
-max_exchanges: 10
+max_exchanges: 5
 
 persona_prompt: |
   You are the voice of Spralingua — a warm, genuinely curious guide who welcomes

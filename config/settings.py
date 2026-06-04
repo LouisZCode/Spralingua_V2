@@ -32,3 +32,55 @@ azure_speech_region = os.getenv("AZURE_SPEECH_REGION", "eastus")
 #Postgres (DATA-001). No default — absence raises at startup (fail-loud).
 # Form: postgresql+asyncpg://user:password@host:port/dbname
 database_url = os.getenv("DATABASE_URL")
+
+# --- Front-page demo agent hardening (SEC-001) ---
+# The "/ws/demo/{id}" + "/say" surface is world-facing and unauthenticated, so
+# it gets its own guardrails (see security.py). Everything is env-overridable so
+# prod can tighten without code edits. Counters are in-memory/per-process —
+# behind multiple workers or hosts, enforce at a gateway/WAF or move to Redis.
+
+# Origins allowed to open the demo WebSocket and call /say. WebSockets aren't
+# subject to CORS, so we check the Origin header ourselves. Comma-separated.
+allowed_origins = [
+    o.strip()
+    for o in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",")
+    if o.strip()
+]
+
+# Wall-clock cap (seconds) on a single demo session — bounds Deepgram stream
+# time and total cost even if the visitor never trips max_exchanges.
+demo_session_timeout_s = int(os.getenv("DEMO_SESSION_TIMEOUT_S", "180"))
+
+# Concurrency + rate caps for the public demo.
+demo_max_concurrent        = int(os.getenv("DEMO_MAX_CONCURRENT", "25"))        # global live demo pipelines
+demo_per_ip_concurrent     = int(os.getenv("DEMO_PER_IP_CONCURRENT", "2"))
+demo_per_ip_new_per_window = int(os.getenv("DEMO_PER_IP_NEW_PER_WINDOW", "20"))
+demo_per_ip_window_s       = int(os.getenv("DEMO_PER_IP_WINDOW_S", "600"))      # 10 min
+demo_global_new_per_min    = int(os.getenv("DEMO_GLOBAL_NEW_PER_MIN", "60"))    # bounds IP-rotation abuse
+
+# /say typed-turn guards (apply to every session; the demo relies on /say).
+say_max_chars         = int(os.getenv("SAY_MAX_CHARS", "500"))
+say_per_ip_interval_s = float(os.getenv("SAY_PER_IP_INTERVAL_S", "2"))
+
+# IPs exempt from per-IP / global *rate* limits (local dev). The Origin check
+# and the global concurrency cap still apply to them.
+rate_limit_exempt_ips = {
+    ip.strip()
+    for ip in os.getenv("RATE_LIMIT_EXEMPT_IPS", "127.0.0.1,::1,localhost").split(",")
+    if ip.strip()
+}
+
+# --- Authentication (AUTH-001) ---
+# Google sign-in (P-3): the frontend obtains a Google ID token and POSTs it to
+# /auth/google; the backend verifies it against this client id, then issues its
+# own session JWT. `google_client_id` is required only to actually verify a
+# Google token — the server still boots without it (the /auth/google route 503s
+# until it's set), so local non-auth work isn't blocked.
+google_client_id = os.getenv("GOOGLE_CLIENT_ID")
+
+# HS256 secret for the backend-issued session JWT. If unset, `auth/tokens.py`
+# mints an ephemeral per-process secret (dev only) and logs a warning — those
+# tokens don't survive a restart and differ per worker, so set JWT_SECRET in any
+# shared/deployed environment.
+jwt_secret = os.getenv("JWT_SECRET")
+jwt_expiry_days = int(os.getenv("JWT_EXPIRY_DAYS", "7"))

@@ -15,7 +15,7 @@ from datetime import datetime
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import update
+from sqlalchemy import func, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -97,6 +97,45 @@ async def finalize_session_row(
                 f"finalize_session_row: no row matched session_id={session_id} "
                 f"(create_session_row likely never ran for this connect)"
             )
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+async def upsert_user(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    email: str | None,
+    name: str | None,
+    picture: str | None,
+) -> None:
+    """Insert or refresh a user from a verified Google sign-in (AUTH-001).
+
+    Keyed on the Google ``sub`` (``user_id``). On a repeat sign-in we refresh the
+    mutable profile fields (the user may have changed their Google name/avatar)
+    and stamp ``last_login_at``. ``created_at`` keeps its first-insert value via
+    the server default and is left untouched on update.
+    """
+    try:
+        stmt = pg_insert(User).values(
+            id=user_id,
+            email=email,
+            name=name,
+            picture=picture,
+            last_login_at=func.now(),
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["id"],
+            set_={
+                "email": stmt.excluded.email,
+                "name": stmt.excluded.name,
+                "picture": stmt.excluded.picture,
+                "last_login_at": stmt.excluded.last_login_at,
+            },
+        )
+        await db.execute(stmt)
         await db.commit()
     except SQLAlchemyError:
         await db.rollback()

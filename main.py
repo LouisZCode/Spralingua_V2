@@ -5,7 +5,7 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, WebSocket
+from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -13,10 +13,19 @@ from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts
+from auth import router as auth_router
 from config import database_url
+from config.settings import demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_TASKS
+from security import (
+    client_ip,
+    demo_release,
+    demo_try_admit,
+    origin_allowed,
+    say_try_admit,
+)
 
 
 @asynccontextmanager
@@ -38,6 +47,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Google sign-in + session-JWT routes (AUTH-001).
+app.include_router(auth_router)
 
 
 @app.get("/health")
@@ -145,12 +157,58 @@ async def ws_endpoint(
     await run_pipeline(websocket, user_id, voice, lesson)
 
 
+# Demo user ids are minted client-side as `demo-<uuid4>`; pin the shape so the
+# public route can't be driven with arbitrary ids.
+_DEMO_USER_ID_RE = re.compile(r"^demo-[A-Za-z0-9_-]{1,64}$")
+
+
+@app.websocket("/ws/demo/{user_id}")
+async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
+    """Public, unauthenticated front-page demo socket (SEC-001).
+
+    Hardened sibling of /ws/{user_id}: the lesson and voice are forced
+    server-side (a visitor can't drive an arbitrary lesson or voice), the Origin
+    header is checked (WebSocket handshakes bypass browser CORS), and global +
+    per-IP concurrency/rate caps gate admission. Rejections close *before*
+    accept with a WS status code (1008 policy / 1013 try-again) so the browser's
+    onError fires cleanly. A successful admit owns one concurrency slot, released
+    in ``finally`` no matter how the session ends.
+    """
+    if not origin_allowed(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
+    if not _DEMO_USER_ID_RE.match(user_id):
+        await websocket.close(code=1008)
+        return
+    ip = client_ip(websocket)
+    ok, _reason = demo_try_admit(ip)
+    if not ok:
+        await websocket.close(code=1013)
+        return
+    try:
+        await websocket.accept()
+        await run_pipeline(
+            websocket,
+            user_id,
+            voice="German_Female",
+            lesson_id="welcome",
+            session_timeout_s=demo_session_timeout_s,
+            # All anonymous demo sessions persist under one seeded `demo` user
+            # row (AUTH-001) — `user_id` stays per-session for ACTIVE_TASKS/say
+            # routing, but the DB FK points at the shared sentinel so the demo
+            # doesn't fill `users` with a row per visitor.
+            db_user_id="demo",
+        )
+    finally:
+        demo_release(ip)
+
+
 class SayBody(BaseModel):
     text: str
 
 
 @app.post("/say/{user_id}")
-async def say(user_id: str, body: SayBody):
+async def say(user_id: str, body: SayBody, request: Request):
     """Inject a typed turn into an active pipeline.
 
     LangchainProcessor accepts LLMContextFrame directly — it extracts the last
@@ -159,13 +217,24 @@ async def say(user_id: str, body: SayBody):
     type the converter would have produced. The converter passes it through
     unchanged via its else branch. TTS / audio playback / Langfuse / goodbye
     detection / exchange count all fire identically to a spoken turn.
+
+    World-facing (the demo's no-mic fallback posts here), so it carries the same
+    guards as the demo socket: Origin allowlist, per-IP rate limit, and a length
+    cap that bounds LLM token cost. These are harmless for the authenticated
+    /learn flow — its frontend sends the allowed Origin and types under the cap.
     """
-    task = ACTIVE_TASKS.get(user_id)
-    if task is None:
-        raise HTTPException(status_code=404, detail="No active session for that user_id")
+    if not origin_allowed(request.headers.get("origin")):
+        raise HTTPException(status_code=403, detail="origin not allowed")
+    if not say_try_admit(client_ip(request)):
+        raise HTTPException(status_code=429, detail="too many requests")
     text = body.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is empty")
+    if len(text) > say_max_chars:
+        raise HTTPException(status_code=413, detail="text too long")
+    task = ACTIVE_TASKS.get(user_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="No active session for that user_id")
 
     context = LLMContext([{"role": "user", "content": text}])
     await task.queue_frame(LLMContextFrame(context=context))

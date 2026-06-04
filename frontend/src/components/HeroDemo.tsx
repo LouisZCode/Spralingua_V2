@@ -8,15 +8,15 @@ import {
 } from "@pipecat-ai/websocket-transport";
 
 // Front-page voice demo — the Spralingua "welcome" concierge (a `respond`
-// lesson, no evaluator). Reuses the live backend over WS. Each tap mints a
+// lesson, no evaluator). Connects to the hardened public demo socket
+// `/ws/demo/{id}`, which forces the welcome lesson + fixed voice server-side
+// and applies the SEC-001 guards (Origin allowlist, global + per-IP
+// concurrency/rate caps, and a wall-clock session timeout). Each tap mints a
 // fresh ephemeral `demo-<uuid>` user id so concurrent visitors never share
-// conversation memory or collide in the backend's ACTIVE_TASKS map. Deferred
-// for public launch: per-visitor rate limits, WSS + origin allowlist, and
-// tuning the lesson's max_exchanges cap.
+// conversation memory or collide in the backend's ACTIVE_TASKS map. Still
+// deferred to deployment: serving this over WSS/TLS.
 const BASE_WS = "ws://localhost:8765";
 const HTTP_BASE = "http://localhost:8765";
-const DEMO_LESSON = "welcome";
-const DEMO_VOICE = "German_Female";
 
 // Reveal the bot bubble when its audio finishes playing in the browser
 // (bot-started time + clip duration + this margin), not when the text
@@ -229,7 +229,7 @@ export default function HeroDemo() {
       clientRef.current = client;
       const demoUserId = `demo-${crypto.randomUUID()}`;
       demoUserIdRef.current = demoUserId;
-      const wsUrl = `${BASE_WS}/ws/${demoUserId}?voice=${DEMO_VOICE}&lesson=${DEMO_LESSON}`;
+      const wsUrl = `${BASE_WS}/ws/demo/${demoUserId}`;
       await client.connect({ wsUrl });
     } catch {
       setNote("Couldn't connect — is the backend running?");

@@ -1,3 +1,4 @@
+import asyncio
 import wave
 from datetime import datetime
 from uuid import uuid4
@@ -55,7 +56,22 @@ class _NoOpTurnTraceObserver:
         pass
 
 
-async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero"):
+async def _session_watchdog(task: PipelineTask, timeout_s: float, user_id: str):
+    """Wall-clock cap on a single session (SEC-001; armed only when a timeout is
+    passed, i.e. the public demo route). Sleeps `timeout_s`, then ends the
+    pipeline gracefully via ``stop_when_done()`` — the same path the agent's
+    goodbye uses, so any in-flight bot reply still finishes playing. Cancelled in
+    run_pipeline's ``finally`` when the session ends on its own, so it never
+    races a natural end."""
+    try:
+        await asyncio.sleep(timeout_s)
+    except asyncio.CancelledError:
+        return
+    logger.info(f"Session wall-clock cap hit ({timeout_s}s); ending: user_id={user_id}")
+    await task.stop_when_done()
+
+
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", session_timeout_s: float | None = None, db_user_id: str | None = None):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -63,6 +79,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # The same uuid is fed to Pipecat as `conversation_id`, so 1 connect = 1
     # conversation trace = 1 Langfuse session.
     session_id = uuid4().hex
+
+    # Which `users` row this session's DB record FKs to. Defaults to `user_id`
+    # (authed /learn → the real user). The public demo route passes
+    # db_user_id="demo" so all anonymous visitors share one seeded sentinel row
+    # (AUTH-001) instead of minting a `users` row per visitor; `user_id` itself
+    # stays per-session for ACTIVE_TASKS routing, Langfuse, and the wrapper.
+    db_user_id = db_user_id or user_id
 
     async with aiohttp.ClientSession() as session:
 
@@ -94,7 +117,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 await create_session_row(
                     db,
                     session_id=session_id,
-                    user_id=user_id,
+                    user_id=db_user_id,
                     lesson_id=lesson_id,
                     voice=voice,
                     started_at=started_at,
@@ -269,6 +292,16 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
 
+        # Wall-clock session cap (SEC-001). Armed only when a timeout is passed
+        # (the public demo route does; /learn passes None → no watchdog, so its
+        # behavior is unchanged). Cancelled first thing in `finally` so a session
+        # that ends on its own never races the watchdog.
+        watchdog = (
+            asyncio.create_task(_session_watchdog(task, session_timeout_s, user_id))
+            if session_timeout_s is not None
+            else None
+        )
+
         print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
 
         # Hoisted out of the inner try-blocks so the DB finalize step below
@@ -286,6 +319,8 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             exception_during_run = e
             raise
         finally:
+            if watchdog is not None:
+                watchdog.cancel()
             ACTIVE_TASKS.pop(user_id, None)
             await audiobuffer.stop_recording()
             # Post-session evaluator (EVAL-001). Best-effort: any failure here
