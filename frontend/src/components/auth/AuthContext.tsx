@@ -47,6 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (raw) {
         const parsed = JSON.parse(raw);
         if (parsed?.token && parsed?.user) {
+          // SSR-safe hydration: localStorage is client-only, so we set auth
+          // state on mount; reading it during render would mismatch server HTML.
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setToken(parsed.token);
           setUser(parsed.user);
         }
