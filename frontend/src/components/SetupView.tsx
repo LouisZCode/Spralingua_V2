@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { useAuth } from "./auth/AuthContext";
 
 type PathKey = "A1" | "B1" | "DEV";
 
@@ -129,13 +130,13 @@ export default function SetupView({
       />
 
       {/* Content column */}
-      <div className="relative mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-6 py-10">
+      <div className="relative mx-auto flex min-h-screen w-full max-w-[560px] flex-col px-6 pt-10 pb-16">
         {/* Header */}
         <header className="rise-in" style={{ animationDelay: "0ms" }}>
-          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-            Voice · Deutsch · v1
-          </p>
-          <h1 className="mt-2 font-display text-[52px] leading-[0.95] font-black tracking-tight text-ink">
+          <div className="flex items-center justify-end">
+            <UserChip />
+          </div>
+          <h1 className="mt-6 font-display text-[52px] leading-[0.95] font-black tracking-tight text-ink">
             <span className="highlighter-gold pr-2">Spralingua</span>
           </h1>
         </header>
@@ -230,7 +231,7 @@ export default function SetupView({
 
         {/* Voice picker */}
         <section
-          className="rise-in mt-10 rounded-[28px] border-[3px] border-ink bg-paper-warm p-5"
+          className="rise-in mt-16 rounded-[28px] border-[3px] border-ink bg-paper-warm p-5"
           style={{ animationDelay: "220ms" }}
         >
           <div className="flex items-center justify-between">
@@ -274,7 +275,7 @@ export default function SetupView({
         {/* CTA */}
         <button
           onClick={handleStart}
-          className="btn-3d rise-in mt-5 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-white"
+          className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-white"
           style={
             {
               ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -287,15 +288,43 @@ export default function SetupView({
           </svg>
           Start lesson
         </button>
-
-        <p
-          className="rise-in mt-3 text-center font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted"
-          style={{ animationDelay: "340ms" }}
-        >
-          Mic on · 15-min cap · auto-ends on goodbye
-        </p>
       </div>
     </main>
+  );
+}
+
+function UserChip() {
+  const { user, signOut } = useAuth();
+  if (!user) return null;
+
+  const name = user.name ?? user.email ?? "Signed in";
+
+  return (
+    <div className="flex items-center gap-2.5">
+      {user.picture ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={user.picture}
+          alt=""
+          referrerPolicy="no-referrer"
+          className="h-9 w-9 shrink-0 rounded-full border-[2px] border-ink object-cover"
+        />
+      ) : (
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-[2px] border-ink bg-flag-gold font-display text-[14px] font-black text-ink">
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className="min-w-0 max-w-[120px] truncate font-display text-[13px] font-bold text-ink">
+        {name}
+      </span>
+      <button
+        type="button"
+        onClick={signOut}
+        className="shrink-0 rounded-full border-[2px] border-ink px-3 py-1 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:bg-ink hover:text-white"
+      >
+        Sign out
+      </button>
+    </div>
   );
 }
 
