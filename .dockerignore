@@ -1,10 +1,11 @@
 # Keep secrets out of image layers — inject them at runtime instead.
 .env
 .env.*
-frontend/.env
-frontend/.env.*
 !.env.example
-!frontend/.env.example
+
+# The frontend ships as its own image (frontend/Dockerfile); keep it out of the
+# backend build context entirely.
+frontend/
 
 # VCS / editor
 .git
@@ -22,11 +23,8 @@ venv/
 .ruff_cache/
 .mypy_cache/
 
-# Node / Next
+# Node (root has none; frontend excluded above)
 node_modules/
-frontend/node_modules/
-frontend/.next/
-frontend/out/
 
 # Runtime data — must not be baked into the image
 logs/
