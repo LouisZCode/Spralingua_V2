@@ -400,15 +400,6 @@ export default function HeroDemo() {
                 ))
               )}
             </div>
-            {mode === "live" && (
-              <p className="text-center font-body text-[10px] uppercase tracking-[0.28em] text-ink-faint">
-                press{" "}
-                <kbd className="rounded border border-ink-faint bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">
-                  /
-                </kbd>{" "}
-                to type instead
-              </p>
-            )}
           </div>
         )}
         {note && (

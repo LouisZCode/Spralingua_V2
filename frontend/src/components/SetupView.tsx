@@ -1,7 +1,8 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { useAuth } from "./auth/AuthContext";
+import QuietRoomModal from "./QuietRoomModal";
 
 type PathKey = "A1" | "B1" | "DEV";
 
@@ -94,6 +95,26 @@ export default function SetupView({
   const [lessonId, setLessonId] = useState<string>(path.lessons[0].id);
   const [voice, setVoice] = useState<string>("German_Female");
 
+  const [showReminder, setShowReminder] = useState(false);
+
+  // Weekly "go somewhere quiet + headphones" nudge. localStorage is client-only,
+  // so reveal it after mount (reading during render would mismatch SSR HTML) and
+  // stamp the time, so it returns at most once every 7 days.
+  useEffect(() => {
+    try {
+      const KEY = "spralingua_quiet_reminder_at";
+      const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+      const last = localStorage.getItem(KEY);
+      if (!last || Date.now() - Number(last) >= WEEK_MS) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setShowReminder(true);
+        localStorage.setItem(KEY, String(Date.now()));
+      }
+    } catch {
+      // Storage blocked/unavailable — just skip the reminder.
+    }
+  }, []);
+
   const switchPath = (key: PathKey) => {
     const next = PATHS.find((p) => p.key === key)!;
     setPathKey(key);
@@ -106,6 +127,9 @@ export default function SetupView({
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-white text-ink">
+      {showReminder && (
+        <QuietRoomModal onClose={() => setShowReminder(false)} />
+      )}
       {/* Bauhaus decorations */}
       <div
         aria-hidden

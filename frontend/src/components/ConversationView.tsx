@@ -659,11 +659,6 @@ function LivePhase({
         style={{ animationDelay: "160ms", maxHeight: "35vh" }}
         aria-label="Conversation transcript"
       >
-        {messages.length === 0 && (
-          <p className="mt-2 text-center font-body text-[13px] uppercase tracking-[0.2em] text-ink-faint">
-            transcript builds as you speak
-          </p>
-        )}
         {messages.map((m, i) => (
           <div
             key={i}
@@ -677,14 +672,6 @@ function LivePhase({
           </div>
         ))}
       </section>
-
-      {/* Slash hint */}
-      <p
-        className="rise-in mt-4 text-center font-body text-[10px] uppercase tracking-[0.28em] text-ink-faint"
-        style={{ animationDelay: "240ms" }}
-      >
-        press <kbd className="rounded border border-ink-faint bg-paper px-1.5 py-0.5 font-mono text-[10px] text-ink-muted">/</kbd> to type a turn
-      </p>
     </>
   );
 }
