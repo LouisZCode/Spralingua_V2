@@ -12,6 +12,7 @@
 // `ended_at` is set (or 30s timeout) and then render.
 
 import { useEffect, useState } from "react";
+import { HTTP_BASE } from "@/lib/api";
 
 export type CompletionStatus = "success" | "info" | "warning";
 
@@ -105,7 +106,6 @@ function parseLevel(lessonId: string): Level {
   return m[1].toUpperCase() as Level;
 }
 
-const HTTP_BASE = "http://localhost:8765";
 const POLL_INTERVAL_MS = 1000;
 const POLL_TIMEOUT_MS = 30000;
 
@@ -409,11 +409,7 @@ function PassBadge({ passed }: { passed: boolean }) {
           : "border-flag-red bg-flag-red text-white"
       }`}
     >
-      <span
-        className={`inline-block h-1.5 w-1.5 rounded-full ${
-          passed ? "bg-white" : "bg-white"
-        }`}
-      />
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-white" />
       {passed ? "Passed" : "Not passed"}
     </span>
   );

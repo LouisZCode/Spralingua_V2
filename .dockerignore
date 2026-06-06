@@ -1,0 +1,37 @@
+# Keep secrets out of image layers — inject them at runtime instead.
+.env
+.env.*
+frontend/.env
+frontend/.env.*
+!.env.example
+!frontend/.env.example
+
+# VCS / editor
+.git
+.gitignore
+.idea
+.vscode
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node / Next
+node_modules/
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Runtime data — must not be baked into the image
+logs/
+*.mp3
+*.wav
+
+# OS noise
+.DS_Store

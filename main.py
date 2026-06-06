@@ -15,7 +15,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from agents.load_prompts import load_prompts
 from auth import AuthError, decode_session_jwt, router as auth_router
 from config import database_url
-from config.settings import demo_session_timeout_s, say_max_chars
+from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_TASKS
@@ -39,11 +39,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-# Frontend dev server lives on :3000; WebSocket isn't subject to CORS, but
-# the /say HTTP endpoint is. Keep this explicit (no wildcard) for clarity.
+# The /say, /auth, and /sessions HTTP endpoints are CORS-checked (WebSockets
+# aren't). Origins come from ALLOWED_ORIGINS (config.settings) so prod sets its
+# real frontend origin without a code edit; defaults to localhost:3000 for dev.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

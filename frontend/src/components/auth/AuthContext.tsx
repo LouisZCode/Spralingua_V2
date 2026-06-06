@@ -7,10 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-
-// Matches ConversationView's backend base. Kept hardcoded to follow the
-// existing convention in this repo (no NEXT_PUBLIC_API_BASE indirection yet).
-const HTTP_BASE = "http://localhost:8765";
+import { HTTP_BASE } from "@/lib/api";
 
 // localStorage key holding { token, user }. The session JWT is replayed on the
 // WS handshake (?token=) and on /say (Authorization: Bearer) — see AUTH-001.

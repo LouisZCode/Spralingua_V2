@@ -6,6 +6,7 @@ import {
   WebSocketTransport,
   ProtobufFrameSerializer,
 } from "@pipecat-ai/websocket-transport";
+import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 
 // Front-page voice demo — the Spralingua "welcome" concierge (a `respond`
 // lesson, no evaluator). Connects to the hardened public demo socket
@@ -13,10 +14,8 @@ import {
 // and applies the SEC-001 guards (Origin allowlist, global + per-IP
 // concurrency/rate caps, and a wall-clock session timeout). Each tap mints a
 // fresh ephemeral `demo-<uuid>` user id so concurrent visitors never share
-// conversation memory or collide in the backend's ACTIVE_TASKS map. Still
-// deferred to deployment: serving this over WSS/TLS.
-const BASE_WS = "ws://localhost:8765";
-const HTTP_BASE = "http://localhost:8765";
+// conversation memory or collide in the backend's ACTIVE_TASKS map. The backend
+// origin (and ws/wss scheme) comes from NEXT_PUBLIC_API_URL — see lib/api.ts.
 
 // Reveal the bot bubble when its audio finishes playing in the browser
 // (bot-started time + clip duration + this margin), not when the text

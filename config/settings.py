@@ -31,7 +31,17 @@ azure_speech_region = os.getenv("AZURE_SPEECH_REGION", "eastus")
 
 #Postgres (DATA-001). No default — absence raises at startup (fail-loud).
 # Form: postgresql+asyncpg://user:password@host:port/dbname
-database_url = os.getenv("DATABASE_URL")
+# Managed hosts (Railway/Render/Neon/Supabase) inject a plain `postgresql://`
+# (or legacy `postgres://`) URL, but our async engine needs the asyncpg driver.
+# Normalize the scheme here so DATABASE_URL is portable; alembic/env.py swaps
+# +asyncpg -> +psycopg2 for its sync migrations.
+_raw_db_url = os.getenv("DATABASE_URL")
+if _raw_db_url:
+    for _prefix in ("postgresql://", "postgres://"):
+        if _raw_db_url.startswith(_prefix):
+            _raw_db_url = "postgresql+asyncpg://" + _raw_db_url[len(_prefix):]
+            break
+database_url = _raw_db_url
 
 # --- Front-page demo agent hardening (SEC-001) ---
 # The "/ws/demo/{id}" + "/say" surface is world-facing and unauthenticated, so
@@ -69,6 +79,12 @@ rate_limit_exempt_ips = {
     for ip in os.getenv("RATE_LIMIT_EXEMPT_IPS", "127.0.0.1,::1,localhost").split(",")
     if ip.strip()
 }
+
+# --- Deployment ---
+# "dev" (default) preserves local ergonomics — e.g. auth/tokens.py falls back to
+# an ephemeral JWT secret. Set APP_ENV=production (anything != "dev") in any
+# deployed environment so missing-secret misconfig fails loud instead.
+app_env = os.getenv("APP_ENV", "dev")
 
 # --- Authentication (AUTH-001) ---
 # Google sign-in (P-3): the frontend obtains a Google ID token and POSTs it to

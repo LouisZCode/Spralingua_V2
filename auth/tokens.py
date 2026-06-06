@@ -24,7 +24,7 @@ from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token
 from loguru import logger
 
-from config.settings import google_client_id, jwt_expiry_days, jwt_secret
+from config.settings import app_env, google_client_id, jwt_expiry_days, jwt_secret
 
 _ALGORITHM = "HS256"
 _GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
@@ -32,16 +32,23 @@ _GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 # One transport reused across calls (it caches Google's signing certs internally).
 _google_transport = google_requests.Request()
 
-# If JWT_SECRET isn't set we fall back to a random per-process secret so dev
-# works out of the box. Warn loudly: sessions won't survive a restart and the
-# secret differs per worker, so this is unfit for any shared/deployed env.
+# JWT_SECRET signs our session tokens. In dev (APP_ENV unset/"dev") we fall back
+# to a random per-process secret so it works out of the box — but that secret
+# differs per worker and dies on restart, so in any deployed env (APP_ENV set to
+# something other than "dev") a missing JWT_SECRET is fatal rather than silently
+# minting unverifiable tokens.
 if jwt_secret:
     _SIGNING_SECRET = jwt_secret
-else:
+elif app_env == "dev":
     _SIGNING_SECRET = secrets.token_urlsafe(48)
     logger.warning(
-        "JWT_SECRET is not set — using an ephemeral per-process secret. "
+        "JWT_SECRET is not set — using an ephemeral per-process secret (APP_ENV=dev). "
         "Session tokens won't survive a restart; set JWT_SECRET before deploying."
+    )
+else:
+    raise RuntimeError(
+        f"JWT_SECRET is required when APP_ENV={app_env!r} (deployed). Refusing to "
+        "mint session tokens with an ephemeral secret — set JWT_SECRET."
     )
 
 

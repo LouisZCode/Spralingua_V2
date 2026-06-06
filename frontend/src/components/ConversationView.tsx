@@ -11,9 +11,7 @@ import SessionSummaryModal, {
   type CompletionData,
 } from "./SessionSummaryModal";
 import { useAuth } from "./auth/AuthContext";
-
-const BASE_WS = "ws://localhost:8765";
-const HTTP_BASE = "http://localhost:8765";
+import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 
 // Briefing field values are either a single prose string OR a list of
 // short items (renders as bullets). Authors pick per field per lesson.
