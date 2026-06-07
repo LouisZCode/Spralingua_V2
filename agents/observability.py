@@ -19,6 +19,7 @@ public/secret key pair from the existing ``.env``.
 
 import base64
 
+from loguru import logger
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from pipecat.utils.tracing.setup import setup_tracing
@@ -59,10 +60,17 @@ def _build_otlp_exporter() -> OTLPSpanExporter:
 # ``BatchSpanProcessor`` for background flushing. Returns False if OTel
 # is unavailable; the pipeline still runs in that case (Pipecat's
 # ``enable_tracing=True`` short-circuits to a no-op).
-_tracing_enabled = setup_tracing(
-    service_name=f"spralingua-{langfuse_environment}",
-    exporter=_build_otlp_exporter(),
-)
+# Langfuse is optional: with no host/keys (e.g. a deploy without the
+# LANGFUSE_* vars) skip export entirely instead of crashing at import —
+# ``_build_otlp_exporter`` would dereference a None host.
+if langfuse_base_url and langfuse_public_key and langfuse_secret_key:
+    _tracing_enabled = setup_tracing(
+        service_name=f"spralingua-{langfuse_environment}",
+        exporter=_build_otlp_exporter(),
+    )
+else:
+    logger.info("Langfuse tracing disabled — LANGFUSE_* not fully configured.")
+    _tracing_enabled = False
 
 # Tracer for hand-rolled spans (the LLM span in ``pipecat_wrapper.astream``).
 # Pipecat-owned spans use their own tracer names internally.
