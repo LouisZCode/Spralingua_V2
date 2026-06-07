@@ -9,8 +9,8 @@ dependencies = [
     "alembic>=1.13",
     "asyncpg>=0.30",
     "azure-cognitiveservices-speech>=1.50.0",
+    "fastapi>=0.128.0",
     "google-auth>=2.53.0",
-    "gradio>=6.2.0",
     "greenlet>=3.0",
     "langchain>=1.2.0",
     "langchain-cerebras>=0.8.2",
@@ -19,10 +19,19 @@ dependencies = [
     "pipecat>=0.3.0",
     "pipecat-ai[deepgram,silero]>=0.0.98",
     "psycopg2-binary>=2.9",
-    "pyaudio>=0.2.14",
     "pydub>=0.25.1",
     "pyjwt>=2.13.0",
     "python-dotenv>=1.2.1",
     "requests>=2.32.5",
     "sqlalchemy[asyncio]>=2.0",
+    "uvicorn>=0.40.0",
+]
+
+# Dev/local-only: gradio (voice_tests UI) + pyaudio (local mic, services/transport
+# transport_vad). The backend Dockerfile runs `uv sync --no-dev`, so these stay
+# out of the production image while local `uv sync` still installs them.
+[dependency-groups]
+dev = [
+    "gradio>=6.2.0",
+    "pyaudio>=0.2.14",
 ]

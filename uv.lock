@@ -2759,8 +2759,8 @@ dependencies = [
     { name = "alembic" },
     { name = "asyncpg" },
     { name = "azure-cognitiveservices-speech" },
+    { name = "fastapi" },
     { name = "google-auth" },
-    { name = "gradio" },
     { name = "greenlet" },
     { name = "langchain" },
     { name = "langchain-cerebras" },
@@ -2769,12 +2769,18 @@ dependencies = [
     { name = "pipecat" },
     { name = "pipecat-ai", extra = ["deepgram", "silero"] },
     { name = "psycopg2-binary" },
-    { name = "pyaudio" },
     { name = "pydub" },
     { name = "pyjwt" },
     { name = "python-dotenv" },
     { name = "requests" },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "uvicorn" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "gradio" },
+    { name = "pyaudio" },
 ]
 
 [package.metadata]
@@ -2783,8 +2789,8 @@ requires-dist = [
     { name = "alembic", specifier = ">=1.13" },
     { name = "asyncpg", specifier = ">=0.30" },
     { name = "azure-cognitiveservices-speech", specifier = ">=1.50.0" },
+    { name = "fastapi", specifier = ">=0.128.0" },
     { name = "google-auth", specifier = ">=2.53.0" },
-    { name = "gradio", specifier = ">=6.2.0" },
     { name = "greenlet", specifier = ">=3.0" },
     { name = "langchain", specifier = ">=1.2.0" },
     { name = "langchain-cerebras", specifier = ">=0.8.2" },
@@ -2793,12 +2799,18 @@ requires-dist = [
     { name = "pipecat", specifier = ">=0.3.0" },
     { name = "pipecat-ai", extras = ["deepgram", "silero"], specifier = ">=0.0.98" },
     { name = "psycopg2-binary", specifier = ">=2.9" },
-    { name = "pyaudio", specifier = ">=0.2.14" },
     { name = "pydub", specifier = ">=0.25.1" },
     { name = "pyjwt", specifier = ">=2.13.0" },
     { name = "python-dotenv", specifier = ">=1.2.1" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
+    { name = "uvicorn", specifier = ">=0.40.0" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "gradio", specifier = ">=6.2.0" },
+    { name = "pyaudio", specifier = ">=0.2.14" },
 ]
 
 [[package]]

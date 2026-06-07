@@ -8,7 +8,6 @@ transport_vad              - Local mic/speaker (for local testing)
 transport_websocket        - WebSocket server, single client (legacy)
 transport_fastapi_ws       - FastAPI WebSocket, multi-client (current)
 """
-from pipecat.transports.local.audio import LocalAudioTransport, LocalAudioTransportParams
 from pipecat.transports.websocket.server import WebsocketServerTransport, WebsocketServerParams
 from pipecat.transports.websocket.fastapi import FastAPIWebsocketTransport, FastAPIWebsocketParams
 from pipecat.serializers.protobuf import ProtobufFrameSerializer
@@ -17,6 +16,13 @@ from pipecat.audio.vad.vad_analyzer import VADParams
 
 
 def transport_vad():
+    # Local mic/speaker (pyaudio-backed, dev/local only). Imported lazily so the
+    # server path — which never calls this — doesn't pull pyaudio into the image.
+    from pipecat.transports.local.audio import (
+        LocalAudioTransport,
+        LocalAudioTransportParams,
+    )
+
     return LocalAudioTransport(
         LocalAudioTransportParams(
             audio_in_enabled=True,

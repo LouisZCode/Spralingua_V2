@@ -8,10 +8,9 @@ FROM python:3.12-slim AS builder
 # uv: fast, lockfile-pinned installs.
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 
-# Build deps: gcc + PortAudio headers so pyaudio's C extension compiles.
+# Build tools for any dependency that ships an sdist instead of a wheel.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential \
-        portaudio19-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ENV UV_LINK_MODE=copy \
@@ -29,14 +28,13 @@ RUN uv sync --frozen --no-install-project --no-dev
 FROM python:3.12-slim AS runtime
 
 # ffmpeg: pydub MP3 export. libssl3/libasound2: Azure Speech SDK. libgomp1:
-# onnxruntime (silero VAD). libportaudio2: pyaudio's runtime lib.
+# onnxruntime (silero VAD).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         ca-certificates \
         libssl3 \
         libasound2 \
         libgomp1 \
-        libportaudio2 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \
