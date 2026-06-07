@@ -110,13 +110,18 @@ async def upsert_user(
     email: str | None,
     name: str | None,
     picture: str | None,
-) -> None:
+) -> str:
     """Insert or refresh a user from a verified Google sign-in (AUTH-001).
 
     Keyed on the Google ``sub`` (``user_id``). On a repeat sign-in we refresh the
     mutable profile fields (the user may have changed their Google name/avatar)
     and stamp ``last_login_at``. ``created_at`` keeps its first-insert value via
     the server default and is left untouched on update.
+
+    ``role`` is deliberately NOT in the conflict update set — it's set out-of-band
+    (SQL) and must survive re-logins — and we ``RETURNING`` it so the caller can
+    embed it in the session JWT + sign-in response. New rows get the column
+    default ("normal").
     """
     try:
         stmt = pg_insert(User).values(
@@ -134,9 +139,11 @@ async def upsert_user(
                 "picture": stmt.excluded.picture,
                 "last_login_at": stmt.excluded.last_login_at,
             },
-        )
-        await db.execute(stmt)
+        ).returning(User.role)
+        result = await db.execute(stmt)
+        role = result.scalar_one()
         await db.commit()
+        return role
     except SQLAlchemyError:
         await db.rollback()
         raise

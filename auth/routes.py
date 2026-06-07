@@ -25,6 +25,7 @@ class UserOut(BaseModel):
     email: str | None
     name: str | None
     picture: str | None
+    role: str
 
 
 class AuthOut(BaseModel):
@@ -58,16 +59,18 @@ async def auth_google(body: GoogleAuthBody) -> AuthOut:
 
     try:
         async with get_sessionmaker()() as db:
-            await upsert_user(
+            role = await upsert_user(
                 db, user_id=user_id, email=email, name=name, picture=picture
             )
     except SQLAlchemyError:
         raise HTTPException(status_code=500, detail="Could not persist the user.")
 
-    token = issue_session_jwt(user_id)
+    token = issue_session_jwt(user_id, role)
     return AuthOut(
         token=token,
-        user=UserOut(id=user_id, email=email, name=name, picture=picture),
+        user=UserOut(
+            id=user_id, email=email, name=name, picture=picture, role=role
+        ),
     )
 
 
@@ -79,5 +82,9 @@ async def auth_me(user_id: str = Depends(get_current_user_id)) -> UserOut:
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
     return UserOut(
-        id=user.id, email=user.email, name=user.name, picture=user.picture
+        id=user.id,
+        email=user.email,
+        name=user.name,
+        picture=user.picture,
+        role=user.role,
     )

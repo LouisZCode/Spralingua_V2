@@ -55,6 +55,11 @@ class User(Base):
         TIMESTAMP, nullable=False, server_default=text("now()")
     )
     last_login_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
+    # Access tier: "normal" (default), "premium" (reserved), "developer" (unlocks
+    # the internal dev tools in the UI). Set out-of-band via SQL; not reset on login.
+    role: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'normal'")
+    )
 
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 

@@ -80,15 +80,17 @@ async def verify_google_id_token(credential: str) -> dict:
     return claims
 
 
-def issue_session_jwt(user_id: str) -> str:
+def issue_session_jwt(user_id: str, role: str = "normal") -> str:
     """Mint an HS256 session JWT for ``user_id`` (Google ``sub``).
 
-    Valid for ``jwt_expiry_days``. No refresh in v1 — the frontend re-runs the
-    Google sign-in to get a fresh token when this one expires.
+    ``role`` rides as a signed claim so it's tamper-resistant — a client can't
+    promote itself by editing localStorage. Valid for ``jwt_expiry_days``. No
+    refresh in v1 — the frontend re-runs Google sign-in when this one expires.
     """
     now = int(time.time())
     payload = {
         "sub": user_id,
+        "role": role,
         "iat": now,
         "exp": now + jwt_expiry_days * 86400,
     }

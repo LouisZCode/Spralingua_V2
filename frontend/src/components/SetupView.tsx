@@ -95,6 +95,11 @@ export default function SetupView({
   const [lessonId, setLessonId] = useState<string>(path.lessons[0].id);
   const [voice, setVoice] = useState<string>("German_Female");
 
+  const { user } = useAuth();
+  const isDev = user?.role === "developer";
+  const [devUnlocked, setDevUnlocked] = useState(false);
+  const devVisible = isDev && devUnlocked;
+
   const [showReminder, setShowReminder] = useState(false);
 
   // Weekly "go somewhere quiet + headphones" nudge. localStorage is client-only,
@@ -114,6 +119,53 @@ export default function SetupView({
       // Storage blocked/unavailable — just skip the reminder.
     }
   }, []);
+
+  // Developer tab unlock — hidden behind a "&" keypress AND gated to a
+  // developer-role account (pressing "&" is a no-op for normal/premium users).
+  // Hydrate the toggle from localStorage after mount (client-only).
+  useEffect(() => {
+    if (!isDev) return;
+    try {
+      if (localStorage.getItem("spralingua_dev_unlocked") === "1") {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setDevUnlocked(true);
+      }
+    } catch {
+      // Storage blocked — leave it locked.
+    }
+  }, [isDev]);
+
+  useEffect(() => {
+    if (!isDev) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "&") return;
+      setDevUnlocked((prev) => {
+        const next = !prev;
+        try {
+          localStorage.setItem("spralingua_dev_unlocked", next ? "1" : "0");
+        } catch {
+          // ignore storage errors
+        }
+        return next;
+      });
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isDev]);
+
+  // If the dev tab is hidden while a DEV lesson is selected, fall back to A1 so
+  // we never submit a hidden lesson.
+  useEffect(() => {
+    if (devVisible || pathKey !== "DEV") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPathKey("A1");
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLessonId(PATHS[0].lessons[0].id);
+  }, [devVisible, pathKey]);
+
+  const visiblePaths = devVisible
+    ? PATHS
+    : PATHS.filter((p) => p.key !== "DEV");
 
   const switchPath = (key: PathKey) => {
     const next = PATHS.find((p) => p.key === key)!;
@@ -171,7 +223,7 @@ export default function SetupView({
           style={{ animationDelay: "80ms" }}
           aria-label="Lesson paths"
         >
-          {PATHS.map((p) => {
+          {visiblePaths.map((p) => {
             const active = p.key === pathKey;
             return (
               <button

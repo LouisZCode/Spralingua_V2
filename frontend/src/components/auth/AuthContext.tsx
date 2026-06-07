@@ -18,6 +18,7 @@ export type AuthUser = {
   email: string | null;
   name: string | null;
   picture: string | null;
+  role: string;
 };
 
 type AuthState = {
