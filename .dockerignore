@@ -26,8 +26,11 @@ venv/
 # Node (root has none; frontend excluded above)
 node_modules/
 
-# Runtime data — must not be baked into the image
-logs/
+# Runtime data — must not be baked into the image. Exclude only the
+# per-session OUTPUT dir, NOT all of logs/: logs/ is also a Python package
+# (logs/__init__.py, logs/session_logger.py) imported by pipeline/factory.py
+# at startup, so a blanket logs/ ignore crashes the app with ModuleNotFoundError.
+logs/conversations/
 *.mp3
 *.wav
 
