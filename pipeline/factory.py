@@ -145,22 +145,37 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             enable_turn_audio=True,
         )
 
-        @audiobuffer.event_handler("on_audio_data")
-        async def on_audio_data(buffer, audio, sample_rate, num_channels):
-            base_path = session_logger.session_dir / session_logger.session_id
-            wav_path = base_path.with_suffix(".wav")
-            mp3_path = base_path.with_suffix(".mp3")
-
+        def _export_session_audio(wav_path, mp3_path, audio, sample_rate, num_channels):
+            """Blocking WAV write + pydub/ffmpeg MP3 encode — runs in a worker
+            thread so disconnect-time encoding never stalls other clients'
+            pipelines on the event loop (BUG-003)."""
             with wave.open(str(wav_path), "wb") as wf:
                 wf.setnchannels(num_channels)
                 wf.setsampwidth(2)
                 wf.setframerate(sample_rate)
                 wf.writeframes(audio)
+            AudioSegment.from_wav(str(wav_path)).export(
+                str(mp3_path), format="mp3", bitrate="128k"
+            )
 
-            audio_segment = AudioSegment.from_wav(str(wav_path))
-            audio_segment.export(str(mp3_path), format="mp3", bitrate="128k")
-            wav_path.unlink()
-            print(f"Audio saved to: {mp3_path}")
+        @audiobuffer.event_handler("on_audio_data")
+        async def on_audio_data(buffer, audio, sample_rate, num_channels):
+            base_path = session_logger.session_dir / session_logger.session_id
+            wav_path = base_path.with_suffix(".wav")
+            mp3_path = base_path.with_suffix(".mp3")
+            # Same non-fatal contract as the other disconnect-side steps: an
+            # export failure (ffmpeg missing, disk full) must not crash the
+            # pipeline, and the temp WAV is removed either way.
+            try:
+                await asyncio.to_thread(
+                    _export_session_audio,
+                    wav_path, mp3_path, audio, sample_rate, num_channels,
+                )
+                logger.info(f"Audio saved to: {mp3_path}")
+            except Exception as e:  # noqa: BLE001 — audio export must not block cleanup
+                logger.warning(f"Audio export failed (non-fatal): {type(e).__name__}: {e}")
+            finally:
+                wav_path.unlink(missing_ok=True)
 
         @audiobuffer.event_handler("on_user_turn_audio_data")
         async def on_user_turn_audio(_buffer, audio, sample_rate, num_channels):
@@ -321,7 +336,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         finally:
             if watchdog is not None:
                 watchdog.cancel()
-            ACTIVE_TASKS.pop(user_id, None)
+            # Identity-guarded: if the same user opened a second tab, its
+            # connect overwrote our entry — popping blindly here would break
+            # /say for that still-live session (BUG-004).
+            if ACTIVE_TASKS.get(user_id) is task:
+                ACTIVE_TASKS.pop(user_id, None)
             await audiobuffer.stop_recording()
             # Post-session evaluator (EVAL-001). Best-effort: any failure here
             # (LLM outage, missing goal entry, network) is logged and swallowed

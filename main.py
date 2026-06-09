@@ -1,6 +1,7 @@
 # Backend:  uvicorn main:app --host 0.0.0.0 --port 8765
 # Frontend: cd frontend && npm run dev
 
+import asyncio
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -8,6 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
@@ -54,7 +56,20 @@ app.include_router(auth_router)
 
 
 @app.get("/health")
-def health():
+async def health():
+    """Readiness check (INFRA-003): verifies Postgres is still reachable.
+
+    Startup is fail-loud (lifespan), but the DB can die *after* startup —
+    session writes are non-fatal by design, so nothing else would surface
+    it. Returning 503 here lets Railway's healthcheck stop routing to an
+    instance that has silently stopped persisting.
+    """
+    try:
+        async with asyncio.timeout(2):
+            async with get_sessionmaker()() as db:
+                await db.execute(text("SELECT 1"))
+    except Exception:  # noqa: BLE001 — any failure means "not ready"
+        raise HTTPException(status_code=503, detail="database unreachable")
     return {"status": "ok"}
 
 
@@ -118,14 +133,21 @@ def lesson_meta(lesson_id: str):
 
 
 @app.get("/sessions/{session_id}")
-async def get_session(session_id: str):
+async def get_session(session_id: str, request: Request):
     """Return the activity_session row for the post-session modal to render.
 
     ``ended_at IS NULL`` means the disconnect-side finalize step hasn't run
     yet (evaluators + DB update happen in pipeline/factory.py's finally:
     block, after the WS is already closed). The frontend polls this route
     every ~1s until ``ended_at`` is set, then renders the eval blocks.
+
+    Auth (SEC-002): requires the caller's session JWT, and the row is only
+    returned to its owner. No demo carve-out — the public demo never opens
+    the summary modal, so demo rows have no legitimate caller here.
     """
+    sub = _bearer_subject(request)
+    if sub is None:
+        raise HTTPException(status_code=401, detail="missing or invalid token")
     try:
         session_uuid = uuid.UUID(session_id)
     except ValueError:
@@ -135,6 +157,8 @@ async def get_session(session_id: str):
         row = await db.get(ActivitySession, session_uuid)
     if row is None:
         raise HTTPException(status_code=404, detail="session not found")
+    if row.user_id != sub:
+        raise HTTPException(status_code=403, detail="not your session")
     return {
         "id": str(row.id),
         "lesson_id": row.lesson_id,

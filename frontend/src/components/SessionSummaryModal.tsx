@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
+import { useAuth } from "./auth/AuthContext";
 
 export type CompletionStatus = "success" | "info" | "warning";
 
@@ -141,13 +142,14 @@ export default function SessionSummaryModal({
   sessionId: string | null;
   onClose: () => void;
 }) {
+  const { token } = useAuth();
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
   const [evalStatus, setEvalStatus] = useState<EvalStatus>(() =>
     sessionId ? "loading" : "no-id",
   );
 
   useEffect(() => {
-    if (!sessionId) return;
+    if (!sessionId || !token) return;
 
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
@@ -156,7 +158,10 @@ export default function SessionSummaryModal({
     const tick = async () => {
       if (cancelled) return;
       try {
-        const r = await fetch(`${HTTP_BASE}/sessions/${sessionId}`);
+        // GET /sessions/{id} is owner-only (SEC-002) — send the session JWT.
+        const r = await fetch(`${HTTP_BASE}/sessions/${sessionId}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
         if (!r.ok) return;
         const data = (await r.json()) as SessionData;
         if (cancelled) return;
@@ -184,7 +189,7 @@ export default function SessionSummaryModal({
       if (intervalId) clearInterval(intervalId);
       if (timeoutId) clearTimeout(timeoutId);
     };
-  }, [sessionId]);
+  }, [sessionId, token]);
 
   const title = completion?.title ?? DEFAULT_TITLE;
   const status = completion?.status ?? DEFAULT_STATUS;
