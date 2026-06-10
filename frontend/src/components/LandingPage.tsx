@@ -119,8 +119,8 @@ export default function LandingPage() {
             <div className="rise-in">
               <h1 className="font-display text-[clamp(38px,6.5vw,68px)] font-black leading-[0.98] tracking-tight text-ink">
                 Learn a language by{" "}
-                <span className="goal-shimmer">speaking</span> it
-                {/* Raven end-cap: inline so it rides at the end of "it" and
+                <span className="goal-shimmer">speaking</span>
+                {/* Raven end-cap: inline so it rides at the end of the line and
                     reflows with the headline — no absolute coords to break on
                     resize. Sized in em so it scales with the fluid headline.
                     The image is scaled past the circle and pushed up so head +
