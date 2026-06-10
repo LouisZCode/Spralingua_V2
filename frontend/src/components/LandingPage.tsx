@@ -117,22 +117,24 @@ export default function LandingPage() {
             />
 
             <div className="rise-in">
-              {/* Raven peeking out of a porthole to welcome you. The image is
-                  scaled past the circle and pushed up so head + waving wing
-                  fill the badge while the feet crop away (overflow-hidden). */}
-              <div className="relative mb-6 inline-block h-24 w-24 -rotate-3 overflow-hidden rounded-full border-[3px] border-ink bg-flag-gold-soft shadow-[0_5px_0_var(--color-ink)]">
-                <Image
-                  src="/mascot/raven.png"
-                  alt="Spralingua raven waving hello"
-                  width={220}
-                  height={220}
-                  priority
-                  className="pointer-events-none absolute left-1/2 top-[-4%] w-[150%] max-w-none -translate-x-1/2 select-none"
-                />
-              </div>
               <h1 className="font-display text-[clamp(38px,6.5vw,68px)] font-black leading-[0.98] tracking-tight text-ink">
                 Learn a language by{" "}
-                <span className="goal-shimmer">speaking</span> it.
+                <span className="goal-shimmer">speaking</span> it
+                {/* Raven end-cap: inline so it rides at the end of "it" and
+                    reflows with the headline — no absolute coords to break on
+                    resize. Sized in em so it scales with the fluid headline.
+                    The image is scaled past the circle and pushed up so head +
+                    waving wing fill the badge while the feet crop away. */}
+                <span className="relative ml-[0.2em] inline-block h-[1.45em] w-[1.45em] -rotate-3 overflow-hidden rounded-full border-[3px] border-ink bg-flag-gold-soft align-middle shadow-[0_4px_0_var(--color-ink)]">
+                  <Image
+                    src="/mascot/raven.png"
+                    alt="Spralingua raven waving hello"
+                    width={220}
+                    height={220}
+                    priority
+                    className="pointer-events-none absolute left-1/2 top-[-4%] w-[150%] max-w-none -translate-x-1/2 select-none"
+                  />
+                </span>
               </h1>
               <p className="mt-5 max-w-[440px] font-body text-[17px] leading-relaxed text-ink-soft">
                 Real-time voice conversations with an AI partner.
