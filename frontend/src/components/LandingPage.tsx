@@ -117,6 +117,19 @@ export default function LandingPage() {
             />
 
             <div className="rise-in">
+              {/* Raven peeking out of a porthole to welcome you. The image is
+                  scaled past the circle and pushed up so head + waving wing
+                  fill the badge while the feet crop away (overflow-hidden). */}
+              <div className="relative mb-6 inline-block h-24 w-24 -rotate-3 overflow-hidden rounded-full border-[3px] border-ink bg-flag-gold-soft shadow-[0_5px_0_var(--color-ink)]">
+                <Image
+                  src="/mascot/raven.png"
+                  alt="Spralingua raven waving hello"
+                  width={220}
+                  height={220}
+                  priority
+                  className="pointer-events-none absolute left-1/2 top-[-4%] w-[150%] max-w-none -translate-x-1/2 select-none"
+                />
+              </div>
               <h1 className="font-display text-[clamp(38px,6.5vw,68px)] font-black leading-[0.98] tracking-tight text-ink">
                 Learn a language by{" "}
                 <span className="goal-shimmer">speaking</span> it.
