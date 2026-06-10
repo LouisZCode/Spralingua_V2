@@ -1,4 +1,5 @@
 import { Fragment } from "react";
+import Image from "next/image";
 import HeroDemo from "./HeroDemo";
 import StartCta from "./auth/StartCta";
 
@@ -82,9 +83,19 @@ export default function LandingPage() {
       {/* Top bar */}
       <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <span className="font-display text-[22px] font-black tracking-tight text-ink">
-            Spralingua
-          </span>
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/mascot/raven.png"
+              alt="Spralingua raven mascot"
+              width={40}
+              height={40}
+              priority
+              className="h-9 w-9 select-none"
+            />
+            <span className="font-display text-[22px] font-black tracking-tight text-ink">
+              Spralingua
+            </span>
+          </div>
           <StartCta className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red">
             Start →
           </StartCta>
@@ -269,9 +280,18 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="relative border-t-[3px] border-ink bg-white">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 sm:flex-row">
-          <span className="font-display text-[16px] font-black tracking-tight text-ink">
-            Spralingua
-          </span>
+          <div className="flex items-center gap-2">
+            <Image
+              src="/mascot/raven.png"
+              alt="Spralingua raven mascot"
+              width={32}
+              height={32}
+              className="h-7 w-7 select-none"
+            />
+            <span className="font-display text-[16px] font-black tracking-tight text-ink">
+              Spralingua
+            </span>
+          </div>
           <span className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted">
             Voice-powered language learning
           </span>
