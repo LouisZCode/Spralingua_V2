@@ -6,10 +6,11 @@ import { useAuth } from "./AuthContext";
 import SignInModal from "./SignInModal";
 
 // Drop-in replacement for the landing page's "Start" <Link>s. Instead of
-// navigating straight to /learn, it gates on auth: already signed in → go to
-// /learn; otherwise open the Google sign-in modal and only advance once the
-// session JWT is in hand. className/style/children are passed through so each
-// call site keeps its existing look (nav link, hero button, closing button).
+// navigating straight into a lesson, it gates on auth: already signed in → go
+// to the /practice menu (choose conversation vs. vocabulary); otherwise open
+// the Google sign-in modal and only advance once the session JWT is in hand.
+// className/style/children are passed through so each call site keeps its
+// existing look (nav link, hero button, closing button).
 export default function StartCta({
   className,
   style,
@@ -28,7 +29,7 @@ export default function StartCta({
     // user who clicks during the first render would wrongly see the modal.
     if (!ready) return;
     if (token) {
-      router.push("/learn");
+      router.push("/practice");
     } else {
       setShowModal(true);
     }
@@ -48,7 +49,7 @@ export default function StartCta({
         <SignInModal
           onSuccess={() => {
             setShowModal(false);
-            router.push("/learn");
+            router.push("/practice");
           }}
           onClose={() => setShowModal(false)}
         />
