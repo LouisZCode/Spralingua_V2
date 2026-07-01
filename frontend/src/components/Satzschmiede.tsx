@@ -5,16 +5,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import VocabTrainer from "./satzschmiede/VocabTrainer";
 
-// Vocabulary trainer ("Satzschmiede") — placeholder shell. This is the blank
-// canvas the production-practice module will grow into: deck → type a sentence
-// → strict examiner → spaced review. For now it only proves the route + auth
-// guard + navigation, so there's a real place to iterate on the frontend before
-// any backend is wired up.
-const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
-} as React.CSSProperties;
-
+// Vocabulary trainer ("Satzschmiede"). For now the deck is mock data rendered
+// entirely on the frontend (see satzschmiede/deck.ts) so we can design the card
+// + answer UI before any backend — content, evaluation and scheduling get wired
+// in later. This component is just the auth-guarded page shell; VocabTrainer
+// owns the card/deck interaction.
 export default function Satzschmiede() {
   const { token, ready } = useAuth();
   const router = useRouter();
@@ -60,43 +57,14 @@ export default function Satzschmiede() {
         </div>
       </header>
 
-      <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center px-6 py-20 text-center">
-        <div className="rise-in flex flex-col items-center">
-          <div className="grid h-20 w-20 place-items-center rounded-full border-[4px] border-ink bg-flag-gold-soft text-ink shadow-[0_5px_0_var(--color-ink)]">
-            {/* pencil glyph — matches the menu card icon */}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-9 w-9"
-            >
-              <path d="M12 20h9" />
-              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
-            </svg>
-          </div>
-          <p className="mt-6 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-            Satzschmiede
+      <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
+        {/* Sample-deck label so the mock is clearly not final content */}
+        <div className="mb-5 text-center">
+          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+            Satzschmiede · sample deck
           </p>
-          <h1 className="mt-3 font-display text-[clamp(28px,5vw,44px)] font-black leading-[1.05] tracking-tight text-ink">
-            Vocabulary practice is
-            <br />
-            under construction.
-          </h1>
-          <p className="mt-4 max-w-md font-body text-[16px] leading-relaxed text-ink-soft">
-            This is the blank canvas for the sentence trainer. We&apos;ll build
-            the deck, the examiner, and spaced review right here.
-          </p>
-          <Link
-            href="/practice"
-            className="btn-3d mt-8 inline-flex items-center justify-center gap-2 rounded-[24px] border-[3px] border-ink bg-white px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
-            style={inkShadow}
-          >
-            ← Back to menu
-          </Link>
         </div>
+        <VocabTrainer />
       </main>
     </div>
   );
