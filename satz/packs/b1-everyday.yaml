@@ -1,0 +1,91 @@
+# Level pack: intermediate everyday vocabulary. Home of the reflexive verbs
+# the trainer teaches by omission (sich hidden on the clue).
+# Authored per .claude/skills/satz-cards/SKILL.md.
+id: b1-everyday
+title: B1 Everyday
+description: Intermediate words for opinions, plans, and daily life
+kind: level
+level: B1
+position: 2
+cards:
+  - id: n-erfahrung
+    type: noun
+    target: Erfahrung
+    article: die
+    level: B1
+    gloss: the experience
+    note: "feminine · plural: die Erfahrungen"
+    example: Ich habe viel Erfahrung mit Kindern.
+
+  - id: n-vorschlag
+    type: noun
+    target: Vorschlag
+    article: der
+    level: B1
+    gloss: the suggestion / proposal
+    note: "masculine · plural: die Vorschläge"
+    example: Das ist ein guter Vorschlag.
+
+  - id: n-umgebung
+    type: noun
+    target: Umgebung
+    article: die
+    level: B1
+    gloss: the surroundings / area
+    note: "feminine · plural: die Umgebungen"
+    example: Die Umgebung ist sehr ruhig.
+
+  - id: n-gewohnheit
+    type: noun
+    target: Gewohnheit
+    article: die
+    level: B1
+    gloss: the habit
+    note: "feminine · plural: die Gewohnheiten"
+    example: Früh aufstehen ist eine gute Gewohnheit.
+
+  - id: v-freuen
+    type: verb
+    target: freuen
+    reflexive: true
+    level: B1
+    gloss: to look forward to
+    example: Ich freue mich auf das Wochenende.
+
+  - id: v-erinnern
+    type: verb
+    target: erinnern
+    reflexive: true
+    level: B1
+    gloss: to remember
+    example: Ich erinnere mich an meinen ersten Schultag.
+
+  - id: v-vorschlagen
+    type: verb
+    target: vorschlagen
+    level: B1
+    gloss: to suggest
+    example: Ich schlage vor, dass wir früher anfangen.
+
+  - id: v-verbringen
+    type: verb
+    target: verbringen
+    level: B1
+    gloss: to spend (time)
+    example: Wir verbringen den Sommer am See.
+
+  - id: p-kommt-darauf-an
+    type: phrase
+    target: Das kommt darauf an.
+    level: B1
+    gloss: '"That depends."'
+    note: spoken · neutral register
+    example: „Kommst du mit?" – „Das kommt darauf an."
+
+  - id: p-es-lohnt-sich
+    type: phrase
+    target: Es lohnt sich.
+    level: B1
+    gloss: '"It''s worth it."'
+    note: spoken · neutral register
+    example: Der Film ist toll — es lohnt sich!

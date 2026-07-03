@@ -1,0 +1,88 @@
+# Level pack: absolute-beginner core vocabulary.
+# Authored per .claude/skills/satz-cards/SKILL.md — noun/verb/reflexive rules.
+id: a1-basics
+title: A1 Basics
+description: The everyday words every beginner sentence needs
+kind: level
+level: A1
+position: 1
+cards:
+  - id: n-frage
+    type: noun
+    target: Frage
+    article: die
+    level: A1
+    gloss: the question
+    note: "feminine · plural: die Fragen"
+    example: Ich habe eine Frage.
+
+  - id: n-antwort
+    type: noun
+    target: Antwort
+    article: die
+    level: A1
+    gloss: the answer
+    note: "feminine · plural: die Antworten"
+    example: Die Antwort ist richtig.
+
+  - id: n-stadt
+    type: noun
+    target: Stadt
+    article: die
+    level: A1
+    gloss: the city
+    note: "feminine · plural: die Städte"
+    example: Berlin ist eine große Stadt.
+
+  - id: n-haus
+    type: noun
+    target: Haus
+    article: das
+    level: A1
+    gloss: the house
+    note: "neuter · plural: die Häuser"
+    example: Unser Haus ist klein.
+
+  - id: v-wohnen
+    type: verb
+    target: wohnen
+    level: A1
+    gloss: to live (reside)
+    example: Ich wohne in Berlin.
+
+  - id: v-brauchen
+    type: verb
+    target: brauchen
+    level: A1
+    gloss: to need
+    example: Wir brauchen Milch und Brot.
+
+  - id: v-helfen
+    type: verb
+    target: helfen
+    level: A1
+    gloss: to help
+    example: Kannst du mir helfen?
+
+  - id: v-verstehen
+    type: verb
+    target: verstehen
+    level: A1
+    gloss: to understand
+    example: Ich verstehe die Frage nicht.
+
+  - id: p-wie-bitte
+    type: phrase
+    target: Wie bitte?
+    level: A1
+    gloss: '"Pardon? / Come again?"'
+    note: spoken · polite
+    example: Wie bitte? Können Sie das bitte wiederholen?
+
+  - id: p-keine-ahnung
+    type: phrase
+    target: Keine Ahnung.
+    level: A1
+    gloss: '"No idea."'
+    note: spoken · casual
+    example: „Wo ist Tom?" – „Keine Ahnung."

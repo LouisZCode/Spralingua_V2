@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { MOCK_DECK, MOCK_KEYWORDS, type CardType } from "./deck";
+import { targetStems, type Card, type CardType } from "./deck";
 
 // Visual identity per word type: badge label + colour. One card shell serves
 // every type — the face shows only the badge + the word to produce. Meaning and
@@ -50,23 +50,25 @@ const inkShadow = {
 // stand-in for the real examiner's reflexivity check.
 const REFLEXIVE_PRONOUNS = ["mich", "dich", "sich", "uns", "euch"];
 
-export default function VocabTrainer() {
+export default function VocabTrainer({ deck }: { deck: Card[] }) {
   const [index, setIndex] = useState(0);
   const [answer, setAnswer] = useState("");
   const [revealed, setRevealed] = useState(false); // used the hint → a miss
   const [flipped, setFlipped] = useState(false); // showing the answer side
 
-  const total = MOCK_DECK.length;
-  const card = MOCK_DECK[index];
+  const total = deck.length;
+  const card = deck[index];
   const accent = TYPE_STYLE[card.type];
 
   // Placeholder verdict: revealing the example is always a miss; otherwise a
-  // dumb keyword match stands in for the real examiner so both states are
-  // designable. Reflexive cards additionally require a reflexive pronoun — the
-  // learner has to *spot* that the verb is reflexive, since `sich` is never on
-  // the clue. Only shown once the card is flipped.
-  const kw = MOCK_KEYWORDS[card.id];
-  const usedTarget = kw ? answer.toLowerCase().includes(kw) : false;
+  // dumb stem match (targetStems) stands in for the real examiner so both
+  // states are designable on any card the DB serves. Reflexive cards
+  // additionally require a reflexive pronoun — the learner has to *spot* that
+  // the verb is reflexive, since `sich` is never on the clue. Only shown once
+  // the card is flipped.
+  const usedTarget = targetStems(card).some((s) =>
+    answer.toLowerCase().includes(s)
+  );
   const usedReflexive =
     !card.reflexive ||
     REFLEXIVE_PRONOUNS.some((p) => new RegExp(`\\b${p}\\b`, "i").test(answer));

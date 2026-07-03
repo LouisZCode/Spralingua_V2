@@ -1,6 +1,6 @@
-// A single practice item. This type is the contract the backend will satisfy
-// later (from a content file or the DB); for now MOCK_DECK below fills it so we
-// can design the card + answer UI entirely on the frontend, with no backend.
+// A single practice item — the contract GET /satz/deck serves (backend:
+// satz/routes.py::_card_payload). Optional fields are omitted (not null) so
+// `card.note && …` guards and `??` fallbacks stay clean.
 export type CardType = "noun" | "verb" | "phrase";
 
 export type Card = {
@@ -12,73 +12,74 @@ export type Card = {
   gloss: string; // English meaning
   note?: string; // grammar strip: gender/plural, governed case, or register
   example?: string; // optional model sentence, revealable as a hint
+  level?: string; // CEFR hint (A1–B2)
 };
 
-// Six sample items — two nouns, two verbs, two phrases — picked to exercise all
-// three card types (and their grammar strips). Placeholder content only; swap
-// for a real deck once the backend serves one.
-export const MOCK_DECK: Card[] = [
-  {
-    id: "n-rechnung",
-    type: "noun",
-    target: "Rechnung",
-    article: "die",
-    gloss: "the bill / invoice",
-    note: "feminine · plural: die Rechnungen",
-    example: "Können wir bitte die Rechnung haben?",
-  },
-  {
-    id: "n-termin",
-    type: "noun",
-    target: "Termin",
-    article: "der",
-    gloss: "the appointment",
-    note: "masculine · plural: die Termine",
-    example: "Ich habe morgen einen Termin beim Arzt.",
-  },
-  {
-    id: "v-freuen-auf",
-    type: "verb",
-    target: "freuen",
-    reflexive: true,
-    gloss: "to look forward to",
-    example: "Ich freue mich auf das Wochenende.",
-  },
-  {
-    id: "v-teilnehmen-an",
-    type: "verb",
-    target: "teilnehmen",
-    gloss: "to take part in",
-    example: "Sie nimmt an dem Kurs teil.",
-  },
-  {
-    id: "p-kommt-darauf-an",
-    type: "phrase",
-    target: "Das kommt darauf an.",
-    gloss: '"That depends."',
-    note: "spoken · neutral register",
-    example: '„Kommst du mit?" – „Das kommt darauf an."',
-  },
-  {
-    id: "p-haette-gern",
-    type: "phrase",
-    target: "Ich hätte gern …",
-    gloss: '"I’d like …"',
-    note: "polite · ordering & requests",
-    example: "Ich hätte gern einen Kaffee, bitte.",
-  },
+// ── Placeholder verdict helper ──────────────────────────────────────────────
+// Until the real examiner (backend LLM, POST /satz/attempts) lands, "Check
+// answer" does a dumb contains-test against stems derived from the target.
+// This whole block is disposable — it goes when the examiner phase ships.
+
+// Separable prefixes, longest first so "auseinander" wins over "aus". When a
+// verb separates ("Sie nimmt … teil"), the prefix — not the stem — is what
+// shows up in the sentence, so it counts as a match too.
+const SEPARABLE_PREFIXES = [
+  "auseinander",
+  "gegenüber",
+  "zusammen",
+  "zurück",
+  "herunter",
+  "hinunter",
+  "heraus",
+  "hinaus",
+  "herein",
+  "hinein",
+  "vorbei",
+  "weiter",
+  "wieder",
+  "statt",
+  "teil",
+  "mit",
+  "nach",
+  "fest",
+  "frei",
+  "los",
+  "weg",
+  "ab",
+  "an",
+  "auf",
+  "aus",
+  "bei",
+  "ein",
+  "vor",
+  "zu",
 ];
 
-// Mock-only: the keyword the placeholder "Check" looks for in the learner's
-// sentence to fake a correct/close verdict. Purely to make the frontend flow
-// tangible for now — the real examiner (backend) replaces all of this.
-// Reflexive cards (reflexive: true) ALSO require a reflexive pronoun on top of
-// this keyword — that extra check lives in VocabTrainer.
-export const MOCK_KEYWORDS: Record<string, string> = {
-  "n-rechnung": "rechnung",
-  "n-termin": "termin",
-  "v-freuen-auf": "freu",
-  "v-teilnehmen-an": "teil",
-  "p-kommt-darauf-an": "darauf an",
-  "p-haette-gern": "gern",
-};
+function normalize(word: string): string {
+  return word.toLowerCase().replace(/[^a-zäöüß]/g, "");
+}
+
+export function targetStems(card: Card): string[] {
+  // Phrases: their longest word is the most distinctive one ("darauf",
+  // "hätte", "mitnehmen") — good enough for a placeholder.
+  const word =
+    card.type === "phrase"
+      ? card.target
+          .split(/\s+/)
+          .reduce((a, b) => (normalize(b).length > normalize(a).length ? b : a), "")
+      : card.target;
+  const w = normalize(word);
+  if (card.type !== "verb") {
+    return [w];
+  }
+  // Verbs: drop the infinitive ending so conjugated forms match
+  // ("freuen" → "freu" matches "freue mich").
+  const stems = [w.replace(/e?n$/, "")];
+  const prefix = SEPARABLE_PREFIXES.find(
+    (p) => w.startsWith(p) && w.length > p.length + 2
+  );
+  if (prefix) {
+    stems.push(prefix);
+  }
+  return stems;
+}

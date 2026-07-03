@@ -21,6 +21,7 @@ from config.settings import allowed_origins, demo_session_timeout_s, say_max_cha
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_TASKS
+from satz import router as satz_router, sync_curated_content
 from security import (
     client_ip,
     demo_release,
@@ -35,15 +36,20 @@ async def lifespan(app: FastAPI):
     # Fail-loud: if Postgres is unreachable, init_engine raises here and
     # uvicorn exits non-zero. Saves us from silent broken-persistence builds.
     await init_engine(database_url)
+    # Same philosophy for curated Satzschmiede content: YAML packs are synced
+    # into Postgres on every boot, so a malformed pack aborts startup instead
+    # of serving a half-broken gallery (SATZ-002).
+    await sync_curated_content()
     yield
     await dispose_engine()
 
 
 app = FastAPI(lifespan=lifespan)
 
-# The /say, /auth, and /sessions HTTP endpoints are CORS-checked (WebSockets
-# aren't). Origins come from ALLOWED_ORIGINS (config.settings) so prod sets its
-# real frontend origin without a code edit; defaults to localhost:3000 for dev.
+# The /say, /auth, /sessions, and /satz HTTP endpoints are CORS-checked
+# (WebSockets aren't). Origins come from ALLOWED_ORIGINS (config.settings) so
+# prod sets its real frontend origin without a code edit; defaults to
+# localhost:3000 for dev.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
@@ -53,6 +59,8 @@ app.add_middleware(
 
 # Google sign-in + session-JWT routes (AUTH-001).
 app.include_router(auth_router)
+# Satzschmiede packs/pool/deck routes (SATZ-002).
+app.include_router(satz_router)
 
 
 @app.get("/health")

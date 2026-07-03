@@ -1,0 +1,90 @@
+# Situation pack: ordering, paying, and small talk at the café.
+# n-rechnung and p-haette-gern were the original mock-deck cards — they live
+# here now as real content. Authored per .claude/skills/satz-cards/SKILL.md.
+id: coffee-shop
+title: Coffee Shop
+description: Order, pay, and small-talk at the café
+kind: situation
+level: A1–A2
+position: 4
+cards:
+  - id: n-kaffee
+    type: noun
+    target: Kaffee
+    article: der
+    level: A1
+    gloss: the coffee
+    note: "masculine · plural: die Kaffees"
+    example: Der Kaffee ist noch heiß.
+
+  - id: n-kuchen
+    type: noun
+    target: Kuchen
+    article: der
+    level: A1
+    gloss: the cake
+    note: "masculine · plural: die Kuchen"
+    example: Der Kuchen schmeckt wunderbar.
+
+  - id: n-milch
+    type: noun
+    target: Milch
+    article: die
+    level: A1
+    gloss: the milk
+    note: feminine · usually no plural
+    example: Die Milch ist im Kühlschrank.
+
+  - id: n-rechnung
+    type: noun
+    target: Rechnung
+    article: die
+    level: A2
+    gloss: the bill / invoice
+    note: "feminine · plural: die Rechnungen"
+    example: Können wir bitte die Rechnung haben?
+
+  - id: v-bestellen
+    type: verb
+    target: bestellen
+    level: A1
+    gloss: to order
+    example: Wir möchten gern bestellen.
+
+  - id: v-empfehlen
+    type: verb
+    target: empfehlen
+    level: A2
+    gloss: to recommend
+    example: Können Sie etwas empfehlen?
+
+  - id: v-schmecken
+    type: verb
+    target: schmecken
+    level: A1
+    gloss: to taste (good)
+    example: Hat es Ihnen geschmeckt?
+
+  - id: p-haette-gern
+    type: phrase
+    target: Ich hätte gern …
+    level: A1
+    gloss: '"I''d like …"'
+    note: polite · ordering & requests
+    example: Ich hätte gern einen Kaffee, bitte.
+
+  - id: p-zum-mitnehmen
+    type: phrase
+    target: zum Mitnehmen
+    level: A2
+    gloss: '"to go / takeaway"'
+    note: spoken · everyday
+    example: Einen Cappuccino zum Mitnehmen, bitte.
+
+  - id: p-stimmt-so
+    type: phrase
+    target: Stimmt so.
+    level: A2
+    gloss: '"Keep the change."'
+    note: spoken · tipping
+    example: „Das macht 8,50 Euro." – „Zehn Euro — stimmt so."

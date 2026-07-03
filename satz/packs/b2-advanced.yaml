@@ -1,0 +1,89 @@
+# Level pack: upper-intermediate vocabulary — abstract nouns, precise verbs,
+# and idiomatic phrases. Authored per .claude/skills/satz-cards/SKILL.md.
+id: b2-advanced
+title: B2 Advanced
+description: Abstract nouns and precise verbs for real arguments
+kind: level
+level: B2
+position: 3
+cards:
+  - id: n-herausforderung
+    type: noun
+    target: Herausforderung
+    article: die
+    level: B2
+    gloss: the challenge
+    note: "feminine · plural: die Herausforderungen"
+    example: Das Projekt ist eine echte Herausforderung.
+
+  - id: n-voraussetzung
+    type: noun
+    target: Voraussetzung
+    article: die
+    level: B2
+    gloss: the prerequisite / requirement
+    note: "feminine · plural: die Voraussetzungen"
+    example: Gute Deutschkenntnisse sind eine Voraussetzung für die Stelle.
+
+  - id: n-zusammenhang
+    type: noun
+    target: Zusammenhang
+    article: der
+    level: B2
+    gloss: the connection / context
+    note: "masculine · plural: die Zusammenhänge"
+    example: Ich sehe keinen Zusammenhang zwischen den beiden Themen.
+
+  - id: n-massnahme
+    type: noun
+    target: Maßnahme
+    article: die
+    level: B2
+    gloss: the measure / action taken
+    note: "feminine · plural: die Maßnahmen"
+    example: Die Stadt plant neue Maßnahmen gegen den Lärm.
+
+  - id: v-beantragen
+    type: verb
+    target: beantragen
+    level: B2
+    gloss: to apply for (officially)
+    example: Ich habe ein Visum beantragt.
+
+  - id: v-vermeiden
+    type: verb
+    target: vermeiden
+    level: B2
+    gloss: to avoid
+    example: Ich vermeide es, spät zu essen.
+
+  - id: v-auseinandersetzen
+    type: verb
+    target: auseinandersetzen
+    reflexive: true
+    level: B2
+    gloss: to engage with / examine (a topic) critically
+    example: Wir setzen uns mit dem Thema Klimawandel auseinander.
+
+  - id: v-einschaetzen
+    type: verb
+    target: einschätzen
+    level: B2
+    gloss: to assess / estimate
+    example: Es ist schwer einzuschätzen, wie lange das dauert.
+
+  - id: p-im-grossen-und-ganzen
+    type: phrase
+    target: im Großen und Ganzen
+    level: B2
+    gloss: '"by and large / on the whole"'
+    note: neutral · written & spoken
+    example: Im Großen und Ganzen bin ich zufrieden.
+
+  - id: p-kommt-nicht-in-frage
+    type: phrase
+    target: Das kommt nicht in Frage!
+    level: B2
+    gloss: '"That''s out of the question!"'
+    note: spoken · emphatic
+    example: Noch eine Woche warten? Das kommt nicht in Frage!

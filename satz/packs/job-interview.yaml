@@ -1,0 +1,85 @@
+# Situation pack: the job interview — applying, self-presentation, salary.
+# n-erfahrung is reused from b1-everyday via ref (defined once, shared).
+# Authored per .claude/skills/satz-cards/SKILL.md.
+id: job-interview
+title: Job Interview
+description: Apply, present yourself, and talk salary
+kind: situation
+level: B1–B2
+position: 5
+cards:
+  - id: n-vorstellungsgespraech
+    type: noun
+    target: Vorstellungsgespräch
+    article: das
+    level: B1
+    gloss: the job interview
+    note: "neuter · plural: die Vorstellungsgespräche"
+    example: Morgen habe ich ein Vorstellungsgespräch.
+
+  - id: n-staerke
+    type: noun
+    target: Stärke
+    article: die
+    level: B1
+    gloss: the strength
+    note: "feminine · plural: die Stärken"
+    example: Teamarbeit ist eine meiner Stärken.
+
+  - id: n-schwaeche
+    type: noun
+    target: Schwäche
+    article: die
+    level: B1
+    gloss: the weakness
+    note: "feminine · plural: die Schwächen"
+    example: Ungeduld ist meine größte Schwäche.
+
+  - id: n-gehalt
+    type: noun
+    target: Gehalt
+    article: das
+    level: B2
+    gloss: the salary
+    note: "neuter · plural: die Gehälter"
+    example: Das Gehalt wird am Ende des Gesprächs verhandelt.
+
+  - ref: n-erfahrung
+
+  - id: v-bewerben
+    type: verb
+    target: bewerben
+    reflexive: true
+    level: B1
+    gloss: to apply (for a job)
+    example: Ich bewerbe mich um diese Stelle.
+
+  - id: v-vorstellen
+    type: verb
+    target: vorstellen
+    reflexive: true
+    level: B1
+    gloss: to introduce oneself
+    example: Darf ich mich kurz vorstellen?
+
+  - id: v-verhandeln
+    type: verb
+    target: verhandeln
+    level: B2
+    gloss: to negotiate
+    example: Über das Gehalt kann man verhandeln.
+
+  - id: v-einstellen
+    type: verb
+    target: einstellen
+    level: B2
+    gloss: to hire
+    example: Die Firma stellt dieses Jahr neue Leute ein.
+
+  - id: p-unter-druck
+    type: phrase
+    target: unter Druck arbeiten
+    level: B2
+    gloss: '"to work under pressure"'
+    note: collocation · job talk
+    example: Ich kann gut unter Druck arbeiten.

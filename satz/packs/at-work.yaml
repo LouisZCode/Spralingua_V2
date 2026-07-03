@@ -1,0 +1,90 @@
+# Situation pack: office life — meetings, deadlines, colleagues.
+# n-termin and v-teilnehmen were original mock-deck cards — real content now.
+# Authored per .claude/skills/satz-cards/SKILL.md.
+id: at-work
+title: At Work
+description: Meetings, deadlines, and colleagues — office German
+kind: situation
+level: A2–B1
+position: 6
+cards:
+  - id: n-termin
+    type: noun
+    target: Termin
+    article: der
+    level: A2
+    gloss: the appointment
+    note: "masculine · plural: die Termine"
+    example: Ich habe morgen einen Termin beim Arzt.
+
+  - id: n-besprechung
+    type: noun
+    target: Besprechung
+    article: die
+    level: B1
+    gloss: the meeting
+    note: "feminine · plural: die Besprechungen"
+    example: Die Besprechung beginnt um neun Uhr.
+
+  - id: n-feierabend
+    type: noun
+    target: Feierabend
+    article: der
+    level: A2
+    gloss: the end of the workday
+    note: "masculine · plural: die Feierabende"
+    example: Ich mache heute um fünf Feierabend.
+
+  - id: n-kollege
+    type: noun
+    target: Kollege
+    article: der
+    level: A2
+    gloss: the colleague
+    note: "masculine · plural: die Kollegen"
+    example: Mein Kollege hilft mir bei dem Projekt.
+
+  - id: v-teilnehmen
+    type: verb
+    target: teilnehmen
+    level: B1
+    gloss: to take part in
+    example: Sie nimmt an dem Kurs teil.
+
+  - id: v-erledigen
+    type: verb
+    target: erledigen
+    level: B1
+    gloss: to get done / take care of
+    example: Ich erledige das bis morgen.
+
+  - id: v-verschieben
+    type: verb
+    target: verschieben
+    level: B1
+    gloss: to postpone
+    example: Können wir den Termin verschieben?
+
+  - id: v-melden
+    type: verb
+    target: melden
+    reflexive: true
+    level: B1
+    gloss: to get in touch
+    example: Ich melde mich morgen bei Ihnen.
+
+  - id: p-geht-klar
+    type: phrase
+    target: Geht klar.
+    level: A2
+    gloss: '"Sure thing / will do."'
+    note: spoken · casual
+    example: „Schickst du mir die Datei?" – „Geht klar."
+
+  - id: p-auf-dem-laufenden
+    type: phrase
+    target: auf dem Laufenden halten
+    level: B1
+    gloss: '"to keep (someone) posted"'
+    note: collocation · office talk
+    example: Halten Sie mich bitte auf dem Laufenden.

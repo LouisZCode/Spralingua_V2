@@ -25,6 +25,7 @@ from sqlalchemy import (
     Boolean,
     ForeignKey,
     Index,
+    Integer,
     Text,
     TIMESTAMP,
     UniqueConstraint,
@@ -101,3 +102,107 @@ class ActivitySession(Base):
         ),
         Index("ix_activity_session_user_lesson", "user_id", "lesson_id"),
     )
+
+
+# ── Satzschmiede (SATZ-002) ──────────────────────────────────────────────
+# Content/state split: ``cards`` is ONE shared canonical catalog (curated
+# rows synced from satz/packs/*.yaml at startup, community rows added by the
+# enricher later); ``user_cards`` is per-user state referencing it. Popularity
+# = COUNT(DISTINCT user_id) per card_id — meaningful only because every pool
+# points at the same canonical row.
+
+
+class VocabCard(Base):
+    __tablename__ = "cards"
+
+    # Slug id from the pack YAML ("n-rechnung", "v-freuen"); community cards
+    # get the same shape minted at insert time.
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    type: Mapped[str] = mapped_column(Text, nullable=False)  # noun|verb|phrase
+    target: Mapped[str] = mapped_column(Text, nullable=False)
+    article: Mapped[str | None] = mapped_column(Text, nullable=True)  # nouns
+    # Verbs whose taught sense needs a reflexive pronoun — hidden on the clue,
+    # required by the examiner (the "teach reflexivity by omission" rule).
+    reflexive: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+    gloss: Mapped[str] = mapped_column(Text, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    example: Mapped[str | None] = mapped_column(Text, nullable=True)
+    level: Mapped[str | None] = mapped_column(Text, nullable=True)  # CEFR hint
+    # "curated" (from YAML, resynced on every boot) | "community" (user-added
+    # via the enricher; never touched by the sync).
+    source: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'curated'")
+    )
+    first_added_by: Mapped[str | None] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+
+    # Dedup seam for the add-a-word flow: one canonical row per (type, word).
+    __table_args__ = (
+        Index("uq_cards_type_target_lower", "type", text("lower(target)"), unique=True),
+    )
+
+
+class Pack(Base):
+    __tablename__ = "packs"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    kind: Mapped[str] = mapped_column(Text, nullable=False)  # level|situation
+    level: Mapped[str | None] = mapped_column(Text, nullable=True)  # display hint
+    position: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+
+
+class PackCard(Base):
+    __tablename__ = "pack_cards"
+
+    pack_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("packs.id", ondelete="CASCADE"), primary_key=True
+    )
+    card_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("cards.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Card order within the pack (YAML order, rewritten on every sync).
+    position: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+
+
+class UserCard(Base):
+    __tablename__ = "user_cards"
+
+    # CASCADE (unlike activity_session's RESTRICT): pool rows are preference
+    # state, not audit data — they should vanish with the user.
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    # RESTRICT: a canonical card that sits in someone's pool must not be deleted.
+    card_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("cards.id", ondelete="RESTRICT"), primary_key=True
+    )
+    added_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+    # Which pack the card arrived from (NULL = added individually).
+    source_pack: Mapped[str | None] = mapped_column(
+        Text, ForeignKey("packs.id", ondelete="SET NULL"), nullable=True
+    )
+    # Scheduling state — columns exist from day one so the scheduler phase is
+    # pure code, no second migration. NULL due_at = "new, never practiced".
+    due_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
+    interval_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reps: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    last_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    # The deck query: "this user's cards that are due".
+    __table_args__ = (Index("ix_user_cards_user_due", "user_id", "due_at"),)

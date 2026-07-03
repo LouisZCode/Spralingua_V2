@@ -72,6 +72,11 @@ async def verify_google_id_token(credential: str) -> dict:
             credential,
             _google_transport,
             google_client_id,
+            # Tolerate small clock drift between this machine and Google —
+            # the library default of 0 rejects fresh tokens as "used too
+            # early" when the local clock runs even a few seconds behind
+            # (observed locally: Mac 6s behind → every sign-in 401'd).
+            clock_skew_in_seconds=10,
         )
     except ValueError as e:
         raise AuthError(f"Invalid Google token: {e}") from e
