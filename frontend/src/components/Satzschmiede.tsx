@@ -7,7 +7,13 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import PackModal from "./satzschmiede/PackModal";
-import { fetchDeck, UnauthorizedError } from "./satzschmiede/api";
+import {
+  fetchDeck,
+  removeCard,
+  submitAttempt,
+  UnauthorizedError,
+  type AttemptResult,
+} from "./satzschmiede/api";
 import type { Card } from "./satzschmiede/deck";
 
 const redShadow = {
@@ -15,8 +21,8 @@ const redShadow = {
 } as React.CSSProperties;
 
 // Vocabulary trainer ("Satzschmiede"). The deck is the user's own pool served
-// by GET /satz/deck. The trainer is the main surface; packs are browsed and
-// added via the "Add a deck" popup (PackModal) — an empty pool shows a CTA
+// by GET /satz/deck. The trainer is the main surface; words and packs are
+// added via the "Add Cards" popup (PackModal) — an empty pool shows a CTA
 // into that popup instead of cards. This component is the auth-guarded page
 // shell + state; VocabTrainer owns the card interaction.
 export default function Satzschmiede() {
@@ -25,7 +31,7 @@ export default function Satzschmiede() {
 
   const [deck, setDeck] = useState<Card[] | null>(null); // null = loading
   const [error, setError] = useState(false);
-  const [packsOpen, setPacksOpen] = useState(false); // the "Add a deck" popup
+  const [packsOpen, setPacksOpen] = useState(false); // the "Add Cards" popup
 
   useEffect(() => {
     if (ready && !token) {
@@ -51,6 +57,41 @@ export default function Satzschmiede() {
   useEffect(() => {
     refreshDeck();
   }, [refreshDeck]);
+
+  const handleRemove = useCallback(
+    async (cardId: string) => {
+      if (!token) return;
+      try {
+        await removeCard(token, cardId);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+          return;
+        }
+        // Non-fatal (e.g. already gone): the refetch below re-syncs the UI.
+      }
+      refreshDeck();
+    },
+    [token, signOut, refreshDeck]
+  );
+
+  // Judge one recorded sentence. Auth errors sign out here (same policy as
+  // every other call); everything else rethrows so the trainer can show a
+  // learner-facing message next to the mic.
+  const handleAttempt = useCallback(
+    async (cardId: string, audio: Blob): Promise<AttemptResult> => {
+      if (!token) throw new UnauthorizedError("/satz/attempts");
+      try {
+        return await submitAttempt(token, cardId, audio);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
 
   if (!ready || !token) {
     return null;
@@ -106,7 +147,7 @@ export default function Satzschmiede() {
               onClick={() => setPacksOpen(true)}
               className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-flag-red-deep"
             >
-              + Add a deck
+              + Add Cards
             </button>
           )}
         </div>
@@ -122,8 +163,8 @@ export default function Satzschmiede() {
               Your pool is empty.
             </h2>
             <p className="mx-auto mt-3 max-w-[360px] font-body text-[15px] leading-relaxed text-ink-soft">
-              Add a deck of words — by level or by situation — and start
-              forging sentences.
+              Grab a pack of words — by level or by situation — or forge your
+              own, and start building sentences.
             </p>
             <button
               type="button"
@@ -131,11 +172,15 @@ export default function Satzschmiede() {
               className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
               style={redShadow}
             >
-              + Add a deck
+              + Add Cards
             </button>
           </div>
         ) : (
-          <VocabTrainer deck={deck} />
+          <VocabTrainer
+            deck={deck}
+            onRemove={handleRemove}
+            onAttempt={handleAttempt}
+          />
         )}
 
         {packsOpen && deck !== null && (

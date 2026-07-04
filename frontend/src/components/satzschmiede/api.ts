@@ -23,6 +23,11 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// Thrown on 422: the backend rejected the input itself (not German, gibberish,
+// a whole sentence). The detail is a learner-facing sentence written by the
+// enricher — show it verbatim instead of a generic failure.
+export class WordRejectedError extends Error {}
+
 async function request<T>(
   path: string,
   token: string,
@@ -34,6 +39,12 @@ async function request<T>(
   });
   if (res.status === 401) {
     throw new UnauthorizedError(path);
+  }
+  if (res.status === 422) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new WordRejectedError(
+      typeof detail === "string" ? detail : "That input didn't work — try a single German word."
+    );
   }
   if (!res.ok) {
     throw new Error(`${path} failed (${res.status})`);
@@ -56,4 +67,46 @@ export async function addPack(
 export async function fetchDeck(token: string): Promise<Card[]> {
   const data = await request<{ cards: Card[] }>("/satz/deck", token);
   return data.cards;
+}
+
+export async function addWord(
+  token: string,
+  word: string
+): Promise<{ card: Card; created: boolean; added: number; poolSize: number }> {
+  return request("/satz/cards", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ word }),
+  });
+}
+
+// The examiner's answer to one spoken attempt (POST /satz/attempts).
+// `verdict` maps straight onto the trainer's card states; "revealed" stays a
+// frontend-only state (the learner peeked instead of attempting).
+export type AttemptResult = {
+  transcript: string;
+  verdict: "correct" | "close";
+  feedback: string;
+  corrected: string | null;
+};
+
+export async function submitAttempt(
+  token: string,
+  cardId: string,
+  audio: Blob
+): Promise<AttemptResult> {
+  // No Content-Type header: the browser sets the multipart boundary itself.
+  const form = new FormData();
+  form.append("card_id", cardId);
+  form.append("audio", audio, "attempt");
+  return request("/satz/attempts", token, { method: "POST", body: form });
+}
+
+export async function removeCard(
+  token: string,
+  cardId: string
+): Promise<{ removed: number; poolSize: number }> {
+  return request(`/satz/deck/${encodeURIComponent(cardId)}`, token, {
+    method: "DELETE",
+  });
 }

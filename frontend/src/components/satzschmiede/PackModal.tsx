@@ -1,11 +1,13 @@
 "use client";
 
 import { createPortal } from "react-dom";
+import AddWordForm from "./AddWordForm";
 import PackGallery from "./PackGallery";
 
-// "Add a deck" popup — hosts the pack gallery in an overlay instead of a
-// full-page view, so the trainer stays the main surface. Same portal pattern
-// as SignInModal (portal to <body> to escape transformed ancestors).
+// "Add Cards" popup — forge a single word (top) or add a whole pack (below),
+// in an overlay instead of a full-page view so the trainer stays the main
+// surface. Same portal pattern as SignInModal (portal to <body> to escape
+// transformed ancestors).
 export default function PackModal({
   token,
   onPoolChanged,
@@ -48,19 +50,33 @@ export default function PackModal({
         </button>
 
         <h2 className="text-center font-display text-[26px] font-black leading-tight text-ink">
-          Add a deck
+          Add Cards
         </h2>
         <p className="mx-auto mt-2 max-w-[340px] text-center font-body text-[14px] leading-relaxed text-ink-soft">
-          Pick a word pack — its words join your personal pool.
+          Forge a single word or grab a whole pack — everything joins your
+          personal pool.
         </p>
 
         <div className="mt-7">
-          <PackGallery
+          <AddWordForm
             token={token}
             onPoolChanged={onPoolChanged}
-            onPractice={canPractice ? onClose : null}
             onUnauthorized={onUnauthorized}
           />
+
+          <div className="mt-8 border-t-[3px] border-ink pt-6">
+            <h3 className="text-center font-display text-[18px] font-black leading-tight text-ink">
+              Or add a whole pack
+            </h3>
+            <div className="mt-5">
+              <PackGallery
+                token={token}
+                onPoolChanged={onPoolChanged}
+                onPractice={canPractice ? onClose : null}
+                onUnauthorized={onUnauthorized}
+              />
+            </div>
+          </div>
         </div>
       </div>
     </div>,
