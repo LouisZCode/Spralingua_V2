@@ -114,10 +114,10 @@ export default function Satzschmiede() {
   const emptyPool = deck !== null && deck.length === 0;
   const label =
     deck === null || error
-      ? "Satzschmiede"
+      ? " "
       : emptyPool
-        ? "Satzschmiede · your pool"
-        : `Satzschmiede · your pool · ${deck.length} words`;
+        ? "your pool"
+        : `your pool · ${deck.length} words`;
 
   return (
     <div className="relative flex min-h-screen flex-col bg-white text-ink">
@@ -151,19 +151,26 @@ export default function Satzschmiede() {
       </header>
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
-        <div className="mb-5 flex items-center justify-center gap-4 text-center">
-          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-            {label}
-          </p>
-          {!error && deck !== null && !emptyPool && (
-            <button
-              type="button"
-              onClick={() => setPacksOpen(true)}
-              className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-flag-red-deep"
-            >
-              + Add Cards
-            </button>
-          )}
+        {/* Page title — the module name reads as a heading; the pool count
+            stays a quiet sub-line next to the Add Cards action. */}
+        <div className="mb-5 text-center">
+          <h1 className="font-display text-[24px] font-black tracking-tight text-ink">
+            Satzschmiede
+          </h1>
+          <div className="mt-1.5 flex items-center justify-center gap-4">
+            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+              {label}
+            </p>
+            {!error && deck !== null && !emptyPool && (
+              <button
+                type="button"
+                onClick={() => setPacksOpen(true)}
+                className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-flag-red-deep"
+              >
+                + Add Cards
+              </button>
+            )}
+          </div>
         </div>
 
         {error ? (

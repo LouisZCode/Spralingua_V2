@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { WordRejectedError, type AttemptResult } from "./api";
 import type { DeckCard } from "./deck";
 
 type Verdict = "correct" | "close" | "revealed";
+
+// Hands-free practice: "running" arms the mic on every card and advances by
+// itself; "paused" freezes the loop; "off" is the classic click-to-record
+// trainer, untouched.
+type AutoState = "off" | "running" | "paused";
 
 // No verdict text anywhere — the tint (green/red/gold) plus a ✓/✕ mark carry
 // the outcome, so the back stays scannable: the word first, the attempt after.
@@ -46,6 +52,10 @@ const goldShadow = {
 // uploading minutes of audio (the backend caps bytes for the same reason).
 const MAX_RECORD_SECONDS = 20;
 
+// The manual tap-to-record mic button is parked (hidden, code kept): the
+// auto session ("Start") is the one practice input for now.
+const SHOW_MANUAL_MIC: boolean = false;
+
 // How many never-practiced words one session introduces — the classic SRS
 // drip. The rest wait in the pool for tomorrow's queue (or the "+ practice
 // more" button on the done panel).
@@ -54,6 +64,23 @@ const NEW_PER_SESSION = 5;
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both
 // as-is, so we just pick the first container the browser supports.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+
+// ── Auto session tuning ────────────────────────────────────────────────
+// The energy VAD: normalized mic RMS in a quiet room sits well under 0.02;
+// speech lands 0.05+. Start needs the louder threshold, silence the softer
+// one (hysteresis), so trailing-off speech doesn't cut a sentence short.
+const AUTO_SPEECH_RMS = 0.04; // level that counts as "started speaking"
+const AUTO_SILENCE_RMS = 0.02; // below this = quiet
+const AUTO_SILENCE_MS = 1800; // quiet this long after speech = sentence done
+const AUTO_NO_SPEECH_MS = 8000; // no speech yet → restart the recorder, card stays
+const AUTO_DWELL_GREEN_MS = 6500; // review time when the word was right
+const AUTO_DWELL_RED_MS = 11000; // longer when there's a correction to read
+const AUTO_TICK_MS = 90; // VAD sampling interval
+
+// Voice-wave strip: a rolling history of mic levels drawn under the mic
+// button, so speaking has visible feedback beyond the timer.
+const WAVE_BARS = 28; // history columns
+const WAVE_GAIN = 9; // rms → bar height; speech (~0.05–0.2 rms) fills the strip
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -91,6 +118,8 @@ export default function VocabTrainer({
   // Record a practice-mode peek as a lapse (fire-and-forget via the parent).
   onReveal: (cardId: string) => void;
 }) {
+  const router = useRouter(); // "End session" leaves for the practice menu
+
   // Two ways to face the pool: "practice" works today's queue (due + a drip
   // of new, shuffled — green pops a card, anything else recycles it); browse
   // is the old free walk over everything, schedule untouched by peeks.
@@ -110,12 +139,24 @@ export default function VocabTrainer({
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
 
+  const [auto, setAuto] = useState<AutoState>("off");
+  const [heardSpeech, setHeardSpeech] = useState(false); // VAD saw speech start
+
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
   const discardRef = useRef(false);
   // Cards finished (green) this session — the deck's srs snapshot still calls
   // them due/new, so re-queueing has to exclude them by hand.
   const doneRef = useRef<Set<string>>(new Set());
+  // Auto-session plumbing: one mic stream + analyser live for the whole
+  // session (no per-card permission churn); the rest is VAD scratch state.
+  const autoStreamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const spokeRef = useRef(false); // speech started on the current card
+  const quietSinceRef = useRef<number | null>(null); // silence run began at
+  const armedAtRef = useRef(0); // recorder start, for the no-speech skip
+  const waveCanvasRef = useRef<HTMLCanvasElement | null>(null); // voice-wave strip
 
   const total = deck.length;
   const byId = new Map(deck.map((c) => [c.id, c] as const));
@@ -192,15 +233,143 @@ export default function VocabTrainer({
   }, [recording]);
 
   // Unmount mid-recording: kill the mic without submitting the partial clip.
+  // An auto session also holds a stream + AudioContext that must die with us.
   useEffect(
     () => () => {
       discardRef.current = true;
       if (recorderRef.current?.state === "recording") {
         recorderRef.current.stop();
       }
+      autoStreamRef.current?.getTracks().forEach((t) => t.stop());
+      audioCtxRef.current?.close().catch(() => {});
     },
     []
   );
+
+  // ── Auto session loop ──────────────────────────────────────────────────
+  // Arm the mic whenever a fresh front-facing card is on screen. Running out
+  // of queue ends the session (the done panel takes over); an attempt error
+  // pauses instead of looping back into the same failure.
+  useEffect(() => {
+    if (auto !== "running") return;
+    if (!card) {
+      exitAuto();
+      return;
+    }
+    if (attemptError) {
+      setAuto("paused");
+      return;
+    }
+    if (browsing || flipped || recording || checking) return;
+    armCard();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- armCard/exitAuto touch only refs+setters; these deps are their real inputs
+  }, [auto, card, browsing, flipped, recording, checking, attemptError]);
+
+  // The energy VAD: sample the analyser while recording. Speech start flips
+  // heardSpeech; a long-enough quiet run after speech submits the clip. The
+  // card itself waits for real speech — thinking time never advances it.
+  useEffect(() => {
+    if (auto !== "running" || !recording) return;
+    const analyser = analyserRef.current;
+    if (!analyser) return;
+    const buf = new Uint8Array(analyser.fftSize);
+    const tick = setInterval(() => {
+      if (recorderRef.current?.state !== "recording") return;
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const d = (buf[i] - 128) / 128;
+        sum += d * d;
+      }
+      const rms = Math.sqrt(sum / buf.length);
+      if (!spokeRef.current) {
+        if (rms >= AUTO_SPEECH_RMS) {
+          spokeRef.current = true;
+          setHeardSpeech(true);
+        } else if (Date.now() - armedAtRef.current >= AUTO_NO_SPEECH_MS) {
+          // Thinking time is free: silently restart the recorder (the arm
+          // effect re-arms this same card) so the pending clip never grows
+          // while we wait — the card only moves on a real attempt.
+          discardRef.current = true;
+          recorderRef.current.stop();
+        }
+      } else if (rms < AUTO_SILENCE_RMS) {
+        if (quietSinceRef.current === null) {
+          quietSinceRef.current = Date.now();
+        } else if (Date.now() - quietSinceRef.current >= AUTO_SILENCE_MS) {
+          stopRecording();
+        }
+      } else {
+        quietSinceRef.current = null;
+      }
+    }, AUTO_TICK_MS);
+    return () => clearInterval(tick);
+  }, [auto, recording]);
+
+  // Review dwell: the verdict hangs around long enough to read — longer when
+  // there's a correction to study — then the loop moves on by itself.
+  useEffect(() => {
+    if (auto !== "running" || !flipped) return;
+    const ms = result?.wordOk ? AUTO_DWELL_GREEN_MS : AUTO_DWELL_RED_MS;
+    const t = setTimeout(() => handleNext(), ms);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNext changes identity every render; adding it would reset the dwell on any re-render
+  }, [auto, flipped, result]);
+
+  // Space = advance the review now; Esc = pause. The listener only exists
+  // while a session is on, so the manual trainer keeps zero keyboard state.
+  useEffect(() => {
+    if (auto === "off") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (auto === "running" && flipped) handleNext();
+      } else if (e.code === "Escape" && auto === "running") {
+        pauseAuto();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deps re-subscribe on the state handleNext/pauseAuto actually read
+  }, [auto, flipped, result, revealed, browsing, queue]);
+
+  // The voice wave: rolling mic levels drawn straight to a canvas at rAF
+  // speed (no React state churn) whenever a recorder is hot — manual clips
+  // carry an analyser too, purely for this strip.
+  useEffect(() => {
+    if (!recording) return;
+    const analyser = analyserRef.current;
+    const canvas = waveCanvasRef.current;
+    const ctx2d = canvas?.getContext("2d");
+    if (!analyser || !canvas || !ctx2d) return;
+    const buf = new Uint8Array(analyser.fftSize);
+    const levels: number[] = new Array(WAVE_BARS).fill(0);
+    ctx2d.fillStyle = getComputedStyle(canvas).color;
+    let raf = 0;
+    const draw = () => {
+      analyser.getByteTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) {
+        const d = (buf[i] - 128) / 128;
+        sum += d * d;
+      }
+      levels.push(Math.min(1, Math.sqrt(sum / buf.length) * WAVE_GAIN));
+      levels.shift();
+      const { width, height } = canvas;
+      ctx2d.clearRect(0, 0, width, height);
+      const bw = width / WAVE_BARS;
+      for (let i = 0; i < WAVE_BARS; i++) {
+        const h = Math.max(4, levels[i] * height);
+        ctx2d.fillRect(i * bw + bw * 0.3, (height - h) / 2, bw * 0.4, h);
+      }
+      raf = requestAnimationFrame(draw);
+    };
+    raf = requestAnimationFrame(draw);
+    return () => {
+      cancelAnimationFrame(raf);
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+    };
+  }, [recording]);
 
   async function startRecording() {
     if (busy || flipped || !card) return;
@@ -215,6 +384,15 @@ export default function VocabTrainer({
       );
       return;
     }
+    // Manual clips get the same analyser auto sessions use — purely to feed
+    // the voice-wave strip. Created per clip, closed with it in onstop.
+    const actx = new AudioContext();
+    const manualAnalyser = actx.createAnalyser();
+    manualAnalyser.fftSize = 1024;
+    actx.createMediaStreamSource(stream).connect(manualAnalyser);
+    void actx.resume();
+    audioCtxRef.current = actx;
+    analyserRef.current = manualAnalyser;
     const mime = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m));
     const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
     const chunks: Blob[] = [];
@@ -223,6 +401,11 @@ export default function VocabTrainer({
     };
     rec.onstop = () => {
       stream.getTracks().forEach((t) => t.stop());
+      actx.close().catch(() => {});
+      if (audioCtxRef.current === actx) {
+        audioCtxRef.current = null;
+        analyserRef.current = null;
+      }
       setRecording(false);
       if (discardRef.current) return;
       void check(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
@@ -315,8 +498,86 @@ export default function VocabTrainer({
 
   function toggleMode() {
     if (busy) return;
+    if (auto !== "off") exitAuto();
     setBrowsing((b) => !b);
     resetScratch();
+  }
+
+  // ── Auto session controls ──────────────────────────────────────────────
+
+  async function startAutoSession() {
+    if (busy || browsing || auto !== "off" || !card) return;
+    setAttemptError(null);
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setAttemptError(
+        "Microphone blocked — allow mic access in your browser and try again."
+      );
+      return;
+    }
+    const ctx = new AudioContext();
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 1024;
+    ctx.createMediaStreamSource(stream).connect(analyser);
+    void ctx.resume(); // Safari can hand the context over suspended
+    autoStreamRef.current = stream;
+    audioCtxRef.current = ctx;
+    analyserRef.current = analyser;
+    setAuto("running"); // the arm effect starts the first card
+  }
+
+  // One recorder per card on the session-long stream. Unlike the manual path,
+  // stopping must NOT kill the stream's tracks — the session owns them.
+  function armCard() {
+    const stream = autoStreamRef.current;
+    if (!stream || recorderRef.current?.state === "recording") return;
+    const mime = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m));
+    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    const chunks: Blob[] = [];
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    rec.onstop = () => {
+      setRecording(false);
+      if (discardRef.current) return;
+      void check(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
+    };
+    discardRef.current = false;
+    recorderRef.current = rec;
+    spokeRef.current = false;
+    quietSinceRef.current = null;
+    armedAtRef.current = Date.now();
+    setHeardSpeech(false);
+    rec.start();
+    setRecording(true);
+  }
+
+  function pauseAuto() {
+    if (recorderRef.current?.state === "recording") {
+      discardRef.current = true;
+      recorderRef.current.stop();
+    }
+    setAuto("paused");
+  }
+
+  function continueAuto() {
+    setAttemptError(null); // otherwise the arm effect re-pauses immediately
+    setAuto("running");
+  }
+
+  function exitAuto() {
+    if (recorderRef.current?.state === "recording") {
+      discardRef.current = true;
+      recorderRef.current.stop();
+    }
+    autoStreamRef.current?.getTracks().forEach((t) => t.stop());
+    autoStreamRef.current = null;
+    audioCtxRef.current?.close().catch(() => {});
+    audioCtxRef.current = null;
+    analyserRef.current = null;
+    setAuto("off");
   }
 
   async function handleRemove() {
@@ -420,7 +681,7 @@ export default function VocabTrainer({
           learner knows which tense to produce. Flips in place. */}
       <div
         className={`flip-scene transition-[height] duration-300 ${
-          grammarNote ? "h-[430px]" : "h-[340px]"
+          grammarNote ? "h-[450px]" : "h-[360px]"
         }`}
       >
         <div className={`flip-card ${flipped ? "is-flipped" : ""}`}>
@@ -557,6 +818,9 @@ export default function VocabTrainer({
           scheduler saying when the card returns). ── */}
       <div className={`mt-6 transition-opacity ${flipped ? "opacity-60" : ""}`}>
         <div className="flex flex-col items-center">
+          {/* The mic button is the manual trainer's control; an auto session
+              runs the mic itself. Parked behind SHOW_MANUAL_MIC for now. */}
+          {SHOW_MANUAL_MIC && auto === "off" && (
           <button
             type="button"
             onClick={recording ? stopRecording : startRecording}
@@ -592,17 +856,87 @@ export default function VocabTrainer({
               </svg>
             )}
           </button>
+          )}
+          {/* Live voice wave — the bars move with the learner's voice while
+              a recorder is hot; the slot keeps its space otherwise so
+              nothing jumps. */}
+          <canvas
+            ref={waveCanvasRef}
+            width={440}
+            height={64}
+            aria-hidden
+            className="mt-3 h-8 w-[220px] text-flag-red"
+          />
           {/* Non-breaking space when idle keeps the height stable, so the
               timer appearing doesn't shove the layout around. */}
-          <p className="mt-3 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
+          <p className="mt-2 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
             {checking
               ? "Checking your sentence…"
               : recording
-                ? `0:${String(elapsed).padStart(2, "0")} · tap to stop`
-                : flipped
-                  ? scheduleLine
-                  : " "}
+                ? auto === "running" && !heardSpeech
+                  ? "Listening — just speak"
+                  : `0:${String(elapsed).padStart(2, "0")}${
+                      auto === "running" ? "" : " · tap to stop"
+                    }`
+                : auto === "paused"
+                  ? "Paused"
+                  : flipped
+                    ? auto === "running"
+                      ? `${scheduleLine} · space →`
+                      : scheduleLine
+                    : "\u00A0"}
           </p>
+
+          {/* Session controls live with the mic: the exercise's one spot to
+              watch. Practice only; browsing keeps peeking penalty-free. */}
+          {!browsing && (
+            <div className="mt-4 flex items-center justify-center gap-3">
+              {auto === "off" && (
+                <button
+                  type="button"
+                  onClick={startAutoSession}
+                  disabled={busy}
+                  className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-red-deep bg-flag-red px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-white disabled:pointer-events-none disabled:opacity-40"
+                  style={redShadow}
+                >
+                  {"\u25B6"} Start
+                </button>
+              )}
+              {auto === "running" && (
+                <button
+                  type="button"
+                  onClick={pauseAuto}
+                  className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-ink bg-white px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink"
+                  style={inkShadow}
+                >
+                  {"\u275A\u275A"} Pause
+                </button>
+              )}
+              {auto === "paused" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={continueAuto}
+                    className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-red-deep bg-flag-red px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-white"
+                    style={redShadow}
+                  >
+                    {"\u25B6"} Continue
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      exitAuto();
+                      router.push("/practice"); // out of the exercise entirely
+                    }}
+                    className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-ink bg-white px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink"
+                    style={inkShadow}
+                  >
+                    {"\u2715"} End session
+                  </button>
+                </>
+              )}
+            </div>
+          )}
         </div>
 
         {attemptError && (
@@ -612,7 +946,7 @@ export default function VocabTrainer({
         )}
 
         {card.example && (
-          <div className="mt-3 text-center">
+          <div className="mt-7 text-center">
             {/* Gold — same tone the card back wears when you peek: revealing
                 is the "hint" path, visually priced as such. In practice mode
                 the peek is also a recorded lapse; browsing is just looking. */}
