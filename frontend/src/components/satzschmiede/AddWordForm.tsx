@@ -98,7 +98,12 @@ export default function AddWordForm({
           {" — "}
           {forged.card.gloss}
           <span className="ml-2 font-body text-[11px] font-black uppercase tracking-[0.14em] text-success">
-            {forged.added > 0 ? "added ✓" : "already in your pool"}
+            {/* Verbs land as a pair (present + spoken past), so say so. */}
+            {forged.added > 1
+              ? `${forged.added} cards ✓`
+              : forged.added > 0
+                ? "added ✓"
+                : "already in your pool"}
           </span>
         </p>
       )}

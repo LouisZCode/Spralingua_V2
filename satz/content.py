@@ -47,6 +47,16 @@ def _validate_card(card: dict, pack_id: str) -> None:
     if card["type"] != "verb" and card.get("reflexive"):
         raise ValueError(f"{where}: 'reflexive' applies to verbs only")
 
+    # Verb tense siblings: `tense: past` marks the spoken-past card; the form
+    # it reveals lives in `tense_form` (the note stays empty — Verbs Rule).
+    if card.get("tense"):
+        if card["type"] != "verb" or card["tense"] != "past":
+            raise ValueError(f"{where}: tense must be 'past', on verb cards only")
+        if not card.get("tense_form"):
+            raise ValueError(f"{where}: past verb cards need a tense_form")
+    elif card.get("tense_form"):
+        raise ValueError(f"{where}: tense_form requires tense")
+
     # Adjectives always reveal their comparison forms on the answer side.
     if card["type"] == "adjective" and not card.get("note"):
         raise ValueError(f"{where}: adjectives need a comparison note")

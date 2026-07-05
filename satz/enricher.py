@@ -57,6 +57,20 @@ class EnrichedCard(BaseModel):
             "comparison note. Verbs: MUST be null"
         ),
     )
+    past_form: Optional[str] = Field(
+        default=None,
+        description=(
+            "Verbs only, null otherwise: the past form as Germans actually "
+            "SPEAK it (see the verb past rules)"
+        ),
+    )
+    past_example: Optional[str] = Field(
+        default=None,
+        description=(
+            "Verbs only, null otherwise: one natural German sentence using "
+            "the verb in that spoken past"
+        ),
+    )
     example: Optional[str] = Field(
         default=None, description="One natural German sentence using the word"
     )
@@ -81,6 +95,9 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
 # Card rules (strict)
 - type "noun": `target` = bare capitalized singular noun. `article` = der/die/das. `note` = "<masculine|feminine|neuter> · plural: die <plural form>" — or "<gender> · no plural" if it has none.
 - type "verb": `target` = bare infinitive, WITHOUT "sich" and without any preposition or case hint. `reflexive` = true only for genuinely reflexive verbs. `note` MUST be null — the learner has to recall case/preposition/reflexivity unaided.
+- type "verb" ALSO fills the past fields (every other type leaves them null):
+  - `past_form`: the past as Germans actually SPEAK it, third person singular. Default is the Perfekt with its auxiliary: "ist geflogen", "hat gedacht". When the Präteritum is also everyday speech for this verb (denken → dachte, wissen → wusste, geben → gab, finden → fand), give both spoken-first: "dachte · hat gedacht". When the Perfekt is unnatural in speech (sein, haben, werden, the modals), give ONLY the Präteritum: "war", "hatte", "wollte". Reflexive verbs include the pronoun: "hat sich gefreut".
+  - `past_example`: one natural German sentence using the verb in that spoken past.
 - type "phrase": `target` = the phrase as naturally written. `note` = one short register/usage hint (e.g. "polite register · when ordering").
 - type "adjective": `target` = the base (positive) form, lowercase. `note` = "comparative: <form> · superlative: am <form>" (e.g. "comparative: schneller · superlative: am schnellsten") — watch for irregulars (gut → besser → am besten, hoch → höher, teuer → teurer). For absolute adjectives that aren't normally compared (schwanger, tot): `note` = "not usually compared".
 - `gloss`: concise English meaning, ONE sense only — the most common everyday sense. If the word is hopelessly ambiguous without context, pick the dominant sense.
@@ -115,6 +132,8 @@ def _normalize(e: EnrichedCard) -> EnrichedCard:
         e.article = None
     if e.type != "verb":
         e.reflexive = False
+        e.past_form = None
+        e.past_example = None
     e.target = t
     return e
 

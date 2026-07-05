@@ -35,6 +35,8 @@ _CARD_CONTENT_FIELDS = (
     "reflexive",
     "gloss",
     "note",
+    "tense",
+    "tense_form",
     "example",
     "level",
 )

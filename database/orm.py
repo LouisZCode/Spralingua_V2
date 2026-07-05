@@ -128,6 +128,13 @@ class VocabCard(Base):
     )
     gloss: Mapped[str] = mapped_column(Text, nullable=False)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Verb tense siblings: NULL = present (the base card), "past" for the
+    # spoken-past sibling forged alongside it — each its own card with its
+    # own schedule, since past-tense recall is a separate skill.
+    tense: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The natural SPOKEN past shown as the answer ("ist geflogen",
+    # "dachte · hat gedacht", "war") — set exactly when tense is.
+    tense_form: Mapped[str | None] = mapped_column(Text, nullable=True)
     example: Mapped[str | None] = mapped_column(Text, nullable=True)
     level: Mapped[str | None] = mapped_column(Text, nullable=True)  # CEFR hint
     # "curated" (from YAML, resynced on every boot) | "community" (user-added
@@ -142,9 +149,16 @@ class VocabCard(Base):
         TIMESTAMP, nullable=False, server_default=text("now()")
     )
 
-    # Dedup seam for the add-a-word flow: one canonical row per (type, word).
+    # Dedup seam for the add-a-word flow: one canonical row per (type, word,
+    # tense) — a verb's present and past siblings share (type, target).
     __table_args__ = (
-        Index("uq_cards_type_target_lower", "type", text("lower(target)"), unique=True),
+        Index(
+            "uq_cards_type_target_lower",
+            "type",
+            text("lower(target)"),
+            text("coalesce(tense, 'present')"),
+            unique=True,
+        ),
     )
 
 

@@ -415,7 +415,9 @@ export default function VocabTrainer({
       </div>
 
       {/* The card — word only, no type badge: capitalization is the signal
-          (nouns capitalized, verbs/phrases not). Flips in place. */}
+          (nouns capitalized, verbs/phrases not). The one exception is a
+          verb's spoken-past sibling, which needs its PAST chip so the
+          learner knows which tense to produce. Flips in place. */}
       <div
         className={`flip-scene transition-[height] duration-300 ${
           grammarNote ? "h-[430px]" : "h-[340px]"
@@ -427,6 +429,11 @@ export default function VocabTrainer({
             <h2 className="font-display text-[clamp(30px,6vw,44px)] font-black leading-[1.05] tracking-tight text-ink">
               {card.target}
             </h2>
+            {card.tense === "past" && (
+              <span className="mt-4 rounded-full border-[2px] border-ink px-3.5 py-1 font-body text-[10px] font-black uppercase tracking-[0.24em] text-ink">
+                past
+              </span>
+            )}
           </div>
 
           {/* ── Back, learn-first split: the word (zone 1), then the
@@ -440,16 +447,27 @@ export default function VocabTrainer({
                   gender), the translation under it, the plural a step lower. */}
               <div className="text-center">
                 <p className="font-display text-[28px] font-black leading-tight text-ink">
-                  {lead && (
-                    <span
-                      className={
-                        card.article ? ARTICLE_COLOR[card.article] : "text-ink"
-                      }
-                    >
-                      {lead}{" "}
-                    </span>
+                  {/* The past sibling's answer IS the spoken form — pronoun
+                      included for reflexives ("hat sich gefreut"), so no
+                      lead needed. */}
+                  {card.tense === "past" && card.tenseForm ? (
+                    card.tenseForm
+                  ) : (
+                    <>
+                      {lead && (
+                        <span
+                          className={
+                            card.article
+                              ? ARTICLE_COLOR[card.article]
+                              : "text-ink"
+                          }
+                        >
+                          {lead}{" "}
+                        </span>
+                      )}
+                      {card.target}
+                    </>
                   )}
-                  {card.target}
                 </p>
                 <p className="mt-1 font-body text-[15px] font-semibold text-ink-soft">
                   {card.gloss}

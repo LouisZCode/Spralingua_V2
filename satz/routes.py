@@ -23,7 +23,7 @@ from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import Pack, PackCard, User, UserCard, VocabCard
 from satz.content import _validate_card
-from satz.enricher import enrich_word
+from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.scheduler import schedule
 
@@ -46,6 +46,9 @@ def _card_payload(c: VocabCard) -> dict:
         payload["reflexive"] = True
     if c.note:
         payload["note"] = c.note
+    if c.tense:
+        payload["tense"] = c.tense
+        payload["tenseForm"] = c.tense_form
     if c.example:
         payload["example"] = c.example
     if c.level:
@@ -175,20 +178,26 @@ async def _find_canonical(db: AsyncSession, word: str) -> VocabCard | None:
         .scalars()
         .all()
     )
+    # A verb's past sibling shares its target — typed input always resolves
+    # to the base (present) card; pairing links the sibling separately.
+    rows = sorted(rows, key=lambda c: c.tense is not None)
     for c in rows:
         if c.target in word:
             return c
     return rows[0] if rows else None
 
 
-async def _fresh_id(db: AsyncSession, card_type: str, target: str) -> str:
+async def _fresh_id(
+    db: AsyncSession, card_type: str, target: str, *, suffix: str = ""
+) -> str:
     """Mint a community card id in the same shape as the pack YAML slugs
-    ("n-feierabend"), suffixing on the rare id collision across targets."""
+    ("n-feierabend"; tense siblings append theirs: "v-fliegen-past"),
+    suffixing a counter on the rare id collision across targets."""
     s = target.lower()
     for a, b in _TRANSLIT:
         s = s.replace(a, b)
     s = re.sub(r"[^a-z0-9]+", "-", s).strip("-") or "wort"
-    base = f"{_ID_PREFIX[card_type]}-{s[:40]}"
+    base = f"{_ID_PREFIX[card_type]}-{s[:40]}{suffix}"
     cid, n = base, 2
     while await db.get(VocabCard, cid) is not None:
         cid = f"{base}-{n}"
@@ -196,10 +205,13 @@ async def _fresh_id(db: AsyncSession, card_type: str, target: str) -> str:
     return cid
 
 
-async def _forge_card(db: AsyncSession, word: str, user_id: str) -> VocabCard:
+async def _forge_card(
+    db: AsyncSession, word: str, user_id: str
+) -> tuple[VocabCard, EnrichedCard]:
     """Catalog miss → enrich via LLM, validate against the curated card rules,
     insert a ``community`` canonical row. Flushed but not committed — the
-    caller commits together with the pool link."""
+    caller commits together with the pool link. Returns the enrichment too so
+    a verb's past sibling can be forged without a second LLM call."""
     try:
         enriched = await enrich_word(word)
     except Exception:
@@ -215,15 +227,16 @@ async def _forge_card(db: AsyncSession, word: str, user_id: str) -> VocabCard:
         )
 
     # The enricher normalizes ("Termine" → "Termin"), so re-check the dedup
-    # seam (type, lower(target)) before inserting a duplicate canonical row.
+    # seam (type, lower(target), present) before inserting a duplicate row.
     existing = await db.scalar(
         select(VocabCard).where(
             VocabCard.type == enriched.type,
             func.lower(VocabCard.target) == enriched.target.lower(),
+            VocabCard.tense.is_(None),
         )
     )
     if existing is not None:
-        return existing
+        return existing, enriched
 
     card = VocabCard(
         id=await _fresh_id(db, enriched.type, enriched.target),
@@ -265,12 +278,83 @@ async def _forge_card(db: AsyncSession, word: str, user_id: str) -> VocabCard:
             select(VocabCard).where(
                 VocabCard.type == enriched.type,
                 func.lower(VocabCard.target) == enriched.target.lower(),
+                VocabCard.tense.is_(None),
             )
         )
         if existing is None:
             raise HTTPException(status_code=502, detail="Couldn't save the card — try again.")
-        return existing
-    return card
+        return existing, enriched
+    return card, enriched
+
+
+async def _ensure_past_sibling(
+    db: AsyncSession,
+    present: VocabCard,
+    user_id: str,
+    enriched: EnrichedCard | None,
+) -> VocabCard | None:
+    """A verb comes as a pair: the base (present) card plus a spoken-past
+    sibling whose answer side shows the form as actually spoken ("ist
+    geflogen", "dachte · hat gedacht"). Find the sibling, or forge it — from
+    the enrichment already in hand on a fresh forge, or one extra enricher
+    call when a catalog hit predates verb pairing. Returns None (with a log)
+    rather than failing the add: the present card alone is still a win."""
+    sibling = await db.scalar(
+        select(VocabCard).where(
+            VocabCard.type == "verb",
+            func.lower(VocabCard.target) == present.target.lower(),
+            VocabCard.tense == "past",
+        )
+    )
+    if sibling is not None:
+        return sibling
+
+    if enriched is None or not enriched.past_form:
+        try:
+            enriched = await enrich_word(present.target)
+        except Exception:
+            logger.exception(
+                "Satz past-sibling enrichment failed for {!r}", present.target
+            )
+            return None
+    if not enriched.past_form:
+        logger.warning(
+            "Satz enricher gave no past form for {!r} — pairing skipped",
+            present.target,
+        )
+        return None
+
+    values = dict(
+        id=await _fresh_id(db, "verb", present.target, suffix="-past"),
+        type="verb",
+        target=present.target,
+        reflexive=present.reflexive,
+        gloss=present.gloss,
+        tense="past",
+        tense_form=enriched.past_form,
+        example=enriched.past_example,
+        level=present.level,
+        source="community",
+        first_added_by=user_id,
+    )
+    try:
+        _validate_card({**values, "article": None, "note": None}, "community")
+    except ValueError as err:
+        logger.warning(
+            "Satz past sibling invalid for {!r}: {}", present.target, err
+        )
+        return None
+
+    # Plain insert would race two learners adding the same verb — DO NOTHING
+    # and re-select instead: whoever's row landed, both link it.
+    await db.execute(pg_insert(VocabCard).values(**values).on_conflict_do_nothing())
+    return await db.scalar(
+        select(VocabCard).where(
+            VocabCard.type == "verb",
+            func.lower(VocabCard.target) == present.target.lower(),
+            VocabCard.tense == "past",
+        )
+    )
 
 
 class WordIn(BaseModel):
@@ -288,7 +372,8 @@ async def add_word(
     Canonical-catalog hit (curated, or a card another learner already forged)
     → just link it, no LLM call. Miss → one cheap structured-output enrichment
     call builds a ``community`` card that then serves everyone — the same
-    shared-canonical model pack cards use.
+    shared-canonical model pack cards use. Verbs arrive as a pair: the base
+    card plus a spoken-past sibling, each on its own schedule.
     """
     word = " ".join(body.word.split())
     if not word:
@@ -307,15 +392,25 @@ async def add_word(
 
     card = await _find_canonical(db, word)
     created = False
+    enriched = None
     if card is None:
-        card = await _forge_card(db, word, user_id)
+        card, enriched = await _forge_card(db, word, user_id)
         created = True
 
-    result = await db.execute(
-        pg_insert(UserCard)
-        .values(user_id=user_id, card_id=card.id)
-        .on_conflict_do_nothing(index_elements=["user_id", "card_id"])
-    )
+    to_link = [card]
+    if card.type == "verb" and card.tense is None:
+        sibling = await _ensure_past_sibling(db, card, user_id, enriched)
+        if sibling is not None:
+            to_link.append(sibling)
+
+    added = 0
+    for c in to_link:
+        result = await db.execute(
+            pg_insert(UserCard)
+            .values(user_id=user_id, card_id=c.id)
+            .on_conflict_do_nothing(index_elements=["user_id", "card_id"])
+        )
+        added += result.rowcount
     payload = _card_payload(card)  # serialize before commit expires the ORM row
     await db.commit()
 
@@ -325,7 +420,7 @@ async def add_word(
     return {
         "card": payload,
         "created": created,
-        "added": result.rowcount,
+        "added": added,
         "poolSize": pool_size,
     }
 

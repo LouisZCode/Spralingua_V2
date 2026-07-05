@@ -114,6 +114,15 @@ def _card_brief(card) -> str:
             "declension ending ('ein schnelles Auto'). Comparative/superlative "
             "forms count as using the word"
         )
+    if card.tense == "past":
+        lines.append(
+            "- this card tests the SPOKEN PAST: the sentence must use the verb "
+            "in a past tense — a correctly built Perfekt OR Präteritum both "
+            "count (Germans speak both). Using the verb in the present or "
+            "future means word_ok=false, even if the sentence is otherwise fine"
+        )
+        if card.tense_form:
+            lines.append(f"- its natural spoken past: {card.tense_form}")
     lines.append(f"- meaning: {card.gloss}")
     if card.note:
         lines.append(f"- grammar note: {card.note}")

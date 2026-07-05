@@ -11,6 +11,8 @@ export type Card = {
   reflexive?: boolean; // reflexive verbs: `sich` is hidden on the clue and shown on the answer — the learner must spot the reflexivity unaided; the examiner must verify the sentence actually uses a reflexive pronoun
   gloss: string; // English meaning
   note?: string; // grammar strip: gender/plural, comparison forms, or register
+  tense?: "past"; // verb tense siblings: the spoken-past card (absent = present/base)
+  tenseForm?: string; // the answer the past card reveals: "ist geflogen", "dachte · hat gedacht"
   example?: string; // optional model sentence, revealable as a hint
   level?: string; // CEFR hint (A1–B2)
 };
