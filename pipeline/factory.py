@@ -27,6 +27,7 @@ from .tts_duration import TTSDurationTracker
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.evaluator import evaluate
+from agents.error_extractor import extract_errors
 from agents.load_goals import load_goal
 from agents.load_prompts import load_prompts
 from agents.load_pronunciation import load_pronunciation_locale
@@ -34,6 +35,7 @@ from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces
 
 from database import create_session_row, finalize_session_row, get_sessionmaker
+from database.repository import load_grammar_focus, load_tandem_notes, record_grammar_error
 
 from logs import setup_session_logger
 
@@ -84,7 +86,7 @@ async def _session_watchdog(task: PipelineTask, timeout_s: float, user_id: str):
     await task.stop_when_done()
 
 
-async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", session_timeout_s: float | None = None, db_user_id: str | None = None):
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -144,8 +146,28 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 f"DB session insert failed (non-fatal): {type(e).__name__}: {e}"
             )
 
+        # Tandem grammar-focus + memory layers (TANDEM-001). The prompt
+        # middleware is sync, so these async DB reads happen here, once at
+        # connect, and ride on Context. Only tandem lessons carry them. Non-fatal:
+        # a DB hiccup just means a less-personalised chat, never a failed connect.
+        grammar_focus: list = []
+        session_notes: list = []
+        if lesson_snapshot.get("type") == "tandem":
+            try:
+                async with get_sessionmaker()() as db:
+                    grammar_focus = await load_grammar_focus(db, user_id=db_user_id)
+                    session_notes = await load_tandem_notes(db, user_id=db_user_id)
+                logger.info(
+                    f"Tandem layers: focus_patterns={len(grammar_focus)} "
+                    f"notes={len(session_notes)} topic={topic!r} user={db_user_id}"
+                )
+            except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
+                logger.warning(
+                    f"Tandem layer fetch failed (non-fatal): {type(e).__name__}: {e}"
+                )
+
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
@@ -339,6 +361,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # didn't run (no goals / no locale / evaluator crashed).
         result = None
         pron_result = None
+        error_result = None
         # Captures any exception from runner.run so the DB finalize can record
         # ended_by="crash". We re-raise immediately so the caller (the WS endpoint)
         # still sees the failure.
@@ -381,6 +404,45 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     )
             except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
                 logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
+            # Post-session grammar-error harvest (GRAM-001 Phase 2, Harvester B).
+            # Same non-fatal contract and goal-gate as the evaluator above, so the
+            # goal-less lessons (lesson_zero / welcome / goodbye_test) are auto-
+            # excluded — no new YAML field. Classified slips land as `error_eval`
+            # on the row AND upsert the ledger with source="situation"; deliberately
+            # NOT surfaced in the drill modal (one feedback voice per mode). The
+            # ledger keys on `db_user_id` (the real users row, like the
+            # activity_session FK), never the per-session `user_id`.
+            try:
+                if wrapper._transcript and load_goal(lesson_id) is not None:
+                    error_result = await extract_errors(
+                        transcript=wrapper.render_transcript(),
+                    )
+                    if error_result.errors:
+                        async with get_sessionmaker()() as db:
+                            for err in error_result.errors:
+                                # Each upsert is its own commit, wrapped so one
+                                # bad row can't abort the rest of the harvest.
+                                try:
+                                    await record_grammar_error(
+                                        db,
+                                        user_id=db_user_id,
+                                        pattern_id=err.pattern_id,
+                                        sentence=err.sentence,
+                                        corrected=err.corrected,
+                                        note=err.note,
+                                        source="situation",
+                                        session_id=session_id,
+                                    )
+                                except Exception:  # noqa: BLE001 — one ledger row must not block the rest
+                                    logger.exception(
+                                        f"Grammar-ledger write failed (pattern {err.pattern_id})"
+                                    )
+                    logger.info(
+                        f"Grammar harvest: patterns={len(error_result.errors)} "
+                        f"lesson={lesson_id}"
+                    )
+            except Exception as e:  # noqa: BLE001 — harvester must not block cleanup
+                logger.warning(f"Grammar extractor failed (non-fatal): {type(e).__name__}: {e}")
             # Post-session pronunciation assessment (PRON-001). Same non-fatal
             # contract as the goal evaluator above: any failure (missing key,
             # Azure outage, count mismatch) is logged and swallowed so audio
@@ -419,6 +481,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     ended_by = "user"
                 goal_eval_dict = result.model_dump() if result is not None else None
                 pron_eval_dict = pron_result.model_dump() if pron_result is not None else None
+                error_eval_dict = error_result.model_dump() if error_result is not None else None
                 passed = goal_eval_dict["passed"] if goal_eval_dict is not None else None
                 async with get_sessionmaker()() as db:
                     await finalize_session_row(
@@ -429,6 +492,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         transcript=wrapper.render_transcript() if wrapper._transcript else None,
                         goal_eval=goal_eval_dict,
                         pron_eval=pron_eval_dict,
+                        error_eval=error_eval_dict,
                         passed=passed,
                     )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal

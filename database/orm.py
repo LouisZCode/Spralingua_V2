@@ -91,6 +91,11 @@ class ActivitySession(Base):
     goal_eval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # PronunciationResult.model_dump() — NULL if the lesson has no locale.
     pron_eval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # ErrorExtraction.model_dump() — the drill's classified grammar slips
+    # (GRAM-001 Phase 2). NULL when the lesson has no goals (same gate as
+    # goal_eval). The durable store is the user_errors ledger; this is the
+    # per-session record, never shown in the drill modal.
+    error_eval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Mirrors goal_eval["passed"] for fast indexed lookup. NULL if no eval ran.
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
 

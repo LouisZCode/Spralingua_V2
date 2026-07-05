@@ -14,7 +14,7 @@ from sqlalchemy import text
 from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
-from agents.load_prompts import load_prompts
+from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
@@ -179,12 +179,20 @@ async def get_session(session_id: str, request: Request):
     }
 
 
+@app.get("/tandem/topics")
+def tandem_topics():
+    """Conversation-topic suggestions for the Grammatik-Tandem topic screen
+    (TANDEM-001). Public, non-sensitive content — same as ``/lessons/{id}``."""
+    return {"topics": load_tandem_topics()}
+
+
 @app.websocket("/ws/{user_id}")
 async def ws_endpoint(
     websocket: WebSocket,
     user_id: str,
     voice: str = "happy_harry",
     lesson: str = "lesson_zero",
+    topic: str = "",
     token: str = "",
 ):
     """Authenticated learn socket (AUTH-001, P-3).
@@ -202,7 +210,8 @@ async def ws_endpoint(
         await websocket.close(code=1008)
         return
     await websocket.accept()
-    await run_pipeline(websocket, sub, voice, lesson)
+    # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
+    await run_pipeline(websocket, sub, voice, lesson, topic=topic)
 
 
 # Demo user ids are minted client-side as `demo-<uuid4>`; pin the shape so the

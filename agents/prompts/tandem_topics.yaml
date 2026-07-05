@@ -1,0 +1,30 @@
+# Grammatik-Tandem topics (TANDEM-001, Phase 3 MVP)
+#
+# Content-as-data, like the lesson YAMLs and satz packs — NOT a lesson, so the
+# lesson loader never touches it. The frontend topic screen shows these as
+# suggestions (random pick + shuffle), and the learner can also type their own
+# ("or talk about…"). The chosen topic rides to the backend as the `?topic=`
+# WebSocket query param and is injected into the tandem short-term layer.
+#
+# Kept as everyday, all-level conversation themes phrased as stage directions
+# (English), so the same string reads naturally both as a user-facing choice
+# AND injected into the (English) persona prompt. The conversation itself is
+# always German. Growing this list is a data edit, not code.
+
+topics:
+  - Your weekend
+  - Food and cooking
+  - Travel and places you've been
+  - Music and concerts
+  - Films and series
+  - Your work or studies
+  - Where you grew up
+  - Hobbies and free time
+  - Your daily routine
+  - Plans and things you're looking forward to
+  - Sport and staying active
+  - Books and what you're reading
+  - The weather and the seasons
+  - Family and friends
+  - City life vs. the countryside
+  - A recent small win or annoyance

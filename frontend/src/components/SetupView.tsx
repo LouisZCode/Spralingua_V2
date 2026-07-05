@@ -82,6 +82,9 @@ const VOICES: Record<string, { label: string; meta: string }> = {
 export interface SessionParams {
   lesson: string;
   voice: string;
+  // Grammatik-Tandem only: the chosen conversation theme, sent as the `?topic=`
+  // WS query param. Undefined for scenario lessons.
+  topic?: string;
 }
 
 export default function SetupView({

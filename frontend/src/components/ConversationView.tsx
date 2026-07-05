@@ -258,6 +258,7 @@ export default function ConversationView({
         `${BASE_WS}/ws/${encodeURIComponent(user.id)}` +
         `?voice=${params.voice}` +
         `&lesson=${params.lesson}` +
+        (params.topic ? `&topic=${encodeURIComponent(params.topic)}` : "") +
         `&token=${encodeURIComponent(token)}`;
       await client.connect({ wsUrl });
     } catch (e) {
