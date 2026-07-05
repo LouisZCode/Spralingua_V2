@@ -44,6 +44,18 @@ from logs import setup_session_logger
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
 
 
+# The voice runtime is German. These lessons stay English: `welcome` is the
+# front-page English concierge (product positioning), `goodbye_test` is a dev
+# fixture, and `b1_l1` still holds English content until its German rewrite
+# (grammar-tandem Phase B) — remove each from this set as it converts.
+ENGLISH_LESSONS = {"welcome", "goodbye_test", "b1_l1"}
+
+
+def lesson_language(lesson_id: str) -> str:
+    """STT/TTS language code for a lesson: 'en' for the English exceptions, 'de' otherwise."""
+    return "en" if lesson_id in ENGLISH_LESSONS else "de"
+
+
 class _NoOpTurnTraceObserver:
     """Stub installed on `PipelineTask._turn_trace_observer` to satisfy
     Pipecat's cleanup path (task.py:670–671), which calls
@@ -92,9 +104,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # Transport: one per client (wraps this specific websocket)
         transport = transport_fastapi_ws(websocket)
 
-        # Fresh services per client
-        stt = stt_deepgram()
-        tts = tts_minimax(session, voice=voice)
+        # Fresh services per client. Language is per-lesson: German runtime,
+        # English only for the `welcome` concierge and other English exceptions.
+        lesson_lang = lesson_language(lesson_id)
+        stt = stt_deepgram(language=lesson_lang)
+        tts = tts_minimax(session, voice=voice, language=lesson_lang)
         converter = TranscriptionToContextConverter()
 
         # Per-client logger
@@ -352,6 +366,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         transcript=wrapper.render_transcript(),
                         goals=goal["goals"],
                         pass_threshold=goal["pass_threshold"],
+                        # Eval language tracks the lesson's runtime language, so a
+                        # German lesson is judged as German and an English one as
+                        # English during the mixed-content migration window.
+                        language="German" if lesson_language(lesson_id) == "de" else "English",
                     )
                     session_logger.write_evaluation(result)
                     passed_count = sum(1 for g in result.goals if g.passed)

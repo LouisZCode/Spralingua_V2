@@ -57,10 +57,20 @@ from .observability import tracer
 # so an opening line like "great to see you" can't end the call on turn 1.
 
 GOODBYE_PHRASES = [
+    # English (welcome concierge + English drills)
     "goodbye", "bye", "see you", "take care",
     "nice talking", "great talking", "good talking",
     "talk to you later", "talk soon", "have a good",
     "have a nice", "it was nice meeting",
+    # German (the German runtime — open chat, drills, tandem). Without these a
+    # German farewell ("Tschüss") would never trip the goodbye-driven disconnect,
+    # so a German session could only ever end on the max_exchanges cap.
+    "tschüss", "tschüs", "tschau", "ciao",
+    "auf wiedersehen", "wiedersehen",
+    "bis bald", "bis später", "bis dann", "bis morgen",
+    "bis zum nächsten mal", "wir sehen uns",
+    "mach's gut", "machs gut", "pass auf dich auf",
+    "schönen tag", "schönes wochenende", "gute nacht", "alles gute",
 ]
 
 
