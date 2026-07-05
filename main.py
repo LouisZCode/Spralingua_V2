@@ -176,6 +176,11 @@ async def get_session(session_id: str, request: Request):
         "passed": row.passed,
         "goal_eval": row.goal_eval,
         "pron_eval": row.pron_eval,
+        # error_eval is surfaced ONLY for tandem (the debrief the TandemDebriefModal
+        # renders). Drill sessions also store an error_eval (the silent grammar
+        # harvest), but feedback separation is the point — never hand it back to a
+        # drill client, which would let it leak into the drill summary modal.
+        "error_eval": row.error_eval if row.lesson_id == "tandem" else None,
     }
 
 

@@ -10,6 +10,7 @@ import type { SessionParams } from "./SetupView";
 import SessionSummaryModal, {
   type CompletionData,
 } from "./SessionSummaryModal";
+import TandemDebriefModal from "./TandemDebriefModal";
 import { useAuth } from "./auth/AuthContext";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 
@@ -153,10 +154,13 @@ export default function ConversationView({
       audioRef.current.srcObject = null;
     }
     const reason: "user" | "agent" = endReasonRef.current ?? "agent";
+    const isTandem = params.lesson === "tandem";
     setShowFinishConfirm(false);
-    // User-initiated finish → no results; go straight back to the lesson list.
+    // User-initiated finish → normally no results; go straight back to the list.
     // The summary (with eval results) is only for lessons the agent completes.
-    if (reason === "user") {
+    // Tandem is the exception: its debrief is shown for EVERY end reason, so a
+    // user-ended tandem still opens the summary (TANDEM-001 Phase 4).
+    if (reason === "user" && !isTandem) {
       onFinish();
       return;
     }
@@ -386,16 +390,25 @@ export default function ConversationView({
         </div>
       )}
 
-      {showSummary && (
-        <SessionSummaryModal
-          lessonTitle={meta?.title ?? ""}
-          briefingGoal={meta?.briefing?.goal ?? null}
-          completion={meta?.completion ?? null}
-          endedBy={endedBy}
-          sessionId={sessionId}
-          onClose={onFinish}
-        />
-      )}
+      {showSummary &&
+        (params.lesson === "tandem" ? (
+          <TandemDebriefModal
+            lessonTitle={meta?.title ?? ""}
+            completion={meta?.completion ?? null}
+            endedBy={endedBy}
+            sessionId={sessionId}
+            onClose={onFinish}
+          />
+        ) : (
+          <SessionSummaryModal
+            lessonTitle={meta?.title ?? ""}
+            briefingGoal={meta?.briefing?.goal ?? null}
+            completion={meta?.completion ?? null}
+            endedBy={endedBy}
+            sessionId={sessionId}
+            onClose={onFinish}
+          />
+        ))}
 
       {showFinishConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-[2px]">

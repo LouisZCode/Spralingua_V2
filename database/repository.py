@@ -222,6 +222,52 @@ async def record_grammar_error(
         raise
 
 
+# Consecutive correct spontaneous productions in tandem sessions before a
+# pattern retires (GRAM-001: "retire on streak >= 2"). One correct use is
+# encouraging; two is acquisition evidence.
+_RETIRE_STREAK = 2
+
+
+async def credit_pattern_success(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    pattern_id: str,
+    session_id: str | None = None,
+) -> str | None:
+    """Credit a spontaneously-correct target pattern in a tandem session (Phase 4).
+
+    The success counterpart to :func:`record_grammar_error`: where a slip resets
+    the streak and reopens the pattern, a clean spontaneous production bumps the
+    retire ``streak`` and retires the pattern once it reaches ``_RETIRE_STREAK``.
+    Only ``streak`` / ``status`` / ``last_seen`` move — ``occurrences`` (lifetime
+    error count) and the ``examples`` ring buffer are untouched, since nothing
+    went wrong.
+
+    Returns the resulting ``status`` (``"open"`` | ``"retired"``) so the caller
+    can flag a fresh retirement for the debrief modal, or ``None`` if the row is
+    gone (the pattern was removed between connect and debrief). Same contract as
+    the sibling ledger ops: re-raises on ``SQLAlchemyError``, caller owns the
+    non-fatal wrapping.
+    """
+    try:
+        row = await db.get(UserError, (user_id, pattern_id))
+        if row is None:
+            return None
+        row.streak += 1
+        row.last_seen = datetime.now()
+        row.last_source = "tandem"
+        if session_id:
+            row.last_session_id = session_id
+        if row.streak >= _RETIRE_STREAK:
+            row.status = "retired"
+        await db.commit()
+        return row.status
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
 # How many of the learner's own recent slips each focus pattern carries into
 # the tandem prompt (from the tail of the ledger ring buffer).
 _GRAMMAR_FOCUS_EXAMPLES = 2

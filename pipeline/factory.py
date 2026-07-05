@@ -28,14 +28,22 @@ from .tts_duration import TTSDurationTracker
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.evaluator import evaluate
 from agents.error_extractor import extract_errors
+from agents.debrief import debrief as run_debrief
 from agents.load_goals import load_goal
 from agents.load_prompts import load_prompts
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces
 
+from grammar import load_taxonomy
+
 from database import create_session_row, finalize_session_row, get_sessionmaker
-from database.repository import load_grammar_focus, load_tandem_notes, record_grammar_error
+from database.repository import (
+    credit_pattern_success,
+    load_grammar_focus,
+    load_tandem_notes,
+    record_grammar_error,
+)
 
 from logs import setup_session_logger
 
@@ -362,6 +370,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         result = None
         pron_result = None
         error_result = None
+        # The tandem debrief (Phase 4) stores an already-enriched dict (labels +
+        # per-pattern `retired` flags) rather than a bare model dump, so it lands
+        # in `error_eval` on its own path below. Mutually exclusive with the
+        # drill `error_result` — a session is one lesson, tandem or drill.
+        debrief_eval_dict = None
         # Captures any exception from runner.run so the DB finalize can record
         # ended_by="crash". We re-raise immediately so the caller (the WS endpoint)
         # still sees the failure.
@@ -443,6 +456,122 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     )
             except Exception as e:  # noqa: BLE001 — harvester must not block cleanup
                 logger.warning(f"Grammar extractor failed (non-fatal): {type(e).__name__}: {e}")
+            # Post-session tandem debrief (TANDEM-001 / GRAM-001 Phase 4). Gated
+            # on the tandem lesson type — tandem has no goals and no locale, so
+            # goal eval, drill harvest, and pron assessment all auto-skip and the
+            # debrief is its ONE feedback voice. One structured-output call judges
+            # the session's target patterns (the same `grammar_focus` the prompt
+            # steered toward), harvests new errors, and writes a memory note; the
+            # streak/retire lifecycle is applied to the ledger right here. Runs for
+            # ALL end reasons (a user-ended tandem still gets its debrief). Same
+            # non-fatal contract as the evaluators above; the enriched result
+            # (taxonomy labels + per-pattern `retired` flags) is stored as
+            # `error_eval` for the debrief modal, and its `session_note` is what
+            # `load_tandem_notes` feeds into the next session's memory layer.
+            try:
+                if wrapper._transcript and lesson_snapshot.get("type") == "tandem":
+                    focus = wrapper.context.grammar_focus
+                    debrief_result = await run_debrief(
+                        transcript=wrapper.render_transcript(),
+                        focus=focus,
+                        topic=topic,
+                    )
+                    retired_ids: set[str] = set()
+                    async with get_sessionmaker()() as db:
+                        # Target patterns: a clean spontaneous production advances
+                        # the streak (retire at 2); a slip reopens/resets exactly
+                        # like a fresh recurrence (record_grammar_error). Un-elicited
+                        # targets are left untouched — no evidence either way.
+                        for p in debrief_result.patterns:
+                            if not p.elicited:
+                                continue
+                            try:
+                                if p.produced_correctly:
+                                    status = await credit_pattern_success(
+                                        db,
+                                        user_id=db_user_id,
+                                        pattern_id=p.pattern_id,
+                                        session_id=session_id,
+                                    )
+                                    if status == "retired":
+                                        retired_ids.add(p.pattern_id)
+                                elif p.evidence and p.evidence.strip().lower() != "none":
+                                    await record_grammar_error(
+                                        db,
+                                        user_id=db_user_id,
+                                        pattern_id=p.pattern_id,
+                                        sentence=p.evidence,
+                                        corrected=p.corrected or None,
+                                        note=p.note or None,
+                                        source="tandem",
+                                        session_id=session_id,
+                                    )
+                            except Exception:  # noqa: BLE001 — one row must not block the rest
+                                logger.exception(
+                                    f"Tandem ledger write failed (target {p.pattern_id})"
+                                )
+                        # New (non-target) errors: plain ledger upserts, same as
+                        # the drill harvester, source="tandem".
+                        for e in debrief_result.new_errors:
+                            try:
+                                await record_grammar_error(
+                                    db,
+                                    user_id=db_user_id,
+                                    pattern_id=e.pattern_id,
+                                    sentence=e.sentence,
+                                    corrected=e.corrected,
+                                    note=e.note,
+                                    source="tandem",
+                                    session_id=session_id,
+                                )
+                            except Exception:  # noqa: BLE001 — one row must not block the rest
+                                logger.exception(
+                                    f"Tandem ledger write failed (new {e.pattern_id})"
+                                )
+                    # Enrich for the debrief modal: taxonomy labels + which
+                    # patterns retired this session. `session_note` rides along in
+                    # the stored payload (load_tandem_notes reads it) but the modal
+                    # keeps it private.
+                    catalog = load_taxonomy()
+
+                    def _label(pid: str) -> str:
+                        pat = catalog.get(pid)
+                        return pat["label"] if pat else pid
+
+                    debrief_eval_dict = {
+                        "kind": "tandem_debrief",
+                        "session_note": debrief_result.session_note,
+                        "patterns": [
+                            {
+                                "pattern_id": p.pattern_id,
+                                "label": _label(p.pattern_id),
+                                "elicited": p.elicited,
+                                "produced_correctly": p.produced_correctly,
+                                "evidence": p.evidence,
+                                "corrected": p.corrected,
+                                "note": p.note,
+                                "retired": p.pattern_id in retired_ids,
+                            }
+                            for p in debrief_result.patterns
+                        ],
+                        "new_errors": [
+                            {
+                                "pattern_id": e.pattern_id,
+                                "label": _label(e.pattern_id),
+                                "sentence": e.sentence,
+                                "corrected": e.corrected,
+                                "note": e.note,
+                            }
+                            for e in debrief_result.new_errors
+                        ],
+                    }
+                    logger.info(
+                        f"Tandem debrief: targets={len(debrief_result.patterns)} "
+                        f"retired={len(retired_ids)} new={len(debrief_result.new_errors)} "
+                        f"note={'yes' if debrief_result.session_note else 'no'}"
+                    )
+            except Exception as e:  # noqa: BLE001 — debrief must not block cleanup
+                logger.warning(f"Tandem debrief failed (non-fatal): {type(e).__name__}: {e}")
             # Post-session pronunciation assessment (PRON-001). Same non-fatal
             # contract as the goal evaluator above: any failure (missing key,
             # Azure outage, count mismatch) is logged and swallowed so audio
@@ -481,7 +610,15 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     ended_by = "user"
                 goal_eval_dict = result.model_dump() if result is not None else None
                 pron_eval_dict = pron_result.model_dump() if pron_result is not None else None
-                error_eval_dict = error_result.model_dump() if error_result is not None else None
+                # error_eval carries the drill harvest (a model dump) OR the
+                # tandem debrief (an already-enriched dict) — never both in one
+                # session. The tandem dict wins when present.
+                if debrief_eval_dict is not None:
+                    error_eval_dict = debrief_eval_dict
+                elif error_result is not None:
+                    error_eval_dict = error_result.model_dump()
+                else:
+                    error_eval_dict = None
                 passed = goal_eval_dict["passed"] if goal_eval_dict is not None else None
                 async with get_sessionmaker()() as db:
                     await finalize_session_row(
