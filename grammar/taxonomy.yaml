@@ -1,0 +1,281 @@
+# Grammar-pattern taxonomy (GRAM-001) — the fixed catalog of German error
+# patterns the extractors classify into. One entry per STRUCTURAL pattern;
+# purely lexical slips (a noun's gender misremembered, a wrong word sense)
+# are deliberately absent — those belong to the vocabulary card's own SRS.
+#
+# Fields per pattern (all required):
+#   id          — stable slug; ledger PK part, never rename once rows exist
+#   label       — short human/LLM-facing name
+#   level       — CEFR tier where the pattern is typically acquired
+#   description — one learner-facing line stating the rule
+#   wrong/right — a minimal contrast pair (used by classifying LLMs)
+#   elicit      — how a conversation partner naturally provokes the structure
+#                 (consumed by the tandem grammar-focus layer, Phase 3)
+
+patterns:
+  # ── A1 ──────────────────────────────────────────────────────────────────
+  - id: v2-wortstellung
+    label: Verb-second word order
+    level: A1
+    description: "In a main clause the conjugated verb is always the second element — starting with Heute/Dann/Deshalb pulls the subject behind the verb."
+    wrong: "Heute ich gehe ins Kino."
+    right: "Heute gehe ich ins Kino."
+    elicit: "Ask questions that invite a fronted time or reason word: 'Was machst du heute?', 'Und dann?', 'Und deshalb?'"
+
+  - id: subjekt-verb-endung
+    label: Present-tense verb endings
+    level: A1
+    description: "The present-tense ending must agree with the subject: ich -e, du -st, er/sie/es -t, wir/sie -en."
+    wrong: "Mein Bruder wohnen in Berlin."
+    right: "Mein Bruder wohnt in Berlin."
+    elicit: "Ask about third persons — family, friends, colleagues — so answers need er/sie forms."
+
+  - id: sein-vs-haben
+    label: sein vs. haben in fixed pairs
+    level: A1
+    description: "States like Hunger, Durst and Angst take haben; adjectives like müde or krank take sein."
+    wrong: "Ich bin Hunger."
+    right: "Ich habe Hunger."
+    elicit: "Ask how they feel right now — tired, hungry, thirsty, in a hurry."
+
+  - id: akkusativ-artikel
+    label: Accusative article for direct objects
+    level: A1
+    description: "A masculine article changes to den/einen when the noun is the direct object."
+    wrong: "Ich sehe der Mann."
+    right: "Ich sehe den Mann."
+    elicit: "Ask what they see, buy, want or order — steer toward masculine nouns (der Kaffee, der Film, der Tisch)."
+
+  - id: nicht-vs-kein
+    label: Negation with nicht vs. kein
+    level: A1
+    description: "Nouns are negated with kein-; verbs and adjectives with nicht."
+    wrong: "Ich habe nicht Zeit."
+    right: "Ich habe keine Zeit."
+    elicit: "Ask about things they don't have or don't do — time, pets, plans."
+
+  - id: modalverb-infinitiv-ende
+    label: Modal verb sends the infinitive to the end
+    level: A1
+    description: "With möchten/können/müssen/wollen the second verb stands at the end of the sentence as an infinitive."
+    wrong: "Ich will gehen ins Kino."
+    right: "Ich will ins Kino gehen."
+    elicit: "Ask about wishes, plans and abilities: 'Was möchtest du am Wochenende machen?'"
+
+  - id: trennbare-verben
+    label: Separable-verb prefix at the end
+    level: A1
+    description: "In a main clause the prefix of a separable verb splits off and goes to the end."
+    wrong: "Ich aufstehe um sieben."
+    right: "Ich stehe um sieben auf."
+    elicit: "Ask about the daily routine — aufstehen, anfangen, einkaufen, anrufen, fernsehen."
+
+  - id: pronomen-akk-dat
+    label: Pronoun case (mich/mir, dich/dir)
+    level: A1
+    description: "Personal pronouns change with case — anrufen/sehen/fragen take mich/dich; helfen/danken and most prepositions take mir/dir."
+    wrong: "Kannst du mir morgen anrufen?"
+    right: "Kannst du mich morgen anrufen?"
+    elicit: "Talk about calling, visiting and helping each other — sentences with me/you as the object."
+
+  - id: possessiv-endung
+    label: Possessive article endings
+    level: A1
+    description: "mein/dein/sein/ihr take the same endings as ein/eine — they must agree with the noun's gender and case."
+    wrong: "Mein Schwester wohnt hier."
+    right: "Meine Schwester wohnt hier."
+    elicit: "Ask about family and belongings: 'Erzähl mir von deiner Familie.'"
+
+  - id: fragen-wortstellung
+    label: Question word order
+    level: A1
+    description: "The verb comes right after the question word — and first in yes/no questions."
+    wrong: "Wo du wohnst?"
+    right: "Wo wohnst du?"
+    elicit: "Invite the learner to ask YOU things: 'Frag mich doch auch mal etwas!'"
+
+  - id: am-um-im-zeit
+    label: Time prepositions am/um/im
+    level: A1
+    description: "am + day or part of day, um + clock time, im + month or season."
+    wrong: "Ich arbeite in Montag."
+    right: "Ich arbeite am Montag."
+    elicit: "Ask when things happen — days, clock times, months, seasons."
+
+  # ── A2 ──────────────────────────────────────────────────────────────────
+  - id: perfekt-aux-sein
+    label: Perfekt with sein for movement/change
+    level: A2
+    description: "Verbs of movement or change of state (gehen, fahren, aufstehen, bleiben) build the Perfekt with sein, not haben."
+    wrong: "Ich habe nach Berlin gefahren."
+    right: "Ich bin nach Berlin gefahren."
+    elicit: "Ask about past trips and how they got places: 'Wie bist du dahin gekommen?'"
+
+  - id: partizip2-form
+    label: Partizip II formation
+    level: A2
+    description: "Strong verbs change their stem in the Partizip II (trinken → getrunken, gehen → gegangen); it can't be built with -t alone."
+    wrong: "Ich habe Tee getrinkt."
+    right: "Ich habe Tee getrunken."
+    elicit: "Ask what they ate, drank, saw or read recently."
+
+  - id: perfekt-satzklammer
+    label: Partizip II at the end (sentence bracket)
+    level: A2
+    description: "haben/sein stays in position two and the Partizip II closes the sentence — everything else sits inside the bracket."
+    wrong: "Ich habe gekauft ein Buch."
+    right: "Ich habe ein Buch gekauft."
+    elicit: "Ask about yesterday with enough detail that objects land between the two verbs: 'Was hast du gestern gemacht?'"
+
+  - id: nebensatz-verbende
+    label: weil/dass/wenn send the verb to the end
+    level: A2
+    description: "In a subordinate clause (weil, dass, wenn, obwohl) the conjugated verb moves to the very end."
+    wrong: "Ich bleibe zu Hause, weil ich habe keine Zeit."
+    right: "Ich bleibe zu Hause, weil ich keine Zeit habe."
+    elicit: "Ask why-questions and opinions: 'Warum …?', 'Glaubst du, dass …?'"
+
+  - id: wechselpraepositionen
+    label: Two-way prepositions (Akk vs. Dat)
+    level: A2
+    description: "in/an/auf/über/unter take the accusative for direction (wohin?) and the dative for location (wo?)."
+    wrong: "Ich gehe in dem Supermarkt."
+    right: "Ich gehe in den Supermarkt."
+    elicit: "Mix where-to and where questions: 'Wohin gehst du gleich? Und wo bist du jetzt?'"
+
+  - id: dativ-praepositionen
+    label: Dative-only prepositions
+    level: A2
+    description: "mit, nach, bei, von, zu, aus and seit always take the dative."
+    wrong: "Ich wohne mit meinen Bruder."
+    right: "Ich wohne mit meinem Bruder."
+    elicit: "Ask who they do things with and where they come from: 'Mit wem …?', 'Woher …?'"
+
+  - id: akkusativ-praepositionen
+    label: Accusative-only prepositions
+    level: A2
+    description: "für, ohne, gegen, durch and um always take the accusative."
+    wrong: "Das Geschenk ist für mein Vater."
+    right: "Das Geschenk ist für meinen Vater."
+    elicit: "Ask who things are for and what they couldn't live without: 'Für wen …?', 'Ohne was …?'"
+
+  - id: dativ-verben
+    label: Dative verbs (helfen, danken, gefallen)
+    level: A2
+    description: "helfen, danken, gefallen, gehören and antworten take a dative object, not an accusative one."
+    wrong: "Ich helfe meine Mutter."
+    right: "Ich helfe meiner Mutter."
+    elicit: "Ask whom they help and what they like: 'Wem hilfst du manchmal?', 'Gefällt dir …?'"
+
+  - id: komparativ-form
+    label: Comparative with -er, not "mehr"
+    level: A2
+    description: "German comparatives add -er to the adjective (+ als); 'mehr + adjective' is English grammar."
+    wrong: "Der Sommer ist mehr schön als der Winter."
+    right: "Der Sommer ist schöner als der Winter."
+    elicit: "Invite comparisons — two cities, seasons, foods: 'Was ist besser, X oder Y? Warum?'"
+
+  - id: reflexivpronomen
+    label: Reflexive verbs need their pronoun
+    level: A2
+    description: "Reflexive verbs (sich freuen, sich treffen, sich erinnern) are incomplete without the matching pronoun."
+    wrong: "Ich freue auf das Wochenende."
+    right: "Ich freue mich auf das Wochenende."
+    elicit: "Ask what they look forward to, how they relax, whom they meet."
+
+  - id: praeteritum-sein-haben-modal
+    label: war/hatte/wollte instead of Perfekt
+    level: A2
+    description: "In speech, sein, haben and the modal verbs use the Präteritum (war, hatte, wollte, konnte) — their Perfekt sounds unnatural."
+    wrong: "Ich habe gestern müde gewesen."
+    right: "Ich war gestern müde."
+    elicit: "Ask how yesterday or the weekend was, and what they wanted to do."
+
+  - id: zu-infinitiv
+    label: zu + infinitive
+    level: A2
+    description: "After verbs like vergessen, versuchen and anfangen, and phrases like 'keine Lust haben', the infinitive needs zu."
+    wrong: "Ich habe vergessen, das Fenster schließen."
+    right: "Ich habe vergessen, das Fenster zu schließen."
+    elicit: "Ask what they forgot, are trying to do, or have no time or desire to do."
+
+  # ── B1 ──────────────────────────────────────────────────────────────────
+  - id: adjektivendungen
+    label: Attributive adjective endings
+    level: B1
+    description: "An adjective before a noun needs an ending matching gender, case and article type; only predicative use (after sein) is endingless."
+    wrong: "Das ist ein große Haus."
+    right: "Das ist ein großes Haus."
+    elicit: "Ask for descriptions — their flat, city, favourite food — pushing for adjective + noun."
+
+  - id: konjunktiv2-hypothese
+    label: Konjunktiv II for hypotheticals
+    level: B1
+    description: "Unreal or imagined situations take wäre/hätte/würde + infinitive, not the present tense."
+    wrong: "Wenn ich reich bin, kaufe ich ein Haus."
+    right: "Wenn ich reich wäre, würde ich ein Haus kaufen."
+    elicit: "Ask what-if questions: lottery win, a superpower, living anywhere."
+
+  - id: relativsatz
+    label: Relative clauses
+    level: B1
+    description: "A relative clause takes the matching pronoun (der/die/das/dem/den …) and sends its verb to the end."
+    wrong: "Der Kollege, der sitzt neben mir, ist nett."
+    right: "Der Kollege, der neben mir sitzt, ist nett."
+    elicit: "Ask them to describe people and things in more detail: 'Was für ein Mensch ist das?'"
+
+  - id: indirekte-frage
+    label: Indirect questions
+    level: B1
+    description: "After 'Ich weiß nicht' or 'Kannst du mir sagen', the question word keeps its verb at the end; yes/no questions take ob."
+    wrong: "Ich weiß nicht, wo ist der Bahnhof."
+    right: "Ich weiß nicht, wo der Bahnhof ist."
+    elicit: "Model uncertainty and invite relayed questions: 'Weißt du, ob …?'"
+
+  - id: als-vs-wenn
+    label: als vs. wenn for past events
+    level: B1
+    description: "A one-time past situation takes als; wenn is for repeated events and conditions."
+    wrong: "Wenn ich ein Kind war, habe ich in Spanien gewohnt."
+    right: "Als ich ein Kind war, habe ich in Spanien gewohnt."
+    elicit: "Ask about childhood and single past moments: 'Wie war das, als du …?'"
+
+  - id: verben-mit-praepositionen
+    label: Verb + fixed preposition
+    level: B1
+    description: "Many verbs bind a fixed preposition with a fixed case: warten auf + Akk, denken an + Akk, sich interessieren für + Akk."
+    wrong: "Ich warte für den Bus."
+    right: "Ich warte auf den Bus."
+    elicit: "Ask what they're waiting for, thinking about, interested in."
+
+  - id: passiv-werden
+    label: Passive with werden
+    level: B1
+    description: "The processual passive is werden + Partizip II (wird gebaut, wurde gebaut); sein + Partizip states only a result."
+    wrong: "Das Brot ist jeden Morgen gebacken."
+    right: "Das Brot wird jeden Morgen gebacken."
+    elicit: "Talk about how things are made or done: 'Wie wird das bei euch gemacht?'"
+
+  - id: n-deklination
+    label: Weak nouns (n-declension)
+    level: B1
+    description: "Weak masculine nouns (Kollege, Student, Junge, Herr, Mensch) add -(e)n in every case except the nominative."
+    wrong: "Ich habe einen Kollege gefragt."
+    right: "Ich habe einen Kollegen gefragt."
+    elicit: "Ask about colleagues, neighbours and other people in their life."
+
+  - id: um-zu-damit
+    label: Purpose clauses (um…zu / damit)
+    level: B1
+    description: "Purpose is expressed with um…zu + infinitive (same subject) or damit + clause (different subject) — never with 'für + infinitive'."
+    wrong: "Ich lerne Deutsch für in Deutschland arbeiten."
+    right: "Ich lerne Deutsch, um in Deutschland zu arbeiten."
+    elicit: "Ask why and what-for: 'Warum machst du das? Wozu?'"
+
+  - id: da-wo-komposita
+    label: da-/wo-compounds
+    level: B1
+    description: "A preposition + es/das collapses into darauf/darüber/davon; questions use worauf/worüber."
+    wrong: "Ich freue mich auf es."
+    right: "Ich freue mich darauf."
+    elicit: "Refer back to things just mentioned ('Freust du dich darauf?') and see whether they mirror the form."

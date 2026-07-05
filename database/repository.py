@@ -20,7 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .orm import ActivitySession, User
+from .orm import ActivitySession, User, UserError
 
 
 async def create_session_row(
@@ -144,6 +144,75 @@ async def upsert_user(
         role = result.scalar_one()
         await db.commit()
         return role
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+# How many of the learner's own slips each ledger row keeps (ring buffer).
+_MAX_LEDGER_EXAMPLES = 5
+
+
+async def record_grammar_error(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    pattern_id: str,
+    sentence: str,
+    corrected: str | None,
+    note: str | None,
+    source: str,
+    session_id: str | None = None,
+) -> None:
+    """Upsert one classified slip into the grammar-error ledger (GRAM-001).
+
+    One row per (user, pattern): a new pattern inserts with the column
+    defaults (occurrences=1, status='open'); a recurrence bumps
+    ``occurrences``, resets the retire ``streak``, REOPENS a retired pattern,
+    and appends the learner's own sentence to the ``examples`` ring buffer
+    (most recent last, capped at ``_MAX_LEDGER_EXAMPLES``).
+
+    Same contract as the session-row ops: re-raises on ``SQLAlchemyError``,
+    the caller owns the non-fatal wrapping — a ledger outage must never
+    break the practice attempt it rides on.
+
+    Read-modify-write, not ON CONFLICT: the ring-buffer append doesn't
+    express cleanly in SQL, and one user's attempts are sequential — there
+    is no concurrent writer for a given (user, pattern) in practice.
+    """
+    now = datetime.now()
+    example: dict = {
+        "sentence": sentence,
+        "corrected": corrected,
+        "note": note,
+        "source": source,
+        "at": now.isoformat(timespec="seconds"),
+    }
+    if session_id:
+        example["session_id"] = session_id
+    try:
+        row = await db.get(UserError, (user_id, pattern_id))
+        if row is None:
+            db.add(
+                UserError(
+                    user_id=user_id,
+                    pattern_id=pattern_id,
+                    first_seen=now,
+                    last_seen=now,
+                    last_source=source,
+                    last_session_id=session_id,
+                    examples=[example],
+                )
+            )
+        else:
+            row.status = "open"
+            row.streak = 0
+            row.occurrences += 1
+            row.last_seen = now
+            row.last_source = source
+            row.last_session_id = session_id
+            row.examples = (row.examples or [])[-(_MAX_LEDGER_EXAMPLES - 1):] + [example]
+        await db.commit()
     except SQLAlchemyError:
         await db.rollback()
         raise

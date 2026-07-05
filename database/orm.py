@@ -220,3 +220,50 @@ class UserCard(Base):
 
     # The deck query: "this user's cards that are due".
     __table_args__ = (Index("ix_user_cards_user_due", "user_id", "due_at"),)
+
+
+# ── Grammatik-Tandem (GRAM-001) ──────────────────────────────────────────
+# The error ledger: one row per (user, grammar pattern) — the ledger tracks
+# PATTERNS, not individual slips. ``pattern_id`` is a slug from
+# ``grammar/taxonomy.yaml``; deliberately not an FK — the taxonomy is
+# content-as-data (like lesson YAMLs), validated against the loaded catalog
+# at write time instead.
+
+
+class UserError(Base):
+    __tablename__ = "user_errors"
+
+    # CASCADE like user_cards: ledger rows are learning state, not audit data.
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    pattern_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # "open" | "retired" — retired at streak >= 2 (two consecutive correct
+    # spontaneous productions in tandem sessions); any recurrence reopens.
+    status: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'open'")
+    )
+    streak: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    # Lifetime error count across all modes.
+    occurrences: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("1")
+    )
+    first_seen: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+    last_seen: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+    # "satz" | "situation" | "tandem" — where the pattern last surfaced.
+    last_source: Mapped[str] = mapped_column(Text, nullable=False)
+    # activity_session id (hex) for conversation sources; NULL from satz.
+    last_session_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Ring buffer of the learner's own slips, most recent last, capped at 5:
+    # [{sentence, corrected, note, source, at, session_id?}, …] — this is what
+    # the tandem grammar-focus layer and the debrief quote back to the learner.
+    examples: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+
+    # The tandem prompt-layer query: "this user's open patterns".
+    __table_args__ = (Index("ix_user_errors_user_status", "user_id", "status"),)
