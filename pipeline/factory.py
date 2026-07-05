@@ -30,7 +30,7 @@ from agents.evaluator import evaluate
 from agents.error_extractor import extract_errors
 from agents.debrief import debrief as run_debrief
 from agents.load_goals import load_goal
-from agents.load_prompts import load_prompts
+from agents.load_prompts import list_lesson_ids, load_prompts
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces
@@ -65,6 +65,26 @@ ENGLISH_LESSONS = {"welcome", "goodbye_test", "lesson_zero"}
 def lesson_language(lesson_id: str) -> str:
     """STT/TTS language code for a lesson: 'en' for the English exceptions, 'de' otherwise."""
     return "en" if lesson_id in ENGLISH_LESSONS else "de"
+
+
+def validate_lesson_languages() -> None:
+    """Fail-loud startup cross-check of the two per-lesson language sources.
+
+    ``ENGLISH_LESSONS`` drives STT/TTS/goal-eval language; the YAML ``locale:``
+    drives Azure pronunciation — maintained independently, with nothing else
+    tying them together. A lesson whose locale's primary subtag contradicts
+    ``lesson_language()`` would be transcribed in one language and
+    pronunciation-scored in another, silently. Called from the FastAPI
+    lifespan, so a drifted lesson aborts startup like a bad DB or satz pack.
+    """
+    for lid in list_lesson_ids():
+        locale = load_prompts(lid).get("locale")
+        if locale and locale.split("-")[0].lower() != lesson_language(lid):
+            raise RuntimeError(
+                f"Lesson {lid!r}: locale {locale!r} contradicts "
+                f"lesson_language()={lesson_language(lid)!r} — update "
+                f"ENGLISH_LESSONS or the lesson's locale"
+            )
 
 
 class _NoOpTurnTraceObserver:
@@ -117,7 +137,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
 
         # Fresh services per client. Language is per-lesson: German runtime,
         # English only for the `welcome` concierge and other English exceptions.
-        lesson_lang = lesson_language(lesson_id)
+        # The snapshot is loaded first because `load_prompts` falls back to
+        # lesson_zero on an unknown id — the language must follow that fallback
+        # (German STT over the English lesson_zero prompt would transcribe the
+        # user's English as noise), so it derives from the id of the lesson
+        # that actually loaded, not the raw query param.
+        lesson_snapshot = load_prompts(lesson_id)
+        lesson_lang = lesson_language(lesson_snapshot.get("id", lesson_id))
         stt = stt_deepgram(language=lesson_lang)
         tts = tts_minimax(session, voice=voice, language=lesson_lang)
         converter = TranscriptionToContextConverter()
@@ -136,7 +162,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         audio_path = str(
             (session_logger.session_dir / session_logger.session_id).with_suffix(".mp3")
         )
-        lesson_snapshot = load_prompts(lesson_id)
         try:
             async with get_sessionmaker()() as db:
                 await create_session_row(
@@ -406,7 +431,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # Eval language tracks the lesson's runtime language, so a
                         # German lesson is judged as German and an English one as
                         # English during the mixed-content migration window.
-                        language="German" if lesson_language(lesson_id) == "de" else "English",
+                        language="German" if lesson_lang == "de" else "English",
                     )
                     session_logger.write_evaluation(result)
                     passed_count = sum(1 for g in result.goals if g.passed)

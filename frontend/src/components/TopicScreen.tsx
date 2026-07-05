@@ -52,7 +52,7 @@ export default function TopicScreen({
   );
 
   const shuffle = () => {
-    if (topics.length === 0) return;
+    if (topics.length < 2) return;
     // Pick a different one when we can, so the button visibly does something.
     let next = selected;
     for (let i = 0; i < 8 && next === selected; i++) {
@@ -122,7 +122,7 @@ export default function TopicScreen({
             <button
               type="button"
               onClick={shuffle}
-              disabled={topics.length === 0}
+              disabled={topics.length < 2}
               className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-40"
               style={inkShadow}
             >

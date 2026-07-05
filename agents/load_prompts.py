@@ -28,6 +28,19 @@ def load_prompts(lesson_id: str) -> dict:
         return yaml.safe_load(f)
 
 
+def list_lesson_ids() -> list[str]:
+    """Stems of every lesson YAML under prompts/ — skips data files that are
+    not lessons (``tandem_topics.yaml`` has no ``type`` key). Used by the
+    startup language cross-check in ``pipeline/factory.py``."""
+    ids: list[str] = []
+    for path in sorted(_PROMPTS_DIR.glob("*.yaml")):
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        if isinstance(data, dict) and "type" in data:
+            ids.append(path.stem)
+    return ids
+
+
 @lru_cache(maxsize=1)
 def load_tandem_topics() -> list[str]:
     """Load the Grammatik-Tandem topic suggestions (TANDEM-001).

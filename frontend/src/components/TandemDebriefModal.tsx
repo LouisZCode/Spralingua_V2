@@ -45,6 +45,7 @@ interface TandemDebriefData {
 interface SessionData {
   lesson_id: string;
   ended_at: string | null;
+  ended_by: "user" | "agent" | "crash" | null;
   error_eval: TandemDebriefData | null;
 }
 
@@ -58,6 +59,8 @@ const DEFAULT_STATUS: CompletionStatus = "success";
 const DEFAULT_MESSAGE_BY_AGENT = "That was a good one — Lena enjoyed catching up. Bis bald!";
 const DEFAULT_MESSAGE_BY_USER =
   "You wrapped up early. Lena will be here whenever you want to pick it back up.";
+const MESSAGE_CRASH =
+  "The connection dropped mid-chat. Don't worry — your conversation was saved, and Lena will be here to pick it back up.";
 
 const STATUS_STYLES: Record<CompletionStatus, { dot: string; text: string }> = {
   success: { dot: "bg-success", text: "text-success" },
@@ -129,10 +132,17 @@ export default function TandemDebriefModal({
 
   const title = completion?.title ?? DEFAULT_TITLE;
   const status = completion?.status ?? DEFAULT_STATUS;
+  // The client can only guess how the session ended (Finish click = "user",
+  // every other disconnect lands as "agent"). Once the poll returns, the
+  // server's ended_by is authoritative — it distinguishes a backend crash and
+  // records a socket drop as "user" — so prefer it over the prop.
+  const effectiveEndedBy = sessionData?.ended_by ?? endedBy;
   const message =
-    endedBy === "user"
-      ? (completion?.message_by_user ?? DEFAULT_MESSAGE_BY_USER)
-      : (completion?.message_by_agent ?? DEFAULT_MESSAGE_BY_AGENT);
+    effectiveEndedBy === "crash"
+      ? MESSAGE_CRASH
+      : effectiveEndedBy === "user"
+        ? (completion?.message_by_user ?? DEFAULT_MESSAGE_BY_USER)
+        : (completion?.message_by_agent ?? DEFAULT_MESSAGE_BY_AGENT);
   const styles = STATUS_STYLES[status];
 
   return (

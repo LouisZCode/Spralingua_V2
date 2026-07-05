@@ -20,7 +20,7 @@ from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
-from pipeline.factory import ACTIVE_TASKS
+from pipeline.factory import ACTIVE_TASKS, validate_lesson_languages
 from satz import router as satz_router, sync_curated_content
 from security import (
     client_ip,
@@ -40,6 +40,10 @@ async def lifespan(app: FastAPI):
     # into Postgres on every boot, so a malformed pack aborts startup instead
     # of serving a half-broken gallery (SATZ-002).
     await sync_curated_content()
+    # And for the two per-lesson language sources (ENGLISH_LESSONS vs the YAML
+    # `locale:`) — a drifted lesson would be transcribed in one language and
+    # pronunciation-scored in another, so it aborts startup instead.
+    validate_lesson_languages()
     yield
     await dispose_engine()
 
