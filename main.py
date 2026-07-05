@@ -14,13 +14,13 @@ from sqlalchemy import text
 from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
-from agents.load_prompts import load_prompts
+from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
-from pipeline.factory import ACTIVE_TASKS
+from pipeline.factory import ACTIVE_TASKS, validate_lesson_languages
 from satz import router as satz_router, sync_curated_content
 from security import (
     client_ip,
@@ -40,6 +40,10 @@ async def lifespan(app: FastAPI):
     # into Postgres on every boot, so a malformed pack aborts startup instead
     # of serving a half-broken gallery (SATZ-002).
     await sync_curated_content()
+    # And for the two per-lesson language sources (ENGLISH_LESSONS vs the YAML
+    # `locale:`) — a drifted lesson would be transcribed in one language and
+    # pronunciation-scored in another, so it aborts startup instead.
+    validate_lesson_languages()
     yield
     await dispose_engine()
 
@@ -176,7 +180,19 @@ async def get_session(session_id: str, request: Request):
         "passed": row.passed,
         "goal_eval": row.goal_eval,
         "pron_eval": row.pron_eval,
+        # error_eval is surfaced ONLY for tandem (the debrief the TandemDebriefModal
+        # renders). Drill sessions also store an error_eval (the silent grammar
+        # harvest), but feedback separation is the point — never hand it back to a
+        # drill client, which would let it leak into the drill summary modal.
+        "error_eval": row.error_eval if row.lesson_id == "tandem" else None,
     }
+
+
+@app.get("/tandem/topics")
+def tandem_topics():
+    """Conversation-topic suggestions for the Grammatik-Tandem topic screen
+    (TANDEM-001). Public, non-sensitive content — same as ``/lessons/{id}``."""
+    return {"topics": load_tandem_topics()}
 
 
 @app.websocket("/ws/{user_id}")
@@ -185,6 +201,7 @@ async def ws_endpoint(
     user_id: str,
     voice: str = "happy_harry",
     lesson: str = "lesson_zero",
+    topic: str = "",
     token: str = "",
 ):
     """Authenticated learn socket (AUTH-001, P-3).
@@ -202,7 +219,8 @@ async def ws_endpoint(
         await websocket.close(code=1008)
         return
     await websocket.accept()
-    await run_pipeline(websocket, sub, voice, lesson)
+    # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
+    await run_pipeline(websocket, sub, voice, lesson, topic=topic)
 
 
 # Demo user ids are minted client-side as `demo-<uuid4>`; pin the shape so the

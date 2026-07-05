@@ -21,6 +21,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from config import deepgram_api_key, openrouter_api_key, openrouter_base_url
+from grammar import load_taxonomy, taxonomy_brief
 
 EXAMINER_MODEL = "openai/gpt-oss-120b"
 
@@ -77,6 +78,16 @@ class Judgement(BaseModel):
             "anything is wrong. Null when everything is right"
         ),
     )
+    # GRAM-001: the harvest seam. Classified here, in the same call that
+    # already names the error — no second LLM call, no response change.
+    pattern_id: Optional[str] = Field(
+        default=None,
+        description=(
+            "When a mistake matches exactly ONE entry of the grammar-pattern "
+            "catalog, that entry's id verbatim; null when nothing is wrong, "
+            "the slip is purely about this word, or no catalog entry fits"
+        ),
+    )
 
 
 PROMPT = """# Role
@@ -94,6 +105,11 @@ You examine one spoken attempt in a German vocabulary trainer. The learner saw a
 - `grammar_ok` — is the REST of the sentence grammatical German? Word order, other verbs' conjugation, other words' articles and endings. A sentence can be word_ok but not grammar_ok: "Ich hasse Winter, weil ich habe viele Allergien" uses the target 'Allergie' perfectly, but the weil-clause word order is wrong. If the sentence isn't German at all, both are false.
 - `corrected`: whenever anything is false — repair the learner's own sentence with the smallest possible change (keep their idea and their words). If the target word was missing entirely, write the simplest sentence that expresses their idea WITH the word. When everything is right: null.
 - `error`: when grammar_ok=false, ONE short English line naming the rule that was broken (e.g. "'weil' sends the verb to the end") — the correction sits right next to it, so name the WHY, never restate the fix. When only word_ok=false, add it only when the correction alone doesn't reveal why (e.g. "'freuen' is reflexive — it needs 'mich'"), otherwise null. AT MOST 10 words. When everything is right: null.
+
+# Grammar-pattern catalog (for `pattern_id`)
+{taxonomy}
+
+- `pattern_id`: when your judgement found a mistake (word_ok or grammar_ok false) AND the broken rule matches exactly one catalog entry above, return that entry's id. Use ONLY ids from the catalog — never invent one. Purely lexical slips — the target's gender misremembered, a wrong word sense — get null: the card's own schedule already tracks those. But a case, word-order or tense error is a pattern even when it lands on the target word (a nominative article in an object slot is akkusativ-artikel, a missing reflexive pronoun is reflexivpronomen). When everything is right: null.
 """
 
 
@@ -137,12 +153,18 @@ async def examine_attempt(card, transcript: str) -> Judgement:
         api_key=openrouter_api_key,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(Judgement)
-    prompt = PROMPT.replace("{card}", _card_brief(card)).replace(
-        "{transcript}", transcript
+    prompt = (
+        PROMPT.replace("{card}", _card_brief(card))
+        .replace("{transcript}", transcript)
+        .replace("{taxonomy}", taxonomy_brief())
     )
     result = await llm.ainvoke(prompt)
     if result.word_ok and result.grammar_ok:
         # A "fix" on a fully correct sentence only confuses.
         result.corrected = None
         result.error = None
+        result.pattern_id = None
+    if result.pattern_id and result.pattern_id not in load_taxonomy():
+        # The ledger keys on catalog ids — a hallucinated slug must not enter.
+        result.pattern_id = None
     return result

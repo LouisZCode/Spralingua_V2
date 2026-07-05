@@ -20,6 +20,11 @@ from pipecat.transcriptions.language import Language
 MINIMAX_MODEL = "speech-2.8-turbo"   # speech-02-turbo (fast), speech-02-hd (quality)
 MINIMAX_PROVIDER = "minimax"
 
+# STT/TTS run in German by default (the runtime is German); the front-page
+# `welcome` concierge is the English exception. Maps the short code that
+# pipeline/factory.py derives per lesson → MiniMax's Language enum.
+_TTS_LANGUAGE = {"de": Language.DE, "en": Language.EN}
+
 # Available voices: key → MiniMax voice_id
 # Cloned voices are kept in sync with the MiniMax account.
 # See ARCHITECTURE.md → "Voice Inventory" for the source-of-truth table.
@@ -86,7 +91,7 @@ class FirstOnlyTracedMiniMaxTTS(MiniMaxHttpTTSService):
                 self._tracing_enabled = saved
 
 
-def tts_minimax(session, voice: str = "happy_harry"):
+def tts_minimax(session, voice: str = "happy_harry", language: str = "de"):
     voice_id = VOICE_MAP.get(voice, "german_bavarian_male_v2")
     return FirstOnlyTracedMiniMaxTTS(
         api_key=minimax_api_key,
@@ -99,6 +104,6 @@ def tts_minimax(session, voice: str = "happy_harry"):
             pitch=0,                   # -12 to 12
             volume=1.0,                # 0 to 10
             emotion="neutral",         # happy, sad, angry, fearful, disgusted, surprised, neutral, fluent
-            language=Language.EN,      # Language enum (ES, EN, DE, FR, etc.)
+            language=_TTS_LANGUAGE.get(language, Language.DE),  # "de" runtime; "en" for the welcome concierge
         )
     )

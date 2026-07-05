@@ -27,13 +27,23 @@ from .tts_duration import TTSDurationTracker
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
 from agents.evaluator import evaluate
+from agents.error_extractor import extract_errors
+from agents.debrief import debrief as run_debrief
 from agents.load_goals import load_goal
-from agents.load_prompts import load_prompts
+from agents.load_prompts import list_lesson_ids, load_prompts
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces
 
+from grammar import load_taxonomy
+
 from database import create_session_row, finalize_session_row, get_sessionmaker
+from database.repository import (
+    credit_pattern_success,
+    load_grammar_focus,
+    load_tandem_notes,
+    record_grammar_error,
+)
 
 from logs import setup_session_logger
 
@@ -42,6 +52,39 @@ from logs import setup_session_logger
 # to inject typed turns into an active session. Per-client isolation rule
 # from CLAUDE.md still holds — this is just a lookup, not shared state.
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
+
+
+# The voice runtime is German. These lessons stay English: `lesson_zero` is the
+# open-conversation default (kept English by decision — its fake_profiles profile
+# targets English), `welcome` is the front-page English concierge (product
+# positioning), and `goodbye_test` is a dev fixture. Content lessons (a1_l1,
+# b1_l1) are German — remove each from this set as it converts.
+ENGLISH_LESSONS = {"welcome", "goodbye_test", "lesson_zero"}
+
+
+def lesson_language(lesson_id: str) -> str:
+    """STT/TTS language code for a lesson: 'en' for the English exceptions, 'de' otherwise."""
+    return "en" if lesson_id in ENGLISH_LESSONS else "de"
+
+
+def validate_lesson_languages() -> None:
+    """Fail-loud startup cross-check of the two per-lesson language sources.
+
+    ``ENGLISH_LESSONS`` drives STT/TTS/goal-eval language; the YAML ``locale:``
+    drives Azure pronunciation — maintained independently, with nothing else
+    tying them together. A lesson whose locale's primary subtag contradicts
+    ``lesson_language()`` would be transcribed in one language and
+    pronunciation-scored in another, silently. Called from the FastAPI
+    lifespan, so a drifted lesson aborts startup like a bad DB or satz pack.
+    """
+    for lid in list_lesson_ids():
+        locale = load_prompts(lid).get("locale")
+        if locale and locale.split("-")[0].lower() != lesson_language(lid):
+            raise RuntimeError(
+                f"Lesson {lid!r}: locale {locale!r} contradicts "
+                f"lesson_language()={lesson_language(lid)!r} — update "
+                f"ENGLISH_LESSONS or the lesson's locale"
+            )
 
 
 class _NoOpTurnTraceObserver:
@@ -71,7 +114,7 @@ async def _session_watchdog(task: PipelineTask, timeout_s: float, user_id: str):
     await task.stop_when_done()
 
 
-async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", session_timeout_s: float | None = None, db_user_id: str | None = None):
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -92,9 +135,17 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # Transport: one per client (wraps this specific websocket)
         transport = transport_fastapi_ws(websocket)
 
-        # Fresh services per client
-        stt = stt_deepgram()
-        tts = tts_minimax(session, voice=voice)
+        # Fresh services per client. Language is per-lesson: German runtime,
+        # English only for the `welcome` concierge and other English exceptions.
+        # The snapshot is loaded first because `load_prompts` falls back to
+        # lesson_zero on an unknown id — the language must follow that fallback
+        # (German STT over the English lesson_zero prompt would transcribe the
+        # user's English as noise), so it derives from the id of the lesson
+        # that actually loaded, not the raw query param.
+        lesson_snapshot = load_prompts(lesson_id)
+        lesson_lang = lesson_language(lesson_snapshot.get("id", lesson_id))
+        stt = stt_deepgram(language=lesson_lang)
+        tts = tts_minimax(session, voice=voice, language=lesson_lang)
         converter = TranscriptionToContextConverter()
 
         # Per-client logger
@@ -111,7 +162,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         audio_path = str(
             (session_logger.session_dir / session_logger.session_id).with_suffix(".mp3")
         )
-        lesson_snapshot = load_prompts(lesson_id)
         try:
             async with get_sessionmaker()() as db:
                 await create_session_row(
@@ -129,8 +179,28 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 f"DB session insert failed (non-fatal): {type(e).__name__}: {e}"
             )
 
+        # Tandem grammar-focus + memory layers (TANDEM-001). The prompt
+        # middleware is sync, so these async DB reads happen here, once at
+        # connect, and ride on Context. Only tandem lessons carry them. Non-fatal:
+        # a DB hiccup just means a less-personalised chat, never a failed connect.
+        grammar_focus: list = []
+        session_notes: list = []
+        if lesson_snapshot.get("type") == "tandem":
+            try:
+                async with get_sessionmaker()() as db:
+                    grammar_focus = await load_grammar_focus(db, user_id=db_user_id)
+                    session_notes = await load_tandem_notes(db, user_id=db_user_id)
+                logger.info(
+                    f"Tandem layers: focus_patterns={len(grammar_focus)} "
+                    f"notes={len(session_notes)} topic={topic!r} user={db_user_id}"
+                )
+            except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
+                logger.warning(
+                    f"Tandem layer fetch failed (non-fatal): {type(e).__name__}: {e}"
+                )
+
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
@@ -324,6 +394,12 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # didn't run (no goals / no locale / evaluator crashed).
         result = None
         pron_result = None
+        error_result = None
+        # The tandem debrief (Phase 4) stores an already-enriched dict (labels +
+        # per-pattern `retired` flags) rather than a bare model dump, so it lands
+        # in `error_eval` on its own path below. Mutually exclusive with the
+        # drill `error_result` — a session is one lesson, tandem or drill.
+        debrief_eval_dict = None
         # Captures any exception from runner.run so the DB finalize can record
         # ended_by="crash". We re-raise immediately so the caller (the WS endpoint)
         # still sees the failure.
@@ -352,6 +428,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         transcript=wrapper.render_transcript(),
                         goals=goal["goals"],
                         pass_threshold=goal["pass_threshold"],
+                        # Eval language tracks the lesson's runtime language, so a
+                        # German lesson is judged as German and an English one as
+                        # English during the mixed-content migration window.
+                        language="German" if lesson_lang == "de" else "English",
                     )
                     session_logger.write_evaluation(result)
                     passed_count = sum(1 for g in result.goals if g.passed)
@@ -362,6 +442,161 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     )
             except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
                 logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
+            # Post-session grammar-error harvest (GRAM-001 Phase 2, Harvester B).
+            # Same non-fatal contract and goal-gate as the evaluator above, so the
+            # goal-less lessons (lesson_zero / welcome / goodbye_test) are auto-
+            # excluded — no new YAML field. Classified slips land as `error_eval`
+            # on the row AND upsert the ledger with source="situation"; deliberately
+            # NOT surfaced in the drill modal (one feedback voice per mode). The
+            # ledger keys on `db_user_id` (the real users row, like the
+            # activity_session FK), never the per-session `user_id`.
+            try:
+                if wrapper._transcript and load_goal(lesson_id) is not None:
+                    error_result = await extract_errors(
+                        transcript=wrapper.render_transcript(),
+                    )
+                    if error_result.errors:
+                        async with get_sessionmaker()() as db:
+                            for err in error_result.errors:
+                                # Each upsert is its own commit, wrapped so one
+                                # bad row can't abort the rest of the harvest.
+                                try:
+                                    await record_grammar_error(
+                                        db,
+                                        user_id=db_user_id,
+                                        pattern_id=err.pattern_id,
+                                        sentence=err.sentence,
+                                        corrected=err.corrected,
+                                        note=err.note,
+                                        source="situation",
+                                        session_id=session_id,
+                                    )
+                                except Exception:  # noqa: BLE001 — one ledger row must not block the rest
+                                    logger.exception(
+                                        f"Grammar-ledger write failed (pattern {err.pattern_id})"
+                                    )
+                    logger.info(
+                        f"Grammar harvest: patterns={len(error_result.errors)} "
+                        f"lesson={lesson_id}"
+                    )
+            except Exception as e:  # noqa: BLE001 — harvester must not block cleanup
+                logger.warning(f"Grammar extractor failed (non-fatal): {type(e).__name__}: {e}")
+            # Post-session tandem debrief (TANDEM-001 / GRAM-001 Phase 4). Gated
+            # on the tandem lesson type — tandem has no goals and no locale, so
+            # goal eval, drill harvest, and pron assessment all auto-skip and the
+            # debrief is its ONE feedback voice. One structured-output call judges
+            # the session's target patterns (the same `grammar_focus` the prompt
+            # steered toward), harvests new errors, and writes a memory note; the
+            # streak/retire lifecycle is applied to the ledger right here. Runs for
+            # ALL end reasons (a user-ended tandem still gets its debrief). Same
+            # non-fatal contract as the evaluators above; the enriched result
+            # (taxonomy labels + per-pattern `retired` flags) is stored as
+            # `error_eval` for the debrief modal, and its `session_note` is what
+            # `load_tandem_notes` feeds into the next session's memory layer.
+            try:
+                if wrapper._transcript and lesson_snapshot.get("type") == "tandem":
+                    focus = wrapper.context.grammar_focus
+                    debrief_result = await run_debrief(
+                        transcript=wrapper.render_transcript(),
+                        focus=focus,
+                        topic=topic,
+                    )
+                    retired_ids: set[str] = set()
+                    async with get_sessionmaker()() as db:
+                        # Target patterns: a clean spontaneous production advances
+                        # the streak (retire at 2); a slip reopens/resets exactly
+                        # like a fresh recurrence (record_grammar_error). Un-elicited
+                        # targets are left untouched — no evidence either way.
+                        for p in debrief_result.patterns:
+                            if not p.elicited:
+                                continue
+                            try:
+                                if p.produced_correctly:
+                                    status = await credit_pattern_success(
+                                        db,
+                                        user_id=db_user_id,
+                                        pattern_id=p.pattern_id,
+                                        session_id=session_id,
+                                    )
+                                    if status == "retired":
+                                        retired_ids.add(p.pattern_id)
+                                elif p.evidence and p.evidence.strip().lower() != "none":
+                                    await record_grammar_error(
+                                        db,
+                                        user_id=db_user_id,
+                                        pattern_id=p.pattern_id,
+                                        sentence=p.evidence,
+                                        corrected=p.corrected or None,
+                                        note=p.note or None,
+                                        source="tandem",
+                                        session_id=session_id,
+                                    )
+                            except Exception:  # noqa: BLE001 — one row must not block the rest
+                                logger.exception(
+                                    f"Tandem ledger write failed (target {p.pattern_id})"
+                                )
+                        # New (non-target) errors: plain ledger upserts, same as
+                        # the drill harvester, source="tandem".
+                        for e in debrief_result.new_errors:
+                            try:
+                                await record_grammar_error(
+                                    db,
+                                    user_id=db_user_id,
+                                    pattern_id=e.pattern_id,
+                                    sentence=e.sentence,
+                                    corrected=e.corrected,
+                                    note=e.note,
+                                    source="tandem",
+                                    session_id=session_id,
+                                )
+                            except Exception:  # noqa: BLE001 — one row must not block the rest
+                                logger.exception(
+                                    f"Tandem ledger write failed (new {e.pattern_id})"
+                                )
+                    # Enrich for the debrief modal: taxonomy labels + which
+                    # patterns retired this session. `session_note` rides along in
+                    # the stored payload (load_tandem_notes reads it) but the modal
+                    # keeps it private.
+                    catalog = load_taxonomy()
+
+                    def _label(pid: str) -> str:
+                        pat = catalog.get(pid)
+                        return pat["label"] if pat else pid
+
+                    debrief_eval_dict = {
+                        "kind": "tandem_debrief",
+                        "session_note": debrief_result.session_note,
+                        "patterns": [
+                            {
+                                "pattern_id": p.pattern_id,
+                                "label": _label(p.pattern_id),
+                                "elicited": p.elicited,
+                                "produced_correctly": p.produced_correctly,
+                                "evidence": p.evidence,
+                                "corrected": p.corrected,
+                                "note": p.note,
+                                "retired": p.pattern_id in retired_ids,
+                            }
+                            for p in debrief_result.patterns
+                        ],
+                        "new_errors": [
+                            {
+                                "pattern_id": e.pattern_id,
+                                "label": _label(e.pattern_id),
+                                "sentence": e.sentence,
+                                "corrected": e.corrected,
+                                "note": e.note,
+                            }
+                            for e in debrief_result.new_errors
+                        ],
+                    }
+                    logger.info(
+                        f"Tandem debrief: targets={len(debrief_result.patterns)} "
+                        f"retired={len(retired_ids)} new={len(debrief_result.new_errors)} "
+                        f"note={'yes' if debrief_result.session_note else 'no'}"
+                    )
+            except Exception as e:  # noqa: BLE001 — debrief must not block cleanup
+                logger.warning(f"Tandem debrief failed (non-fatal): {type(e).__name__}: {e}")
             # Post-session pronunciation assessment (PRON-001). Same non-fatal
             # contract as the goal evaluator above: any failure (missing key,
             # Azure outage, count mismatch) is logged and swallowed so audio
@@ -400,6 +635,15 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     ended_by = "user"
                 goal_eval_dict = result.model_dump() if result is not None else None
                 pron_eval_dict = pron_result.model_dump() if pron_result is not None else None
+                # error_eval carries the drill harvest (a model dump) OR the
+                # tandem debrief (an already-enriched dict) — never both in one
+                # session. The tandem dict wins when present.
+                if debrief_eval_dict is not None:
+                    error_eval_dict = debrief_eval_dict
+                elif error_result is not None:
+                    error_eval_dict = error_result.model_dump()
+                else:
+                    error_eval_dict = None
                 passed = goal_eval_dict["passed"] if goal_eval_dict is not None else None
                 async with get_sessionmaker()() as db:
                     await finalize_session_row(
@@ -410,6 +654,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         transcript=wrapper.render_transcript() if wrapper._transcript else None,
                         goal_eval=goal_eval_dict,
                         pron_eval=pron_eval_dict,
+                        error_eval=error_eval_dict,
                         passed=passed,
                     )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal

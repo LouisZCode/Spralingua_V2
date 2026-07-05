@@ -58,3 +58,12 @@ class Context:
     agent_voice: str = "happy_harry"
     agent_personality: str = "friendly"
     profile: StudentProfile | None = None
+    # Grammatik-Tandem (TANDEM-001) layers — populated at connect for
+    # `type: tandem` lessons only, and read by the tandem middleware branch.
+    # `topic` is the learner's chosen conversation theme (the `?topic=` WS query
+    # param); `grammar_focus` is their top ~3 open ledger patterns, each
+    # `{pattern_id, label, description, elicit, examples}`; `session_notes` is
+    # the thin memory (recent tandem session-note strings). Empty everywhere else.
+    topic: str = ""
+    grammar_focus: list = field(default_factory=list)
+    session_notes: list = field(default_factory=list)

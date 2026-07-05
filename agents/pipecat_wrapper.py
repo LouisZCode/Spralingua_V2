@@ -57,10 +57,20 @@ from .observability import tracer
 # so an opening line like "great to see you" can't end the call on turn 1.
 
 GOODBYE_PHRASES = [
+    # English (welcome concierge + English drills)
     "goodbye", "bye", "see you", "take care",
     "nice talking", "great talking", "good talking",
     "talk to you later", "talk soon", "have a good",
     "have a nice", "it was nice meeting",
+    # German (the German runtime — open chat, drills, tandem). Without these a
+    # German farewell ("Tschüss") would never trip the goodbye-driven disconnect,
+    # so a German session could only ever end on the max_exchanges cap.
+    "tschüss", "tschüs", "tschau", "ciao",
+    "auf wiedersehen", "wiedersehen",
+    "bis bald", "bis später", "bis dann", "bis morgen",
+    "bis zum nächsten mal", "wir sehen uns",
+    "mach's gut", "machs gut", "pass auf dich auf",
+    "schönen tag", "schönes wochenende", "gute nacht", "alles gute",
 ]
 
 
@@ -72,7 +82,8 @@ def _contains_goodbye(text: str) -> bool:
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
-    def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero"):
+    def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero",
+                 topic="", grammar_focus=None, session_notes=None):
         self.user_id = user_id
         self.session_id = session_id
         self.logger = logger
@@ -81,6 +92,12 @@ class ClientWrapper:
             lesson_id=lesson_id,
             agent_voice=voice,
             profile=load_profile(user_id),
+            # Grammatik-Tandem layers (TANDEM-001) — non-empty only for the
+            # tandem lesson, fetched by the factory at connect and read by the
+            # `tandem` middleware branch. Harmless defaults for every other mode.
+            topic=topic,
+            grammar_focus=grammar_focus or [],
+            session_notes=session_notes or [],
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client

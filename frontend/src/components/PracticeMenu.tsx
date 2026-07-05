@@ -76,7 +76,7 @@ export default function PracticeMenu() {
         </div>
 
         <div
-          className="rise-in mt-10 grid gap-6 sm:grid-cols-2"
+          className="rise-in mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
           style={{ animationDelay: "120ms" }}
         >
           <ModeCard
@@ -97,6 +97,16 @@ export default function PracticeMenu() {
             body="Put new words to work in sentences of your own. A strict examiner checks each one and helps it stick."
             cta="Try it out"
           />
+          <ModeCard
+            href="/tandem"
+            accent="ink"
+            icon="chat"
+            kicker="Grammatik-Tandem"
+            badge="New"
+            title="Tandem Partner"
+            body="Daily German chat with Lena, your language-exchange partner. She remembers your last talks and gently fixes the grammar you keep missing."
+            cta="Meet Lena"
+          />
         </div>
       </main>
     </div>
@@ -114,8 +124,8 @@ function ModeCard({
   cta,
 }: {
   href: string;
-  accent: "red" | "gold";
-  icon: "mic" | "pencil";
+  accent: "red" | "gold" | "ink";
+  icon: "mic" | "pencil" | "chat";
   title: string;
   kicker?: string;
   badge?: string;
@@ -123,7 +133,11 @@ function ModeCard({
   cta: string;
 }) {
   const chip =
-    accent === "red" ? "bg-flag-red text-white" : "bg-flag-gold text-ink";
+    accent === "red"
+      ? "bg-flag-red text-white"
+      : accent === "gold"
+        ? "bg-flag-gold text-ink"
+        : "bg-ink text-white";
   return (
     <Link
       href={href}
@@ -173,7 +187,7 @@ function ModeCard({
   );
 }
 
-function ModeIcon({ name }: { name: "mic" | "pencil" }) {
+function ModeIcon({ name }: { name: "mic" | "pencil" | "chat" }) {
   const common = {
     viewBox: "0 0 24 24",
     fill: "none",
@@ -189,6 +203,16 @@ function ModeIcon({ name }: { name: "mic" | "pencil" }) {
         <rect x="9" y="3" width="6" height="11" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0" />
         <line x1="12" y1="18" x2="12" y2="22" />
+      </svg>
+    );
+  }
+  if (name === "chat") {
+    // two overlapping speech bubbles — "a conversation, back and forth"
+    return (
+      <svg {...common}>
+        <path d="M7.5 8.5h9M7.5 12h5.5" />
+        <path d="M3.5 6.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V6.5Z" />
+        <path d="M18 9.5h1.5a2 2 0 0 1 2 2v6L19 15" />
       </svg>
     );
   }

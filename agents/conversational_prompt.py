@@ -309,6 +309,33 @@ def _format_history(profile) -> str:
     return "\n".join(f"- {d}: {t}" for d, t in entries)
 
 
+def _format_grammar_focus(focus: list) -> str:
+    """Render the tandem grammar-focus patterns as prompt bullets.
+
+    One block per pattern: the label + one-line description, the ``elicit`` hint
+    (how to draw the structure out), and the learner's own recent slips as
+    wrong → right pairs. Reads the enriched dicts built by
+    ``database.repository.load_grammar_focus``.
+    """
+    blocks: list[str] = []
+    for p in focus:
+        lines = [f"- {p['label']}: {p['description']}"]
+        lines.append(f"  How to draw it out: {p['elicit']}")
+        for ex in p.get("examples", []):
+            sentence, corrected = ex.get("sentence"), ex.get("corrected")
+            if sentence and corrected:
+                lines.append(f'  They slipped before: "{sentence}" → "{corrected}"')
+            elif sentence:
+                lines.append(f'  They slipped before: "{sentence}"')
+        blocks.append("\n".join(lines))
+    return "\n".join(blocks)
+
+
+def _format_session_notes(notes: list) -> str:
+    """Render recent tandem session notes as plain bullets (most recent first)."""
+    return "\n".join(f"- {n}" for n in notes)
+
+
 @dynamic_prompt
 def layered_prompt_middleware(request: ModelRequest) -> str:
     """Lesson-aware system prompt assembly.
@@ -343,6 +370,26 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
             history_bullets=_format_history(profile),
         )
         assembled = f"{base}\n---\n\n{short}\n---\n\n{long}"
+    elif lesson_type == "tandem":
+        # The recurring tandem partner (TANDEM-001): static persona + short-term
+        # (today + topic) + two DB-backed layers stashed on Context at connect.
+        # The grammar-focus and memory layers are omitted when empty (first
+        # session / clean ledger) so the prompt never carries dangling headers.
+        base = lesson["persona_prompt"]
+        short = lesson["short_term_template"].format(
+            today=date.today().isoformat(),
+            topic=ctx.topic or "whatever they feel like talking about",
+        )
+        parts = [base, short]
+        if ctx.grammar_focus:
+            parts.append(
+                lesson["grammar_focus_header"] + _format_grammar_focus(ctx.grammar_focus)
+            )
+        if ctx.session_notes:
+            parts.append(
+                lesson["long_term_header"] + _format_session_notes(ctx.session_notes)
+            )
+        assembled = "\n---\n\n".join(parts)
     elif lesson_type == "respond":
         assembled = lesson["persona_prompt"]
     else:

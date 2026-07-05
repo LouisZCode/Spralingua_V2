@@ -16,11 +16,11 @@ DEEPGRAM_MODEL = "nova-2"
 DEEPGRAM_PROVIDER = "deepgram"
 
 
-def stt_deepgram():
+def stt_deepgram(language: str = "de"):
     return DeepgramSTTService(
         api_key=deepgram_api_key,
         live_options=LiveOptions(
-            language="en",             # Language input
+            language=language,         # "de" runtime; "en" for the welcome concierge (set per-lesson in factory)
             model=DEEPGRAM_MODEL,      # Deepgram model
             smart_format=True,         # Better formatting
             utterance_end_ms=1000,     # Wait 1s after last word for utterance boundary

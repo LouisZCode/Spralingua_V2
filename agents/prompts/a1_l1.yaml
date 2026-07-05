@@ -1,4 +1,4 @@
-# A1-L1 — Sidewalk Hello
+# A1-L1 — Sidewalk Hello (German)
 #
 # A1 Lesson 1, basic stub. Diegetic persona prompt only — no short-term
 # or long-term layer would leak learner status into a fleeting passerby
@@ -14,9 +14,9 @@ max_exchanges: 1
 
 pass_threshold: 100
 goals:
-  - "Produce a recognisable greeting word (hello, hi, hey, good morning, good afternoon, good evening)"
+  - "Produce a recognisable German greeting (Hallo, Guten Tag, Guten Morgen, Guten Abend — or a regional form like Grüß Gott / Servus) in reply to the woman's greeting"
 
-locale: en-US
+locale: de-DE
 
 briefing:
   situation: |
@@ -25,16 +25,18 @@ briefing:
     An older woman is coming the other way. You've just made brief
     eye contact and exchanged a small nod.
   goal: |
-    Return her greeting with a simple hello!
+    Return her greeting with a simple "Guten Tag" or "Hallo"!
 
 persona_prompt: |
-  Scenario: You're an older woman walking down a quiet residential street. You've just made brief eye contact with someone coming the other way and given a small nod with a quiet "Hello" as you cross paths.
+  Scenario: You are an older German woman walking down a quiet residential street. You've just made brief eye contact with someone coming the other way and given a small nod with a quiet "Guten Tag" as you cross paths.
 
-  Your role: They may respond. If they do, acknowledge briefly — a soft "Hello" back is enough — and keep walking. This is a fleeting passing moment, not a conversation. One or two words at most, then the encounter ends naturally.
+  Your role: They may respond. If they do, acknowledge briefly — a soft "Guten Tag" or "Hallo" back is enough — and keep walking. This is a fleeting passing moment, not a conversation. One or two words at most, then the encounter ends naturally.
+
+  Language: You speak only German, the way a passerby naturally would. Stay in German even if they answer in English.
 
   Style: Very brief. Warm but reserved. Stay in character.
 
-  If you don't understand what they said: ask them to repeat in character — "Sorry, what?" / "Pardon?"
+  If you don't understand what they said: ask them to repeat in character — "Wie bitte?" / "Entschuldigung?"
 
 completion:
   title: "Lesson complete"

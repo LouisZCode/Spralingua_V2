@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import Pack, PackCard, User, UserCard, VocabCard
+from database.repository import record_grammar_error
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
@@ -465,6 +466,12 @@ async def submit_attempt(
     output LLM call) → verdict + feedback, then record the outcome on the
     ``user_cards`` row: only ``word_ok`` moves the schedule (a grammar note
     on a green card costs nothing — same rule as the verdict colour).
+
+    GRAM-001: when the examiner also classified the slip into the grammar-
+    pattern catalog, the attempt is harvested into the error ledger — after
+    the schedule commit and non-fatally, so the ledger can never break a
+    practice attempt. The response payload is unchanged: feedback separation
+    means Satzschmiede never surfaces the ledger.
     """
     row = (
         await db.execute(
@@ -519,6 +526,24 @@ async def submit_attempt(
     user_card.reps += 1
     user_card.last_score = 1 if judgement.word_ok else 0
     await db.commit()
+
+    # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
+    # after the schedule is safe; a ledger failure only logs.
+    if judgement.pattern_id:
+        try:
+            await record_grammar_error(
+                db,
+                user_id=user_id,
+                pattern_id=judgement.pattern_id,
+                sentence=transcript,
+                corrected=judgement.corrected,
+                note=judgement.error,
+                source="satz",
+            )
+        except Exception:
+            logger.exception(
+                "Grammar-ledger write failed (pattern {})", judgement.pattern_id
+            )
 
     # camelCase like every other satz payload (poolSize, cardCount, …).
     return {

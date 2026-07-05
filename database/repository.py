@@ -15,12 +15,14 @@ from datetime import datetime
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import func, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .orm import ActivitySession, User
+from grammar import load_taxonomy
+
+from .orm import ActivitySession, User, UserError
 
 
 async def create_session_row(
@@ -76,6 +78,7 @@ async def finalize_session_row(
     transcript: str | None,
     goal_eval: dict | None,
     pron_eval: dict | None,
+    error_eval: dict | None,
     passed: bool | None,
 ) -> None:
     """Patch the row inserted on connect with the post-session outcome."""
@@ -89,6 +92,7 @@ async def finalize_session_row(
                 transcript=transcript,
                 goal_eval=goal_eval,
                 pron_eval=pron_eval,
+                error_eval=error_eval,
                 passed=passed,
             )
         )
@@ -147,3 +151,199 @@ async def upsert_user(
     except SQLAlchemyError:
         await db.rollback()
         raise
+
+
+# How many of the learner's own slips each ledger row keeps (ring buffer).
+_MAX_LEDGER_EXAMPLES = 5
+
+
+async def record_grammar_error(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    pattern_id: str,
+    sentence: str,
+    corrected: str | None,
+    note: str | None,
+    source: str,
+    session_id: str | None = None,
+) -> None:
+    """Upsert one classified slip into the grammar-error ledger (GRAM-001).
+
+    One row per (user, pattern): a new pattern inserts with the column
+    defaults (occurrences=1, status='open'); a recurrence bumps
+    ``occurrences``, resets the retire ``streak``, REOPENS a retired pattern,
+    and appends the learner's own sentence to the ``examples`` ring buffer
+    (most recent last, capped at ``_MAX_LEDGER_EXAMPLES``).
+
+    Same contract as the session-row ops: re-raises on ``SQLAlchemyError``,
+    the caller owns the non-fatal wrapping — a ledger outage must never
+    break the practice attempt it rides on.
+
+    Read-modify-write, not ON CONFLICT: the ring-buffer append doesn't
+    express cleanly in SQL, and one user's attempts are sequential — there
+    is no concurrent writer for a given (user, pattern) in practice.
+    """
+    now = datetime.now()
+    example: dict = {
+        "sentence": sentence,
+        "corrected": corrected,
+        "note": note,
+        "source": source,
+        "at": now.isoformat(timespec="seconds"),
+    }
+    if session_id:
+        example["session_id"] = session_id
+    try:
+        row = await db.get(UserError, (user_id, pattern_id))
+        if row is None:
+            db.add(
+                UserError(
+                    user_id=user_id,
+                    pattern_id=pattern_id,
+                    first_seen=now,
+                    last_seen=now,
+                    last_source=source,
+                    last_session_id=session_id,
+                    examples=[example],
+                )
+            )
+        else:
+            row.status = "open"
+            row.streak = 0
+            row.occurrences += 1
+            row.last_seen = now
+            row.last_source = source
+            row.last_session_id = session_id
+            row.examples = (row.examples or [])[-(_MAX_LEDGER_EXAMPLES - 1):] + [example]
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+# Consecutive correct spontaneous productions in tandem sessions before a
+# pattern retires (GRAM-001: "retire on streak >= 2"). One correct use is
+# encouraging; two is acquisition evidence.
+_RETIRE_STREAK = 2
+
+
+async def credit_pattern_success(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    pattern_id: str,
+    session_id: str | None = None,
+) -> str | None:
+    """Credit a spontaneously-correct target pattern in a tandem session (Phase 4).
+
+    The success counterpart to :func:`record_grammar_error`: where a slip resets
+    the streak and reopens the pattern, a clean spontaneous production bumps the
+    retire ``streak`` and retires the pattern once it reaches ``_RETIRE_STREAK``.
+    Only ``streak`` / ``status`` / ``last_seen`` move — ``occurrences`` (lifetime
+    error count) and the ``examples`` ring buffer are untouched, since nothing
+    went wrong.
+
+    Returns the resulting ``status`` (``"open"`` | ``"retired"``) so the caller
+    can flag a fresh retirement for the debrief modal, or ``None`` if the row is
+    gone (the pattern was removed between connect and debrief). Same contract as
+    the sibling ledger ops: re-raises on ``SQLAlchemyError``, caller owns the
+    non-fatal wrapping.
+    """
+    try:
+        row = await db.get(UserError, (user_id, pattern_id))
+        if row is None:
+            return None
+        row.streak += 1
+        row.last_seen = datetime.now()
+        row.last_source = "tandem"
+        if session_id:
+            row.last_session_id = session_id
+        if row.streak >= _RETIRE_STREAK:
+            row.status = "retired"
+        await db.commit()
+        return row.status
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+# How many of the learner's own recent slips each focus pattern carries into
+# the tandem prompt (from the tail of the ledger ring buffer).
+_GRAMMAR_FOCUS_EXAMPLES = 2
+
+
+async def load_grammar_focus(
+    db: AsyncSession, *, user_id: str, limit: int = 3
+) -> list[dict]:
+    """Top open ledger patterns for the tandem grammar-focus layer (TANDEM-001).
+
+    Returns up to ``limit`` patterns ranked by ``(occurrences DESC, last_seen
+    DESC)`` — the most persistent, most recent slips first — each enriched from
+    the taxonomy with ``label`` / ``description`` / ``elicit`` and carrying the
+    learner's own most-recent examples ``[{sentence, corrected}]``. A pattern
+    whose slug is no longer in the taxonomy (a removed catalog entry) is skipped.
+
+    Read-only: no commit, no rollback — the caller (``pipeline/factory.py``)
+    owns the non-fatal wrapping, so an outage yields a less-personalised chat,
+    never a failed connect.
+    """
+    rows = (
+        await db.execute(
+            select(UserError.pattern_id, UserError.examples)
+            .where(UserError.user_id == user_id, UserError.status == "open")
+            .order_by(UserError.occurrences.desc(), UserError.last_seen.desc())
+            .limit(limit)
+        )
+    ).all()
+    catalog = load_taxonomy()
+    focus: list[dict] = []
+    for pattern_id, examples in rows:
+        pattern = catalog.get(pattern_id)
+        if pattern is None:
+            continue
+        recent = [
+            {"sentence": e.get("sentence"), "corrected": e.get("corrected")}
+            for e in (examples or [])[-_GRAMMAR_FOCUS_EXAMPLES:]
+        ]
+        focus.append(
+            {
+                "pattern_id": pattern_id,
+                "label": pattern["label"],
+                "description": pattern["description"],
+                "elicit": pattern["elicit"],
+                "examples": recent,
+            }
+        )
+    return focus
+
+
+async def load_tandem_notes(
+    db: AsyncSession, *, user_id: str, limit: int = 5
+) -> list[str]:
+    """Recent tandem session notes for the long-term memory layer (TANDEM-001).
+
+    Reads the ``session_note`` string the Phase-4 debrief writes into
+    ``activity_session.error_eval`` on past tandem sessions, most recent first.
+    Returns ``[]`` until the debrief starts producing notes — Phase 3 wires the
+    reader, Phase 4 fills it. Same read-only, caller-wrapped contract as
+    ``load_grammar_focus``.
+    """
+    rows = (
+        await db.execute(
+            select(ActivitySession.error_eval)
+            .where(
+                ActivitySession.user_id == user_id,
+                ActivitySession.lesson_id == "tandem",
+                ActivitySession.error_eval.isnot(None),
+            )
+            .order_by(ActivitySession.started_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    notes: list[str] = []
+    for error_eval in rows:
+        note = error_eval.get("session_note") if isinstance(error_eval, dict) else None
+        if note:
+            notes.append(note)
+    return notes
