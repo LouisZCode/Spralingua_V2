@@ -8,7 +8,9 @@ carry article + gender/plural note, verbs are bare infinitives with no note
 Same Cerebras ``gpt-oss-120b`` wiring as ``agents/evaluator.py`` — one
 structured-output call, no streaming. The route only fires this on a
 canonical-catalog miss, so a word is only ever enriched once; every later
-learner who adds it gets the existing card for free.
+learner who adds it gets the existing card for free. Adjectives carry a
+comparison note (comparative · superlative) — the forms are the card's
+hidden grammar, and irregulars (gut/besser) get flagged for free.
 """
 
 from typing import Literal, Optional
@@ -32,7 +34,7 @@ class EnrichedCard(BaseModel):
             "learner why the input was rejected (shown to them verbatim)"
         ),
     )
-    type: Optional[Literal["noun", "verb", "phrase"]] = Field(
+    type: Optional[Literal["noun", "verb", "phrase", "adjective"]] = Field(
         default=None, description="Card type; null when valid=false"
     )
     target: Optional[str] = Field(
@@ -50,7 +52,10 @@ class EnrichedCard(BaseModel):
     )
     note: Optional[str] = Field(
         default=None,
-        description="Nouns: gender·plural note. Phrases: register hint. Verbs: MUST be null",
+        description=(
+            "Nouns: gender·plural note. Phrases: register hint. Adjectives: "
+            "comparison note. Verbs: MUST be null"
+        ),
     )
     example: Optional[str] = Field(
         default=None, description="One natural German sentence using the word"
@@ -70,13 +75,14 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
 # Normalize the input first
 - Strip a leading article (der/die/das/ein/eine) — it tells you the noun's gender but never belongs in `target`.
 - Strip a leading "sich" — it tells you the verb is reflexive (set reflexive=true) but never belongs in `target`.
-- Fix casing: German nouns are capitalized; verbs and phrases are lowercase.
+- Fix casing: German nouns are capitalized; verbs, adjectives and phrases are lowercase.
 - If the learner typed an inflected form (plural noun, conjugated verb), build the card for the base form (singular noun, infinitive verb).
 
 # Card rules (strict)
 - type "noun": `target` = bare capitalized singular noun. `article` = der/die/das. `note` = "<masculine|feminine|neuter> · plural: die <plural form>" — or "<gender> · no plural" if it has none.
 - type "verb": `target` = bare infinitive, WITHOUT "sich" and without any preposition or case hint. `reflexive` = true only for genuinely reflexive verbs. `note` MUST be null — the learner has to recall case/preposition/reflexivity unaided.
 - type "phrase": `target` = the phrase as naturally written. `note` = one short register/usage hint (e.g. "polite register · when ordering").
+- type "adjective": `target` = the base (positive) form, lowercase. `note` = "comparative: <form> · superlative: am <form>" (e.g. "comparative: schneller · superlative: am schnellsten") — watch for irregulars (gut → besser → am besten, hoch → höher, teuer → teurer). For absolute adjectives that aren't normally compared (schwanger, tot): `note` = "not usually compared".
 - `gloss`: concise English meaning, ONE sense only — the most common everyday sense. If the word is hopelessly ambiguous without context, pick the dominant sense.
 - `example`: one natural German sentence using the word — nouns appear with their article, reflexive verbs with their pronoun.
 - `level`: CEFR estimate (A1–C2).

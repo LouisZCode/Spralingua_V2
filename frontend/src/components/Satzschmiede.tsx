@@ -10,11 +10,12 @@ import PackModal from "./satzschmiede/PackModal";
 import {
   fetchDeck,
   removeCard,
+  revealCard,
   submitAttempt,
   UnauthorizedError,
   type AttemptResult,
 } from "./satzschmiede/api";
-import type { Card } from "./satzschmiede/deck";
+import type { DeckCard } from "./satzschmiede/deck";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -29,7 +30,7 @@ export default function Satzschmiede() {
   const { token, ready, signOut } = useAuth();
   const router = useRouter();
 
-  const [deck, setDeck] = useState<Card[] | null>(null); // null = loading
+  const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
   const [error, setError] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false); // the "Add Cards" popup
 
@@ -73,6 +74,19 @@ export default function Satzschmiede() {
       refreshDeck();
     },
     [token, signOut, refreshDeck]
+  );
+
+  // Record a reveal-lapse. Fire-and-forget: the trainer's queue behaviour is
+  // local — this write only keeps tomorrow's schedule honest, so a failure
+  // isn't worth interrupting the flip for.
+  const handleReveal = useCallback(
+    (cardId: string) => {
+      if (!token) return;
+      revealCard(token, cardId).catch((e) => {
+        if (e instanceof UnauthorizedError) signOut();
+      });
+    },
+    [token, signOut]
   );
 
   // Judge one recorded sentence. Auth errors sign out here (same policy as
@@ -180,6 +194,7 @@ export default function Satzschmiede() {
             deck={deck}
             onRemove={handleRemove}
             onAttempt={handleAttempt}
+            onReveal={handleReveal}
           />
         )}
 

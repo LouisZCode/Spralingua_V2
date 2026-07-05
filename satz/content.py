@@ -3,7 +3,8 @@
 Reads every ``satz/packs/*.yaml`` and enforces the card rules the trainer's
 pedagogy depends on (see ``.claude/skills/satz-cards/SKILL.md``): nouns carry
 their article + gender/plural note, verbs carry NO grammar note (the learner
-recalls case/reflexivity unaided), phrases carry a register note.
+recalls case/reflexivity unaided), phrases carry a register note, adjectives
+carry a comparison note (comparative · superlative).
 
 Fail-loud by design: a malformed pack raises ``ValueError`` at import of the
 content, which aborts startup — same philosophy as ``init_engine``. Broken
@@ -16,7 +17,7 @@ import yaml
 
 PACKS_DIR = Path(__file__).parent / "packs"
 
-CARD_TYPES = {"noun", "verb", "phrase"}
+CARD_TYPES = {"noun", "verb", "phrase", "adjective"}
 PACK_KINDS = {"level", "situation"}
 
 
@@ -45,6 +46,10 @@ def _validate_card(card: dict, pack_id: str) -> None:
         raise ValueError(f"{where}: verb cards must not carry a note (Verbs Rule)")
     if card["type"] != "verb" and card.get("reflexive"):
         raise ValueError(f"{where}: 'reflexive' applies to verbs only")
+
+    # Adjectives always reveal their comparison forms on the answer side.
+    if card["type"] == "adjective" and not card.get("note"):
+        raise ValueError(f"{where}: adjectives need a comparison note")
 
 
 def load_packs() -> tuple[list[dict], dict[str, dict]]:

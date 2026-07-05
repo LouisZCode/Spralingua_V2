@@ -2,41 +2,34 @@
 
 import { useEffect, useRef, useState } from "react";
 import { WordRejectedError, type AttemptResult } from "./api";
-import type { Card, CardType } from "./deck";
-
-// Visual identity per word type: badge label + colour. One card shell serves
-// every type — the face shows only the badge + the word to produce. Meaning and
-// grammar stay hidden until the card flips (recall the gender/usage, don't read
-// it off the card).
-const TYPE_STYLE: Record<CardType, { label: string; chip: string }> = {
-  noun: { label: "Noun", chip: "bg-flag-red text-white" },
-  verb: { label: "Verb", chip: "bg-flag-gold text-ink" },
-  phrase: { label: "Phrase", chip: "bg-ink text-white" },
-};
+import type { DeckCard } from "./deck";
 
 type Verdict = "correct" | "close" | "revealed";
 
-// The answer side tints the whole card by outcome, so the result reads at a
-// glance without scrolling.
-const VERDICT_STYLE: Record<
-  Verdict,
-  { label: string; faceBox: string; tone: string }
-> = {
+// No verdict text anywhere — the tint (green/red/gold) plus a ✓/✕ mark carry
+// the outcome, so the back stays scannable: the word first, the attempt after.
+const VERDICT_STYLE: Record<Verdict, { faceBox: string; tone: string }> = {
   correct: {
-    label: "Correct",
     faceBox: "border-success bg-success-soft",
     tone: "text-success",
   },
   close: {
-    label: "Close — not quite",
     faceBox: "border-flag-red bg-flag-red-soft",
     tone: "text-flag-red-deep",
   },
   revealed: {
-    label: "Revealed — counts as a miss",
     faceBox: "border-flag-gold bg-flag-gold-soft",
     tone: "text-flag-gold-deep",
   },
+};
+
+// Gender colour-coding — the classic learning mnemonic: der=red, die=blue,
+// das=green. Applied to the article only, never to the noun itself. The
+// palette has no blue (flag colours), so `die` gets a functional one-off.
+const ARTICLE_COLOR: Record<string, string> = {
+  der: "text-flag-red",
+  die: "text-[#2563eb]",
+  das: "text-success",
 };
 
 const redShadow = {
@@ -45,29 +38,68 @@ const redShadow = {
 const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
+const goldShadow = {
+  ["--shadow-color"]: "var(--color-flag-gold-deep)",
+} as React.CSSProperties;
 
 // One sentence is all we judge — auto-stop keeps a forgotten open mic from
 // uploading minutes of audio (the backend caps bytes for the same reason).
 const MAX_RECORD_SECONDS = 20;
 
+// How many never-practiced words one session introduces — the classic SRS
+// drip. The rest wait in the pool for tomorrow's queue (or the "+ practice
+// more" button on the done panel).
+const NEW_PER_SESSION = 5;
+
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both
 // as-is, so we just pick the first container the browser supports.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Today's work: everything due plus a capped drip of new words, shuffled so
+// packs don't replay in authoring order. `exclude` holds cards already
+// finished this session — the deck's srs is a fetch-time snapshot, so the
+// server can't tell us that.
+function buildQueue(deck: DeckCard[], exclude: Set<string>): string[] {
+  const pool = deck.filter((c) => !exclude.has(c.id));
+  const due = pool.filter((c) => c.srs.status === "due").map((c) => c.id);
+  const fresh = pool.filter((c) => c.srs.status === "new").map((c) => c.id);
+  return shuffle([...due, ...shuffle(fresh).slice(0, NEW_PER_SESSION)]);
+}
 
 export default function VocabTrainer({
   deck,
   onRemove,
   onAttempt,
+  onReveal,
 }: {
-  deck: Card[];
+  deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
-  // this prop shrinks — the clamped index below then lands on the next card.
+  // this prop shrinks — the queue/index below adjust to the missing id.
   onRemove: (cardId: string) => Promise<void>;
   // Judge one recorded sentence (POST /satz/attempts via the parent, which
   // owns the token). Resolves with the examiner's verdict.
   onAttempt: (cardId: string, audio: Blob) => Promise<AttemptResult>;
+  // Record a practice-mode peek as a lapse (fire-and-forget via the parent).
+  onReveal: (cardId: string) => void;
 }) {
-  const [index, setIndex] = useState(0);
+  // Two ways to face the pool: "practice" works today's queue (due + a drip
+  // of new, shuffled — green pops a card, anything else recycles it); browse
+  // is the old free walk over everything, schedule untouched by peeks.
+  const [browsing, setBrowsing] = useState(false);
+  const [queue, setQueue] = useState<string[]>(() =>
+    buildQueue(deck, new Set())
+  );
+  const [index, setIndex] = useState(0); // browse-mode position
+
   const [revealed, setRevealed] = useState(false); // used the hint → a miss
   const [flipped, setFlipped] = useState(false); // showing the answer side
   const [removing, setRemoving] = useState(false);
@@ -81,26 +113,70 @@ export default function VocabTrainer({
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
   const discardRef = useRef(false);
+  // Cards finished (green) this session — the deck's srs snapshot still calls
+  // them due/new, so re-queueing has to exclude them by hand.
+  const doneRef = useRef<Set<string>>(new Set());
 
   const total = deck.length;
-  // The deck can shrink underneath us (a removal refetch) while index still
-  // points past the end — clamp instead of crashing on deck[index].
+  const byId = new Map(deck.map((c) => [c.id, c] as const));
+  // The deck can shrink underneath us (a removal refetch) — drop dead ids
+  // from the queue and clamp the browse index instead of crashing.
+  const activeQueue = queue.filter((id) => byId.has(id));
   const safeIndex = Math.min(index, total - 1);
-  const card = deck[safeIndex];
-  const accent = TYPE_STYLE[card.type];
+  const card = browsing ? deck[safeIndex] : byId.get(activeQueue[0]);
 
   // Card navigation stays locked while a recording or check is in flight, so
   // the verdict that comes back always belongs to the card on screen.
   const busy = recording || checking;
 
-  const verdict: Verdict = revealed ? "revealed" : (result?.verdict ?? "close");
+  // The word is what the card tests: wordOk alone decides green vs red. A
+  // grammar slip elsewhere in the sentence stays green and shows up as a
+  // separate grammar note instead.
+  const verdict: Verdict = revealed
+    ? "revealed"
+    : result?.wordOk
+      ? "correct"
+      : "close";
   const v = VERDICT_STYLE[verdict];
+  const grammarNote = result != null && result.wordOk && !result.grammarOk;
 
   // Nouns hide the article, reflexive verbs hide `sich` — the same move: a
   // grammatical lead stripped from the clue and restored here on the answer so
   // the learner sees what they were meant to recall.
-  const lead = card.article ?? (card.reflexive ? "sich" : undefined);
-  const fullForm = lead ? `${lead} ${card.target}` : card.target;
+  const lead = card?.article ?? (card?.reflexive ? "sich" : undefined);
+  // The coloured article already encodes the gender — drop the note's
+  // redundant "feminine ·" prefix (phrase register notes pass untouched).
+  const note = card?.note?.replace(/^(masculine|feminine|neuter)\s*·\s*/, "");
+
+  const dueLeft = activeQueue.filter(
+    (id) => byId.get(id)?.srs.status === "due"
+  ).length;
+  const newLeft = activeQueue.filter(
+    (id) => byId.get(id)?.srs.status === "new"
+  ).length;
+  const practiceLabel =
+    [
+      dueLeft > 0 ? `${dueLeft} due` : null,
+      newLeft > 0 ? `${newLeft} new` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || `${activeQueue.length} left`;
+
+  // When the flipped card comes back, per the scheduler: a browse-mode peek
+  // costs nothing, so it shows no line.
+  const dueDays = result
+    ? result.dueInDays
+    : revealed && !browsing
+      ? 0
+      : null;
+  const scheduleLine =
+    dueDays === null
+      ? " "
+      : dueDays <= 0
+        ? "Again today"
+        : dueDays === 1
+          ? "Back tomorrow"
+          : `Back in ${dueDays} days`;
 
   // Recording timer + auto-stop.
   useEffect(() => {
@@ -127,7 +203,7 @@ export default function VocabTrainer({
   );
 
   async function startRecording() {
-    if (busy || flipped) return;
+    if (busy || flipped || !card) return;
     setAttemptError(null);
     setResult(null);
     let stream: MediaStream;
@@ -164,6 +240,7 @@ export default function VocabTrainer({
   }
 
   async function check(audio: Blob) {
+    if (!card) return;
     setChecking(true);
     try {
       const res = await onAttempt(card.id, audio);
@@ -182,51 +259,142 @@ export default function VocabTrainer({
     }
   }
 
-  // Reset the per-card scratch state on every move. Wrap around so browsing
-  // the deck never dead-ends.
-  function goTo(next: number) {
-    if (busy) return;
-    setIndex((next + total) % total);
+  // Reset the per-card scratch state on every move.
+  function resetScratch() {
     setRevealed(false);
     setFlipped(false);
     setResult(null);
     setAttemptError(null);
   }
 
+  // Browse: step through the whole pool, wrapping so it never dead-ends.
+  // Practice: rotate the queue — skipping is allowed, escaping is not (the
+  // card stays in today's round).
+  function move(dir: 1 | -1) {
+    if (busy) return;
+    if (browsing) {
+      setIndex((i) => (Math.min(i, total - 1) + dir + total) % total);
+    } else {
+      setQueue((q) => {
+        const act = q.filter((id) => byId.has(id));
+        if (act.length < 2) return act;
+        return dir === 1
+          ? [...act.slice(1), act[0]]
+          : [act[act.length - 1], ...act.slice(0, -1)];
+      });
+    }
+    resetScratch();
+  }
+
+  // The forward move, with meaning: in practice a green answer pops the card
+  // from today's queue, anything else (red, reveal, plain skip) recycles it
+  // to the back for another go. Browse just walks on.
+  function handleNext() {
+    if (busy) return;
+    if (browsing) {
+      move(1);
+      return;
+    }
+    if (!card) return;
+    const passed = !revealed && result?.wordOk === true;
+    if (passed) doneRef.current.add(card.id);
+    setQueue((q) => {
+      const act = q.filter((id) => byId.has(id));
+      if (act.length === 0) return act;
+      const [head, ...rest] = act;
+      return passed ? rest : [...rest, head];
+    });
+    resetScratch();
+  }
+
+  // Top the queue up with the next drip of new words (done-panel button).
+  function startMore() {
+    setQueue(buildQueue(deck, doneRef.current));
+    resetScratch();
+  }
+
+  function toggleMode() {
+    if (busy) return;
+    setBrowsing((b) => !b);
+    resetScratch();
+  }
+
   async function handleRemove() {
-    if (removing || busy) return;
+    if (removing || busy || !card) return;
     setRemoving(true);
     try {
       await onRemove(card.id);
       // The shrunken deck arrives via props; reset the scratch state so the
       // card that slides into this slot starts fresh.
-      setRevealed(false);
-      setFlipped(false);
-      setResult(null);
-      setAttemptError(null);
+      resetScratch();
     } finally {
       setRemoving(false);
     }
   }
 
+  if (!card) {
+    // Practice queue exhausted (browse always has a card — the parent only
+    // mounts the trainer on a non-empty pool). New words beyond today's drip
+    // can be pulled in; otherwise the pool is resting.
+    const moreNew = deck.filter(
+      (c) => c.srs.status === "new" && !doneRef.current.has(c.id)
+    ).length;
+    return (
+      <div className="mx-auto w-full max-w-xl text-center">
+        <h2 className="font-display text-[clamp(26px,5vw,36px)] font-black leading-tight tracking-tight text-ink">
+          {doneRef.current.size > 0
+            ? "Alles geschmiedet!"
+            : "Nothing due today."}
+        </h2>
+        <p className="mx-auto mt-3 max-w-[380px] font-body text-[15px] leading-relaxed text-ink-soft">
+          {moreNew > 0
+            ? `Today's round is done — ${moreNew} new ${
+                moreNew === 1 ? "word is" : "words are"
+              } still waiting in your pool.`
+            : "Your words are resting — they'll come back when it's time to forge them again."}
+        </p>
+        {moreNew > 0 && (
+          <button
+            type="button"
+            onClick={startMore}
+            className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+            style={redShadow}
+          >
+            + Practice {Math.min(moreNew, NEW_PER_SESSION)} more
+          </button>
+        )}
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={() => setBrowsing(true)}
+            className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+          >
+            Browse all {total} words →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto w-full max-w-xl">
-      {/* Progress + free browse */}
-      <div className="mb-4 flex items-center justify-between">
+      {/* Progress + navigation. Practice counts down today's queue; browse
+          keeps the old free walk over the whole pool. */}
+      <div className="mb-2 flex items-center justify-between">
         <button
           type="button"
-          onClick={() => goTo(safeIndex - 1)}
+          onClick={() => move(-1)}
           disabled={busy}
           className="font-body text-[12px] font-bold uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red disabled:opacity-40"
         >
           ← Prev
         </button>
         <span className="font-body text-[11px] font-semibold uppercase tracking-[0.26em] text-ink-muted">
-          Word {safeIndex + 1} of {total}
+          {browsing ? `Word ${safeIndex + 1} of ${total}` : practiceLabel}
         </span>
         <button
           type="button"
-          onClick={() => goTo(safeIndex + 1)}
+          onClick={handleNext}
           disabled={busy}
           className="font-body text-[12px] font-bold uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red disabled:opacity-40"
         >
@@ -234,52 +402,127 @@ export default function VocabTrainer({
         </button>
       </div>
 
-      {/* The card — word only. Flips in place; the mic below never moves. */}
-      <div className="flip-scene h-[360px]">
+      {/* Mode toggle — browse is the escape hatch, never the default. */}
+      <div className="mb-4 text-center">
+        <button
+          type="button"
+          onClick={toggleMode}
+          disabled={busy}
+          className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-faint transition-colors hover:text-flag-red disabled:opacity-40"
+        >
+          {browsing ? "← Back to practice" : `Browse all ${total} →`}
+        </button>
+      </div>
+
+      {/* The card — word only, no type badge: capitalization is the signal
+          (nouns capitalized, verbs/phrases not). Flips in place. */}
+      <div
+        className={`flip-scene transition-[height] duration-300 ${
+          grammarNote ? "h-[430px]" : "h-[340px]"
+        }`}
+      >
         <div className={`flip-card ${flipped ? "is-flipped" : ""}`}>
-          {/* ── Front: the word to produce ──────────────────────────── */}
+          {/* ── Front: nothing but the word to produce ───────────────── */}
           <div className="flip-face items-center justify-center rounded-[28px] border-[3px] border-ink bg-white p-7 text-center shadow-[0_6px_0_var(--color-ink)]">
-            <span
-              className={`inline-flex items-center rounded-full border-[2px] border-ink px-3 py-1 font-body text-[11px] font-black uppercase tracking-[0.18em] ${accent.chip}`}
-            >
-              {accent.label}
-            </span>
-            <h2 className="mt-5 font-display text-[clamp(30px,6vw,44px)] font-black leading-[1.05] tracking-tight text-ink">
+            <h2 className="font-display text-[clamp(30px,6vw,44px)] font-black leading-[1.05] tracking-tight text-ink">
               {card.target}
             </h2>
           </div>
 
-          {/* ── Back: verdict + the info that was hidden ────────────── */}
+          {/* ── Back, learn-first split: the word (zone 1), then the
+                attempt (zone 2). No verdict headline, no scrolling — the
+                tint and ✓/✕ say it, the corrected sentence teaches it. ── */}
           <div
             className={`flip-face flip-back rounded-[28px] border-[3px] p-7 shadow-[0_6px_0_var(--color-ink)] ${v.faceBox}`}
           >
             <div className="flex min-h-0 flex-1 flex-col">
-              <p
-                className={`font-display text-[16px] font-black uppercase tracking-[0.14em] ${v.tone}`}
-              >
-                {v.label}
-              </p>
-              <p className="mt-2 font-display text-[22px] font-black leading-tight text-ink">
-                {fullForm}
-              </p>
-              <dl className="mt-3 min-h-0 flex-1 space-y-2.5 overflow-y-auto">
-                {result && (
-                  <Row label="We heard" value={`„${result.transcript}“`} />
+              {/* Zone 1, a centered stack: the word (article colour-coded by
+                  gender), the translation under it, the plural a step lower. */}
+              <div className="text-center">
+                <p className="font-display text-[28px] font-black leading-tight text-ink">
+                  {lead && (
+                    <span
+                      className={
+                        card.article ? ARTICLE_COLOR[card.article] : "text-ink"
+                      }
+                    >
+                      {lead}{" "}
+                    </span>
+                  )}
+                  {card.target}
+                </p>
+                <p className="mt-1 font-body text-[15px] font-semibold text-ink-soft">
+                  {card.gloss}
+                </p>
+                {note && (
+                  <p className="mt-2 font-body text-[13px] font-semibold text-ink-muted">
+                    {note}
+                  </p>
                 )}
-                {result && <Row label="Feedback" value={result.feedback} />}
-                {result?.corrected && (
-                  <Row label="Try it like this" value={result.corrected} />
+              </div>
+
+              {/* Zone 2: what you said → the fix (or the example if you
+                  peeked instead of attempting). */}
+              <div className="mt-4 flex-1 border-t-[2px] border-ink/20 pt-3">
+                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                  {result ? "Your attempt" : "Natural example"}
+                </p>
+                {result ? (
+                  <>
+                    <p className="mt-2 font-body text-[17px] leading-snug text-ink">
+                      <span className={`mr-1.5 font-black ${v.tone}`}>
+                        {verdict === "correct" ? "✓" : "✕"}
+                      </span>
+                      „{result.transcript}“
+                    </p>
+                    {/* Word error (red): correction + optional hint inline. */}
+                    {!result.wordOk && result.corrected && (
+                      <p className="mt-3.5 font-body text-[17px] font-bold leading-snug text-ink">
+                        <span className={`mr-1.5 ${v.tone}`}>→</span>
+                        {result.corrected}
+                      </p>
+                    )}
+                    {!result.wordOk && result.error && (
+                      <p className="mt-2 font-body text-[13px] leading-snug text-ink-soft">
+                        {result.error}
+                      </p>
+                    )}
+                    {/* Word right, sentence grammar off: still green — the
+                        fix lives in its own section so it reads as a bonus
+                        lesson, not a fail. */}
+                    {grammarNote && (
+                      <div className="mt-6 border-t-[2px] border-ink/20 pt-3">
+                        {/* Red label — the one loud thing on a green card, so
+                            the bonus lesson can't be missed. */}
+                        <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-flag-red">
+                          Grammar
+                        </p>
+                        {result.corrected && (
+                          <p className="mt-1.5 font-body text-[17px] font-bold leading-snug text-ink">
+                            <span className="mr-1.5 text-ink-muted">→</span>
+                            {result.corrected}
+                          </p>
+                        )}
+                        {result.error && (
+                          <p className="mt-1.5 font-body text-[13px] leading-snug text-ink-soft">
+                            {result.error}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  card.example && (
+                    <p className="mt-1.5 font-body text-[15px] leading-snug text-ink">
+                      {card.example}
+                    </p>
+                  )
                 )}
-                <Row label="Meaning" value={card.gloss} />
-                {card.note && <Row label="Gender / form" value={card.note} />}
-                {card.example && (
-                  <Row label="Natural example" value={card.example} />
-                )}
-              </dl>
+              </div>
             </div>
             <button
               type="button"
-              onClick={() => goTo(safeIndex + 1)}
+              onClick={handleNext}
               className="btn-3d mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
               style={inkShadow}
             >
@@ -290,13 +533,12 @@ export default function VocabTrainer({
       </div>
 
       {/* ── Separate block, outside the card: the mic. Speak one sentence,
-          release, verdict flips the card. Mic-only by design — no typing. ── */}
+          release, verdict flips the card. Mic-only by design — no typing.
+          No instruction text: the mic explains itself; the line below it
+          only speaks when something is happening (timer, checking, or the
+          scheduler saying when the card returns). ── */}
       <div className={`mt-6 transition-opacity ${flipped ? "opacity-60" : ""}`}>
-        <p className="text-center font-body text-[12px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
-          Say a sentence with this word
-        </p>
-
-        <div className="mt-4 flex flex-col items-center">
+        <div className="flex flex-col items-center">
           <button
             type="button"
             onClick={recording ? stopRecording : startRecording}
@@ -332,12 +574,16 @@ export default function VocabTrainer({
               </svg>
             )}
           </button>
+          {/* Non-breaking space when idle keeps the height stable, so the
+              timer appearing doesn't shove the layout around. */}
           <p className="mt-3 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
             {checking
               ? "Checking your sentence…"
               : recording
                 ? `0:${String(elapsed).padStart(2, "0")} · tap to stop`
-                : "Tap to record"}
+                : flipped
+                  ? scheduleLine
+                  : " "}
           </p>
         </div>
 
@@ -349,14 +595,19 @@ export default function VocabTrainer({
 
         {card.example && (
           <div className="mt-3 text-center">
+            {/* Gold — same tone the card back wears when you peek: revealing
+                is the "hint" path, visually priced as such. In practice mode
+                the peek is also a recorded lapse; browsing is just looking. */}
             <button
               type="button"
               onClick={() => {
                 setRevealed(true);
                 setFlipped(true);
+                if (!browsing) onReveal(card.id);
               }}
               disabled={flipped || busy}
-              className="font-body text-[12px] font-bold uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red disabled:opacity-40"
+              className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-gold-deep bg-flag-gold px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink disabled:pointer-events-none disabled:opacity-40"
+              style={goldShadow}
             >
               Reveal example
             </button>
@@ -371,24 +622,11 @@ export default function VocabTrainer({
           type="button"
           onClick={handleRemove}
           disabled={removing || busy}
-          className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-faint transition-colors hover:text-flag-red disabled:opacity-40"
+          className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-flag-red transition-colors hover:text-flag-red-deep disabled:opacity-40"
         >
           {removing ? "Removing…" : "✕ Remove this word from my pool"}
         </button>
       </div>
-    </div>
-  );
-}
-
-function Row({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <dt className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-        {label}
-      </dt>
-      <dd className="mt-0.5 font-body text-[16px] leading-relaxed text-ink">
-        {value}
-      </dd>
     </div>
   );
 }

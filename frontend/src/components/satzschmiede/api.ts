@@ -2,7 +2,7 @@
 // call replays the session JWT as a Bearer header — same AUTH-001 token the
 // WS handshake and /say already use.
 import { HTTP_BASE } from "@/lib/api";
-import type { Card } from "./deck";
+import type { Card, DeckCard } from "./deck";
 
 export type PackSummary = {
   id: string;
@@ -64,8 +64,8 @@ export async function addPack(
   return request(`/satz/packs/${packId}/add`, token, { method: "POST" });
 }
 
-export async function fetchDeck(token: string): Promise<Card[]> {
-  const data = await request<{ cards: Card[] }>("/satz/deck", token);
+export async function fetchDeck(token: string): Promise<DeckCard[]> {
+  const data = await request<{ cards: DeckCard[] }>("/satz/deck", token);
   return data.cards;
 }
 
@@ -80,14 +80,22 @@ export async function addWord(
   });
 }
 
-// The examiner's answer to one spoken attempt (POST /satz/attempts).
-// `verdict` maps straight onto the trainer's card states; "revealed" stays a
-// frontend-only state (the learner peeked instead of attempting).
+// The examiner's answer to one spoken attempt (POST /satz/attempts) — two
+// separate judgements: the WORD is what the card tests (wordOk drives the
+// green/red tint); the rest of the sentence's grammar is feedback only,
+// rendered as a grammar note on a green card, never a fail. "revealed" stays
+// a frontend-only state (the learner peeked instead of attempting).
 export type AttemptResult = {
   transcript: string;
-  verdict: "correct" | "close";
-  feedback: string;
+  wordOk: boolean;
+  grammarOk: boolean;
+  // One ≤10-word line naming the broken rule ("'weil' sends the verb to the
+  // end") — always set on grammar errors, only-when-not-obvious on word errors.
+  error: string | null;
   corrected: string | null;
+  // When the card comes back: the interval the scheduler just wrote (0 =
+  // still due today after a miss, 1 = tomorrow, then the expanding ladder).
+  dueInDays: number;
 };
 
 export async function submitAttempt(
@@ -100,6 +108,18 @@ export async function submitAttempt(
   form.append("card_id", cardId);
   form.append("audio", audio, "attempt");
   return request("/satz/attempts", token, { method: "POST", body: form });
+}
+
+// The learner peeked at the example instead of attempting — record the lapse
+// so the reveal can't silently keep a long interval alive. The card drops to
+// "due now"; reps stay untouched (a reveal isn't a graded attempt).
+export async function revealCard(
+  token: string,
+  cardId: string
+): Promise<{ dueInDays: number }> {
+  return request(`/satz/deck/${encodeURIComponent(cardId)}/reveal`, token, {
+    method: "POST",
+  });
 }
 
 export async function removeCard(

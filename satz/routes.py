@@ -1,6 +1,6 @@
 """HTTP routes for Satzschmiede (SATZ-002 — Phase 1: browse packs + read deck;
 Phase 2: forge your own word + remove a card from the pool; Phase 3: speak a
-sentence, get an examiner verdict).
+sentence, get an examiner verdict; Phase 4: expanding-interval scheduling).
 
 Every route resolves the caller via the session JWT (``get_current_user_id``)
 and gets one ``AsyncSession`` per request (``get_db``) — the two dependencies
@@ -9,6 +9,7 @@ so the Next.js origin needs no extra wiring here.
 """
 
 import re
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
@@ -24,6 +25,7 @@ from database.orm import Pack, PackCard, User, UserCard, VocabCard
 from satz.content import _validate_card
 from satz.enricher import enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
+from satz.scheduler import schedule
 
 router = APIRouter(prefix="/satz", tags=["satzschmiede"])
 
@@ -49,6 +51,25 @@ def _card_payload(c: VocabCard) -> dict:
     if c.level:
         payload["level"] = c.level
     return payload
+
+
+def _srs_payload(uc: UserCard, now: datetime) -> dict:
+    """Per-user schedule state riding on each deck card (frontend ``CardSrs``).
+    ``status`` is computed server-side so the client never compares clocks:
+    "new" = never practiced, "due" = practice today, "later" = scheduled ahead.
+    """
+    if uc.due_at is None:
+        status = "new"
+    elif uc.due_at <= now:
+        status = "due"
+    else:
+        status = "later"
+    return {
+        "status": status,
+        "dueAt": uc.due_at.isoformat() if uc.due_at else None,
+        "intervalDays": uc.interval_days,
+        "reps": uc.reps,
+    }
 
 
 @router.get("/packs")
@@ -138,7 +159,7 @@ async def add_pack(
 _LEADS = ("der ", "die ", "das ", "ein ", "eine ", "sich ")
 
 _TRANSLIT = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
-_ID_PREFIX = {"noun": "n", "verb": "v", "phrase": "p"}
+_ID_PREFIX = {"noun": "n", "verb": "v", "phrase": "p", "adjective": "adj"}
 
 
 async def _find_canonical(db: AsyncSession, word: str) -> VocabCard | None:
@@ -346,16 +367,20 @@ async def submit_attempt(
     """Judge one spoken sentence for a card in the caller's pool.
 
     Transcribe (Deepgram prerecorded, one POST) → examine (one structured-
-    output LLM call) → verdict + feedback. Stateless for now: the scheduling
-    phase will start recording outcomes on ``user_cards``.
+    output LLM call) → verdict + feedback, then record the outcome on the
+    ``user_cards`` row: only ``word_ok`` moves the schedule (a grammar note
+    on a green card costs nothing — same rule as the verdict colour).
     """
-    card = await db.scalar(
-        select(VocabCard)
-        .join(UserCard, UserCard.card_id == VocabCard.id)
-        .where(UserCard.user_id == user_id, VocabCard.id == card_id)
-    )
-    if card is None:
+    row = (
+        await db.execute(
+            select(VocabCard, UserCard)
+            .join(UserCard, UserCard.card_id == VocabCard.id)
+            .where(UserCard.user_id == user_id, VocabCard.id == card_id)
+        )
+    ).first()
+    if row is None:
         raise HTTPException(status_code=404, detail="That card isn't in your pool.")
+    card, user_card = row
 
     data = await audio.read()
     if not data:
@@ -389,11 +414,25 @@ async def submit_attempt(
             detail="The examiner is unavailable right now — try again in a moment.",
         )
 
+    # Record the outcome. A miss lands on (0, now) — still due, retryable
+    # this session; a hit climbs the interval ladder.
+    interval, due_at = schedule(
+        judgement.word_ok, user_card.interval_days, datetime.now()
+    )
+    user_card.interval_days = interval
+    user_card.due_at = due_at
+    user_card.reps += 1
+    user_card.last_score = 1 if judgement.word_ok else 0
+    await db.commit()
+
+    # camelCase like every other satz payload (poolSize, cardCount, …).
     return {
         "transcript": transcript,
-        "verdict": judgement.verdict,
-        "feedback": judgement.feedback,
+        "wordOk": judgement.word_ok,
+        "grammarOk": judgement.grammar_ok,
+        "error": judgement.error,
         "corrected": judgement.corrected,
+        "dueInDays": interval,
     }
 
 
@@ -402,18 +441,46 @@ async def get_deck(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """The caller's pool, oldest-added first. Phase 1 serves the whole pool;
-    the scheduler phase will narrow this to cards that are due."""
-    cards = (
-        (
-            await db.execute(
-                select(VocabCard)
-                .join(UserCard, UserCard.card_id == VocabCard.id)
-                .where(UserCard.user_id == user_id)
-                .order_by(UserCard.added_at, VocabCard.id)
-            )
+    """The caller's whole pool, oldest-added first, each card carrying its
+    schedule state. One payload serves both trainer modes: the frontend builds
+    today's practice queue from the due/new cards and keeps browse-all over
+    the full list."""
+    now = datetime.now()
+    rows = (
+        await db.execute(
+            select(VocabCard, UserCard)
+            .join(UserCard, UserCard.card_id == VocabCard.id)
+            .where(UserCard.user_id == user_id)
+            .order_by(UserCard.added_at, VocabCard.id)
         )
-        .scalars()
-        .all()
+    ).all()
+    return {
+        "cards": [
+            {**_card_payload(c), "srs": _srs_payload(uc, now)} for c, uc in rows
+        ]
+    }
+
+
+@router.post("/deck/{card_id}/reveal")
+async def reveal_card(
+    card_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """The learner peeked at the example instead of attempting — a lapse.
+
+    Drops the card to "due now" so the peek can't silently keep a long
+    interval alive (the next green restarts the ladder honestly at 1 day).
+    ``reps``/``last_score`` stay untouched: a reveal isn't a graded attempt.
+    """
+    user_card = await db.scalar(
+        select(UserCard).where(
+            UserCard.user_id == user_id, UserCard.card_id == card_id
+        )
     )
-    return {"cards": [_card_payload(c) for c in cards]}
+    if user_card is None:
+        raise HTTPException(status_code=404, detail="That card isn't in your pool.")
+    user_card.interval_days = 0
+    user_card.due_at = datetime.now()
+    await db.commit()
+    return {"dueInDays": 0}

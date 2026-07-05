@@ -8,11 +8,13 @@ one-shot calls turn the clip into feedback:
    no Pipecat: the conversation pipeline exists for live turn-taking; this is
    a plain request/response, so it uses none of it.
 2. **Examiner LLM** — the same Cerebras ``gpt-oss-120b`` structured-output
-   wiring as ``satz/enricher.py`` judges whether the sentence uses the card's
-   word correctly and writes one learner-facing feedback line.
+   wiring as ``satz/enricher.py`` makes two separate judgements: was the
+   card's WORD used correctly (that is what the card tests — it drives the
+   green/red verdict), and is the rest of the sentence grammatical (feedback
+   only, shown as a grammar note — it never fails the attempt).
 """
 
-from typing import Literal, Optional
+from typing import Optional
 
 import aiohttp
 from langchain_openai import ChatOpenAI
@@ -49,23 +51,30 @@ async def transcribe_attempt(audio: bytes, mimetype: str | None) -> str:
 
 
 class Judgement(BaseModel):
-    verdict: Literal["correct", "close"] = Field(
+    """Two separate judgements: the WORD is what the card tests (drives the
+    pass/fail colour); the rest of the sentence's grammar is feedback only."""
+
+    word_ok: bool = Field(
         description=(
-            "correct = a grammatical German sentence that uses the target word "
-            "properly; close = anything less"
+            "True iff the target word itself was used correctly: present, in "
+            "its intended sense, with the grammar the word owns done right"
         )
     )
-    feedback: str = Field(
+    grammar_ok: bool = Field(
+        description="True iff the rest of the sentence is grammatical German"
+    )
+    error: Optional[str] = Field(
+        default=None,
         description=(
-            "One or two short, friendly English sentences for the learner "
-            "(shown to them verbatim)"
-        )
+            "One short English line (AT MOST 10 words) naming the broken rule; "
+            "null when there is nothing to name"
+        ),
     )
     corrected: Optional[str] = Field(
         default=None,
         description=(
-            "Only when verdict=close: the learner's sentence minimally repaired, "
-            "in German. Null when verdict=correct"
+            "The learner's sentence minimally repaired, in German — whenever "
+            "anything is wrong. Null when everything is right"
         ),
     )
 
@@ -79,12 +88,12 @@ You examine one spoken attempt in a German vocabulary trainer. The learner saw a
 # What the learner said (speech-recognition transcript)
 "{transcript}"
 
-# How to judge
-- The transcript comes from speech recognition: IGNORE punctuation and capitalization entirely, and forgive an obviously misheard small word — judge the sentence the learner most plausibly said.
-- verdict "correct": a natural, grammatical German sentence that uses the target word in its intended meaning. Any correctly conjugated or declined form counts as using the word; separable verbs may split. A filler ("ähm") is fine.
-- verdict "close": everything else — the word is missing or used in the wrong sense, wrong article/gender/case agreement involving the word, a missing reflexive pronoun on a reflexive verb, broken conjugation or word order, or the sentence isn't German at all.
-- `feedback`: one or two short, friendly English sentences. When correct: confirm it, optionally add one tiny nuance. When close: name the SINGLE most important problem — don't list everything.
-- `corrected`: when close, repair the learner's own sentence with the smallest possible change (keep their idea and their words). If the target word was missing entirely, write the simplest sentence that expresses their idea WITH the word. When correct: null.
+# How to judge — two SEPARATE calls
+- The transcript comes from speech recognition: IGNORE punctuation and capitalization entirely, and forgive an obviously misheard small word — judge the sentence the learner most plausibly said. A filler ("ähm") is fine.
+- `word_ok` — did the learner use the TARGET WORD correctly? This covers only the word itself: it appears (any correctly conjugated or declined form counts; separable verbs may split), in its intended meaning, with the grammar the word OWNS done right — its article/gender/case agreement, its own ending, the reflexive pronoun if it is reflexive. false when the word is missing, used in the wrong sense, or its own grammar is broken.
+- `grammar_ok` — is the REST of the sentence grammatical German? Word order, other verbs' conjugation, other words' articles and endings. A sentence can be word_ok but not grammar_ok: "Ich hasse Winter, weil ich habe viele Allergien" uses the target 'Allergie' perfectly, but the weil-clause word order is wrong. If the sentence isn't German at all, both are false.
+- `corrected`: whenever anything is false — repair the learner's own sentence with the smallest possible change (keep their idea and their words). If the target word was missing entirely, write the simplest sentence that expresses their idea WITH the word. When everything is right: null.
+- `error`: when grammar_ok=false, ONE short English line naming the rule that was broken (e.g. "'weil' sends the verb to the end") — the correction sits right next to it, so name the WHY, never restate the fix. When only word_ok=false, add it only when the correction alone doesn't reveal why (e.g. "'freuen' is reflexive — it needs 'mich'"), otherwise null. AT MOST 10 words. When everything is right: null.
 """
 
 
@@ -97,6 +106,13 @@ def _card_brief(card) -> str:
         lines.append(
             "- it is a REFLEXIVE verb: a correct sentence must pair it with the "
             "matching reflexive pronoun (mich/dich/sich/uns/euch)"
+        )
+    if card.type == "adjective":
+        lines.append(
+            "- it is an adjective: endingless predicative use ('Das Auto ist "
+            "schnell') is correct; attributive use must carry the right "
+            "declension ending ('ein schnelles Auto'). Comparative/superlative "
+            "forms count as using the word"
         )
     lines.append(f"- meaning: {card.gloss}")
     if card.note:
@@ -116,6 +132,8 @@ async def examine_attempt(card, transcript: str) -> Judgement:
         "{transcript}", transcript
     )
     result = await llm.ainvoke(prompt)
-    if result.verdict == "correct":
-        result.corrected = None  # a "fix" on a correct sentence only confuses
+    if result.word_ok and result.grammar_ok:
+        # A "fix" on a fully correct sentence only confuses.
+        result.corrected = None
+        result.error = None
     return result
