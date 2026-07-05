@@ -44,11 +44,12 @@ from logs import setup_session_logger
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
 
 
-# The voice runtime is German. These lessons stay English: `welcome` is the
-# front-page English concierge (product positioning), `goodbye_test` is a dev
-# fixture, and `b1_l1` still holds English content until its German rewrite
-# (grammar-tandem Phase B) — remove each from this set as it converts.
-ENGLISH_LESSONS = {"welcome", "goodbye_test", "b1_l1"}
+# The voice runtime is German. These lessons stay English: `lesson_zero` is the
+# open-conversation default (kept English by decision — its fake_profiles profile
+# targets English), `welcome` is the front-page English concierge (product
+# positioning), and `goodbye_test` is a dev fixture. Content lessons (a1_l1,
+# b1_l1) are German — remove each from this set as it converts.
+ENGLISH_LESSONS = {"welcome", "goodbye_test", "lesson_zero"}
 
 
 def lesson_language(lesson_id: str) -> str:
