@@ -34,7 +34,7 @@ class EnrichedCard(BaseModel):
             "learner why the input was rejected (shown to them verbatim)"
         ),
     )
-    type: Optional[Literal["noun", "verb", "phrase", "adjective"]] = Field(
+    type: Optional[Literal["noun", "verb", "phrase", "adjective", "preposition"]] = Field(
         default=None, description="Card type; null when valid=false"
     )
     target: Optional[str] = Field(
@@ -54,7 +54,7 @@ class EnrichedCard(BaseModel):
         default=None,
         description=(
             "Nouns: gender·plural note. Phrases: register hint. Adjectives: "
-            "comparison note. Verbs: MUST be null"
+            "comparison note. Prepositions: the case it governs. Verbs: MUST be null"
         ),
     )
     past_form: Optional[str] = Field(
@@ -89,7 +89,7 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
 # Normalize the input first
 - Strip a leading article (der/die/das/ein/eine) — it tells you the noun's gender but never belongs in `target`.
 - Strip a leading "sich" — it tells you the verb is reflexive (set reflexive=true) but never belongs in `target`.
-- Fix casing: German nouns are capitalized; verbs, adjectives and phrases are lowercase.
+- Fix casing: German nouns are capitalized; verbs, adjectives, prepositions and phrases are lowercase.
 - If the learner typed an inflected form (plural noun, conjugated verb), build the card for the base form (singular noun, infinitive verb).
 
 # Card rules (strict)
@@ -98,6 +98,7 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
 - type "verb" ALSO fills the past fields (every other type leaves them null):
   - `past_form`: the past as Germans actually SPEAK it, third person singular. Default is the Perfekt with its auxiliary: "ist geflogen", "hat gedacht". When the Präteritum is also everyday speech for this verb (denken → dachte, wissen → wusste, geben → gab, finden → fand), give both spoken-first: "dachte · hat gedacht". When the Perfekt is unnatural in speech (sein, haben, werden, the modals), give ONLY the Präteritum: "war", "hatte", "wollte". Reflexive verbs include the pronoun: "hat sich gefreut".
   - `past_example`: one natural German sentence using the verb in that spoken past.
+- type "preposition": `target` = the preposition, lowercase, bare. `note` = the case it forces on its object, written as a short tag: "+ accusative" (durch, für, gegen, ohne, um), "+ dative" (aus, bei, mit, nach, seit, von, zu, gegenüber), or "+ genitive" (wegen, trotz, während, (an)statt). For a TWO-WAY preposition (an, auf, in, über, unter, vor, hinter, neben, zwischen): `note` = "two-way · accusative (Wohin?) · dative (Wo?)". `gloss` = its core spatial or logical meaning. Also use this type for a word that works as a prepositional adverb (e.g. gegenüber) — pick its prepositional case.
 - type "phrase": `target` = the phrase as naturally written. `note` = one short register/usage hint (e.g. "polite register · when ordering").
 - type "adjective": `target` = the base (positive) form, lowercase. `note` = "comparative: <form> · superlative: am <form>" (e.g. "comparative: schneller · superlative: am schnellsten") — watch for irregulars (gut → besser → am besten, hoch → höher, teuer → teurer). For absolute adjectives that aren't normally compared (schwanger, tot): `note` = "not usually compared".
 - `gloss`: concise English meaning, ONE sense only — the most common everyday sense. If the word is hopelessly ambiguous without context, pick the dominant sense.
@@ -128,6 +129,8 @@ def _normalize(e: EnrichedCard) -> EnrichedCard:
             t = t[5:]
             e.reflexive = True
         e.note = None  # the Verbs Rule, non-negotiable
+    if e.type == "preposition":
+        t = t.lower()  # prepositions are always lowercase
     if e.type != "noun":
         e.article = None
     if e.type != "verb":

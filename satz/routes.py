@@ -163,7 +163,7 @@ async def add_pack(
 _LEADS = ("der ", "die ", "das ", "ein ", "eine ", "sich ")
 
 _TRANSLIT = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
-_ID_PREFIX = {"noun": "n", "verb": "v", "phrase": "p", "adjective": "adj"}
+_ID_PREFIX = {"noun": "n", "verb": "v", "phrase": "p", "adjective": "adj", "preposition": "prep"}
 
 
 async def _find_canonical(db: AsyncSession, word: str) -> VocabCard | None:

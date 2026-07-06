@@ -4,7 +4,8 @@ Reads every ``satz/packs/*.yaml`` and enforces the card rules the trainer's
 pedagogy depends on (see ``.claude/skills/satz-cards/SKILL.md``): nouns carry
 their article + gender/plural note, verbs carry NO grammar note (the learner
 recalls case/reflexivity unaided), phrases carry a register note, adjectives
-carry a comparison note (comparative · superlative).
+carry a comparison note (comparative · superlative), prepositions carry a
+case note (the case they govern).
 
 Fail-loud by design: a malformed pack raises ``ValueError`` at import of the
 content, which aborts startup — same philosophy as ``init_engine``. Broken
@@ -17,7 +18,7 @@ import yaml
 
 PACKS_DIR = Path(__file__).parent / "packs"
 
-CARD_TYPES = {"noun", "verb", "phrase", "adjective"}
+CARD_TYPES = {"noun", "verb", "phrase", "adjective", "preposition"}
 PACK_KINDS = {"level", "situation"}
 
 
@@ -60,6 +61,12 @@ def _validate_card(card: dict, pack_id: str) -> None:
     # Adjectives always reveal their comparison forms on the answer side.
     if card["type"] == "adjective" and not card.get("note"):
         raise ValueError(f"{where}: adjectives need a comparison note")
+
+    # A preposition's hidden grammar is the case it forces on its object —
+    # the note carries it ("+ dative", "two-way · Akk./Dat."), same way an
+    # adjective's note carries its comparison forms.
+    if card["type"] == "preposition" and not card.get("note"):
+        raise ValueError(f"{where}: prepositions need a case note (e.g. '+ dative')")
 
 
 def load_packs() -> tuple[list[dict], dict[str, dict]]:

@@ -1,16 +1,16 @@
 // A single practice item — the contract GET /satz/deck serves (backend:
 // satz/routes.py::_card_payload). Optional fields are omitted (not null) so
 // `card.note && …` guards and `??` fallbacks stay clean.
-export type CardType = "noun" | "verb" | "phrase" | "adjective";
+export type CardType = "noun" | "verb" | "phrase" | "adjective" | "preposition";
 
 export type Card = {
   id: string;
   type: CardType;
-  target: string; // the clue on the front — bare noun (no article), bare verb (no preposition/case/reflexive), base adjective, or phrase
+  target: string; // the clue on the front — bare noun (no article), bare verb (no preposition/case/reflexive), base adjective, bare preposition, or phrase
   article?: string; // nouns only: der/die/das — hidden on the clue, shown on the answer
   reflexive?: boolean; // reflexive verbs: `sich` is hidden on the clue and shown on the answer — the learner must spot the reflexivity unaided; the examiner must verify the sentence actually uses a reflexive pronoun
   gloss: string; // English meaning
-  note?: string; // grammar strip: gender/plural, comparison forms, or register
+  note?: string; // grammar strip: gender/plural, comparison forms, register, or the case a preposition governs
   tense?: "past"; // verb tense siblings: the spoken-past card (absent = present/base)
   tenseForm?: string; // the answer the past card reveals: "ist geflogen", "dachte · hat gedacht"
   example?: string; // optional model sentence, revealable as a hint

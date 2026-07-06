@@ -130,6 +130,14 @@ def _card_brief(card) -> str:
             "declension ending ('ein schnelles Auto'). Comparative/superlative "
             "forms count as using the word"
         )
+    if card.type == "preposition":
+        lines.append(
+            "- it is a preposition: a correct sentence must actually use it as a "
+            "preposition and put its object in the case named in the grammar "
+            "note. A two-way preposition takes the ACCUSATIVE for motion toward "
+            "a goal (Wohin?) and the DATIVE for a static location (Wo?). "
+            "word_ok=false if the object is in the wrong case or the word is missing"
+        )
     if card.tense == "past":
         lines.append(
             "- this card tests the SPOKEN PAST: the sentence must use the verb "
