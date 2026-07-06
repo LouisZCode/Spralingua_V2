@@ -941,11 +941,18 @@ export default function VocabTrainer({
             <button
               type="button"
               onClick={() => {
+                // An auto session keeps the mic hot on the front — stop and
+                // discard the pending clip so it never submits a verdict over
+                // the peek. The peek itself is the lapse (onReveal below).
+                if (recorderRef.current?.state === "recording") {
+                  discardRef.current = true;
+                  recorderRef.current.stop();
+                }
                 setRevealed(true);
                 setFlipped(true);
                 if (!browsing) onReveal(card.id);
               }}
-              disabled={flipped || busy}
+              disabled={flipped || checking}
               className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-gold-deep bg-flag-gold px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink disabled:pointer-events-none disabled:opacity-40"
               style={goldShadow}
             >
