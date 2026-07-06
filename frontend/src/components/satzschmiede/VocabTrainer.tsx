@@ -59,7 +59,7 @@ const SHOW_MANUAL_MIC: boolean = false;
 // How many never-practiced words one session introduces — the classic SRS
 // drip. The rest wait in the pool for tomorrow's queue (or the "+ practice
 // more" button on the done panel).
-const NEW_PER_SESSION = 5;
+const NEW_PER_SESSION = 15;
 
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both
 // as-is, so we just pick the first container the browser supports.
@@ -73,8 +73,6 @@ const AUTO_SPEECH_RMS = 0.04; // level that counts as "started speaking"
 const AUTO_SILENCE_RMS = 0.02; // below this = quiet
 const AUTO_SILENCE_MS = 1800; // quiet this long after speech = sentence done
 const AUTO_NO_SPEECH_MS = 8000; // no speech yet → restart the recorder, card stays
-const AUTO_DWELL_GREEN_MS = 6500; // review time when the word was right
-const AUTO_DWELL_RED_MS = 11000; // longer when there's a correction to read
 const AUTO_TICK_MS = 90; // VAD sampling interval
 
 // Voice-wave strip: a rolling history of mic levels drawn under the mic
@@ -305,16 +303,6 @@ export default function VocabTrainer({
     }, AUTO_TICK_MS);
     return () => clearInterval(tick);
   }, [auto, recording]);
-
-  // Review dwell: the verdict hangs around long enough to read — longer when
-  // there's a correction to study — then the loop moves on by itself.
-  useEffect(() => {
-    if (auto !== "running" || !flipped) return;
-    const ms = result?.wordOk ? AUTO_DWELL_GREEN_MS : AUTO_DWELL_RED_MS;
-    const t = setTimeout(() => handleNext(), ms);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleNext changes identity every render; adding it would reset the dwell on any re-render
-  }, [auto, flipped, result]);
 
   // Space = advance the review now; Esc = pause. The listener only exists
   // while a session is on, so the manual trainer keeps zero keyboard state.
