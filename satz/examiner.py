@@ -25,11 +25,12 @@ from grammar import load_taxonomy, taxonomy_brief
 
 EXAMINER_MODEL = "openai/gpt-oss-120b"
 
-# One-shot (prerecorded) endpoint — same nova-2 family as the live pipeline's
-# streaming STT, but German: Satzschmiede sentences are in the target language,
-# unlike the (currently English) conversation lessons.
+# One-shot (prerecorded) endpoint — same nova-3 model as the live pipeline's
+# streaming STT (services/stt.py::DEEPGRAM_MODEL), always German: Satzschmiede
+# sentences are in the target language (the English-by-design conversation
+# lessons don't apply here).
 _DEEPGRAM_URL = (
-    "https://api.deepgram.com/v1/listen?model=nova-2&language=de&smart_format=true"
+    "https://api.deepgram.com/v1/listen?model=nova-3&language=de&smart_format=true"
 )
 
 

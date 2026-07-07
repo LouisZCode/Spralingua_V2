@@ -12,7 +12,7 @@ from config import deepgram_api_key
 
 # Single source of truth — both stt_deepgram() and the STT trace observer
 # in pipeline/observers.py read these. Keep in sync with LiveOptions below.
-DEEPGRAM_MODEL = "nova-2"
+DEEPGRAM_MODEL = "nova-3"
 DEEPGRAM_PROVIDER = "deepgram"
 
 

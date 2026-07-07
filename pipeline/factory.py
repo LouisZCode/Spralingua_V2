@@ -204,7 +204,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
-        # `sample_rate=16000` matches Deepgram nova-2 (no resampling cost) and
+        # `sample_rate=16000` matches Deepgram nova-3 (no resampling cost) and
         # is what Azure Pronunciation Assessment expects natively.
         # `enable_turn_audio=True` activates the `_process_turn_recording` code
         # path that fires `on_user_turn_audio_data` on each UserStoppedSpeakingFrame
