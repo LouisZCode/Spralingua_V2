@@ -24,6 +24,16 @@ goals:
 
 locale: de-DE
 
+# STT-003 P2: nova-3 keyterm prompting. Waiting-room setting nouns and set
+# closing phrases this scene reliably elicits — the mishear-prone, predictable
+# vocabulary. Refine from real tester misses.
+keyterms:
+  - Wartezimmer
+  - Termin
+  - Auf Wiedersehen
+  - Bis bald
+  - Schönen Tag noch
+
 briefing:
   situation: |
     You're in your local doctor's office waiting room, killing

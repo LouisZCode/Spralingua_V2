@@ -144,7 +144,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # that actually loaded, not the raw query param.
         lesson_snapshot = load_prompts(lesson_id)
         lesson_lang = lesson_language(lesson_snapshot.get("id", lesson_id))
-        stt = stt_deepgram(language=lesson_lang)
+        # STT-003 P2: optional per-lesson keyterm list (nova-3 keyterm prompting).
+        # The snapshot is already loaded, so no ordering change — English lessons
+        # simply carry no `keyterms:` key and pass None (param omitted).
+        stt = stt_deepgram(language=lesson_lang, keyterms=lesson_snapshot.get("keyterms"))
         tts = tts_minimax(session, voice=voice, language=lesson_lang)
         converter = TranscriptionToContextConverter()
 

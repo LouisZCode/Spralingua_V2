@@ -15,6 +15,7 @@ one-shot calls turn the clip into feedback:
 """
 
 from typing import Optional
+from urllib.parse import quote
 
 import aiohttp
 from langchain_openai import ChatOpenAI
@@ -34,19 +35,31 @@ _DEEPGRAM_URL = (
 )
 
 
-async def transcribe_attempt(audio: bytes, mimetype: str | None) -> str:
+async def transcribe_attempt(
+    audio: bytes, mimetype: str | None, keyterms: list[str] | None = None
+) -> str:
     """One POST to Deepgram's prerecorded API: finished clip in, transcript out.
 
     Browsers hand us opus-in-webm (Chrome/Firefox) or aac-in-mp4 (Safari);
     Deepgram accepts both as-is, so the upload's content type passes through.
+
+    STT-003 P2: ``keyterms`` are nova-3 keyterm-prompting hints (repeated
+    ``&keyterm=`` query params). Satzschmiede's strongest case — the card names
+    the exact word the learner was told to say, so we bias the recognizer toward
+    it and its spoken past form, cutting *false* fails on rare target words.
     """
+    url = _DEEPGRAM_URL
+    for kt in keyterms or []:
+        term = (kt or "").strip()
+        if term:
+            url += f"&keyterm={quote(term)}"  # quote handles umlauts/ß/spaces
     headers = {
         "Authorization": f"Token {deepgram_api_key}",
         "Content-Type": mimetype or "audio/webm",
     }
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(_DEEPGRAM_URL, headers=headers, data=audio) as resp:
+        async with session.post(url, headers=headers, data=audio) as resp:
             resp.raise_for_status()
             body = await resp.json()
     return body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()

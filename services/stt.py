@@ -16,7 +16,7 @@ DEEPGRAM_MODEL = "nova-3"
 DEEPGRAM_PROVIDER = "deepgram"
 
 
-def stt_deepgram(language: str = "de"):
+def stt_deepgram(language: str = "de", keyterms: list[str] | None = None):
     return DeepgramSTTService(
         api_key=deepgram_api_key,
         live_options=LiveOptions(
@@ -24,5 +24,11 @@ def stt_deepgram(language: str = "de"):
             model=DEEPGRAM_MODEL,      # Deepgram model
             smart_format=True,         # Better formatting
             utterance_end_ms=1000,     # Wait 1s after last word for utterance boundary
+            # STT-003 P2: keyterm prompting biases nova-3 toward words this
+            # lesson is likely to elicit (regional greetings, setting nouns) —
+            # words a general model may normalise or mishear. Per-lesson list
+            # from the YAML `keyterms:` via factory; nova-3-only, ignored on
+            # nova-2. None (English lessons, or no list) omits the param.
+            keyterm=list(keyterms) if keyterms else None,
         )
     )

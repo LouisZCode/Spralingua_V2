@@ -16,7 +16,7 @@ Browser (mic) ⇄ WebSocket ⇄ FastAPI / Pipecat (STT → buffer → LLM → TT
 
 | Component | Technology |
 |---|---|
-| STT | Deepgram Nova-2 (English, smart_format) |
+| STT | Deepgram nova-3 (per-lesson language, smart_format, optional keyterm prompting) |
 | LLM | Cerebras `gpt-oss-120b` via OpenRouter (`ChatOpenAI` + LangGraph, `provider.order=["cerebras"]`) |
 | TTS | MiniMax `speech-2.8-turbo` (dynamic voice via `VOICE_MAP`) |
 | VAD | Silero (1.5s silence threshold) |
@@ -87,7 +87,7 @@ Per-turn STT / LLM / TTS spans also land in Langfuse for latency, token, and tra
 ├── main.py                     FastAPI app — /health, /lessons/{lesson_id}, /ws/{user_id}, /say/{user_id}
 ├── config/settings.py          Loads .env (Deepgram, MiniMax, OpenRouter, Langfuse)
 ├── services/
-│   ├── stt.py                  stt_deepgram() — Deepgram Nova-2 config
+│   ├── stt.py                  stt_deepgram() — Deepgram nova-3 config (per-lesson language + keyterms)
 │   ├── tts.py                  tts_minimax(session, voice) — MiniMax + VOICE_MAP
 │   └── transport.py            FastAPI WebSocket transport factory (current) + legacy local/WS variants
 ├── agents/

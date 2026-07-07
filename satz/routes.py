@@ -493,8 +493,17 @@ async def submit_attempt(
             detail="That recording is too long — keep it to one sentence.",
         )
 
+    # STT-003 P2: the card names the exact word we expect to hear — the ideal
+    # keyterm. For a past-tense card add the spoken past form too (the learner
+    # says "ist gegangen", not the lemma "gehen").
+    card_keyterms = [card.target]
+    if card.tense_form:
+        card_keyterms.append(card.tense_form)
+
     try:
-        transcript = await transcribe_attempt(data, audio.content_type)
+        transcript = await transcribe_attempt(
+            data, audio.content_type, keyterms=card_keyterms
+        )
     except Exception:
         logger.exception("Satz transcription failed (card {})", card_id)
         raise HTTPException(

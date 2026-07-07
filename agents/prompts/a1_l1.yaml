@@ -18,6 +18,14 @@ goals:
 
 locale: de-DE
 
+# STT-003 P2: nova-3 keyterm prompting. Regional greeting forms a general
+# German model tends to normalise or mishear — the rest (Hallo, Guten Tag)
+# nova-3 already handles. Refine from real tester misses.
+keyterms:
+  - Grüß Gott
+  - Servus
+  - Guten Tag
+
 briefing:
   situation: |
     You're walking down a quiet residential street.
