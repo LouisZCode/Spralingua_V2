@@ -46,6 +46,15 @@ const STATE_LABEL: Record<SpeakerState, string> = {
   agent_speaking: "Speaking",
 };
 
+// MOBILE-001 P2: iOS Safari only lets an <audio> element play from inside a
+// real user gesture. The bot track arrives later, async, in onTrackStarted —
+// outside any gesture — so iOS silently rejects that play() and the user never
+// hears the agent. We "bless" the element during the "I am ready" click by
+// playing this tiny silent clip; once user-activated, the later srcObject
+// playback is allowed without a fresh gesture. (Standard empty-WAV unlock.)
+const SILENT_AUDIO_DATA_URI =
+  "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
+
 export default function ConversationView({
   params,
   onFinish,
@@ -170,6 +179,19 @@ export default function ConversationView({
 
   const startCall = async () => {
     if (!token || !user) return;
+    // MOBILE-001 P2: prime audio playback INSIDE this click handler (a real
+    // user gesture) before any await, so iOS Safari unlocks the element for the
+    // bot track that arrives later in onTrackStarted. Must run before the first
+    // await or iOS no longer counts it as gesture-driven.
+    const audioEl = audioRef.current;
+    if (audioEl) {
+      audioEl.src = SILENT_AUDIO_DATA_URI;
+      audioEl.play().catch((e) => {
+        // Non-fatal, but on iOS a rejection here predicts silent bot audio —
+        // don't swallow it (the old bug). Surface it instead of hiding it.
+        console.warn("Audio unlock failed:", e);
+      });
+    }
     setPhase("live");
     setStatus("Connecting...");
     try {
@@ -197,8 +219,17 @@ export default function ConversationView({
             if (track.kind === "audio" && participant?.local === false) {
               const stream = new MediaStream([track]);
               if (audioRef.current) {
-                audioRef.current.srcObject = stream;
-                audioRef.current.play().catch(() => {});
+                const el = audioRef.current;
+                // Drop the silent-primer src (MOBILE-001 P2) before attaching
+                // the live stream so srcObject is the sole source.
+                el.removeAttribute("src");
+                el.srcObject = stream;
+                el.play().catch((e) => {
+                  // Was silently swallowed — a rejection here means the browser
+                  // blocked bot audio (iOS autoplay). Make it visible.
+                  console.warn("Bot audio playback blocked:", e);
+                  setStatus("Audio blocked — tap the screen to enable sound");
+                });
               }
             }
           },
