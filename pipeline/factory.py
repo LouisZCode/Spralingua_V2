@@ -20,6 +20,11 @@ from pipecat.processors.frameworks.rtvi import (
     RTVIProcessor,
 )
 from pipecat.processors.audio.audio_buffer_processor import AudioBufferProcessor
+from pipecat.processors.filters.stt_mute_filter import (
+    STTMuteConfig,
+    STTMuteFilter,
+    STTMuteStrategy,
+)
 
 from .converters import TranscriptionToContextConverter
 from .observers import PipelineLatencyObserver
@@ -336,8 +341,18 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             wrapper=wrapper,
         )
 
+        # BUG-001 / MOBILE-001 #3: on speakerphone the bot's voice loops back into
+        # the mic. Our WebSocket transport gives the browser echo canceller no
+        # reference signal (Pipecat #1771), so the echo reaches Deepgram + Silero
+        # VAD and — with allow_interruptions=True — cancels the bot mid-sentence.
+        # STTMuteFilter(ALWAYS) drops mic audio + VAD/transcription frames while the
+        # bot speaks (half-duplex), so nothing loops back. Headphones already avoid
+        # this; this fixes speakerphone. The typed /say path is unaffected.
+        stt_mute = STTMuteFilter(config=STTMuteConfig(strategies={STTMuteStrategy.ALWAYS}))
+
         pipeline = Pipeline([
             transport.input(),
+            stt_mute,          # deafen STT while bot speaks — kills speakerphone echo
             stt,
             converter,
             llm,
