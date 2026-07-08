@@ -2,6 +2,8 @@
 Simple frame converters for Pipecat pipelines.
 """
 
+from loguru import logger
+
 from pipecat.frames.frames import (
     Frame,
     TranscriptionFrame,
@@ -38,7 +40,14 @@ class TranscriptionToContextConverter(FrameProcessor):
         await super().process_frame(frame, direction)
 
         if isinstance(frame, UserStartedSpeakingFrame):
-            # User started - clear buffer for new utterance
+            # User started - clear buffer for new utterance.
+            # BUG-007: a non-empty buffer here means a Deepgram final landed
+            # AFTER the VAD-stop flush (network-lagged utterance tail) and is
+            # about to be discarded — it never reached the LLM/transcript. Log
+            # frequency (loguru sink -> session_NNN.log) before deciding on a
+            # grace window (P2) or speech_final-driven flush (P3).
+            if self._buffer.strip():
+                logger.warning(f"Discarding late STT text: {self._buffer!r}")
             self._buffer = ""
             await self.push_frame(frame, direction)
 
