@@ -478,6 +478,18 @@ export default function VocabTrainer({
     resetScratch();
   }
 
+  // SATZ-003: retry the same card right away instead of waiting for the
+  // recycle — corrective feedback works best when the learner re-produces
+  // the correct form while it's still on their mind. The failed attempt
+  // already recorded its miss (interval reset to 0, still due), so a green
+  // retry simply climbs the ladder from there — no schedule state to undo.
+  // Clearing the scratch un-flips the card; the card stays at the queue
+  // head, and a running auto session's arm effect re-arms the mic on it.
+  function tryAgain() {
+    if (busy) return;
+    resetScratch();
+  }
+
   // Top the queue up with the next drip of new words (done-panel button).
   function startMore() {
     setQueue(buildQueue(deck, doneRef.current));
@@ -667,11 +679,9 @@ export default function VocabTrainer({
           (nouns capitalized, verbs/phrases not). The one exception is a
           verb's spoken-past sibling, which needs its PAST chip so the
           learner knows which tense to produce. Flips in place. */}
-      <div
-        className={`flip-scene transition-[height] duration-300 ${
-          grammarNote ? "h-[450px]" : "h-[360px]"
-        }`}
-      >
+      {/* SATZ-004: no fixed height — the grid-stacked faces (globals.css)
+          size the card to whatever the verdict produced. */}
+      <div className="flip-scene">
         <div className={`flip-card ${flipped ? "is-flipped" : ""}`}>
           {/* ── Front: nothing but the word to produce ───────────────── */}
           <div className="flip-face items-center justify-center rounded-[28px] border-[3px] border-ink bg-white p-7 text-center shadow-[0_6px_0_var(--color-ink)]">
@@ -787,14 +797,29 @@ export default function VocabTrainer({
                 )}
               </div>
             </div>
-            <button
-              type="button"
-              onClick={handleNext}
-              className="btn-3d mt-3 inline-flex w-full items-center justify-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
-              style={inkShadow}
-            >
-              Next word →
-            </button>
+            {/* SATZ-003: a red or peeked card offers an immediate retry next
+                to the recycle — say it correctly now, while the correction
+                is fresh. A green card keeps the single Next button. */}
+            <div className="mt-3 flex gap-2">
+              {!browsing && verdict !== "correct" && (
+                <button
+                  type="button"
+                  onClick={tryAgain}
+                  className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+                  style={redShadow}
+                >
+                  {"↻"} Try again
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleNext}
+                className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                style={inkShadow}
+              >
+                Next word →
+              </button>
+            </div>
           </div>
         </div>
       </div>

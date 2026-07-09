@@ -278,15 +278,18 @@ body {
 }
 
 /* ─── Satzschmiede: flip card (question ⇄ answer, no reflow) ───────
-   The scene sets perspective + a fixed height; the card rotates in place so
-   the answer side replaces the question side without changing layout height —
-   everything stays on one screen and nothing shifts. */
+   The scene sets perspective; both faces are stacked in the SAME grid cell,
+   so the card's height is always the tallest face's natural content height
+   (SATZ-004: a long transcript/correction grows the card instead of clipping
+   against a hardcoded height — on any viewport width). The faces still share
+   one box, so the rotate itself never reflows; the min-height keeps a short
+   card's stage presence. */
 .flip-scene {
   perspective: 1400px;
 }
 .flip-card {
   position: relative;
-  height: 100%;
+  display: grid;
   width: 100%;
   transform-style: preserve-3d;
   transition: transform 560ms cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -295,8 +298,8 @@ body {
   transform: rotateY(180deg);
 }
 .flip-face {
-  position: absolute;
-  inset: 0;
+  grid-area: 1 / 1;
+  min-height: 360px;
   display: flex;
   flex-direction: column;
   backface-visibility: hidden;
