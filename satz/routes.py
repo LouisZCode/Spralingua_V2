@@ -9,6 +9,7 @@ so the Next.js origin needs no extra wiring here.
 """
 
 import re
+import time
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -19,6 +20,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agents.observability import tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import Pack, PackCard, User, UserCard, VocabCard
@@ -214,7 +216,7 @@ async def _forge_card(
     caller commits together with the pool link. Returns the enrichment too so
     a verb's past sibling can be forged without a second LLM call."""
     try:
-        enriched = await enrich_word(word)
+        enriched = await enrich_word(word, user_id=user_id)
     except Exception:
         logger.exception("Satz enrichment call failed for {!r}", word)
         raise HTTPException(
@@ -312,7 +314,7 @@ async def _ensure_past_sibling(
 
     if enriched is None or not enriched.past_form:
         try:
-            enriched = await enrich_word(present.target)
+            enriched = await enrich_word(present.target, user_id=user_id)
         except Exception:
             logger.exception(
                 "Satz past-sibling enrichment failed for {!r}", present.target
@@ -500,69 +502,93 @@ async def submit_attempt(
     if card.tense_form:
         card_keyterms.append(card.tense_form)
 
-    try:
-        transcript = await transcribe_attempt(
-            data, audio.content_type, keyterms=card_keyterms
-        )
-    except Exception:
-        logger.exception("Satz transcription failed (card {})", card_id)
-        raise HTTPException(
-            status_code=502,
-            detail="Couldn't process the audio — try again in a moment.",
-        )
-    if not transcript:
-        raise HTTPException(
-            status_code=422,
-            detail="We couldn't hear anything — try again a bit closer to the mic.",
-        )
+    # OBS-006: one Langfuse trace per judged attempt. The `stt` and `llm`
+    # child generations (opened inside transcribe_attempt / examine_attempt
+    # — start_as_current_span nests them here automatically) split the
+    # attempt's highly variable latency per stage; the perf_counter log line
+    # below answers the same question locally when Langfuse is off.
+    with tracer.start_as_current_span("satz-attempt") as attempt_span:
+        attempt_span.set_attribute("user.id", user_id)
+        attempt_span.set_attribute("card_id", card_id)
 
-    try:
-        judgement = await examine_attempt(card, transcript)
-    except Exception:
-        logger.exception("Satz examiner call failed (card {})", card_id)
-        raise HTTPException(
-            status_code=502,
-            detail="The examiner is unavailable right now — try again in a moment.",
-        )
-
-    # Record the outcome. A miss lands on (0, now) — still due, retryable
-    # this session; a hit climbs the interval ladder.
-    interval, due_at = schedule(
-        judgement.word_ok, user_card.interval_days, datetime.now()
-    )
-    user_card.interval_days = interval
-    user_card.due_at = due_at
-    user_card.reps += 1
-    user_card.last_score = 1 if judgement.word_ok else 0
-    await db.commit()
-
-    # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
-    # after the schedule is safe; a ledger failure only logs.
-    if judgement.pattern_id:
+        t0 = time.perf_counter()
         try:
-            await record_grammar_error(
-                db,
-                user_id=user_id,
-                pattern_id=judgement.pattern_id,
-                sentence=transcript,
-                corrected=judgement.corrected,
-                note=judgement.error,
-                source="satz",
+            transcript = await transcribe_attempt(
+                data, audio.content_type, keyterms=card_keyterms
             )
         except Exception:
-            logger.exception(
-                "Grammar-ledger write failed (pattern {})", judgement.pattern_id
+            logger.exception("Satz transcription failed (card {})", card_id)
+            raise HTTPException(
+                status_code=502,
+                detail="Couldn't process the audio — try again in a moment.",
             )
+        t_stt = time.perf_counter()
+        if not transcript:
+            raise HTTPException(
+                status_code=422,
+                detail="We couldn't hear anything — try again a bit closer to the mic.",
+            )
+        attempt_span.set_attribute("langfuse.trace.input", transcript)
 
-    # camelCase like every other satz payload (poolSize, cardCount, …).
-    return {
-        "transcript": transcript,
-        "wordOk": judgement.word_ok,
-        "grammarOk": judgement.grammar_ok,
-        "error": judgement.error,
-        "corrected": judgement.corrected,
-        "dueInDays": interval,
-    }
+        try:
+            judgement = await examine_attempt(card, transcript)
+        except Exception:
+            logger.exception("Satz examiner call failed (card {})", card_id)
+            raise HTTPException(
+                status_code=502,
+                detail="The examiner is unavailable right now — try again in a moment.",
+            )
+        t_llm = time.perf_counter()
+        logger.info(
+            "Satz attempt timing: stt={:.2f}s llm={:.2f}s (card {})",
+            t_stt - t0,
+            t_llm - t_stt,
+            card_id,
+        )
+        attempt_span.set_attribute(
+            "langfuse.trace.output",
+            f"wordOk={judgement.word_ok} grammarOk={judgement.grammar_ok}"
+            + (f" → {judgement.corrected}" if judgement.corrected else ""),
+        )
+
+        # Record the outcome. A miss lands on (0, now) — still due, retryable
+        # this session; a hit climbs the interval ladder.
+        interval, due_at = schedule(
+            judgement.word_ok, user_card.interval_days, datetime.now()
+        )
+        user_card.interval_days = interval
+        user_card.due_at = due_at
+        user_card.reps += 1
+        user_card.last_score = 1 if judgement.word_ok else 0
+        await db.commit()
+
+        # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
+        # after the schedule is safe; a ledger failure only logs.
+        if judgement.pattern_id:
+            try:
+                await record_grammar_error(
+                    db,
+                    user_id=user_id,
+                    pattern_id=judgement.pattern_id,
+                    sentence=transcript,
+                    corrected=judgement.corrected,
+                    note=judgement.error,
+                    source="satz",
+                )
+            except Exception:
+                logger.exception(
+                    "Grammar-ledger write failed (pattern {})", judgement.pattern_id
+                )
+
+        # camelCase like every other satz payload (poolSize, cardCount, …).
+        return {
+            "transcript": transcript,
+            "wordOk": judgement.word_ok,
+            "grammarOk": judgement.grammar_ok,
+            "error": judgement.error,
+            "corrected": judgement.corrected,
+            "dueInDays": interval,
+        }
 
 
 @router.get("/deck")

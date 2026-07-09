@@ -31,6 +31,11 @@ body carries literal JSON braces, same as the sibling evaluators.
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from config import openrouter_api_key, openrouter_base_url
 from grammar import load_taxonomy, taxonomy_brief
 
@@ -202,7 +207,7 @@ def _render_targets(focus: list[dict]) -> str:
 
 
 async def debrief(
-    *, transcript: str, focus: list[dict], topic: str = ""
+    *, transcript: str, focus: list[dict], topic: str = "", session_id: str | None = None
 ) -> TandemDebrief:
     """Judge the tandem session: target-pattern outcomes + new errors + memory note.
 
@@ -211,6 +216,9 @@ async def debrief(
     only real target ids and whose ``new_errors`` name only valid catalog ids
     that are NOT targets (both deduped, first-seen wins) — so the caller applies
     each pattern to the ledger exactly once.
+
+    ``session_id`` (OBS-006) files the debrief's Langfuse trace into the same
+    Session as the conversation turns it judges.
     """
     target_ids = {p["pattern_id"] for p in focus}
     rendered = (
@@ -225,8 +233,15 @@ async def debrief(
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
-    ).with_structured_output(TandemDebrief)
-    result = await llm.ainvoke(rendered)
+    ).with_structured_output(TandemDebrief, include_raw=True)
+    with generation_span(
+        "tandem-debrief",
+        model=DEBRIEF_MODEL,
+        input_text=transcript,
+        session_id=session_id,
+    ) as span:
+        result, usage = unwrap_structured_output(await llm.ainvoke(rendered))
+        record_generation_output(span, result.model_dump_json(), usage)
 
     # Keep only real target ids in `patterns` (drop any the model invented or
     # duplicated), preserving order — these drive the streak/retire lifecycle.

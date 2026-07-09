@@ -18,6 +18,7 @@ public/secret key pair from the existing ``.env``.
 """
 
 import base64
+from contextlib import contextmanager
 
 from loguru import logger
 from opentelemetry import trace
@@ -75,6 +76,67 @@ else:
 # Tracer for hand-rolled spans (the LLM span in ``pipecat_wrapper.astream``).
 # Pipecat-owned spans use their own tracer names internally.
 tracer = trace.get_tracer("spralingua.llm")
+
+
+@contextmanager
+def generation_span(
+    name: str,
+    *,
+    model: str,
+    input_text: str,
+    system: str = "openrouter",
+    operation: str = "chat",
+    session_id: str | None = None,
+    user_id: str | None = None,
+):
+    """One Generation span for the one-shot STT/LLM calls that live OUTSIDE
+    the Pipecat pipeline (OBS-006): the Satzschmiede attempt path + word
+    forge, the tandem debrief, and the drill grammar harvester.
+
+    Mirrors the ``gen_ai.*`` / ``langfuse.*`` attribute conventions of the
+    hand-rolled LLM span in ``agents/pipecat_wrapper.py::ClientWrapper.astream``
+    so Langfuse ingests the same Generation shape (model, input/output,
+    usage, duration). Opened as the *current* span, so nested calls parent
+    automatically — the ``satz-attempt`` root adopts its ``stt`` and ``llm``
+    children with no explicit context passing. ``session_id`` groups the
+    trace into a Langfuse Session (the tandem debrief joins its
+    conversation's session); without one the trace stands alone.
+
+    Callers stamp the result via :func:`record_generation_output` once it is
+    in hand. With LANGFUSE_* unconfigured the tracer is a no-op and every
+    ``set_attribute`` is swallowed — zero cost.
+    """
+    with tracer.start_as_current_span(name) as span:
+        span.set_attribute("gen_ai.system", system)
+        span.set_attribute("gen_ai.request.model", model)
+        span.set_attribute("gen_ai.operation.name", operation)
+        span.set_attribute("langfuse.observation.input", input_text)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
+        if user_id:
+            span.set_attribute("user.id", user_id)
+        yield span
+
+
+def record_generation_output(span, output_text: str, usage: dict | None = None) -> None:
+    """Stamp a generation's output + token usage (LangChain ``usage_metadata``
+    shape) onto its span — the same fields the pipeline LLM span records."""
+    span.set_attribute("langfuse.observation.output", output_text)
+    if usage:
+        if (n := usage.get("input_tokens")) is not None:
+            span.set_attribute("gen_ai.usage.input_tokens", n)
+        if (n := usage.get("output_tokens")) is not None:
+            span.set_attribute("gen_ai.usage.output_tokens", n)
+
+
+def unwrap_structured_output(result) -> tuple:
+    """Unpack a ``with_structured_output(..., include_raw=True)`` result into
+    ``(parsed_model, usage_metadata)``, re-raising the parse error that a
+    plain ``with_structured_output`` call would have raised. ``include_raw``
+    exists purely so the raw message's token usage can reach the span."""
+    if result.get("parsing_error") is not None:
+        raise result["parsing_error"]
+    return result["parsed"], getattr(result.get("raw"), "usage_metadata", None)
 
 
 def flush_traces() -> None:

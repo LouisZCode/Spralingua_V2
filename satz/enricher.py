@@ -18,6 +18,11 @@ from typing import Literal, Optional
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from config import openrouter_api_key, openrouter_base_url
 
 ENRICHER_MODEL = "openai/gpt-oss-120b"
@@ -141,13 +146,21 @@ def _normalize(e: EnrichedCard) -> EnrichedCard:
     return e
 
 
-async def enrich_word(word: str) -> EnrichedCard:
+async def enrich_word(word: str, user_id: str | None = None) -> EnrichedCard:
     """One structured-output judgement call: reject or forge a rule-conformant card."""
     llm = ChatOpenAI(
         model=ENRICHER_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
-    ).with_structured_output(EnrichedCard)
-    result = await llm.ainvoke(PROMPT.replace("{word}", word))
+    ).with_structured_output(EnrichedCard, include_raw=True)
+    # OBS-006: the forge is its own single-generation Langfuse trace — the
+    # add-a-word path's latency and verdicts were previously invisible.
+    with generation_span(
+        "satz-forge", model=ENRICHER_MODEL, input_text=word, user_id=user_id
+    ) as span:
+        result, usage = unwrap_structured_output(
+            await llm.ainvoke(PROMPT.replace("{word}", word))
+        )
+        record_generation_output(span, result.model_dump_json(), usage)
     return _normalize(result)

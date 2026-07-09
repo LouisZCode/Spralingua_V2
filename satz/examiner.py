@@ -21,6 +21,11 @@ import aiohttp
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from config import deepgram_api_key, openrouter_api_key, openrouter_base_url
 from grammar import load_taxonomy, taxonomy_brief
 
@@ -30,8 +35,9 @@ EXAMINER_MODEL = "openai/gpt-oss-120b"
 # streaming STT (services/stt.py::DEEPGRAM_MODEL), always German: Satzschmiede
 # sentences are in the target language (the English-by-design conversation
 # lessons don't apply here).
+_DEEPGRAM_MODEL = "nova-3"
 _DEEPGRAM_URL = (
-    "https://api.deepgram.com/v1/listen?model=nova-3&language=de&smart_format=true"
+    f"https://api.deepgram.com/v1/listen?model={_DEEPGRAM_MODEL}&language=de&smart_format=true"
 )
 
 
@@ -49,20 +55,33 @@ async def transcribe_attempt(
     it and its spoken past form, cutting *false* fails on rare target words.
     """
     url = _DEEPGRAM_URL
-    for kt in keyterms or []:
-        term = (kt or "").strip()
-        if term:
-            url += f"&keyterm={quote(term)}"  # quote handles umlauts/ß/spaces
+    terms = [t for t in ((kt or "").strip() for kt in keyterms or []) if t]
+    for term in terms:
+        url += f"&keyterm={quote(term)}"  # quote handles umlauts/ß/spaces
     headers = {
         "Authorization": f"Token {deepgram_api_key}",
         "Content-Type": mimetype or "audio/webm",
     }
     timeout = aiohttp.ClientTimeout(total=30)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        async with session.post(url, headers=headers, data=audio) as resp:
-            resp.raise_for_status()
-            body = await resp.json()
-    return body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+    # OBS-006: the `stt` child of the route's satz-attempt trace — span
+    # duration is the Deepgram round-trip, the half of the attempt's latency
+    # the examiner LLM can't explain.
+    with generation_span(
+        "stt",
+        system="deepgram",
+        model=_DEEPGRAM_MODEL,
+        operation="transcription",
+        input_text=f"[{len(audio)} bytes, {mimetype or 'audio/webm'}]",
+    ) as span:
+        if terms:
+            span.set_attribute("keyterms", ", ".join(terms))
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, headers=headers, data=audio) as resp:
+                resp.raise_for_status()
+                body = await resp.json()
+        transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+        record_generation_output(span, transcript)
+    return transcript
 
 
 class Judgement(BaseModel):
@@ -174,13 +193,18 @@ async def examine_attempt(card, transcript: str) -> Judgement:
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
-    ).with_structured_output(Judgement)
+    ).with_structured_output(Judgement, include_raw=True)
     prompt = (
         PROMPT.replace("{card}", _card_brief(card))
         .replace("{transcript}", transcript)
         .replace("{taxonomy}", taxonomy_brief())
     )
-    result = await llm.ainvoke(prompt)
+    # OBS-006: the `llm` child of the satz-attempt trace — the usual suspect
+    # for the slow attempts (OpenRouter queueing / provider fallback), now
+    # measured per call with model + tokens attached.
+    with generation_span("llm", model=EXAMINER_MODEL, input_text=prompt) as span:
+        result, usage = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage)
     if result.word_ok and result.grammar_ok:
         # A "fix" on a fully correct sentence only confuses.
         result.corrected = None

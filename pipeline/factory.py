@@ -472,6 +472,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 if wrapper._transcript and load_goal(lesson_id) is not None:
                     error_result = await extract_errors(
                         transcript=wrapper.render_transcript(),
+                        session_id=session_id,
                     )
                     if error_result.errors:
                         async with get_sessionmaker()() as db:
@@ -518,6 +519,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         transcript=wrapper.render_transcript(),
                         focus=focus,
                         topic=topic,
+                        session_id=session_id,
                     )
                     retired_ids: set[str] = set()
                     async with get_sessionmaker()() as db:
