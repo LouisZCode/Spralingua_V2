@@ -1,0 +1,196 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useAuth } from "./auth/AuthContext";
+import VocabTrainer from "./satzschmiede/VocabTrainer";
+import {
+  fetchDeck,
+  removeCard,
+  revealCard,
+  submitAttempt,
+  UnauthorizedError,
+  type AttemptResult,
+} from "./satzschmiede/api";
+import type { DeckCard } from "./satzschmiede/deck";
+
+const redShadow = {
+  ["--shadow-color"]: "var(--color-flag-red-deep)",
+} as React.CSSProperties;
+
+// Verbformen — GRAM-002 Exercise C: the verb principal-parts drill. The
+// user's own finding: past-tense misses are LEXICON, not rule ("every miss
+// was a strong verb wearing a weak ending"), so the prescription is
+// flashcarding — and Satzschmiede's spoken-past sibling cards ARE those
+// flashcards. This mode is a focused lens over the same pool: the learner's
+// past-sibling cards only, drilled through the same trainer, same examiner
+// (Perfekt OR Präteritum both pass), same shared SRS schedule — a card
+// greened here is greened in Satzschmiede too. Only the OBS-007 session
+// prefix differs ("vf-"), so Verbformen sittings group apart in Langfuse.
+export default function Verbformen() {
+  const { token, ready, signOut } = useAuth();
+  const router = useRouter();
+
+  const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (ready && !token) {
+      router.replace("/");
+    }
+  }, [ready, token, router]);
+
+  const refreshDeck = useCallback(() => {
+    if (!token) return;
+    fetchDeck(token)
+      .then(setDeck)
+      .catch((e) => {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        } else {
+          setError(true);
+        }
+      });
+  }, [token, signOut]);
+
+  useEffect(() => {
+    refreshDeck();
+  }, [refreshDeck]);
+
+  const handleRemove = useCallback(
+    async (cardId: string) => {
+      if (!token) return;
+      try {
+        await removeCard(token, cardId);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+          return;
+        }
+      }
+      refreshDeck();
+    },
+    [token, signOut, refreshDeck]
+  );
+
+  const handleReveal = useCallback(
+    (cardId: string) => {
+      if (!token) return;
+      revealCard(token, cardId).catch((e) => {
+        if (e instanceof UnauthorizedError) signOut();
+      });
+    },
+    [token, signOut]
+  );
+
+  const handleAttempt = useCallback(
+    async (
+      cardId: string,
+      audio: Blob,
+      sessionId: string
+    ): Promise<AttemptResult> => {
+      if (!token) throw new UnauthorizedError("/satz/attempts");
+      try {
+        return await submitAttempt(token, cardId, audio, sessionId);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  if (!ready || !token) {
+    return null;
+  }
+
+  // The drill's material: every spoken-past sibling in the pool. Verbs arrive
+  // as pairs (present + past) when added anywhere in Satzschmiede, so this
+  // grows by itself as the learner's verb vocabulary grows.
+  const verbDeck = deck?.filter((c) => c.tense === "past") ?? null;
+  const empty = verbDeck !== null && verbDeck.length === 0;
+
+  return (
+    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
+      />
+
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+          <Link href="/" className="flex items-center gap-2.5">
+            <Image
+              src="/mascot/raven.png"
+              alt="Spralingua raven mascot"
+              width={40}
+              height={40}
+              priority
+              className="h-9 w-9 select-none"
+            />
+            <span className="font-display text-[22px] font-black tracking-tight text-ink">
+              Spralingua
+            </span>
+          </Link>
+          <Link
+            href="/practice"
+            className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+          >
+            ← Menu
+          </Link>
+        </div>
+      </header>
+
+      <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
+        <div className="mb-5 text-center">
+          <h1 className="font-display text-[24px] font-black tracking-tight text-ink">
+            Verbformen
+          </h1>
+          <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+            {verbDeck && verbDeck.length > 0
+              ? `spoken past · ${verbDeck.length} verbs`
+              : "spoken past"}
+          </p>
+        </div>
+
+        {error ? (
+          <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
+            Couldn&apos;t load your verbs — is the backend running?
+          </p>
+        ) : verbDeck === null ? null : empty ? (
+          /* No verb pairs yet — every verb added in Satzschmiede brings its
+             spoken-past sibling along, so the fix is to add verbs there. */
+          <div className="text-center">
+            <h2 className="font-display text-[clamp(26px,5vw,36px)] font-black leading-tight tracking-tight text-ink">
+              No verbs in your pool yet.
+            </h2>
+            <p className="mx-auto mt-3 max-w-[380px] font-body text-[15px] leading-relaxed text-ink-soft">
+              Verbformen drills the spoken past of your own verbs — ist
+              gefahren, hat gedacht, war, wollte. Add a few verbs in
+              Satzschmiede first; every verb brings its past form along.
+            </p>
+            <Link
+              href="/satzschmiede"
+              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+              style={redShadow}
+            >
+              Open Satzschmiede
+            </Link>
+          </div>
+        ) : (
+          <VocabTrainer
+            deck={verbDeck}
+            onRemove={handleRemove}
+            onAttempt={handleAttempt}
+            onReveal={handleReveal}
+            sessionPrefix="vf"
+          />
+        )}
+      </main>
+    </div>
+  );
+}

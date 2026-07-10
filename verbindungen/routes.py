@@ -1,17 +1,10 @@
-"""HTTP routes for Bauteil-Sätze (GRAM-002, Exercise A: build the inflected
-phrase from raw parts — a WRITTEN drill, no audio, no SRS).
+"""HTTP routes for Feste Verbindungen (GRAM-002, Exercise D: complete the
+fixed verb chunk — reflexive pronoun, fixed preposition, governed case —
+with reflexive and non-reflexive verbs MIXED so nothing is predictable).
 
-Two endpoints behind the same session-JWT + per-request AsyncSession
-dependencies as ``satz/routes.py``:
-
-- ``GET /bauteil/round`` — ten items, weighted toward the learner's hot open
-  ledger patterns (``load_grammar_focus``) but never monopolized by them:
-  deciding *which* structure applies is part of the drill (design rule 1).
-- ``POST /bauteil/attempts`` — judge one typed phrase. A deterministic string
-  check green-lights exact (or sentence-embedded) matches at zero LLM cost;
-  only misses pay for the diagnosis call. Every attempt then feeds the
-  grammar-error ledger (design rule 4): a miss is a slip, a green credits the
-  retire streak — both tagged ``source="bauteil"``, both non-fatal.
+Same shape as ``bauteil/routes.py``: ledger-weighted round, deterministic
+check first, one diagnosis call on misses, non-fatal ledger feedback, OBS-007
+tracing under the frontend-minted practice-session id.
 """
 
 import random
@@ -24,21 +17,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import tracer
 from auth.deps import get_current_user_id
-from bauteil.content import TARGET_PATTERNS, load_items
-from bauteil.judge import judge_attempt
 from database.connection import get_db
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
     record_grammar_error,
 )
+from verbindungen.content import TARGET_PATTERNS, load_items
+from verbindungen.judge import judge_chunk
 
-router = APIRouter(prefix="/bauteil", tags=["bauteil"])
+router = APIRouter(prefix="/verbindungen", tags=["verbindungen"])
 
 ROUND_SIZE = 10
-# Hot ledger patterns lead the round but never fill it: at least 4 of 10 items
-# come from outside the learner's weak spots so the mix keeps "which rule even
-# applies here?" a live question instead of telegraphing the answer.
+# Hot patterns lead but never fill the round — the reflexive/non-reflexive
+# MIX is the drill's whole mechanism, so decoys must always be present.
 MAX_HOT = 6
 
 
@@ -47,15 +39,14 @@ async def get_round(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """One practice round. The answer never leaves the server — checking is
-    the POST's job, so devtools can't leak the solution mid-drill."""
+    """One practice round; answers and chunks stay server-side (the chunk
+    line would answer the item, so it only ships with the verdict)."""
     items = list(load_items().values())
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
         hot = {f["pattern_id"] for f in focus} & set(TARGET_PATTERNS)
     except Exception:
-        # Ledger outage = a less personalised round, never a failed one.
-        logger.exception("Bauteil focus read failed — serving an unweighted round")
+        logger.exception("Verbindungen focus read failed — serving an unweighted round")
         hot = set()
 
     hot_items = [i for i in items if i["pattern_id"] in hot]
@@ -64,21 +55,19 @@ async def get_round(
     random.shuffle(rest)
     chosen = (hot_items[:MAX_HOT] + rest)[:ROUND_SIZE]
     if len(chosen) < ROUND_SIZE:
-        # Every pattern is hot → `rest` ran short; pad back from the hot pool.
         chosen += hot_items[MAX_HOT : MAX_HOT + ROUND_SIZE - len(chosen)]
     random.shuffle(chosen)
     return {
         "items": [
-            {"id": i["id"], "parts": i["parts"], "frame": i["frame"], "hint": i["hint"]}
-            for i in chosen
+            {"id": i["id"], "frame": i["frame"], "hint": i["hint"]} for i in chosen
         ]
     }
 
 
-# Learners type one phrase; anything longer than a generous full sentence is
-# a paste accident, not an attempt.
 _MAX_ANSWER_CHARS = 120
 
+# Same deterministic-match contract as bauteil/routes.py (kept local — each
+# exercise module is self-contained like satz/ and bauteil/ are).
 _EDGE_PUNCT = " .,!?;:…\"'"
 
 
@@ -87,11 +76,11 @@ def _normalize(s: str) -> str:
 
 
 def _matches(typed: str, expected: str, frame: str) -> bool:
-    """Deterministic green: the exact phrase, or the phrase embedded in the
-    typed-out sentence. Containment alone would be a hole — extra NON-frame
-    words around the phrase (an added pronoun, a different preposition) must
-    fall through to the judge — so whatever surrounds the match must consist
-    of frame words only (i.e. the learner typed the sentence, nothing else)."""
+    """Exact match, or the answer embedded in the typed-out sentence — but
+    ONLY frame words may surround it. Plain containment would defeat the
+    decoys: "mich auf" contains the decoy answer "auf", yet the extra
+    pronoun is exactly the error the mix exists to catch — it must reach
+    the judge, never green deterministically."""
     t, e = _normalize(typed), _normalize(expected)
     if t == e:
         return True
@@ -106,8 +95,7 @@ def _matches(typed: str, expected: str, frame: str) -> bool:
 class AttemptIn(BaseModel):
     item_id: str
     answer: str
-    # OBS-007: frontend-minted practice-sitting id — one Langfuse Session per
-    # trainer visit, same contract as /satz/attempts. Optional so curl works.
+    # OBS-007 practice-sitting id — same contract as the sibling drills.
     session_id: str | None = Field(None, max_length=64)
 
 
@@ -117,7 +105,8 @@ async def submit_attempt(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Judge one typed phrase, feed the ledger, return the two-axis verdict."""
+    """Judge one typed chunk completion, feed the ledger, return the verdict
+    + the canonical chunk to memorize (only now — it would answer the item)."""
     item = load_items().get(body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
@@ -126,13 +115,10 @@ async def submit_attempt(
         raise HTTPException(status_code=422, detail="Type your answer first.")
     if len(answer) > _MAX_ANSWER_CHARS:
         raise HTTPException(
-            status_code=422, detail="Keep it to the phrase — that looks like a paragraph."
+            status_code=422, detail="Keep it to the missing words — that looks like a paragraph."
         )
 
-    # OBS-007: one Langfuse trace per judged attempt, grouped into the
-    # practice sitting. Deterministic greens trace too (no `llm` child) —
-    # a session should show every attempt, not just the ones that cost tokens.
-    with tracer.start_as_current_span("bauteil-attempt") as attempt_span:
+    with tracer.start_as_current_span("verbindungen-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("item_id", item["id"])
         if body.session_id:
@@ -140,33 +126,26 @@ async def submit_attempt(
         attempt_span.set_attribute("langfuse.trace.input", answer)
 
         if _matches(answer, item["answer"], item["frame"]):
-            correct, case_ok, carrier_ok, note = True, True, True, None
+            correct, note = True, None
         else:
             try:
-                diag = await judge_attempt(item, answer)
+                diag = await judge_chunk(item, answer)
             except Exception:
-                logger.exception("Bauteil judge call failed (item {})", item["id"])
+                logger.exception("Verbindungen judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
                     detail="The judge is unavailable right now — try again in a moment.",
                 )
-            correct, case_ok, carrier_ok, note = (
-                diag.correct,
-                diag.case_ok,
-                diag.carrier_ok,
-                diag.note,
-            )
+            correct, note = diag.correct, diag.note
 
         attempt_span.set_attribute(
             "langfuse.trace.output",
-            f"correct={correct} caseOk={case_ok} carrierOk={carrier_ok}"
-            + (f" — {note}" if note else ""),
+            f"correct={correct}" + (f" — {note}" if note else ""),
         )
 
-        # Feed the grammar-error ledger (design rule 4) — non-fatal, so a DB
-        # outage can never break the attempt it rides on. A drilled green
-        # credits the retire streak; if the pattern still breaks in speech,
-        # the spoken harvesters reopen it — the ledger self-corrects.
+        # Feed the ledger (design rule 4) — non-fatal, same self-correcting
+        # contract as bauteil: a drill-retired pattern that still breaks in
+        # speech gets reopened by the spoken harvesters.
         try:
             if correct:
                 await credit_pattern_success(
@@ -174,7 +153,7 @@ async def submit_attempt(
                     user_id=user_id,
                     pattern_id=item["pattern_id"],
                     session_id=body.session_id,
-                    source="bauteil",
+                    source="verbindungen",
                 )
             else:
                 await record_grammar_error(
@@ -184,19 +163,17 @@ async def submit_attempt(
                     sentence=item["frame"].replace("___", answer),
                     corrected=item["frame"].replace("___", item["answer"]),
                     note=note,
-                    source="bauteil",
+                    source="verbindungen",
                     session_id=body.session_id,
                 )
         except Exception:
             logger.exception(
-                "Bauteil ledger write failed (pattern {})", item["pattern_id"]
+                "Verbindungen ledger write failed (pattern {})", item["pattern_id"]
             )
 
-        # camelCase like every other practice payload.
         return {
             "correct": correct,
             "expected": item["answer"],
-            "caseOk": case_ok,
-            "carrierOk": carrier_ok,
+            "chunk": item["chunk"],
             "note": note,
         }

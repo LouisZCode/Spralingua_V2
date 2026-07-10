@@ -105,6 +105,7 @@ export default function VocabTrainer({
   onRemove,
   onAttempt,
   onReveal,
+  sessionPrefix = "satz",
 }: {
   deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
@@ -120,6 +121,10 @@ export default function VocabTrainer({
   ) => Promise<AttemptResult>;
   // Record a practice-mode peek as a lapse (fire-and-forget via the parent).
   onReveal: (cardId: string) => void;
+  // Langfuse practice-session id prefix (OBS-007). The Verbformen mode
+  // (GRAM-002 Exercise C) reuses this trainer on a verb-only sub-deck and
+  // passes "vf" so its sittings group apart from regular Satzschmiede ones.
+  sessionPrefix?: string;
 }) {
   const router = useRouter(); // "End session" leaves for the practice menu
 
@@ -422,10 +427,10 @@ export default function VocabTrainer({
 
   async function check(audio: Blob) {
     if (!card) return;
-    // "satz-" prefix + 32-hex tail mirrors the backend's uuid4().hex session
-    // ids while staying recognizable in the Langfuse Sessions list.
+    // Mode prefix ("satz-" / "vf-") + 32-hex tail mirrors the backend's
+    // uuid4().hex session ids while staying recognizable in Langfuse.
     practiceSessionRef.current ??=
-      "satz-" + crypto.randomUUID().replace(/-/g, "");
+      sessionPrefix + "-" + crypto.randomUUID().replace(/-/g, "");
     setChecking(true);
     try {
       const res = await onAttempt(card.id, audio, practiceSessionRef.current);

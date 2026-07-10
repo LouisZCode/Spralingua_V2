@@ -1,0 +1,155 @@
+# Sprechen & transkribieren task catalog (GRAM-002, Exercise B) — constrained
+# speaking prompts. Content-as-data like satz/packs and bauteil/items;
+# sprechen/content.py validates fail-loud at startup.
+#
+# Fields per task (keyterms optional, everything else required):
+#   id         — stable slug
+#   pattern_id — grammar/taxonomy.yaml id this task drills (the ledger key)
+#   title      — short chip shown above the prompt ("weil × 2")
+#   prompt     — the learner instruction, English. MUST carry the constraint:
+#                an open prompt lets the learner route around every hard case
+#                and prove nothing (GRAM-002 design rule 1 — the user's own
+#                finding: a fronted-clause flip went 0/2 → 4/4 once the
+#                constraint trapped it).
+#   forces     — judge-facing: what the constraint forces and what must be
+#                verified, including how to count the required elements.
+#   keyterms   — nova-3 keyterm-prompting hints for Deepgram (STT-003), for
+#                the exact words the task asks the learner to say.
+
+tasks:
+  # ── v2-wortstellung ─────────────────────────────────────────────────────
+  - id: v2-woche
+    pattern_id: v2-wortstellung
+    title: Nicht mit dem Subjekt!
+    prompt: >-
+      Tell me about your week — but start EVERY sentence with something other
+      than the subject: a time (Heute, Am Montag), a place, or Dann / Leider /
+      Zum Glück. At least 3 sentences.
+    forces: >-
+      Constraint: at least 3 main clauses, each opening with a non-subject
+      element (time, place, Dann/Leider/…). In each, the conjugated verb must
+      come IMMEDIATELY after that opener (position two) with the subject
+      after the verb. A sentence that starts with the subject does not count
+      toward the three.
+    keyterms: [Montag, Dienstag, heute, dann, leider]
+
+  - id: v2-drei-tage
+    pattern_id: v2-wortstellung
+    title: Gestern · Heute · Morgen
+    prompt: >-
+      Say one sentence each about yesterday, today, and tomorrow — and start
+      each sentence with the time word: Gestern …, Heute …, Morgen …
+    forces: >-
+      Constraint: three clauses, one starting with each of Gestern / Heute /
+      Morgen.
+      After the fronted time word the conjugated verb must stand in position
+      two, subject after it ("Gestern habe ich …", never "Gestern ich habe").
+    keyterms: [gestern, heute, morgen]
+
+  # ── nebensatz-verbende ──────────────────────────────────────────────────
+  - id: weil-deutsch
+    pattern_id: nebensatz-verbende
+    title: weil × 2
+    prompt: >-
+      Why are you learning German? Answer in two or three sentences — and use
+      "weil" twice.
+    forces: >-
+      Constraint: "weil" appears at least twice. In EVERY weil-clause the
+      conjugated verb must stand at the very end ("weil ich in Deutschland
+      arbeite", never "weil ich arbeite in Deutschland").
+    keyterms: [weil]
+
+  - id: dass-meinung
+    pattern_id: nebensatz-verbende
+    title: Ich denke, dass …
+    prompt: >-
+      Tell me two things you believe about your city or your job — start both
+      with "Ich denke, dass …" or "Ich glaube, dass …".
+    forces: >-
+      Constraint: two dass-clauses. In each dass-clause the conjugated verb
+      must stand at the very end.
+    keyterms: [dass]
+
+  # ── perfekt-satzklammer ─────────────────────────────────────────────────
+  - id: perfekt-gestern
+    pattern_id: perfekt-satzklammer
+    title: Gestern (Perfekt)
+    prompt: >-
+      What did you do yesterday? Tell me at least three things — in the past.
+    forces: >-
+      Constraint: at least 3 past-tense clauses (count aux+participle pairs
+      or war/hatte clauses, not sentences). In Perfekt clauses
+      haben/sein must stand in position two and the Partizip II at the very
+      END, with objects/places inside the bracket ("Ich habe ein Buch
+      gekauft", never "Ich habe gekauft ein Buch"). Präteritum war/hatte/
+      wollte counts as a valid past sentence too (Germans speak both).
+    keyterms: [gestern]
+
+  - id: perfekt-wochenende
+    pattern_id: perfekt-satzklammer
+    title: Volles Wochenende
+    prompt: >-
+      Describe your last weekend in three sentences — in the past, and every
+      sentence must say WHAT or WHERE (an object or a place), so something
+      sits between the two verb parts.
+    forces: >-
+      Constraint: 3 past-tense clauses, each with material inside the verb
+      bracket — haben/sein in position two, Partizip II at the END, and at
+      least an object or place phrase between them. An empty bracket
+      (auxiliary immediately followed by the participle) does not count
+      toward the three.
+    keyterms: [Wochenende]
+
+  # ── modalverb-infinitiv-ende ────────────────────────────────────────────
+  - id: modal-drei
+    pattern_id: modalverb-infinitiv-ende
+    title: wollen · müssen · können
+    prompt: >-
+      Three things about this week: one you WANT to do, one you MUST do, and
+      one you CAN'T do. Use wollen/möchten, müssen and können — one each.
+    forces: >-
+      Constraint: three clauses with three DIFFERENT modal verbs (wollen or
+      möchten, müssen, können). In each, the modal stands in position two and
+      the full verb goes to the very END as an infinitive ("Ich will ins Kino
+      gehen", never "Ich will gehen ins Kino").
+    keyterms: [möchte, muss, kann]
+
+  - id: modal-wg-regeln
+    pattern_id: modalverb-infinitiv-ende
+    title: WG-Regeln
+    prompt: >-
+      Invent two rules for a perfect flat-share (WG) — use "man muss" in one
+      and "man darf nicht" in the other.
+    forces: >-
+      Constraint: two rules, one with "man muss", one with "man darf nicht".
+      Modal in position two, the infinitive at the very END of each rule.
+    keyterms: [muss, darf]
+
+  # ── trennbare-verben ────────────────────────────────────────────────────
+  - id: trenn-morgen
+    pattern_id: trennbare-verben
+    title: Der Morgen, zerlegt
+    prompt: >-
+      Describe your typical morning in three sentences, using at least three
+      of these verbs: aufstehen, anfangen, einkaufen, anrufen, mitnehmen.
+      Present tense.
+    forces: >-
+      Constraint: at least three of the listed separable verbs, in present-
+      tense MAIN clauses — so each prefix must split off to the END of its
+      clause ("Ich stehe um sieben auf", never "Ich aufstehe um sieben").
+      A verb hidden behind a modal (infinitive, prefix unsplit) does not
+      count toward the three.
+    keyterms: [aufstehen, anfangen, einkaufen, anrufen, mitnehmen]
+
+  - id: trenn-abend
+    pattern_id: trennbare-verben
+    title: Morgen Abend
+    prompt: >-
+      Your plan for tomorrow evening — use "einkaufen", "anrufen" and
+      "fernsehen", in present-tense main clauses (no modal verbs!).
+    forces: >-
+      Constraint: einkaufen, anrufen and fernsehen all used, each in a
+      present-tense MAIN clause with its prefix split to the clause END
+      ("Ich kaufe nach der Arbeit ein"). Modal + infinitive constructions
+      (prefix unsplit) do not satisfy the constraint — the task forbids them.
+    keyterms: [einkaufen, anrufen, fernsehen]

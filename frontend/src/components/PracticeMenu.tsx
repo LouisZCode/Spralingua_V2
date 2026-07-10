@@ -117,6 +117,36 @@ export default function PracticeMenu() {
             body="Raw parts in — ein · gut · Job — the right endings out. Read the sentence, spot the case, and put the flag where it belongs."
             cta="Start building"
           />
+          <ModeCard
+            href="/sprechen"
+            accent="gold"
+            icon="wave"
+            kicker="Sprechen"
+            badge="New"
+            title="Speaking Drills"
+            body="Constrained speaking tasks that trap the structure — use weil twice, front every sentence — then see what you actually said."
+            cta="Start speaking"
+          />
+          <ModeCard
+            href="/verbformen"
+            accent="ink"
+            icon="clock"
+            kicker="Verbformen"
+            badge="New"
+            title="Past-Tense Verbs"
+            body="Drill the spoken past of your own verbs — ist gefahren, hat gedacht, war, wollte — until the forms come without thinking."
+            cta="Drill your verbs"
+          />
+          <ModeCard
+            href="/verbindungen"
+            accent="red"
+            icon="link"
+            kicker="Feste Verbindungen"
+            badge="New"
+            title="Verb Chunks"
+            body="sich freuen auf, warten auf, denken an — complete the chunk: pronoun, preposition, case. Mixed, so nothing is predictable."
+            cta="Fill the gaps"
+          />
         </div>
       </main>
     </div>
@@ -135,7 +165,7 @@ function ModeCard({
 }: {
   href: string;
   accent: "red" | "gold" | "ink";
-  icon: "mic" | "pencil" | "chat" | "blocks";
+  icon: ModeIconName;
   title: string;
   kicker?: string;
   badge?: string;
@@ -197,7 +227,9 @@ function ModeCard({
   );
 }
 
-function ModeIcon({ name }: { name: "mic" | "pencil" | "chat" | "blocks" }) {
+type ModeIconName = "mic" | "pencil" | "chat" | "blocks" | "wave" | "clock" | "link";
+
+function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
     viewBox: "0 0 24 24",
     fill: "none",
@@ -223,6 +255,36 @@ function ModeIcon({ name }: { name: "mic" | "pencil" | "chat" | "blocks" }) {
         <rect x="3.5" y="13" width="7" height="7" rx="1" />
         <rect x="13.5" y="13" width="7" height="7" rx="1" />
         <rect x="8.5" y="4" width="7" height="7" rx="1" />
+      </svg>
+    );
+  }
+  if (name === "wave") {
+    // sound waves — "speak against the constraint"
+    return (
+      <svg {...common}>
+        <line x1="4" y1="10" x2="4" y2="14" />
+        <line x1="8" y1="7" x2="8" y2="17" />
+        <line x1="12" y1="4" x2="12" y2="20" />
+        <line x1="16" y1="7" x2="16" y2="17" />
+        <line x1="20" y1="10" x2="20" y2="14" />
+      </svg>
+    );
+  }
+  if (name === "clock") {
+    // clock turned back — "the spoken past"
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8.5" />
+        <path d="M12 7.5V12l3 2" />
+      </svg>
+    );
+  }
+  if (name === "link") {
+    // chain links — "the verb and its fixed companions"
+    return (
+      <svg {...common}>
+        <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2" />
+        <path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2" />
       </svg>
     );
   }

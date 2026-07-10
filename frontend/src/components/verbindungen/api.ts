@@ -1,0 +1,61 @@
+// Thin authed client for the /verbindungen backend routes
+// (verbindungen/routes.py) — same contract as the other practice clients.
+import { HTTP_BASE } from "@/lib/api";
+import { UnauthorizedError } from "../satzschmiede/api";
+
+// One chunk item as the round serves it. The answer AND the canonical chunk
+// stay server-side until the verdict — the chunk line would answer the item.
+export type ChunkItem = {
+  id: string;
+  frame: string; // the sentence with one ___ gap over the chunk region
+  hint: string; // English rendering of the full sentence
+};
+
+export type ChunkVerdict = {
+  correct: boolean;
+  expected: string; // the words that fill the gap
+  chunk: string; // the canonical chunk to memorize ("sich freuen auf + Akk")
+  // One ≤14-word English line naming exactly which element broke (pronoun /
+  // preposition / case / compound); null when correct.
+  note: string | null;
+};
+
+async function request<T>(
+  path: string,
+  token: string,
+  init?: RequestInit
+): Promise<T> {
+  const res = await fetch(`${HTTP_BASE}${path}`, {
+    ...init,
+    headers: { Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
+  });
+  if (res.status === 401) {
+    throw new UnauthorizedError(path);
+  }
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new Error(
+      typeof detail === "string" ? detail : `${path} failed (${res.status})`
+    );
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function fetchRound(token: string): Promise<ChunkItem[]> {
+  const data = await request<{ items: ChunkItem[] }>("/verbindungen/round", token);
+  return data.items;
+}
+
+export async function submitAttempt(
+  token: string,
+  itemId: string,
+  answer: string,
+  // OBS-007: the practice-sitting id (minted by the Verbindungen shell).
+  sessionId: string
+): Promise<ChunkVerdict> {
+  return request("/verbindungen/attempts", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item_id: itemId, answer, session_id: sessionId }),
+  });
+}

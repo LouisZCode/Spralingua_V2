@@ -1,0 +1,193 @@
+# Feste Verbindungen item catalog (GRAM-002, Exercise D) — complete the fixed
+# verb chunk: reflexive pronoun (if the verb takes one), fixed preposition,
+# and/or the article in the case the preposition governs. Content-as-data;
+# verbindungen/content.py validates fail-loud at startup.
+#
+# Fields per item (all required):
+#   id         — stable slug
+#   pattern_id — grammar/taxonomy.yaml id (reflexivpronomen |
+#                verben-mit-praepositionen | da-wo-komposita)
+#   frame      — the sentence with ONE ___ gap spanning the chunk region
+#   answer     — the words that fill the gap
+#   chunk      — the canonical chunk to memorize, shown AFTER the verdict
+#                ("sich freuen auf + Akkusativ") — never before (it would
+#                answer the item)
+#   hint       — English rendering of the full sentence
+#
+# THE MIX IS THE MECHANISM (design rule 1, the user's own finding: pronouns
+# 10/10 when drilled alone, chunks 2/10 when mixed): reflexive verbs are
+# interleaved with non-reflexive decoys in the same gap position, so "does
+# this verb even take a pronoun?" stays the live question. Same for the
+# article items: the case is never announced, the preposition governs it.
+
+items:
+  # ── reflexivpronomen — reflexive chunks MIXED with non-reflexive decoys ──
+  - id: fv-freuen-auf
+    pattern_id: reflexivpronomen
+    frame: "Ich freue ___ das Wochenende."
+    answer: mich auf
+    chunk: sich freuen auf + Akkusativ
+    hint: I'm looking forward to the weekend.
+
+  - id: fv-warten-decoy
+    pattern_id: reflexivpronomen
+    frame: "Ich warte ___ den Bus."
+    answer: auf
+    chunk: warten auf + Akkusativ (not reflexive!)
+    hint: I'm waiting for the bus.
+
+  - id: fv-erinnern-an
+    pattern_id: reflexivpronomen
+    frame: "Er erinnert ___ seinen ersten Schultag."
+    answer: sich an
+    chunk: sich erinnern an + Akkusativ
+    hint: He remembers his first day of school.
+
+  - id: fv-denken-decoy
+    pattern_id: reflexivpronomen
+    frame: "Sie denkt oft ___ ihre Familie."
+    answer: an
+    chunk: denken an + Akkusativ (not reflexive!)
+    hint: She often thinks about her family.
+
+  - id: fv-interessieren-fuer
+    pattern_id: reflexivpronomen
+    frame: "Wir interessieren ___ Kunst."
+    answer: uns für
+    chunk: sich interessieren für + Akkusativ
+    hint: We are interested in art.
+
+  - id: fv-aergern-ueber
+    pattern_id: reflexivpronomen
+    frame: "Ich ärgere ___ den Lärm."
+    answer: mich über
+    chunk: sich ärgern über + Akkusativ
+    hint: The noise annoys me.
+
+  - id: fv-beschweren-ueber
+    pattern_id: reflexivpronomen
+    frame: "Er beschwert ___ das Essen."
+    answer: sich über
+    chunk: sich beschweren über + Akkusativ
+    hint: He is complaining about the food.
+
+  - id: fv-fragen-decoy
+    pattern_id: reflexivpronomen
+    frame: "Sie fragt ___ dem Weg."
+    answer: nach
+    chunk: fragen nach + Dativ (not reflexive!)
+    hint: She is asking for directions.
+
+  - id: fv-verlassen-auf
+    pattern_id: reflexivpronomen
+    frame: "Du kannst ___ deinen Bruder verlassen."
+    answer: dich auf
+    chunk: sich verlassen auf + Akkusativ
+    hint: You can rely on your brother.
+
+  - id: fv-kuemmern-um
+    pattern_id: reflexivpronomen
+    frame: "Ich kümmere ___ die Kinder."
+    answer: mich um
+    chunk: sich kümmern um + Akkusativ
+    hint: I take care of the children.
+
+  - id: fv-sprechen-decoy
+    pattern_id: reflexivpronomen
+    frame: "Wir sprechen morgen ___ das Problem."
+    answer: über
+    chunk: sprechen über + Akkusativ (not reflexive!)
+    hint: We'll talk about the problem tomorrow.
+
+  - id: fv-bedanken-fuer
+    pattern_id: reflexivpronomen
+    frame: "Ich bedanke ___ das Geschenk."
+    answer: mich für
+    chunk: sich bedanken für + Akkusativ
+    hint: I'm saying thank you for the present.
+
+  # ── verben-mit-praepositionen — the gap includes the ARTICLE (the case) ──
+  - id: fv-warten-auf-den
+    pattern_id: verben-mit-praepositionen
+    frame: "Ich warte ___ Bus."
+    answer: auf den
+    chunk: warten auf + Akkusativ
+    hint: I'm waiting for the bus.
+
+  - id: fv-denken-an-die
+    pattern_id: verben-mit-praepositionen
+    frame: "Ich denke oft ___ Zeit in Spanien."
+    answer: an die
+    chunk: denken an + Akkusativ
+    hint: I often think about the time in Spain.
+
+  - id: fv-warten-auf-das
+    pattern_id: verben-mit-praepositionen
+    frame: "Wir warten noch ___ Ergebnis."
+    answer: auf das
+    chunk: warten auf + Akkusativ
+    hint: We are still waiting for the result.
+
+  - id: fv-traeumen-von
+    pattern_id: verben-mit-praepositionen
+    frame: "Er träumt ___ Haus am Meer."
+    answer: von einem
+    chunk: träumen von + Dativ
+    hint: He dreams of a house by the sea.
+
+  - id: fv-angst-vor
+    pattern_id: verben-mit-praepositionen
+    frame: "Ich habe Angst ___ Prüfung."
+    answer: vor der
+    chunk: Angst haben vor + Dativ
+    hint: I'm afraid of the exam.
+
+  - id: fv-interessieren-fuer-die
+    pattern_id: verben-mit-praepositionen
+    frame: "Sie interessiert sich ___ Geschichte Berlins."
+    answer: für die
+    chunk: sich interessieren für + Akkusativ
+    hint: She is interested in the history of Berlin.
+
+  # ── da-/wo-komposita — refer back / ask with the compound ────────────────
+  - id: fv-darauf-konzert
+    pattern_id: da-wo-komposita
+    frame: "Freust du dich auf das Konzert? — Ja, ich freue mich sehr ___."
+    answer: darauf
+    chunk: da + auf → darauf (refers back to a thing)
+    hint: Are you looking forward to the concert? — Yes, I'm really looking forward to it.
+
+  - id: fv-worauf-frage
+    pattern_id: da-wo-komposita
+    frame: "___ wartest du? — Auf den Bus."
+    answer: Worauf
+    chunk: wo + auf → worauf (asks about a thing)
+    hint: What are you waiting for? — For the bus.
+
+  - id: fv-darueber-morgen
+    pattern_id: da-wo-komposita
+    frame: "Das Problem ist kompliziert — wir sprechen morgen ___."
+    answer: darüber
+    chunk: da + über → darüber (refers back to a thing)
+    hint: The problem is complicated — we'll talk about it tomorrow.
+
+  - id: fv-woran-denken
+    pattern_id: da-wo-komposita
+    frame: "___ denkst du gerade?"
+    answer: Woran
+    chunk: wo(r) + an → woran (asks about a thing)
+    hint: What are you thinking about right now?
+
+  - id: fv-daran-erinnern
+    pattern_id: da-wo-komposita
+    frame: "Der Urlaub war so schön — ich erinnere mich gern ___."
+    answer: daran
+    chunk: da(r) + an → daran (refers back to a thing)
+    hint: The vacation was so nice — I like remembering it.
+
+  - id: fv-wofuer-interesse
+    pattern_id: da-wo-komposita
+    frame: "___ interessierst du dich am meisten?"
+    answer: Wofür
+    chunk: wo + für → wofür (asks about a thing)
+    hint: What are you most interested in?
