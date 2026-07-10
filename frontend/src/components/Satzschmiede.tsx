@@ -93,10 +93,14 @@ export default function Satzschmiede() {
   // every other call); everything else rethrows so the trainer can show a
   // learner-facing message next to the mic.
   const handleAttempt = useCallback(
-    async (cardId: string, audio: Blob): Promise<AttemptResult> => {
+    async (
+      cardId: string,
+      audio: Blob,
+      sessionId: string
+    ): Promise<AttemptResult> => {
       if (!token) throw new UnauthorizedError("/satz/attempts");
       try {
-        return await submitAttempt(token, cardId, audio);
+        return await submitAttempt(token, cardId, audio, sessionId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           signOut();

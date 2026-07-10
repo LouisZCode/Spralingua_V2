@@ -450,6 +450,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # German lesson is judged as German and an English one as
                         # English during the mixed-content migration window.
                         language="German" if lesson_lang == "de" else "English",
+                        session_id=session_id,
                     )
                     session_logger.write_evaluation(result)
                     passed_count = sum(1 for g in result.goals if g.passed)
@@ -627,6 +628,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     pron_result = await assess_pronunciation(
                         user_turns=wrapper.iter_user_turn_audio(),
                         locale=locale,
+                        session_id=session_id,
                     )
                     session_logger.write_pronunciation(
                         pron_result,

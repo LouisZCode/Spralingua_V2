@@ -23,6 +23,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 import azure.cognitiveservices.speech as speechsdk
+from agents.observability import generation_span, record_generation_output
 from config import azure_speech_key, azure_speech_region
 
 
@@ -62,6 +63,7 @@ async def assess_pronunciation(
     *,
     user_turns: Iterable[tuple[str, bytes, int]],
     locale: str,
+    session_id: str | None = None,
 ) -> PronunciationResult:
     """Score every user turn and aggregate. Raises if credentials missing or all calls fail."""
     if not azure_speech_key:
@@ -71,19 +73,32 @@ async def assess_pronunciation(
     if not turns:
         raise RuntimeError("No user turn audio captured")
 
-    scored: list[TurnScore | None] = await asyncio.gather(*[
-        asyncio.to_thread(_score_turn, text, audio, sample_rate, locale)
-        for text, audio, sample_rate in turns
-    ])
-    scored = [t for t in scored if t is not None]
-    if not scored:
-        raise RuntimeError("All Azure assessment calls returned no result")
+    # OBS-007: one Langfuse trace per post-session assessment, filed into the
+    # conversation's session. Not an LLM — no token usage; the observation
+    # output is the aggregate scores, the per-turn detail stays in the DB row.
+    with generation_span(
+        "pronunciation-eval",
+        system="azure",
+        model="azure-pronunciation-assessment",
+        operation="pronunciation",
+        input_text=f"[{len(turns)} user turns, locale={locale}]",
+        session_id=session_id,
+    ) as span:
+        scored: list[TurnScore | None] = await asyncio.gather(*[
+            asyncio.to_thread(_score_turn, text, audio, sample_rate, locale)
+            for text, audio, sample_rate in turns
+        ])
+        scored = [t for t in scored if t is not None]
+        if not scored:
+            raise RuntimeError("All Azure assessment calls returned no result")
 
-    return PronunciationResult(
-        locale=locale,
-        turns=scored,
-        aggregate=_aggregate(scored),
-    )
+        result = PronunciationResult(
+            locale=locale,
+            turns=scored,
+            aggregate=_aggregate(scored),
+        )
+        record_generation_output(span, result.aggregate.model_dump_json())
+    return result
 
 
 def _score_turn(text: str, audio: bytes, sample_rate: int, locale: str) -> TurnScore | None:

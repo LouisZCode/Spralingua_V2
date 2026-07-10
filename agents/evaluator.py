@@ -17,6 +17,11 @@ collide with Python's format-string parsing.
 from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from config import openrouter_api_key, openrouter_base_url
 
 EVALUATOR_MODEL = "openai/gpt-oss-120b"
@@ -288,6 +293,7 @@ async def evaluate(
     goals: list[str],
     pass_threshold: int,
     language: str = "English",
+    session_id: str | None = None,
 ) -> EvaluationResult:
     goals_text = "\n".join(f"{i}. {g}" for i, g in enumerate(goals, 1))
     rendered = (
@@ -302,5 +308,15 @@ async def evaluate(
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
-    ).with_structured_output(EvaluationResult)
-    return await llm.ainvoke(rendered)
+    ).with_structured_output(EvaluationResult, include_raw=True)
+    # OBS-007: `session_id` is the conversation's Langfuse session, so the
+    # post-session judgement files next to the turns it judged.
+    with generation_span(
+        "goal-eval",
+        model=EVALUATOR_MODEL,
+        input_text=rendered,
+        session_id=session_id,
+    ) as span:
+        result, usage = unwrap_structured_output(await llm.ainvoke(rendered))
+        record_generation_output(span, result.model_dump_json(), usage)
+    return result

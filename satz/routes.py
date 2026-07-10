@@ -459,6 +459,11 @@ _MAX_AUDIO_BYTES = 2_500_000
 async def submit_attempt(
     card_id: str = Form(...),
     audio: UploadFile = File(...),
+    # OBS-007: frontend-minted practice-sitting id — groups every attempt of
+    # one VocabTrainer mount into a single Langfuse Session (the analog of
+    # the conversation's connect→disconnect session id). Optional so older
+    # clients and curl keep working.
+    session_id: str | None = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -510,6 +515,8 @@ async def submit_attempt(
     with tracer.start_as_current_span("satz-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("card_id", card_id)
+        if session_id:
+            attempt_span.set_attribute("langfuse.session.id", session_id)
 
         t0 = time.perf_counter()
         try:

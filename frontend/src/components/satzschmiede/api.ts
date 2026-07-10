@@ -101,12 +101,16 @@ export type AttemptResult = {
 export async function submitAttempt(
   token: string,
   cardId: string,
-  audio: Blob
+  audio: Blob,
+  // OBS-007: the practice-sitting id (minted by VocabTrainer on the first
+  // attempt) — the backend files the attempt's Langfuse trace under it.
+  sessionId: string
 ): Promise<AttemptResult> {
   // No Content-Type header: the browser sets the multipart boundary itself.
   const form = new FormData();
   form.append("card_id", cardId);
   form.append("audio", audio, "attempt");
+  form.append("session_id", sessionId);
   return request("/satz/attempts", token, { method: "POST", body: form });
 }
 

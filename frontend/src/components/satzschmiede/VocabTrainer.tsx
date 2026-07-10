@@ -111,8 +111,13 @@ export default function VocabTrainer({
   // this prop shrinks — the queue/index below adjust to the missing id.
   onRemove: (cardId: string) => Promise<void>;
   // Judge one recorded sentence (POST /satz/attempts via the parent, which
-  // owns the token). Resolves with the examiner's verdict.
-  onAttempt: (cardId: string, audio: Blob) => Promise<AttemptResult>;
+  // owns the token). Resolves with the examiner's verdict. `sessionId` is the
+  // practice-sitting id (OBS-007) — minted here, threaded to the backend.
+  onAttempt: (
+    cardId: string,
+    audio: Blob,
+    sessionId: string
+  ) => Promise<AttemptResult>;
   // Record a practice-mode peek as a lapse (fire-and-forget via the parent).
   onReveal: (cardId: string) => void;
 }) {
@@ -143,6 +148,11 @@ export default function VocabTrainer({
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
   const discardRef = useRef(false);
+  // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
+  // first attempt (pure browsing never creates a session), then held for the
+  // whole mount — mode toggles, pauses, retries, and top-ups all share it.
+  // Unmount ("End session" / leaving the route) retires it with the ref.
+  const practiceSessionRef = useRef<string | null>(null);
   // Cards finished (green) this session — the deck's srs snapshot still calls
   // them due/new, so re-queueing has to exclude them by hand.
   const doneRef = useRef<Set<string>>(new Set());
@@ -412,9 +422,13 @@ export default function VocabTrainer({
 
   async function check(audio: Blob) {
     if (!card) return;
+    // "satz-" prefix + 32-hex tail mirrors the backend's uuid4().hex session
+    // ids while staying recognizable in the Langfuse Sessions list.
+    practiceSessionRef.current ??=
+      "satz-" + crypto.randomUUID().replace(/-/g, "");
     setChecking(true);
     try {
-      const res = await onAttempt(card.id, audio);
+      const res = await onAttempt(card.id, audio, practiceSessionRef.current);
       setResult(res);
       setFlipped(true);
     } catch (err) {
