@@ -1,0 +1,125 @@
+"""Written-attempt diagnosis for Bauteil-Sätze (GRAM-002, Exercise A).
+
+Only MISSES reach this module — the route's deterministic check already
+green-lights an exact (or sentence-embedded) match at zero LLM cost. The
+judge exists for the feedback the drill's pedagogy hangs on (design rule 6:
+"separate wrong row from wrong column"): it names which of two independent
+axes broke — the CASE the learner aimed at vs. the CARRIER, i.e. whether
+each ending sits on the right element and is well-formed. Same Cerebras
+``gpt-oss-120b`` structured-output wiring as ``satz/examiner.py``.
+"""
+
+from typing import Optional
+
+from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
+
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
+from config import openrouter_api_key, openrouter_base_url
+
+JUDGE_MODEL = "openai/gpt-oss-120b"
+
+_GENDER_LABEL = {"m": "masculine", "f": "feminine", "n": "neuter", "pl": "plural"}
+
+
+class Diagnosis(BaseModel):
+    """The two-axis verdict on a mismatched typed phrase."""
+
+    correct: bool = Field(
+        description=(
+            "True ONLY when the learner's phrase is a fully correct solution "
+            "that differs from the expected one trivially — the whole sentence "
+            "typed around it, punctuation, capitalization. A changed, added or "
+            "missing ending, letter or umlaut is NEVER trivial"
+        )
+    )
+    case_ok: bool = Field(
+        description=(
+            "The ROW: the learner's endings aim at the case the gap requires "
+            "(false when the phrase is a well-formed phrase of a DIFFERENT case)"
+        )
+    )
+    carrier_ok: bool = Field(
+        description=(
+            "The COLUMN: within the case the learner aimed at, every ending "
+            "sits on the right element and is well-formed"
+        )
+    )
+    note: Optional[str] = Field(
+        default=None,
+        description=(
+            "One short English line (AT MOST 14 words) naming which axis broke "
+            "and why; null when correct"
+        ),
+    )
+
+
+PROMPT = """# Role
+You diagnose one WRITTEN attempt in a German declension drill ("Bauteil-Sätze"). The learner saw a sentence with a gap and the raw, uninflected parts of a phrase, and had to type the phrase correctly inflected for that gap.
+
+# The item
+- sentence: "{frame}"
+- raw parts (uninflected): {parts}
+- the gap requires: {requirement}
+- correct solution: "{expected}"
+
+# What the learner typed
+"{typed}"
+
+# How to diagnose — two SEPARATE axes, never conflated
+A declined-phrase error has two independent axes. Work in two steps:
+
+1. Identify the learner's AIM — with a charitable default: the aim is the REQUIRED case, unless their phrase is a clean, fully well-formed build of a DIFFERENT case (then that case is the aim). A phrase with any malformed or inconsistent ending is an execution problem within the required case — never evidence of a different aim. ("ein alter Freund" is a clean nominative → aim nominative; "ein gute Job" is a clean build of nothing → aim = the required case.)
+2. Score the axes independently:
+   - `case_ok` — the ROW: aim == required case. Nothing else counts here — a phrase full of broken endings can still clearly aim at the right case.
+   - `carrier_ok` — the COLUMN: judged AGAINST THE AIM, not the required case. For the case the learner aimed at, is every ending well-formed and on the right element? The strong (case-marking) ending appears exactly once per phrase: on the article when it can carry it, on the adjective when the article is naked (ein/kein and the possessives carry no ending in masculine nominative and in neuter nominative/accusative). A weak (n-declension) noun's -(e)n belongs to this axis too.
+
+Consequences you must respect:
+- A perfectly built phrase of the WRONG case → case_ok=false, carrier_ok=TRUE (they can build the phrase; they misread what the sentence demands).
+- The right case aimed at, with a broken or misplaced ending → case_ok=TRUE, carrier_ok=false.
+- Both false only when the endings aim at no case consistently, or aim at a wrong case AND are broken within it.
+- Capitalization and punctuation break neither axis.
+
+Then:
+- `correct` — true ONLY when the learner's phrase is a fully correct solution and differs from the expected one trivially: the whole sentence typed around it, punctuation, capitalization. A changed, added or missing ending, letter or umlaut is NEVER trivial.
+- `note` — when correct=false: ONE short English line (AT MOST 14 words) naming which axis broke and teaching the why. The corrected phrase is shown to the learner separately — never restate it. When correct=true: null.
+
+# Worked examples
+- required accusative, expected "einen alten Freund", typed "ein alter Freund" → case_ok=false, carrier_ok=true, note: "A well-built nominative — but 'besuchen' takes a direct object: accusative."
+- required nominative, expected "ein guter Job", typed "ein gute Job" → case_ok=true, carrier_ok=false, note: "Right case — but naked 'ein' hands the strong -er to the adjective."
+- required dative, expected "einem netten Kunden", typed "einem netten Kunde" → case_ok=true, carrier_ok=false, note: "'Kunde' is a weak noun — it needs -n outside the nominative."
+- required accusative, expected "den schwarzen Mantel", typed "ich nehme den schwarzen mantel" → correct=true, case_ok=true, carrier_ok=true, note: null.
+"""
+
+
+async def judge_attempt(item: dict, typed: str) -> Diagnosis:
+    """One structured-output diagnosis call over the item + typed answer."""
+    llm = ChatOpenAI(
+        model=JUDGE_MODEL,
+        base_url=openrouter_base_url,
+        api_key=openrouter_api_key,
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+    ).with_structured_output(Diagnosis, include_raw=True)
+    requirement = f"{item['case']}, {_GENDER_LABEL[item['gender']]}"
+    prompt = (
+        PROMPT.replace("{frame}", item["frame"])
+        .replace("{parts}", " · ".join(item["parts"]))
+        .replace("{requirement}", requirement)
+        .replace("{expected}", item["answer"])
+        .replace("{typed}", typed)
+    )
+    # OBS-007: the `llm` child of the route's bauteil-attempt trace — opened as
+    # current span, so it nests (and inherits the practice session) automatically.
+    with generation_span("llm", model=JUDGE_MODEL, input_text=prompt) as span:
+        result, usage = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage)
+    if result.correct:
+        # A named axis break on an accepted answer only confuses.
+        result.case_ok = True
+        result.carrier_ok = True
+        result.note = None
+    return result

@@ -16,6 +16,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
+from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
@@ -44,6 +45,9 @@ async def lifespan(app: FastAPI):
     # `locale:`) — a drifted lesson would be transcribed in one language and
     # pronunciation-scored in another, so it aborts startup instead.
     validate_lesson_languages()
+    # And for the Bauteil-Sätze item catalog (GRAM-002, Exercise A) — same
+    # rule: malformed drill content aborts startup, not a mid-practice 500.
+    load_bauteil_items()
     yield
     await dispose_engine()
 
@@ -65,6 +69,8 @@ app.add_middleware(
 app.include_router(auth_router)
 # Satzschmiede packs/pool/deck routes (SATZ-002).
 app.include_router(satz_router)
+# Bauteil-Sätze round/attempt routes (GRAM-002, Exercise A).
+app.include_router(bauteil_router)
 
 
 @app.get("/health")

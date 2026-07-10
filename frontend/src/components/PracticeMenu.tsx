@@ -107,6 +107,16 @@ export default function PracticeMenu() {
             body="Daily German chat with Lena, your language-exchange partner. She remembers your last talks and gently fixes the grammar you keep missing."
             cta="Meet Lena"
           />
+          <ModeCard
+            href="/bauteil"
+            accent="red"
+            icon="blocks"
+            kicker="Bauteil-Sätze"
+            badge="New"
+            title="Declension Practice"
+            body="Raw parts in — ein · gut · Job — the right endings out. Read the sentence, spot the case, and put the flag where it belongs."
+            cta="Start building"
+          />
         </div>
       </main>
     </div>
@@ -125,7 +135,7 @@ function ModeCard({
 }: {
   href: string;
   accent: "red" | "gold" | "ink";
-  icon: "mic" | "pencil" | "chat";
+  icon: "mic" | "pencil" | "chat" | "blocks";
   title: string;
   kicker?: string;
   badge?: string;
@@ -187,7 +197,7 @@ function ModeCard({
   );
 }
 
-function ModeIcon({ name }: { name: "mic" | "pencil" | "chat" }) {
+function ModeIcon({ name }: { name: "mic" | "pencil" | "chat" | "blocks" }) {
   const common = {
     viewBox: "0 0 24 24",
     fill: "none",
@@ -203,6 +213,16 @@ function ModeIcon({ name }: { name: "mic" | "pencil" | "chat" }) {
         <rect x="9" y="3" width="6" height="11" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0" />
         <line x1="12" y1="18" x2="12" y2="22" />
+      </svg>
+    );
+  }
+  if (name === "blocks") {
+    // three building blocks — "assemble the phrase from raw parts"
+    return (
+      <svg {...common}>
+        <rect x="3.5" y="13" width="7" height="7" rx="1" />
+        <rect x="13.5" y="13" width="7" height="7" rx="1" />
+        <rect x="8.5" y="4" width="7" height="7" rx="1" />
       </svg>
     );
   }

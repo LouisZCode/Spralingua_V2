@@ -234,8 +234,10 @@ async def credit_pattern_success(
     user_id: str,
     pattern_id: str,
     session_id: str | None = None,
+    source: str = "tandem",
 ) -> str | None:
-    """Credit a spontaneously-correct target pattern in a tandem session (Phase 4).
+    """Credit a correct target-pattern production (tandem Phase 4; GRAM-002
+    grammar exercises credit here too, each with its own ``source``).
 
     The success counterpart to :func:`record_grammar_error`: where a slip resets
     the streak and reopens the pattern, a clean spontaneous production bumps the
@@ -256,7 +258,7 @@ async def credit_pattern_success(
             return None
         row.streak += 1
         row.last_seen = datetime.now()
-        row.last_source = "tandem"
+        row.last_source = source
         if session_id:
             row.last_session_id = session_id
         if row.streak >= _RETIRE_STREAK:

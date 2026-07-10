@@ -1,0 +1,407 @@
+# Bauteil-Sätze item catalog (GRAM-002, Exercise A) — build the inflected
+# phrase from raw parts. Content-as-data like satz/packs: a dev adds an item
+# by appending here; bauteil/content.py validates fail-loud at startup.
+#
+# Fields per item (article optional, everything else required):
+#   id         — stable slug
+#   pattern_id — grammar/taxonomy.yaml id this item drills (the ledger key)
+#   case       — nominative | accusative | dative (what the frame forces)
+#   gender     — m | f | n | pl
+#   article    — the article-type slot of the rotation (omit for bare phrases)
+#   parts      — the raw, uninflected parts shown to the learner
+#   frame      — the sentence with ONE ___ gap; the frame decides the case
+#   answer     — the correctly inflected phrase that fits the gap
+#   hint       — English rendering of the full sentence (comprehension aid)
+#
+# Design rules honored (todo GRAM-002): vocabulary is IMPOSED, not drawn from
+# the learner's Satzschmiede pool (familiar words let the ending be dodged —
+# the user's own topic-1 finding); the rotation lands the strong "flag" ending
+# in every slot: all three cases, all genders, definite / ein-type / bare,
+# including the three naked ein-spots (masc-nom, neut-nom, neut-acc); weak-
+# noun items MIX in non-weak decoys so "does this noun even bend?" stays a
+# live decision (rule 1: block the escape route).
+
+items:
+  # ── adjektivendungen · definite article (weak endings) ─────────────────
+  - id: ae-der-nom-m
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: m
+    article: der
+    parts: [der, jung, Mann]
+    frame: "___ wohnt nebenan."
+    answer: Der junge Mann
+    hint: The young man lives next door.
+
+  - id: ae-der-acc-m
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: m
+    article: der
+    parts: [der, schwarz, Mantel]
+    frame: "Ich nehme ___."
+    answer: den schwarzen Mantel
+    hint: I'll take the black coat.
+
+  - id: ae-der-dat-m
+    pattern_id: adjektivendungen
+    case: dative
+    gender: m
+    article: der
+    parts: [der, alt, Chef]
+    frame: "Sie spricht mit ___."
+    answer: dem alten Chef
+    hint: She is talking to the old boss.
+
+  - id: ae-der-nom-f
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: f
+    article: die
+    parts: [die, klein, Küche]
+    frame: "___ gefällt mir."
+    answer: Die kleine Küche
+    hint: I like the small kitchen.
+
+  - id: ae-der-dat-f
+    pattern_id: adjektivendungen
+    case: dative
+    gender: f
+    article: die
+    parts: [die, nett, Nachbarin]
+    frame: "Er hilft ___."
+    answer: der netten Nachbarin
+    hint: He is helping the nice neighbor.
+
+  - id: ae-der-acc-n
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: n
+    article: das
+    parts: [das, alt, Auto]
+    frame: "Wir verkaufen ___."
+    answer: das alte Auto
+    hint: We are selling the old car.
+
+  - id: ae-der-dat-pl
+    pattern_id: adjektivendungen
+    case: dative
+    gender: pl
+    article: die
+    parts: [die, neu, Kollegen]
+    frame: "Ich arbeite mit ___."
+    answer: den neuen Kollegen
+    hint: I work with the new colleagues.
+
+  # ── adjektivendungen · ein/kein (mixed endings — the naked spots) ───────
+  - id: ae-ein-nom-m
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: m
+    article: ein
+    parts: [ein, gut, Job]
+    frame: "Das ist ___."
+    answer: ein guter Job
+    hint: That is a good job.
+
+  - id: ae-ein-nom-n
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: n
+    article: ein
+    parts: [ein, klein, Problem]
+    frame: "Da ist ___."
+    answer: ein kleines Problem
+    hint: There is a small problem.
+
+  - id: ae-ein-acc-n
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: n
+    article: ein
+    parts: [ein, neu, Handy]
+    frame: "Ich brauche ___."
+    answer: ein neues Handy
+    hint: I need a new phone.
+
+  - id: ae-ein-acc-m
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: m
+    article: ein
+    parts: [ein, alt, Freund]
+    frame: "Ich besuche ___."
+    answer: einen alten Freund
+    hint: I am visiting an old friend.
+
+  - id: ae-ein-nom-f
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: f
+    article: ein
+    parts: [ein, gut, Idee]
+    frame: "Das ist ___."
+    answer: eine gute Idee
+    hint: That is a good idea.
+
+  - id: ae-ein-dat-f
+    pattern_id: adjektivendungen
+    case: dative
+    gender: f
+    article: ein
+    parts: [ein, klein, Firma]
+    frame: "Sie arbeitet bei ___."
+    answer: einer kleinen Firma
+    hint: She works at a small company.
+
+  - id: ae-ein-dat-n
+    pattern_id: adjektivendungen
+    case: dative
+    gender: n
+    article: ein
+    parts: [ein, ruhig, Dorf]
+    frame: "Wir wohnen in ___."
+    answer: einem ruhigen Dorf
+    hint: We live in a quiet village.
+
+  - id: ae-kein-acc-f
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: f
+    article: kein
+    parts: [kein, frei, Wohnung]
+    frame: "Es gibt ___."
+    answer: keine freie Wohnung
+    hint: There is no free apartment.
+
+  - id: ae-kein-nom-m
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: m
+    article: kein
+    parts: [kein, einfach, Weg]
+    frame: "Das ist ___."
+    answer: kein einfacher Weg
+    hint: That is no easy path.
+
+  # ── adjektivendungen · bare phrase (strong endings on the adjective) ────
+  - id: ae-null-acc-pl
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: pl
+    parts: [kalt, Getränke]
+    frame: "Wir haben ___."
+    answer: kalte Getränke
+    hint: We have cold drinks.
+
+  - id: ae-null-dat-pl
+    pattern_id: adjektivendungen
+    case: dative
+    gender: pl
+    parts: [gut, Freunde]
+    frame: "Ich fahre mit ___ in den Urlaub."
+    answer: guten Freunden
+    hint: I am going on vacation with good friends.
+
+  - id: ae-null-nom-m
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: m
+    parts: [stark, Kaffee]
+    frame: "___ hilft immer."
+    answer: Starker Kaffee
+    hint: Strong coffee always helps.
+
+  - id: ae-null-acc-m
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: m
+    parts: [frisch, Fisch]
+    frame: "Heute essen wir ___."
+    answer: frischen Fisch
+    hint: Today we are eating fresh fish.
+
+  # ── possessiv-endung (the possessive's OWN ending, no adjective) ────────
+  - id: pe-mein-nom-f
+    pattern_id: possessiv-endung
+    case: nominative
+    gender: f
+    article: mein
+    parts: [mein, Schwester]
+    frame: "___ wohnt in Berlin."
+    answer: Meine Schwester
+    hint: My sister lives in Berlin.
+
+  - id: pe-mein-acc-m
+    pattern_id: possessiv-endung
+    case: accusative
+    gender: m
+    article: mein
+    parts: [mein, Bruder]
+    frame: "Ich rufe ___ an."
+    answer: meinen Bruder
+    hint: I'll call my brother.
+
+  - id: pe-sein-dat-f
+    pattern_id: possessiv-endung
+    case: dative
+    gender: f
+    article: sein
+    parts: [sein, Mutter]
+    frame: "Er spricht mit ___."
+    answer: seiner Mutter
+    hint: He is talking to his mother.
+
+  - id: pe-ihr-acc-n
+    pattern_id: possessiv-endung
+    case: accusative
+    gender: n
+    article: ihr
+    parts: [ihr, Auto]
+    frame: "Sie verkauft ___."
+    answer: ihr Auto
+    hint: She is selling her car.
+
+  - id: pe-dein-nom-m
+    pattern_id: possessiv-endung
+    case: nominative
+    gender: m
+    article: dein
+    parts: [dein, Plan]
+    frame: "___ gefällt mir."
+    answer: Dein Plan
+    hint: I like your plan.
+
+  - id: pe-unser-dat-m
+    pattern_id: possessiv-endung
+    case: dative
+    gender: m
+    article: unser
+    parts: [unser, Sohn]
+    frame: "Wir kaufen ___ ein Fahrrad."
+    answer: unserem Sohn
+    hint: We are buying our son a bicycle.
+
+  - id: pe-euer-nom-f
+    pattern_id: possessiv-endung
+    case: nominative
+    gender: f
+    article: euer
+    parts: [euer, Wohnung]
+    frame: "___ ist wirklich schön."
+    answer: Eure Wohnung
+    hint: Your (plural) apartment is really beautiful.
+
+  - id: pe-mein-dat-pl
+    pattern_id: possessiv-endung
+    case: dative
+    gender: pl
+    article: mein
+    parts: [mein, Eltern]
+    frame: "Ich wohne noch bei ___."
+    answer: meinen Eltern
+    hint: I still live with my parents.
+
+  - id: pe-sein-adj-dat-f
+    pattern_id: possessiv-endung
+    case: dative
+    gender: f
+    article: sein
+    parts: [sein, neu, Freundin]
+    frame: "Er kommt mit ___."
+    answer: seiner neuen Freundin
+    hint: He is coming with his new girlfriend.
+
+  # ── n-deklination (weak nouns + non-weak decoys — the mix IS the drill) ─
+  - id: nd-ein-acc-kollege
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: ein
+    parts: [ein, Kollege]
+    frame: "Ich habe ___ gefragt."
+    answer: einen Kollegen
+    hint: I asked a colleague.
+
+  - id: nd-der-dat-student
+    pattern_id: n-deklination
+    case: dative
+    gender: m
+    article: der
+    parts: [der, Student]
+    frame: "Sie spricht mit ___."
+    answer: dem Studenten
+    hint: She is talking to the student.
+
+  - id: nd-der-acc-junge
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: der
+    parts: [der, Junge]
+    frame: "Kennst du ___?"
+    answer: den Jungen
+    hint: Do you know the boy?
+
+  - id: nd-acc-herr
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    parts: [Herr, Müller]
+    frame: "Haben Sie ___ gesehen?"
+    answer: Herrn Müller
+    hint: Have you seen Mr. Müller?
+
+  # Nominative contrast — a weak noun does NOT bend in the nominative; blocks
+  # the "always add -n" overgeneralization the acc/dat items would otherwise train.
+  - id: nd-der-nom-student
+    pattern_id: n-deklination
+    case: nominative
+    gender: m
+    article: der
+    parts: [der, Student]
+    frame: "___ wohnt im Wohnheim."
+    answer: Der Student
+    hint: The student lives in the dorm.
+
+  # Decoy — Lehrer is NOT weak; the drilled decision is "does -n apply at all?"
+  - id: nd-decoy-acc-lehrer
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: der
+    parts: [der, Lehrer]
+    frame: "Ich frage ___."
+    answer: den Lehrer
+    hint: I'll ask the teacher.
+
+  - id: nd-kein-acc-mensch
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: kein
+    parts: [kein, Mensch]
+    frame: "Ich sehe ___ auf der Straße."
+    answer: keinen Menschen
+    hint: I don't see a single person on the street.
+
+  - id: nd-ein-adj-dat-kunde
+    pattern_id: n-deklination
+    case: dative
+    gender: m
+    article: ein
+    parts: [ein, nett, Kunde]
+    frame: "Sie hilft ___."
+    answer: einem netten Kunden
+    hint: She is helping a nice customer.
+
+  # Decoy — Arzt is NOT weak.
+  - id: nd-decoy-dat-arzt
+    pattern_id: n-deklination
+    case: dative
+    gender: m
+    article: der
+    parts: [der, Arzt]
+    frame: "Ich war gestern bei ___."
+    answer: dem Arzt
+    hint: I was at the doctor's yesterday.
