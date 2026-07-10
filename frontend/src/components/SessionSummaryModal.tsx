@@ -299,11 +299,27 @@ function EvalSection({
           </p>
         </div>
       )}
-      {hasPron && (
+      {hasPron ? (
         <PronEvalBlock
           evalData={data.pron_eval as PronEval}
           lessonId={data.lesson_id}
         />
+      ) : (
+        // Pronunciation scoring is parked (Azure key retired) — on scored
+        // lessons, say so instead of silently dropping the block. Goal-scored
+        // is the proxy for "pronunciation was expected": every lesson with
+        // `goals` also carries `locale`, while unscored lessons (lesson_zero,
+        // welcome) have neither and should show nothing here.
+        hasGoals && (
+          <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+              Pronunciation
+            </p>
+            <p className="mt-2 font-body text-[14px] text-ink-soft">
+              Speech assessment is in development — coming soon.
+            </p>
+          </div>
+        )
       )}
     </div>
   );
