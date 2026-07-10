@@ -1,7 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { addWord, UnauthorizedError, WordRejectedError } from "./api";
+import {
+  addWord,
+  UnauthorizedError,
+  WordRejectedError,
+  type WordSuggestion,
+} from "./api";
 import type { Card } from "./deck";
 
 const redShadow = {
@@ -28,14 +33,17 @@ export default function AddWordForm({
     null
   );
   const [error, setError] = useState<string | null>(null);
+  // SATZ-005: a typed foreign word we can offer a German equivalent for —
+  // shown as a one-tap "add the German word X?" confirmation.
+  const [suggestion, setSuggestion] = useState<WordSuggestion | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    const w = word.trim();
-    if (!w || busy) return;
+  // Links the actually-chosen German word into the pool and reports it. Shared
+  // by a direct submit and the "Yes, add it" confirmation of a suggestion.
+  async function link(w: string) {
     setBusy(true);
     setError(null);
     setForged(null);
+    setSuggestion(null);
     try {
       const res = await addWord(token, w);
       setForged({ card: res.card, added: res.added });
@@ -45,13 +53,24 @@ export default function AddWordForm({
       if (err instanceof UnauthorizedError) {
         onUnauthorized();
       } else if (err instanceof WordRejectedError) {
-        setError(err.message); // learner-facing sentence from the enricher
+        if (err.suggestion) {
+          setSuggestion(err.suggestion); // offer the German equivalent
+        } else {
+          setError(err.message); // learner-facing sentence from the enricher
+        }
       } else {
         setError("The forge hiccuped — try again in a moment.");
       }
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const w = word.trim();
+    if (!w || busy) return;
+    await link(w);
   }
 
   // Restore the hidden grammatical lead on the confirmation line, same move
@@ -89,6 +108,35 @@ export default function AddWordForm({
         <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
           {error}
         </p>
+      )}
+      {suggestion && (
+        <div className="mt-3 rounded-2xl border-[3px] border-ink bg-paper-warm px-4 py-3">
+          <p className="text-center font-body text-[13px] leading-relaxed text-ink">
+            {`That looks like ${suggestion.sourceLanguage ?? "another language"}. `}
+            Add the German word{" "}
+            <span className="font-black">{suggestion.word}</span>
+            {suggestion.gloss ? ` (${suggestion.gloss})` : ""}?
+          </p>
+          <div className="mt-3 flex justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => link(suggestion.word)}
+              disabled={busy}
+              className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-white disabled:pointer-events-none disabled:opacity-40"
+              style={redShadow}
+            >
+              {busy ? "Adding…" : "Yes, add it"}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSuggestion(null)}
+              disabled={busy}
+              className="inline-flex items-center rounded-[16px] border-[3px] border-ink bg-transparent px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:pointer-events-none disabled:opacity-40"
+            >
+              No
+            </button>
+          </div>
+        </div>
       )}
       {forged && (
         <p className="mt-3 text-center font-body text-[13px] font-semibold text-ink">

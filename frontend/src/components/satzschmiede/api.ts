@@ -23,10 +23,25 @@ export class UnauthorizedError extends Error {
   }
 }
 
+// SATZ-005: when the rejected input is a real foreign word, the enricher names
+// a German equivalent the learner can add with one tap instead of retyping.
+export type WordSuggestion = {
+  word: string;
+  gloss: string | null;
+  sourceLanguage: string | null;
+};
+
 // Thrown on 422: the backend rejected the input itself (not German, gibberish,
-// a whole sentence). The detail is a learner-facing sentence written by the
-// enricher — show it verbatim instead of a generic failure.
-export class WordRejectedError extends Error {}
+// a whole sentence). The message is a learner-facing sentence written by the
+// enricher — show it verbatim. When `suggestion` is set, the input was a
+// foreign word we can offer a German equivalent for (SATZ-005).
+export class WordRejectedError extends Error {
+  suggestion: WordSuggestion | null;
+  constructor(message: string, suggestion: WordSuggestion | null = null) {
+    super(message);
+    this.suggestion = suggestion;
+  }
+}
 
 async function request<T>(
   path: string,
@@ -42,6 +57,15 @@ async function request<T>(
   }
   if (res.status === 422) {
     const detail = (await res.json().catch(() => null))?.detail;
+    if (detail && typeof detail === "object") {
+      // Structured reject (SATZ-005): a foreign word with a German equivalent.
+      throw new WordRejectedError(
+        typeof detail.message === "string"
+          ? detail.message
+          : "That input didn't work — try a single German word.",
+        (detail.suggestion as WordSuggestion | undefined) ?? null
+      );
+    }
     throw new WordRejectedError(
       typeof detail === "string" ? detail : "That input didn't work — try a single German word."
     );

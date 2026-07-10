@@ -224,6 +224,23 @@ async def _forge_card(
             detail="The word forge is unavailable right now — try again in a moment.",
         )
     if not enriched.valid or not enriched.target or not enriched.type:
+        if enriched.german_equivalent:
+            # SATZ-005: the input is a real foreign word we can name a German
+            # equivalent for. Don't dead-end the learner into retyping it by
+            # hand — hand back a structured suggestion so the frontend can
+            # offer it as a one-tap "add the German word X?" confirmation.
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "message": enriched.reason
+                    or f"That looks like {enriched.source_language or 'another language'}.",
+                    "suggestion": {
+                        "word": enriched.german_equivalent,
+                        "gloss": enriched.gloss,
+                        "sourceLanguage": enriched.source_language,
+                    },
+                },
+            )
         raise HTTPException(
             status_code=422,
             detail=enriched.reason or "That doesn't look like a German word or phrase.",

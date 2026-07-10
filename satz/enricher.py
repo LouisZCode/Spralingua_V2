@@ -39,6 +39,22 @@ class EnrichedCard(BaseModel):
             "learner why the input was rejected (shown to them verbatim)"
         ),
     )
+    source_language: Optional[str] = Field(
+        default=None,
+        description=(
+            "Only when the input is a real word/short phrase in ANOTHER language "
+            "that has a clear German equivalent: that language, in English "
+            "(e.g. 'English', 'Spanish'). Null otherwise"
+        ),
+    )
+    german_equivalent: Optional[str] = Field(
+        default=None,
+        description=(
+            "Set together with source_language: the German word to offer instead, "
+            "written naturally (a noun WITH its article, e.g. 'der Termin'; other "
+            "types bare). The learner confirms before we build its card. Null otherwise"
+        ),
+    )
     type: Optional[Literal["noun", "verb", "phrase", "adjective", "preposition"]] = Field(
         default=None, description="Card type; null when valid=false"
     )
@@ -87,9 +103,10 @@ class EnrichedCard(BaseModel):
 PROMPT = """# Role
 You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A learner typed something they want to practice. Decide whether it is usable, then forge the card.
 
-# Accept / reject
-- ACCEPT any real German word or short common phrase (idioms, collocations, polite formulas). Established loanwords used in everyday German (das Handy, der Laptop) count as German.
-- REJECT gibberish, words from other languages, bare proper names, and full sentences (more than ~6 words). When rejecting, set valid=false and write ONE short, friendly English sentence in `reason` telling the learner why — suggest the German equivalent if you know it (e.g. "That's English — the German word for it is 'Termin', try that!"). Leave every other field null.
+# Accept / reject / translate — three outcomes
+- ACCEPT any real German word or short common phrase (idioms, collocations, polite formulas). Established loanwords used in everyday German (das Handy, der Laptop) count as German. Set valid=true and forge the card below.
+- TRANSLATE when the input is a real word or short phrase in ANOTHER language (English, Spanish, …) that has a clear, single German equivalent. Set valid=false, but fill `source_language` (that language, in English — e.g. "English"), `german_equivalent` (the German word to offer — a noun WITH its article like "der Termin", other types bare), and `gloss` (the concise English meaning of that German word, one sense). Also write a friendly one-line `reason`. Leave the card-building fields (type, target, article, note, …) null — the learner confirms first, then we build the card properly.
+- REJECT gibberish, bare proper names, full sentences (more than ~6 words), and foreign words with NO clean German equivalent. Set valid=false, write ONE short, friendly English sentence in `reason`, and leave every other field null (no german_equivalent).
 
 # Normalize the input first
 - Strip a leading article (der/die/das/ein/eine) — it tells you the noun's gender but never belongs in `target`.
@@ -142,6 +159,10 @@ def _normalize(e: EnrichedCard) -> EnrichedCard:
         e.reflexive = False
         e.past_form = None
         e.past_example = None
+    # A valid German card never carries a translation suggestion — those ride
+    # only on the foreign-word reject path (valid=false, which returns above).
+    e.source_language = None
+    e.german_equivalent = None
     e.target = t
     return e
 
