@@ -13,7 +13,7 @@ import {
   submitAttempt,
   UnauthorizedError,
   type AttemptResult,
-} from "./satzschmiede/api";
+} from "./verbformen/api";
 import type { DeckCard } from "./satzschmiede/deck";
 
 const redShadow = {
@@ -24,11 +24,12 @@ const redShadow = {
 // user's own finding: past-tense misses are LEXICON, not rule ("every miss
 // was a strong verb wearing a weak ending"), so the prescription is
 // flashcarding — and Satzschmiede's spoken-past sibling cards ARE those
-// flashcards. This mode is a focused lens over the same pool: the learner's
-// past-sibling cards only, drilled through the same trainer, same examiner
-// (Perfekt OR Präteritum both pass), same shared SRS schedule — a card
-// greened here is greened in Satzschmiede too. Only the OBS-007 session
-// prefix differs ("vf-"), so Verbformen sittings group apart in Langfuse.
+// flashcards. The deck AUTO-FEEDS from the Satzschmiede pool (every verb
+// added there brings its past sibling here), but the drill's state is its
+// own: /verbformen/* writes the user_verbformen overlay, so schedules,
+// reveals and removals in this mode never touch Satzschmiede. Same trainer,
+// same examiner (Perfekt OR Präteritum both pass); the OBS-007 session
+// prefix ("vf-") groups Verbformen sittings apart in Langfuse.
 export default function Verbformen() {
   const { token, ready, signOut } = useAuth();
   const router = useRouter();
@@ -91,7 +92,7 @@ export default function Verbformen() {
       audio: Blob,
       sessionId: string
     ): Promise<AttemptResult> => {
-      if (!token) throw new UnauthorizedError("/satz/attempts");
+      if (!token) throw new UnauthorizedError("/verbformen/attempts");
       try {
         return await submitAttempt(token, cardId, audio, sessionId);
       } catch (e) {
@@ -110,8 +111,9 @@ export default function Verbformen() {
 
   // The drill's material: every spoken-past sibling in the pool. Verbs arrive
   // as pairs (present + past) when added anywhere in Satzschmiede, so this
-  // grows by itself as the learner's verb vocabulary grows.
-  const verbDeck = deck?.filter((c) => c.tense === "past") ?? null;
+  // grows by itself as the learner's verb vocabulary grows. /verbformen/deck
+  // already serves only the past siblings (minus drill-local removals).
+  const verbDeck = deck;
   const empty = verbDeck !== null && verbDeck.length === 0;
 
   return (

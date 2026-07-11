@@ -24,6 +24,7 @@ from datetime import datetime
 from sqlalchemy import (
     Boolean,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Text,
@@ -275,3 +276,40 @@ class UserError(Base):
 
     # The tandem prompt-layer query: "this user's open patterns".
     __table_args__ = (Index("ix_user_errors_user_status", "user_id", "status"),)
+
+
+# ── Verbformen (GRAM-002, Exercise C) ────────────────────────────────────
+# Drill-local overlay on the Satzschmiede pool. The verb list still AUTO-FEEDS
+# from ``user_cards`` (every verb added there brings its spoken-past sibling),
+# but Verbformen's schedule and removals live here — so drilling or hiding a
+# verb in this mode never touches the shared Satzschmiede schedule, and vice
+# versa. No row = "in the feed, never drilled here".
+
+
+class UserVerbformen(Base):
+    __tablename__ = "user_verbformen"
+
+    user_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    card_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Own SRS, same column shape as user_cards so satz/scheduler.py::schedule
+    # and the deck serializers apply unchanged. NULL due_at = never practiced.
+    due_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
+    interval_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    reps: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    # Removed from the Verbformen deck only — the user_cards row lives on.
+    hidden: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )
+
+    # The overlay row follows its pool row: deleting the verb from the
+    # Satzschmiede pool (or deleting the user, which cascades through
+    # user_cards) drops it here too — auto-feed's one accepted coupling.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["user_id", "card_id"],
+            ["user_cards.user_id", "user_cards.card_id"],
+            ondelete="CASCADE",
+        ),
+    )

@@ -8,7 +8,7 @@ import type { ChunkItem, ChunkVerdict } from "./api";
 // contract as BauteilTrainer. `retry` marks the copy.
 type QueueItem = ChunkItem & { retry?: boolean };
 
-type Phase = "drill" | "done";
+type Phase = "intro" | "drill" | "done";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -16,6 +16,28 @@ const redShadow = {
 const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
+
+// The drill rules, shown once up front — same convention as BauteilTrainer.
+// The wording carries the drill's whole mechanism: the gap never says whether
+// a pronoun belongs, and verb + preposition + case travel as ONE word.
+const RULES: { title: string; body: string }[] = [
+  {
+    title: "Complete the chunk",
+    body: "German verbs come welded to their little words — a pronoun, a preposition, a governed case. Type exactly what the gap is missing.",
+  },
+  {
+    title: "The gap hides the pronoun",
+    body: "Some verbs need mich / dich / sich — and some famously don't. „Ich warte ___ den Bus“ takes no pronoun at all; the mix never tells you which kind you're in.",
+  },
+  {
+    title: "One verb, one preposition, one case",
+    body: "freuen auf is not freuen über — and when the article sits in the gap, its case is part of the answer. Learn verb + preposition + case as a single word.",
+  },
+  {
+    title: "Pointing back fuses to da(r)-",
+    body: "When the preposition points at a whole clause or something already said, it fuses: darauf, darüber, womit — never „auf das“.",
+  },
+];
 
 export default function VerbindungenTrainer({
   round,
@@ -29,7 +51,7 @@ export default function VerbindungenTrainer({
   // Fetch a fresh round; the parent remounts this component with it.
   onNewRound: () => void;
 }) {
-  const [phase, setPhase] = useState<Phase>("drill");
+  const [phase, setPhase] = useState<Phase>("intro");
   const [queue, setQueue] = useState<QueueItem[]>(round);
   const [index, setIndex] = useState(0);
   const [value, setValue] = useState("");
@@ -99,6 +121,39 @@ export default function VerbindungenTrainer({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (phase === "intro") {
+    return (
+      <div
+        className="rounded-[28px] border-[3px] border-ink bg-white p-7"
+        style={inkShadow}
+      >
+        <h2 className="font-display text-[20px] font-black tracking-tight text-ink">
+          How it works
+        </h2>
+        <ul className="mt-5 space-y-4">
+          {RULES.map((r) => (
+            <li key={r.title}>
+              <p className="font-body text-[12px] font-black uppercase tracking-[0.18em] text-flag-red">
+                {r.title}
+              </p>
+              <p className="mt-1 font-body text-[14px] leading-relaxed text-ink-soft">
+                {r.body}
+              </p>
+            </li>
+          ))}
+        </ul>
+        <button
+          type="button"
+          onClick={() => setPhase("drill")}
+          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
+          style={redShadow}
+        >
+          Start · {round.length} chunks
+        </button>
+      </div>
+    );
   }
 
   if (phase === "done") {

@@ -18,6 +18,7 @@ from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
+from verbformen import router as verbformen_router
 from verbindungen import (
     load_items as load_verbindungen_items,
     router as verbindungen_router,
@@ -77,9 +78,11 @@ app.include_router(auth_router)
 # Satzschmiede packs/pool/deck routes (SATZ-002).
 app.include_router(satz_router)
 # Grammar-exercise routes (GRAM-002): Bauteil-Sätze (A), Sprechen (B),
-# Feste Verbindungen (D). Verbformen (C) reuses the /satz routes wholesale.
+# Verbformen (C — deck auto-feeds from the Satzschmiede pool, schedule is
+# drill-local on the user_verbformen overlay), Feste Verbindungen (D).
 app.include_router(bauteil_router)
 app.include_router(sprechen_router)
+app.include_router(verbformen_router)
 app.include_router(verbindungen_router)
 
 
