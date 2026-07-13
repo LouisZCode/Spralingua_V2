@@ -135,7 +135,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # stays per-session for ACTIVE_TASKS routing, Langfuse, and the wrapper.
     db_user_id = db_user_id or user_id
 
-    async with aiohttp.ClientSession() as session:
+    # B2: bound the MiniMax TTS session's requests — with no timeout a hung
+    # MiniMax request falls back to aiohttp's 5-minute default, stalling this
+    # client's turn (and, if awaited on the event loop elsewhere, worse).
+    async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as session:
 
         # Transport: one per client (wraps this specific websocket)
         transport = transport_fastapi_ws(websocket)
@@ -390,6 +393,34 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # conversation/turn lifecycle ourselves via PipelineLatencyObserver.
         task._turn_trace_observer = _NoOpTurnTraceObserver()
         wrapper._pipeline_task = task  # Let wrapper end the pipeline via EndTaskFrame
+
+        # B4: a bot-side ErrorFrame (MiniMax/OpenRouter/Deepgram failure that
+        # doesn't throw cleanly) is otherwise silent — the conversation just
+        # freezes until Pipecat's default 300s idle-cancel. `on_pipeline_error`
+        # fires for every ErrorFrame reaching the task from upstream
+        # (task.py::_source_push_frame). Fatal errors already make Pipecat
+        # queue its own CancelFrame right after this handler runs, so we only
+        # need to act on the non-fatal case — log loudly and end the session
+        # gracefully via the same stop_when_done() path the agent's own
+        # goodbye uses (agents/pipecat_wrapper.py::_end_pipeline), so a failed
+        # final turn doesn't hang for 5 minutes.
+        @task.event_handler("on_pipeline_error")
+        async def _on_pipeline_error(_task, frame):
+            logger.error(
+                f"Pipeline ErrorFrame (bot-side failure): session_id={session_id} "
+                f"user_id={user_id} lesson_id={lesson_id} fatal={frame.fatal} "
+                f"error={frame.error!r} exception={frame.exception!r}"
+            )
+            if frame.fatal:
+                return  # Pipecat already cancels the pipeline for fatal errors
+            try:
+                await task.stop_when_done()
+            except Exception as e:  # noqa: BLE001 — must not crash the event-handler path
+                logger.warning(
+                    f"stop_when_done() after ErrorFrame failed (non-fatal): "
+                    f"{type(e).__name__}: {e}"
+                )
+
         runner = PipelineRunner()
 
         await audiobuffer.start_recording()
@@ -435,7 +466,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             # /say for that still-live session (BUG-004).
             if ACTIVE_TASKS.get(user_id) is task:
                 ACTIVE_TASKS.pop(user_id, None)
-            await audiobuffer.stop_recording()
+            # B3: must not be bare — an unhandled raise here would skip every
+            # step after it in this `finally` (evaluators, DB finalize, OTel
+            # flush), leaving the activity_session row ended_at=NULL forever.
+            try:
+                await audiobuffer.stop_recording()
+            except Exception:  # noqa: BLE001 — audio buffer stop must not block cleanup
+                logger.exception("Audio buffer stop_recording failed (non-fatal)")
             # Post-session evaluator (EVAL-001). Best-effort: any failure here
             # (LLM outage, missing goal entry, network) is logged and swallowed
             # so audio export and logger close always run.
@@ -683,6 +720,15 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 logger.warning(
                     f"DB session finalize failed (non-fatal): {type(e).__name__}: {e}"
                 )
-            session_logger.close()
-            flush_traces()  # drain queued OTel spans before the process moves on
+            # B3: same non-fatal contract as above — a close failure must not
+            # skip the OTel flush that follows it.
+            try:
+                session_logger.close()
+            except Exception:  # noqa: BLE001 — logger close must not block cleanup
+                logger.exception("Session logger close failed (non-fatal)")
+            # B1: force_flush() is bounded (timeout_millis=2000 in
+            # agents/observability.py) but still a synchronous, thread-blocking
+            # OTel call — run it off the event loop so a slow Langfuse OTLP
+            # endpoint can't freeze every other connected client's pipeline.
+            await asyncio.to_thread(flush_traces)
             print(f"Client disconnected: {user_id}")

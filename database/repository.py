@@ -195,7 +195,10 @@ async def record_grammar_error(
     if session_id:
         example["session_id"] = session_id
     try:
-        row = await db.get(UserError, (user_id, pattern_id))
+        # SELECT ... FOR UPDATE: locks the row for this transaction so a
+        # concurrent writer to the same (user_id, pattern_id) re-reads after
+        # this commits, instead of racing on stale attributes (lost update).
+        row = await db.get(UserError, (user_id, pattern_id), with_for_update=True)
         if row is None:
             db.add(
                 UserError(
@@ -253,7 +256,10 @@ async def credit_pattern_success(
     non-fatal wrapping.
     """
     try:
-        row = await db.get(UserError, (user_id, pattern_id))
+        # SELECT ... FOR UPDATE: locks the row for this transaction so a
+        # concurrent writer to the same (user_id, pattern_id) re-reads after
+        # this commits, instead of racing on stale attributes (lost update).
+        row = await db.get(UserError, (user_id, pattern_id), with_for_update=True)
         if row is None:
             return None
         row.streak += 1

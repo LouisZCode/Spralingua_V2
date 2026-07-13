@@ -536,15 +536,28 @@ export default function VocabTrainer({
       );
       return;
     }
-    const ctx = new AudioContext();
-    const analyser = ctx.createAnalyser();
-    analyser.fftSize = 1024;
-    ctx.createMediaStreamSource(stream).connect(analyser);
-    void ctx.resume(); // Safari can hand the context over suspended
-    autoStreamRef.current = stream;
-    audioCtxRef.current = ctx;
-    analyserRef.current = analyser;
-    setAuto("running"); // the arm effect starts the first card
+    // AudioContext construction can throw on older Safari / restrictive
+    // WebViews — outside a try/catch that leaves the mic stream we just
+    // acquired orphaned (hot, unreachable by any cleanup). Track the local
+    // `ctx` so a mid-setup failure can still close whatever got created.
+    let ctx: AudioContext | undefined;
+    try {
+      ctx = new AudioContext();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      ctx.createMediaStreamSource(stream).connect(analyser);
+      void ctx.resume(); // Safari can hand the context over suspended
+      autoStreamRef.current = stream;
+      audioCtxRef.current = ctx;
+      analyserRef.current = analyser;
+      setAuto("running"); // the arm effect starts the first card
+    } catch {
+      stream.getTracks().forEach((t) => t.stop());
+      ctx?.close().catch(() => {});
+      setAttemptError(
+        "Microphone blocked — allow mic access in your browser and try again."
+      );
+    }
   }
 
   // One recorder per card on the session-long stream. Unlike the manual path,

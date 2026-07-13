@@ -192,6 +192,7 @@ async def examine_attempt(card, transcript: str) -> Judgement:
         model=EXAMINER_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(Judgement, include_raw=True)
     prompt = (

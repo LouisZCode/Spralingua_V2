@@ -49,6 +49,11 @@ async def init_engine(database_url: str) -> None:
         pool_size=5,
         max_overflow=5,
         pool_pre_ping=True,
+        # Bound how long a request waits for a pooled connection, and how
+        # long a query / new connection can run, so a hung Postgres can't
+        # stall request or cleanup coroutines indefinitely.
+        pool_timeout=30,
+        connect_args={"command_timeout": 30, "timeout": 10},
     )
     _sessionmaker = async_sessionmaker(
         bind=_engine,

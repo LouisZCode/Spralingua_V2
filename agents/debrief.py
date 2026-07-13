@@ -232,6 +232,7 @@ async def debrief(
         model=DEBRIEF_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(TandemDebrief, include_raw=True)
     with generation_span(

@@ -91,24 +91,32 @@ export default function SprechenTrainer({
       setFailed("We need the microphone for this one — check the browser permission.");
       return;
     }
-    const mime = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m));
-    const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-    chunksRef.current = [];
-    discardRef.current = false;
-    rec.ondataavailable = (e) => {
-      if (e.data.size > 0) chunksRef.current.push(e.data);
-    };
-    rec.onstop = () => {
+    // MediaRecorder construction can throw on older Safari / restrictive
+    // WebViews — outside a try/catch that leaves the mic stream we just
+    // acquired orphaned (hot, unreachable by any cleanup).
+    try {
+      const mime = MIME_CANDIDATES.find((m) => MediaRecorder.isTypeSupported(m));
+      const rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+      chunksRef.current = [];
+      discardRef.current = false;
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        if (discardRef.current) return;
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType });
+        void submit(blob);
+      };
+      recorderRef.current = rec;
+      rec.start();
+      setRecording(true);
+      setElapsed(0);
+      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+    } catch {
       stream.getTracks().forEach((t) => t.stop());
-      if (discardRef.current) return;
-      const blob = new Blob(chunksRef.current, { type: rec.mimeType });
-      void submit(blob);
-    };
-    recorderRef.current = rec;
-    rec.start();
-    setRecording(true);
-    setElapsed(0);
-    timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      setFailed("We need the microphone for this one — check the browser permission.");
+    }
   }
 
   async function submit(audio: Blob) {

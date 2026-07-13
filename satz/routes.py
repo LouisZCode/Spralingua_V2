@@ -168,6 +168,31 @@ _TRANSLIT = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
 _ID_PREFIX = {"noun": "n", "verb": "v", "phrase": "p", "adjective": "adj", "preposition": "prep"}
 
 
+def _type_hint(word: str) -> str | None:
+    """Best-effort card-type hint from the RAW input, to tell homographs apart
+    (verb ``unternehmen`` vs. noun ``Unternehmen``). Returns ``"noun"``,
+    ``"not-noun"`` (verb/adjective/preposition/phrase), or ``None`` when the
+    input gives no signal — so an article-led or capitalized single word never
+    dedups against a card of the wrong type (SATZ homograph fix)."""
+    w = word.strip()
+    low = w.lower()
+    # A leading article is an unambiguous noun marker.
+    if any(
+        low.startswith(a)
+        for a in ("der ", "die ", "das ", "ein ", "eine ", "kein ", "keine ",
+                  "mein ", "dein ", "sein ", "ihr ", "unser ", "euer ")
+    ):
+        return "noun"
+    # A leading "sich" marks a reflexive verb.
+    if low.startswith("sich "):
+        return "not-noun"
+    # One token: German capitalizes nouns and lowercases verbs/adjectives/
+    # prepositions, so casing is a reliable-enough hint for a single word.
+    if len(w.split()) == 1:
+        return "noun" if w[:1].isupper() else "not-noun"
+    return None
+
+
 async def _find_canonical(db: AsyncSession, word: str) -> VocabCard | None:
     """Match typed input against the canonical catalog on ``lower(target)``,
     with plausible leads stripped. Homograph pairs ("Essen"/"essen") share a
@@ -181,6 +206,13 @@ async def _find_canonical(db: AsyncSession, word: str) -> VocabCard | None:
         .scalars()
         .all()
     )
+    # Homograph guard: a mismatched-type catalog hit must NOT dedup — drop it so
+    # the word flows to enrichment and forges the correct new-type card.
+    hint = _type_hint(word)
+    if hint == "noun":
+        rows = [c for c in rows if c.type == "noun"]
+    elif hint == "not-noun":
+        rows = [c for c in rows if c.type != "noun"]
     # A verb's past sibling shares its target — typed input always resolves
     # to the base (present) card; pairing links the sibling separately.
     rows = sorted(rows, key=lambda c: c.tense is not None)
@@ -584,7 +616,11 @@ async def submit_attempt(
         user_card.due_at = due_at
         user_card.reps += 1
         user_card.last_score = 1 if judgement.word_ok else 0
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            logger.exception("Satz schedule commit failed (card {})", card_id)
+            await db.rollback()
 
         # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
         # after the schedule is safe; a ledger failure only logs.

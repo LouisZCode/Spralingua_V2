@@ -138,6 +138,25 @@ export default function ConversationView({
     if (typeOpen) typeInputRef.current?.focus();
   }, [typeOpen]);
 
+  // Unmount-only cleanup: browser/mobile back (or any route change) away from
+  // a live session skips confirmFinish/onDisconnected entirely, so without
+  // this the mic stays hot and the backend keeps the per-client pipeline
+  // running until GC. Mirrors HeroDemo's "leave while live" cleanup
+  // (frontend/src/components/HeroDemo.tsx). Guard the ref — disconnect() on
+  // an already-disconnected client is a safe no-op.
+  useEffect(() => {
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      void clientRef.current?.disconnect();
+      if (audioRef.current?.srcObject) {
+        (audioRef.current.srcObject as MediaStream)
+          .getTracks()
+          .forEach((t) => t.stop());
+        audioRef.current.srcObject = null;
+      }
+    };
+  }, []);
+
   const flushPendingBot = () => {
     const text = pendingBotTextRef.current;
     if (!text) return;

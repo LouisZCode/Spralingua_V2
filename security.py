@@ -40,6 +40,16 @@ _demo_new_by_ip: dict[str, deque] = {}   # IP -> timestamps of recent new sessio
 _demo_new_global: deque = deque()        # timestamps of all recent new sessions
 _say_last_by_ip: dict[str, float] = {}   # IP -> monotonic time of last accepted /say
 
+# Authenticated /ws/{user_id} + /say concurrency guard (E1). Google sign-in is
+# free/instant, so an authenticated user is not automatically a trusted one --
+# without a cap a single account could open unlimited concurrent full
+# pipelines (continuous STT+LLM+TTS) or hammer /say, the exact cost-DoS the
+# demo caps above exist to prevent. Keyed on `user_id` (the JWT subject,
+# unspoofable) rather than IP.
+LEARN_MAX_CONCURRENT_PER_USER = 3
+_learn_concurrent_by_user: dict[str, int] = {}  # user_id -> active pipeline count
+_say_last_by_user: dict[str, float] = {}        # user_id -> monotonic time of last accepted /say
+
 # Opportunistic memory reclaim so a long-running process under IP-rotation abuse
 # doesn't accumulate dead per-IP entries forever.
 _last_prune = 0.0
@@ -72,6 +82,9 @@ def _maybe_prune(now: float) -> None:
     for ip in list(_say_last_by_ip.keys()):
         if _say_last_by_ip[ip] < stale_before:
             del _say_last_by_ip[ip]
+    for user_id in list(_say_last_by_user.keys()):
+        if _say_last_by_user[user_id] < stale_before:
+            del _say_last_by_user[user_id]
 
 
 def client_ip(conn) -> str:
@@ -171,4 +184,39 @@ def say_try_admit(ip: str) -> bool:
     if last is not None and (now - last) < say_per_ip_interval_s:
         return False
     _say_last_by_ip[ip] = now
+    return True
+
+
+def learn_try_admit(user_id: str) -> tuple[bool, str]:
+    """Try to admit a new authenticated learn-socket session for `user_id`.
+
+    Returns (ok, reason). On success the function has already incremented the
+    per-user concurrency counter, so a True result MUST be paired with exactly
+    one later `learn_release(user_id)`. `reason` is one of: "ok",
+    "too_many_concurrent".
+    """
+    held = _learn_concurrent_by_user.get(user_id, 0)
+    if held >= LEARN_MAX_CONCURRENT_PER_USER:
+        return False, "too_many_concurrent"
+    _learn_concurrent_by_user[user_id] = held + 1
+    return True, "ok"
+
+
+def learn_release(user_id: str) -> None:
+    """Release the concurrency slot held by `user_id`. Call exactly once per admit."""
+    held = _learn_concurrent_by_user.get(user_id, 0)
+    if held <= 1:
+        _learn_concurrent_by_user.pop(user_id, None)
+    else:
+        _learn_concurrent_by_user[user_id] = held - 1
+
+
+def say_user_try_admit(user_id: str) -> bool:
+    """Rate-limit typed /say turns to one per `say_per_ip_interval_s` per authenticated user_id."""
+    now = time.monotonic()
+    _maybe_prune(now)
+    last = _say_last_by_user.get(user_id)
+    if last is not None and (now - last) < say_per_ip_interval_s:
+        return False
+    _say_last_by_user[user_id] = now
     return True

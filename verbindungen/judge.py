@@ -67,6 +67,7 @@ async def judge_chunk(item: dict, typed: str) -> Diagnosis:
         model=JUDGE_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(Diagnosis, include_raw=True)
     prompt = (

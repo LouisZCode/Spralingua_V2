@@ -234,7 +234,11 @@ async def submit_attempt(
                 },
             )
         )
-        await db.commit()
+        try:
+            await db.commit()
+        except Exception:
+            logger.exception("Verbformen schedule commit failed (card {})", card_id)
+            await db.rollback()
 
         # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
         # after the schedule is safe; a ledger failure only logs.

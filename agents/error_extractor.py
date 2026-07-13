@@ -157,6 +157,7 @@ async def extract_errors(
         model=EXTRACTOR_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(ErrorExtraction, include_raw=True)
     with generation_span(

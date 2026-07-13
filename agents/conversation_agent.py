@@ -17,6 +17,7 @@ _model = ChatOpenAI(
     base_url=openrouter_base_url,
     api_key=openrouter_api_key,
     stream_usage=True,                       # final usage chunk on streamed OpenAI calls (token counts → Langfuse)
+    timeout=30,
     extra_body={
         # Pin to Cerebras for speed. Cost tracking via Langfuse is deferred —
         # see LEARNINGS.md 2026-05-19 entry.

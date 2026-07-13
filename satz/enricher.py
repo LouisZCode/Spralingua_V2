@@ -173,6 +173,7 @@ async def enrich_word(word: str, user_id: str | None = None) -> EnrichedCard:
         model=ENRICHER_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(EnrichedCard, include_raw=True)
     # OBS-006: the forge is its own single-generation Langfuse trace — the

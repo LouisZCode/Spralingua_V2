@@ -307,6 +307,7 @@ async def evaluate(
         model=EVALUATOR_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(EvaluationResult, include_raw=True)
     # OBS-007: `session_id` is the conversation's Langfuse session, so the

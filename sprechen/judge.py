@@ -94,6 +94,7 @@ async def judge_spoken(task: dict, transcript: str) -> SpokenVerdict:
         model=JUDGE_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
+        timeout=30,
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     ).with_structured_output(SpokenVerdict, include_raw=True)
     p = load_taxonomy()[task["pattern_id"]]

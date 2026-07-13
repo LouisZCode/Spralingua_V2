@@ -148,4 +148,8 @@ def flush_traces() -> None:
     """
     provider = trace.get_tracer_provider()
     if hasattr(provider, "force_flush"):
-        provider.force_flush()
+        # B1: force_flush() is a synchronous, thread-blocking OTel call. Bound
+        # it so a slow Langfuse OTLP endpoint can't stall the caller for its
+        # unbounded default — the factory.py call site also runs this off the
+        # event loop via asyncio.to_thread for the same reason.
+        provider.force_flush(timeout_millis=2000)

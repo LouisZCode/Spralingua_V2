@@ -2,6 +2,7 @@
 # Frontend: cd frontend && npm run dev
 
 import asyncio
+import logging
 import re
 import uuid
 from contextlib import asynccontextmanager
@@ -33,9 +34,36 @@ from security import (
     client_ip,
     demo_release,
     demo_try_admit,
+    learn_release,
+    learn_try_admit,
     origin_allowed,
     say_try_admit,
+    say_user_try_admit,
 )
+
+# The session JWT rides as ``?token=`` on the WS handshake URL (see
+# ws_endpoint below); uvicorn's WebSocket access logging writes the full
+# path+query to stdout, which would otherwise leak a 7-day impersonation
+# token into Railway logs. Redact it before it's ever formatted.
+_TOKEN_LOG_RE = re.compile(r"(token=)[^&\s\"']+")
+
+
+class _RedactTokenFilter(logging.Filter):
+    """Strip ``token=...`` (and ``ticket=...``) from WS access-log lines so the
+    session JWT never lands in stdout / Railway logs."""
+    def filter(self, record: logging.LogRecord) -> bool:
+        try:
+            msg = record.getMessage()
+            if "token=" in msg or "ticket=" in msg:
+                record.msg = _TOKEN_LOG_RE.sub(r"\1REDACTED", msg)
+                record.args = ()
+        except Exception:
+            pass
+        return True
+
+
+for _ln in ("uvicorn.error", "uvicorn.access"):
+    logging.getLogger(_ln).addFilter(_RedactTokenFilter())
 
 
 @asynccontextmanager
@@ -57,6 +85,12 @@ async def lifespan(app: FastAPI):
     load_sprechen_tasks()
     load_verbindungen_items()
     yield
+    # Graceful drain: let in-flight pipelines finalize their DB rows before the
+    # engine is disposed (a redeploy mid-session otherwise orphans them).
+    for _ in range(20):  # up to ~10s
+        if not ACTIVE_TASKS:
+            break
+        await asyncio.sleep(0.5)
     await dispose_engine()
 
 
@@ -223,7 +257,7 @@ async def ws_endpoint(
     topic: str = "",
     token: str = "",
 ):
-    """Authenticated learn socket (AUTH-001, P-3).
+    """Authenticated learn socket (AUTH-001, P-3, E1).
 
     Browsers can't set custom headers on a WebSocket handshake, so the session
     JWT rides as a ``?token=`` query param. We verify it and close *before*
@@ -231,15 +265,30 @@ async def ws_endpoint(
     cleanly. The token's subject is authoritative for identity — the path
     ``user_id`` is ignored, so a client can't drive an arbitrary id by editing
     the URL.
+
+    Google sign-in is free/instant, so a signed-in user isn't automatically a
+    trusted one: without a cap one account could open unlimited concurrent
+    full pipelines (continuous STT+LLM+TTS), an uncapped cost-DoS on the same
+    backend the demo caps protect. `learn_try_admit` gates admission per
+    `sub` (unspoofable, unlike IP) before accept (1013 try-again on reject);
+    a successful admit owns one concurrency slot, released in ``finally`` no
+    matter how the session ends.
     """
     try:
         sub = decode_session_jwt(token)
     except AuthError:
         await websocket.close(code=1008)
         return
-    await websocket.accept()
-    # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
-    await run_pipeline(websocket, sub, voice, lesson, topic=topic)
+    ok, _reason = learn_try_admit(sub)
+    if not ok:
+        await websocket.close(code=1013)
+        return
+    try:
+        await websocket.accept()
+        # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
+        await run_pipeline(websocket, sub, voice, lesson, topic=topic)
+    finally:
+        learn_release(sub)
 
 
 # Demo user ids are minted client-side as `demo-<uuid4>`; pin the shape so the
@@ -327,6 +376,8 @@ async def say(user_id: str, body: SayBody, request: Request):
     - real ids — the authenticated /learn flow (AUTH-001). Requires an
       ``Authorization: Bearer`` session JWT whose subject equals the path id, so
       one signed-in user can't inject turns into another's active session.
+      Also rate-limited (E1), same as the demo branch — an authenticated
+      caller can otherwise hammer /say for free.
 
     A length cap bounds LLM token cost for both.
     """
@@ -342,6 +393,8 @@ async def say(user_id: str, body: SayBody, request: Request):
             raise HTTPException(status_code=401, detail="missing or invalid token")
         if sub != user_id:
             raise HTTPException(status_code=403, detail="token does not match user")
+        if not say_user_try_admit(sub):
+            raise HTTPException(status_code=429, detail="too many requests")
         target_id = sub
 
     text = body.text.strip()
