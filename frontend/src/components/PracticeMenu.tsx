@@ -92,7 +92,6 @@ export default function PracticeMenu() {
             accent="gold"
             icon="pencil"
             kicker="Satzschmiede"
-            badge="New"
             title="Vocabulary Practice"
             body="Put new words to work in sentences of your own. A strict examiner checks each one and helps it stick."
             cta="Try it out"
@@ -102,7 +101,6 @@ export default function PracticeMenu() {
             accent="ink"
             icon="chat"
             kicker="Grammatik-Tandem"
-            badge="New"
             title="Tandem Partner"
             body="Daily German chat with Lena, your language-exchange partner. She remembers your last talks and gently fixes the grammar you keep missing."
             cta="Meet Lena"
@@ -112,7 +110,6 @@ export default function PracticeMenu() {
             accent="red"
             icon="blocks"
             kicker="Bauteil-Sätze"
-            badge="New"
             title="Declension Practice"
             body="Raw parts in — ein · gut · Job — the right endings out. Read the sentence, spot the case, and put the flag where it belongs."
             cta="Start building"
@@ -122,7 +119,6 @@ export default function PracticeMenu() {
             accent="gold"
             icon="wave"
             kicker="Sprechen"
-            badge="New"
             title="Speaking Drills"
             body="Constrained speaking tasks that trap the structure — use weil twice, front every sentence — then see what you actually said."
             cta="Start speaking"
@@ -132,7 +128,6 @@ export default function PracticeMenu() {
             accent="ink"
             icon="clock"
             kicker="Verbformen"
-            badge="New"
             title="Past-Tense Verbs"
             body="Drill the spoken past of your own verbs — ist gefahren, hat gedacht, war, wollte — until the forms come without thinking."
             cta="Drill your verbs"
@@ -142,7 +137,6 @@ export default function PracticeMenu() {
             accent="red"
             icon="link"
             kicker="Feste Verbindungen"
-            badge="New"
             title="Verb Chunks"
             body="sich freuen auf, warten auf, denken an — complete the chunk: pronoun, preposition, case. Mixed, so nothing is predictable."
             cta="Fill the gaps"
@@ -151,7 +145,6 @@ export default function PracticeMenu() {
             href="/szenario"
             accent="gold"
             icon="target"
-            badge="New"
             title="Szenario-Sparring"
             body="Answer unpredictable questions with clear structure."
             cta="Step into the scene"
@@ -168,7 +161,6 @@ function ModeCard({
   icon,
   title,
   kicker,
-  badge,
   body,
   cta,
 }: {
@@ -177,7 +169,6 @@ function ModeCard({
   icon: ModeIconName;
   title: string;
   kicker?: string;
-  badge?: string;
   body: string;
   cta: string;
 }) {
@@ -199,11 +190,6 @@ function ModeCard({
         >
           <ModeIcon name={icon} />
         </div>
-        {badge && (
-          <span className="rounded-full border-[2px] border-ink bg-flag-gold-soft px-3 py-1 font-body text-[10px] font-black uppercase tracking-[0.18em] text-ink">
-            {badge}
-          </span>
-        )}
       </div>
       {kicker && (
         <p className="mt-6 font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
