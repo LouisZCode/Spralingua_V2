@@ -1,0 +1,94 @@
+# Starter set — DRAFT content for user review, not final.
+#
+# Szenario-Sparring (P1, thin slice) scenario catalog. Content-as-data like
+# sprechen/tasks.yaml; szenario/content.py validates fail-loud at startup.
+#
+# Fields per scenario (all required):
+#   id             — stable slug
+#   stufe          — difficulty tier (int); always 1 in this starter set
+#                    (low-pressure, everyday situations)
+#   persona        — { name, role, attitude }. role is German
+#                    (e.g. "Verkäufer im Spieleladen"); attitude is "friendly"
+#                    for every Stufe-1 scenario
+#   kontext        — ONE English sentence setting the scene, shown to the
+#                    learner before the question
+#   questions      — 3-5 German questions this persona might casually ask;
+#                    one is picked at random at runtime
+#   ziel_vokabular — 4-8 German domain nouns for the scene, each WITH its
+#                    article
+
+scenarios:
+  - id: spieleladen
+    stufe: 1
+    persona:
+      name: Jonas
+      role: Verkäufer im Spieleladen
+      attitude: friendly
+    kontext: >-
+      You're browsing in a small board-game shop and the clerk starts
+      chatting with you while you look at the shelves.
+    questions:
+      - Suchen Sie ein Geschenk oder ist das für Sie selbst?
+      - Spielen Sie lieber mit Freunden oder in der Familie?
+      - Mögen Sie eher einfache Spiele oder komplizierte Strategiespiele?
+      - Haben Sie schon mal ein Kartenspiel gespielt?
+      - Wie viele Spieler sollen mitspielen können?
+    ziel_vokabular:
+      - der Spieleladen
+      - das Brettspiel
+      - das Kartenspiel
+      - der Spieler
+      - die Regel
+      - das Geschenk
+      - der Preis
+      - die Anleitung
+
+  - id: cafe
+    stufe: 1
+    persona:
+      name: Lea
+      role: Barista im Café
+      attitude: friendly
+    kontext: >-
+      You're standing at the counter of a small café and the barista makes
+      conversation while preparing your order.
+    questions:
+      - Trinken Sie lieber Kaffee oder Tee?
+      - Wollen Sie das hier trinken oder mitnehmen?
+      - Kennen Sie unser Café schon lange?
+      - Möchten Sie auch etwas Süßes dazu?
+      - Sitzen Sie gern drinnen oder lieber draußen?
+    ziel_vokabular:
+      - der Kaffee
+      - der Tee
+      - die Tasse
+      - der Kuchen
+      - der Tisch
+      - die Rechnung
+      - das Café
+      - der Zucker
+
+  - id: nachbarin
+    stufe: 1
+    persona:
+      name: Frau Bauer
+      role: Nachbarin im Haus
+      attitude: friendly
+    kontext: >-
+      You just moved into a new apartment and your neighbor stops you in the
+      hallway for a quick, friendly chat.
+    questions:
+      - Wohnen Sie jetzt auch in diesem Haus?
+      - Woher kommen Sie eigentlich?
+      - Gefällt Ihnen die Wohnung schon?
+      - Haben Sie schon die Nachbarn kennengelernt?
+      - Brauchen Sie Hilfe beim Einziehen?
+    ziel_vokabular:
+      - die Wohnung
+      - das Haus
+      - der Nachbar
+      - die Nachbarin
+      - der Umzug
+      - der Flur
+      - die Straße
+      - der Stock

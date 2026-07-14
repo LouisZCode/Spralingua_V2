@@ -147,6 +147,15 @@ export default function PracticeMenu() {
             body="sich freuen auf, warten auf, denken an — complete the chunk: pronoun, preposition, case. Mixed, so nothing is predictable."
             cta="Fill the gaps"
           />
+          <ModeCard
+            href="/szenario"
+            accent="gold"
+            icon="target"
+            badge="New"
+            title="Szenario-Sparring"
+            body="Answer unpredictable questions with clear structure."
+            cta="Step into the scene"
+          />
         </div>
       </main>
     </div>
@@ -227,7 +236,15 @@ function ModeCard({
   );
 }
 
-type ModeIconName = "mic" | "pencil" | "chat" | "blocks" | "wave" | "clock" | "link";
+type ModeIconName =
+  | "mic"
+  | "pencil"
+  | "chat"
+  | "blocks"
+  | "wave"
+  | "clock"
+  | "link"
+  | "target";
 
 function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
@@ -285,6 +302,16 @@ function ModeIcon({ name }: { name: ModeIconName }) {
       <svg {...common}>
         <path d="M10 13a5 5 0 0 0 7.5.5l2-2a5 5 0 0 0-7-7l-1.2 1.2" />
         <path d="M14 11a5 5 0 0 0-7.5-.5l-2 2a5 5 0 0 0 7 7l1.2-1.2" />
+      </svg>
+    );
+  }
+  if (name === "target") {
+    // a bullseye — "open with the point, land the anchor"
+    return (
+      <svg {...common}>
+        <circle cx="12" cy="12" r="8.5" />
+        <circle cx="12" cy="12" r="4.5" />
+        <circle cx="12" cy="12" r="1" fill="currentColor" stroke="none" />
       </svg>
     );
   }

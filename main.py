@@ -19,6 +19,7 @@ from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
+from szenario import load_scenarios as load_szenario_scenarios, router as szenario_router
 from verbformen import router as verbformen_router
 from verbindungen import (
     load_items as load_verbindungen_items,
@@ -84,6 +85,9 @@ async def lifespan(app: FastAPI):
     load_bauteil_items()
     load_sprechen_tasks()
     load_verbindungen_items()
+    # And for Szenario-Sparring's scenario catalog (P1, thin slice) — same
+    # fail-loud rule as the grammar-exercise catalogs above.
+    load_szenario_scenarios()
     yield
     # Graceful drain: let in-flight pipelines finalize their DB rows before the
     # engine is disposed (a redeploy mid-session otherwise orphans them).
@@ -118,6 +122,9 @@ app.include_router(bauteil_router)
 app.include_router(sprechen_router)
 app.include_router(verbformen_router)
 app.include_router(verbindungen_router)
+# Szenario-Sparring (P1, thin slice): in-character question, one spoken
+# answer, structure-only judge + silent grammar-ledger credit.
+app.include_router(szenario_router)
 
 
 @app.get("/health")
