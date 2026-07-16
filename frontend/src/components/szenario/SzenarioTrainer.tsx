@@ -22,36 +22,37 @@ const MAX_RECORD_SECONDS = 90;
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
 
-const SATZ_AMPEL_DOT: Record<"green" | "yellow" | "red", string> = {
-  green: "bg-success",
+const SENTENCE_WEIGHT_DOT: Record<"light" | "medium" | "heavy", string> = {
+  light: "bg-success",
   // No flag-yellow design token exists yet — plain Tailwind amber stands in.
-  yellow: "bg-amber-500",
-  red: "bg-flag-red",
+  medium: "bg-amber-500",
+  heavy: "bg-flag-red",
 };
 
 // Shown once, before the first question — same one-time-rules convention as
 // VerbindungenTrainer / BauteilTrainer. The wording carries the whole point
-// of the exercise: this is a structure lens, not a grammar check.
+// of the exercise: this is a coach toward simple German, not a grade, and
+// not a grammar check.
 const RULES: { title: string; body: string }[] = [
   {
     title: "One question, one shot",
     body: "Someone in the scene asks you something. Answer out loud — one recording, then it's submitted.",
   },
   {
-    title: "Structure, not grammar",
-    body: "We're not checking your cases or endings here. We're checking whether your answer holds together.",
+    title: "This isn't a grade",
+    body: "There's no pass or fail here — just a coach nudging you toward simpler, clearer German.",
   },
   {
-    title: "Answer first",
-    body: "Open with the point — the anchor. Save the reasons and the details for after it.",
+    title: "Simple is easier to get right",
+    body: "Short, direct sentences are easier to build correctly than long ones. Simpler German is stronger German.",
   },
   {
-    title: "One idea per sentence",
-    body: "A sentence stacking three thoughts together reads as a run-on, even if every word is correct. Cut it into two.",
+    title: "Watch for long, nested sentences",
+    body: "The thing to avoid is stacking clause inside clause until the listener loses the thread — not using connectors.",
   },
   {
-    title: "Close clean",
-    body: "Land the last sentence instead of trailing off into another clause.",
+    title: "und, aber, deshalb are your friends",
+    body: "Everyday connectors keep sentences light and clear. Reach for them instead of piling on relative clauses.",
   },
 ];
 
@@ -219,6 +220,13 @@ export default function SzenarioTrainer({
   }
 
   if (phase === "result" && verdict) {
+    // Soft tint for the coach message — encouraging either way, never
+    // clinical pass/fail. Only "overcomplicated" leans on the (soft) red.
+    const coachTint =
+      verdict.verdict === "overcomplicated"
+        ? "border-flag-red bg-flag-red-soft"
+        : "border-success bg-success-soft";
+
     return (
       <div>
         <div className="mb-3 flex items-center justify-between">
@@ -231,9 +239,22 @@ export default function SzenarioTrainer({
           className="rounded-[28px] border-[3px] border-ink bg-white p-7"
           style={inkShadow}
         >
+          {/* The coach's message IS the headline — this is a warm nudge
+              toward simpler German, never a grade. */}
+          <div
+            className={`rounded-[18px] border-[3px] px-5 py-5 text-center ${coachTint}`}
+          >
+            <span className="inline-flex items-center rounded-full border-[2px] border-ink bg-white px-3 py-1 font-body text-[10px] font-black uppercase tracking-[0.18em] text-ink-muted">
+              {verdict.levelRead}
+            </span>
+            <p className="mt-3 font-display text-[19px] font-black leading-snug text-ink">
+              {verdict.coachMessage}
+            </p>
+          </div>
+
           {/* The raw transcript IS part of the exercise — what you actually
               said, not what you meant to say. */}
-          <div className="rounded-[18px] border-[3px] border-ink bg-white px-4 py-3">
+          <div className="mt-4 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3">
             <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
               What we heard
             </p>
@@ -242,44 +263,13 @@ export default function SzenarioTrainer({
             </p>
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border-[2px] px-3 py-1 font-body text-[11px] font-black uppercase tracking-[0.14em] ${
-                verdict.anchor.present
-                  ? "border-success bg-success-soft text-success"
-                  : "border-flag-red bg-white text-flag-red-deep"
-              }`}
-            >
-              {verdict.anchor.present ? "✓ Anchor" : "✕ Anchor"}
-            </span>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full border-[2px] px-3 py-1 font-body text-[11px] font-black uppercase tracking-[0.14em] ${
-                verdict.close.clean
-                  ? "border-success bg-success-soft text-success"
-                  : "border-flag-red bg-white text-flag-red-deep"
-              }`}
-            >
-              {verdict.close.clean ? "✓ Clean close" : "✕ Close"}
-            </span>
-          </div>
-          {verdict.anchor.note && (
-            <p className="mt-2 text-center font-body text-[13px] font-semibold text-ink-soft">
-              {verdict.anchor.note}
-            </p>
-          )}
-          {verdict.close.note && (
-            <p className="mt-1 text-center font-body text-[13px] font-semibold text-ink-soft">
-              {verdict.close.note}
-            </p>
-          )}
-
-          {/* Satz-Ampel — one row per sentence, colored by how clean an idea
-              it carries; a non-null `cut` names where an overloaded sentence
-              should split. */}
+          {/* One row per sentence, colored by how heavy it felt to carry —
+              this is a complexity read, not a correctness check. A non-null
+              `simpler` offers a lighter way to say the same thing. */}
           {verdict.sentences.length > 0 && (
             <div className="mt-6">
               <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                Satz-Ampel
+                How heavy each sentence felt
               </p>
               <ul className="mt-2 space-y-2.5">
                 {verdict.sentences.map((s, i) => (
@@ -290,15 +280,15 @@ export default function SzenarioTrainer({
                     <div className="flex items-start gap-2.5">
                       <span
                         aria-hidden
-                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${SATZ_AMPEL_DOT[s.color]}`}
+                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${SENTENCE_WEIGHT_DOT[s.weight]}`}
                       />
                       <p className="font-body text-[15px] leading-relaxed text-ink">
                         {s.text}
                       </p>
                     </div>
-                    {s.cut && (
+                    {s.simpler && (
                       <p className="mt-1.5 pl-5 font-body text-[12px] font-semibold text-ink-muted">
-                        split here → {s.cut}
+                        lighter: {s.simpler}
                       </p>
                     )}
                   </li>
@@ -367,10 +357,6 @@ export default function SzenarioTrainer({
             )}
           </div>
 
-          <p className="mt-6 text-center font-body text-[16px] font-bold leading-relaxed text-ink">
-            {verdict.takeaway}
-          </p>
-
           <div className="mt-7 flex items-center justify-center gap-5">
             <button
               type="button"
@@ -434,7 +420,7 @@ export default function SzenarioTrainer({
               <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
                 {recording
                   ? "speak, then tap stop"
-                  : "answer first, then explain — tap record"}
+                  : "tap record — answer in German, short and simple"}
               </p>
             </>
           )}

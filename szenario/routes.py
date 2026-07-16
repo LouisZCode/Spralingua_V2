@@ -12,17 +12,17 @@ and credited to the shared grammar ledger with ``source="szenario"`` — that
 part never reaches the response.
 """
 
+import asyncio
 import random
 import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.error_extractor import extract_errors
 from agents.observability import tracer
 from auth.deps import get_current_user_id
-from database.connection import get_db
+from database.connection import get_sessionmaker
 from database.repository import record_grammar_error
 from satz.examiner import transcribe_attempt
 from szenario.content import load_scenarios
@@ -34,6 +34,50 @@ router = APIRouter(prefix="/szenario", tags=["szenario"])
 # multi-sentence production, so the ceiling can stay tight (same cap
 # sprechen/routes.py uses for its multi-sentence tasks).
 _MAX_AUDIO_BYTES = 2_500_000
+
+# TASK 4: strong refs to in-flight background harvests, so the event loop
+# never garbage-collects a task mid-run — the standard fire-and-forget
+# pattern (a bare `asyncio.create_task(...)` with no other reference is only
+# weakly held by the loop). Each task discards itself on completion.
+_background_tasks: set[asyncio.Task] = set()
+
+
+async def _background_harvest(transcript: str, session_id: str, user_id: str) -> None:
+    """Fire-and-forget grammar harvest (TASK 4).
+
+    Runs AFTER ``submit_attempt`` has already returned its response — moved
+    off the critical path because Langfuse showed it roughly doubling
+    attempt latency (a 70s attempt was 32s judge + 37s harvest). Opens its
+    OWN DB session (the request-scoped ``db`` from ``Depends(get_db)``
+    closes the instant the response returns, so it can never be reused
+    here) via the same standalone-session pattern
+    ``pipeline/factory.py``'s disconnect block uses for its own post-session
+    harvesters. Because the attempt span has already closed by the time this
+    runs, ``extract_errors``' own generation span becomes its own root trace
+    — grouped into the same Langfuse session via ``session_id`` — exactly
+    like the conversation flow's Harvester B. Same non-fatal, log-and-
+    swallow contract as the inline block this replaces."""
+    try:
+        extraction = await extract_errors(transcript=transcript, session_id=session_id)
+        async with get_sessionmaker()() as db:
+            for err in extraction.errors:
+                try:
+                    await record_grammar_error(
+                        db,
+                        user_id=user_id,
+                        pattern_id=err.pattern_id,
+                        sentence=err.sentence,
+                        corrected=err.corrected,
+                        note=err.note,
+                        source="szenario",
+                        session_id=session_id,
+                    )
+                except Exception:  # noqa: BLE001 — one ledger row must not block the rest
+                    logger.exception(
+                        "Szenario ledger write failed (pattern {})", err.pattern_id
+                    )
+    except Exception:  # noqa: BLE001 — the harvest must never break the attempt response
+        logger.warning("Szenario grammar extraction failed (non-fatal)")
 
 
 @router.get("/scenario")
@@ -73,11 +117,11 @@ async def submit_attempt(
     # /sprechen/attempts.
     sessionId: str = Form(..., max_length=64),
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """Transcribe one spoken answer, judge its STRUCTURE, silently feed the
     grammar ledger, return transcript + structure verdict. Grammar never
-    reaches this response — it's a separate, invisible harvest."""
+    reaches this response — it's a separate, invisible harvest that now runs
+    in the background (TASK 4), off the response's critical path."""
     scenario = load_scenarios().get(scenarioId)
     if scenario is None:
         raise HTTPException(status_code=404, detail="Unknown scenario.")
@@ -101,7 +145,8 @@ async def submit_attempt(
             transcript = await transcribe_attempt(
                 data, audio.content_type, keyterms=scenario.get("ziel_vokabular")
             )
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Szenario transcription failed (scenario {})", scenarioId)
             raise HTTPException(
                 status_code=502,
@@ -122,7 +167,8 @@ async def submit_attempt(
                 ziel_vokabular=scenario["ziel_vokabular"],
                 user_id=user_id,
             )
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Szenario judge call failed (scenario {})", scenarioId)
             raise HTTPException(
                 status_code=502,
@@ -137,57 +183,52 @@ async def submit_attempt(
         )
         attempt_span.set_attribute(
             "langfuse.trace.output",
-            f"anchorPresent={verdict.anchor_present} closeClean={verdict.close_clean}",
+            f"verdict={verdict.verdict} level={verdict.level_read}",
         )
+        # Structured verdict attributes so Langfuse can filter without
+        # string-parsing the free-text trace.output above.
+        attempt_span.set_attribute("verdict.verdict", verdict.verdict)
+        attempt_span.set_attribute("verdict.level_read", verdict.level_read)
 
-        # SILENT grammar enrichment (GRAM-001) — must NEVER fail the response.
-        # Same extractor + ledger contract as pipeline/factory.py's post-session
-        # Harvester B: one structured-output pass classifies the transcript's
-        # grammar slips against the fixed taxonomy, deduplicated by pattern.
-        # extract_errors carries no "clean pattern" signal (no target
-        # pattern_id, no passed flag, unlike sprechen's task-targeted judge),
-        # so — same as Harvester B — there is nothing to credit via
-        # credit_pattern_success here, only errors to record.
-        try:
-            extraction = await extract_errors(transcript=transcript, session_id=sessionId)
-            for err in extraction.errors:
-                try:
-                    await record_grammar_error(
-                        db,
-                        user_id=user_id,
-                        pattern_id=err.pattern_id,
-                        sentence=err.sentence,
-                        corrected=err.corrected,
-                        note=err.note,
-                        source="szenario",
-                        session_id=sessionId,
-                    )
-                except Exception:  # noqa: BLE001 — one ledger row must not block the rest
-                    logger.exception(
-                        "Szenario ledger write failed (pattern {})", err.pattern_id
-                    )
-        except Exception:  # noqa: BLE001 — the harvest must never break the attempt response
-            logger.warning("Szenario grammar extraction failed (non-fatal)")
-
-        return {
+        response = {
             "transcript": transcript,
-            "anchor": {
-                "present": verdict.anchor_present,
-                "note": verdict.anchor_note,
-            },
+            "verdict": verdict.verdict,
+            "levelRead": verdict.level_read,
+            "coachMessage": verdict.coach_message,
             "sentences": [
-                {"text": s.text, "color": s.color, "cut": s.cut}
+                {"text": s.text, "weight": s.weight, "simpler": s.simpler}
                 for s in verdict.sentences
             ],
-            "close": {
-                "clean": verdict.close_clean,
-                "note": verdict.close_note,
-            },
             "skeleton": {
                 "kern": verdict.skeleton.kern,
                 "punkte": verdict.skeleton.punkte,
                 "absprung": verdict.skeleton.absprung,
                 "vokabelAnker": verdict.skeleton.vokabel_anker,
             },
-            "takeaway": verdict.takeaway,
         }
+
+    # SILENT grammar enrichment (GRAM-001) — must NEVER fail, and (TASK 4)
+    # must never ride on the response latency either: fire-and-forget, kicked
+    # off only AFTER the `with` block above exits. asyncio.create_task copies
+    # the CURRENT contextvars snapshot at creation time, not at execution
+    # time — creating it while `attempt_span` was still the current span
+    # would silently parent the harvest's generation span under it even
+    # though it runs later. Waiting until here means no span is current, so
+    # extract_errors' own generation span becomes its own Langfuse ROOT
+    # trace, grouped only by session_id — exactly like the conversation
+    # flow's post-session Harvester B (pipeline/factory.py), which also runs
+    # with no span current. Same extractor + ledger contract as that
+    # harvester: one structured-output pass classifies the transcript's
+    # grammar slips against the fixed taxonomy, deduplicated by pattern.
+    # extract_errors carries no "clean pattern" signal (no target pattern_id,
+    # no passed flag, unlike sprechen's task-targeted judge), so — same as
+    # Harvester B — there is nothing to credit via credit_pattern_success
+    # here, only errors to record. See _background_harvest for the DB-session
+    # and non-fatal contract.
+    harvest_task = asyncio.create_task(
+        _background_harvest(transcript, sessionId, user_id)
+    )
+    _background_tasks.add(harvest_task)
+    harvest_task.add_done_callback(_background_tasks.discard)
+
+    return response

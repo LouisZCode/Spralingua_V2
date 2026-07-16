@@ -26,25 +26,24 @@ export type Scenario = {
 
 export type SentenceRead = {
   text: string;
-  color: "green" | "yellow" | "red";
-  cut: string | null; // non-null: where an overloaded sentence should split
+  weight: "light" | "medium" | "heavy";
+  simpler: string | null; // non-null: a lighter way to say an overloaded sentence
 };
 
-// The structure verdict for one spoken answer (POST /szenario/attempts) —
-// this exercise judges shape (anchor / one-idea-per-sentence / clean close),
-// never grammar.
+// The coach verdict for one spoken answer (POST /szenario/attempts) — this
+// exercise coaches toward simple B1/B2 sentence architecture, never grammar.
 export type StructureResult = {
   transcript: string;
-  anchor: { present: boolean; note: string };
+  verdict: "clear" | "a_bit_heavy" | "overcomplicated";
+  levelRead: string;
+  coachMessage: string;
   sentences: SentenceRead[];
-  close: { clean: boolean; note: string };
   skeleton: {
     kern: string;
     punkte: string[];
     absprung: string;
     vokabelAnker: string[];
   };
-  takeaway: string;
 };
 
 async function request<T>(
