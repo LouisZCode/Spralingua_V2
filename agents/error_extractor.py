@@ -23,7 +23,7 @@ Template substitution uses ``str.replace`` (not ``str.format``) for the same
 reason as the evaluator: the prompt body carries literal JSON braces.
 """
 
-from langchain_openai import ChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -153,12 +153,14 @@ async def extract_errors(
         .replace("{taxonomy}", taxonomy_brief())
         .replace("{transcript}", transcript)
     )
-    llm = ChatOpenAI(
+    llm = ProviderChatOpenAI(
         model=EXTRACTOR_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         timeout=30,
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
+        # asymmetry comment in agents/conversation_agent.py.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
     ).with_structured_output(ErrorExtraction, include_raw=True)
     with generation_span(
         "grammar-harvest",
@@ -166,8 +168,8 @@ async def extract_errors(
         input_text=transcript,
         session_id=session_id,
     ) as span:
-        result, usage = unwrap_structured_output(await llm.ainvoke(rendered))
-        record_generation_output(span, result.model_dump_json(), usage)
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(rendered))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
 
     # The ledger keys on catalog ids — drop hallucinated slugs (same guard as
     # the examiner) and collapse duplicate patterns to one entry (first wins),

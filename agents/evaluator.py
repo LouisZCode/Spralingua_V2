@@ -14,7 +14,7 @@ because the prompt body contains literal JSON examples whose braces would
 collide with Python's format-string parsing.
 """
 
-from langchain_openai import ChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -303,12 +303,14 @@ async def evaluate(
         .replace("{pass_threshold}", str(pass_threshold))
         .replace("{transcript}", transcript)
     )
-    llm = ChatOpenAI(
+    llm = ProviderChatOpenAI(
         model=EVALUATOR_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         timeout=30,
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
+        # asymmetry comment in agents/conversation_agent.py.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
     ).with_structured_output(EvaluationResult, include_raw=True)
     # OBS-007: `session_id` is the conversation's Langfuse session, so the
     # post-session judgement files next to the turns it judged.
@@ -318,6 +320,6 @@ async def evaluate(
         input_text=rendered,
         session_id=session_id,
     ) as span:
-        result, usage = unwrap_structured_output(await llm.ainvoke(rendered))
-        record_generation_output(span, result.model_dump_json(), usage)
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(rendered))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
     return result

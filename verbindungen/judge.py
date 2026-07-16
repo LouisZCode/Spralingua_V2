@@ -10,7 +10,7 @@ compound. Same Cerebras ``gpt-oss-120b`` wiring as the sibling judges.
 
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -63,12 +63,14 @@ You diagnose one WRITTEN attempt in a German verb-chunk drill ("Feste Verbindung
 
 async def judge_chunk(item: dict, typed: str) -> Diagnosis:
     """One structured-output diagnosis call over the item + typed answer."""
-    llm = ChatOpenAI(
+    llm = ProviderChatOpenAI(
         model=JUDGE_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         timeout=30,
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
+        # asymmetry comment in agents/conversation_agent.py.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
     ).with_structured_output(Diagnosis, include_raw=True)
     prompt = (
         PROMPT.replace("{frame}", item["frame"])
@@ -76,10 +78,10 @@ async def judge_chunk(item: dict, typed: str) -> Diagnosis:
         .replace("{expected}", item["answer"])
         .replace("{typed}", typed)
     )
-    # OBS-007: the `llm` child of the route's verbindungen-attempt trace.
-    with generation_span("llm", model=JUDGE_MODEL, input_text=prompt) as span:
-        result, usage = unwrap_structured_output(await llm.ainvoke(prompt))
-        record_generation_output(span, result.model_dump_json(), usage)
+    # OBS-007: the `verbindungen-judge` child of the route's verbindungen-attempt trace.
+    with generation_span("verbindungen-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
     if result.correct:
         result.note = None
     return result

@@ -172,6 +172,7 @@ class ClientWrapper:
         full_response = []
         ttft_ns = None
         final_usage = None
+        final_response_metadata = None
 
         # ``get_current_turn_context()`` returns ``None`` if tracing is
         # disabled OR if no turn span is active right now. Either way OTel
@@ -236,6 +237,16 @@ class ClientWrapper:
 
                     if getattr(token, "usage_metadata", None):
                         final_usage = token.usage_metadata
+                    # OBS-008: on the streamed path only the FINAL chunk carries
+                    # a populated response_metadata (finish_reason/model_name/
+                    # model_provider — see LEARNINGS.md); every prior chunk's is
+                    # empty, so "last non-empty wins" naturally lands on it.
+                    # OpenRouter's actually-served provider is not reachable
+                    # here either (same limitation as the one-shot judge path —
+                    # see agents/observability.py::unwrap_structured_output) and
+                    # adding an extra HTTP call to fetch it is out of scope.
+                    if getattr(token, "response_metadata", None):
+                        final_response_metadata = token.response_metadata
             finally:
                 output_text = "".join(full_response)
                 llm_span.set_attribute("langfuse.observation.output", output_text)
@@ -245,6 +256,9 @@ class ClientWrapper:
                         llm_span.set_attribute("gen_ai.usage.input_tokens", n)
                     if (n := final_usage.get("output_tokens")) is not None:
                         llm_span.set_attribute("gen_ai.usage.output_tokens", n)
+                if final_response_metadata:
+                    if (m := final_response_metadata.get("model_name")) is not None:
+                        llm_span.set_attribute("gen_ai.response.model", m)
                 if ttft_ns is not None:
                     # Keep our existing TTFT metric as a custom attribute. Span
                     # duration itself now covers full LLM streaming (not just

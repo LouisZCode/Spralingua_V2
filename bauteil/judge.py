@@ -9,9 +9,10 @@ each ending sits on the right element and is well-formed. Same Cerebras
 ``gpt-oss-120b`` structured-output wiring as ``satz/examiner.py``.
 """
 
+import re
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -86,7 +87,7 @@ Consequences you must respect:
 
 Then:
 - `correct` — true ONLY when the learner's phrase is a fully correct solution and differs from the expected one trivially: the whole sentence typed around it, punctuation, capitalization. A changed, added or missing ending, letter or umlaut is NEVER trivial.
-- `note` — when correct=false: ONE short English line (AT MOST 14 words) naming which axis broke and teaching the why. The corrected phrase is shown to the learner separately — never restate it. When correct=true: null.
+- `note` — when correct=false: ONE short English line (AT MOST 14 words) naming which axis broke and teaching the why. Name the axes in PLAIN ENGLISH ONLY — "case" and "endings" — and NEVER write the internal field names `case_ok` or `carrier_ok` (the learner never sees those). The corrected phrase is shown to the learner separately — never restate it. When correct=true: null.
 
 # Worked examples
 - required accusative, expected "einen alten Freund", typed "ein alter Freund" → case_ok=false, carrier_ok=true, note: "A well-built nominative — but 'besuchen' takes a direct object: accusative."
@@ -96,14 +97,33 @@ Then:
 """
 
 
+def _sanitize_note(note: str | None) -> str | None:
+    """Belt-and-suspenders guard (TASK 7): the prompt already tells the model
+    never to leak internal field names into the learner-facing note, but
+    defend against drift anyway — swap `case_ok`/`carrier_ok` for their
+    plain-English axis names, and reflow a leaked "<axis> broken: ..."
+    lead-in into a natural "<Axis>: ..." opener (e.g. "endings broken: noun
+    needs -n" -> "Endings: noun needs -n")."""
+    if not note:
+        return note
+    cleaned = re.sub(r"\bcase_ok\b", "case", note, flags=re.IGNORECASE)
+    cleaned = re.sub(r"\bcarrier_ok\b", "endings", cleaned, flags=re.IGNORECASE)
+    m = re.match(r"^(case|endings)\s+broken:\s*", cleaned, flags=re.IGNORECASE)
+    if m:
+        cleaned = f"{m.group(1).capitalize()}: {cleaned[m.end():]}"
+    return cleaned
+
+
 async def judge_attempt(item: dict, typed: str) -> Diagnosis:
     """One structured-output diagnosis call over the item + typed answer."""
-    llm = ChatOpenAI(
+    llm = ProviderChatOpenAI(
         model=JUDGE_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         timeout=30,
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
+        # asymmetry comment in agents/conversation_agent.py.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
     ).with_structured_output(Diagnosis, include_raw=True)
     requirement = f"{item['case']}, {_GENDER_LABEL[item['gender']]}"
     prompt = (
@@ -113,11 +133,13 @@ async def judge_attempt(item: dict, typed: str) -> Diagnosis:
         .replace("{expected}", item["answer"])
         .replace("{typed}", typed)
     )
-    # OBS-007: the `llm` child of the route's bauteil-attempt trace — opened as
-    # current span, so it nests (and inherits the practice session) automatically.
-    with generation_span("llm", model=JUDGE_MODEL, input_text=prompt) as span:
-        result, usage = unwrap_structured_output(await llm.ainvoke(prompt))
-        record_generation_output(span, result.model_dump_json(), usage)
+    # OBS-007: the `bauteil-judge` child of the route's bauteil-attempt trace —
+    # opened as current span, so it nests (and inherits the practice session)
+    # automatically.
+    with generation_span("bauteil-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
+    result.note = _sanitize_note(result.note)
     if result.correct:
         # A named axis break on an accepted answer only confuses.
         result.case_ok = True

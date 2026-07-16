@@ -10,7 +10,7 @@ the rule is the objective; other drills own the rest). Same Cerebras
 
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -90,12 +90,14 @@ You judge one SPOKEN attempt in a German speaking drill. The learner was given a
 
 async def judge_spoken(task: dict, transcript: str) -> SpokenVerdict:
     """One structured-output judgement call over the task + transcript."""
-    llm = ChatOpenAI(
+    llm = ProviderChatOpenAI(
         model=JUDGE_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         timeout=30,
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
+        # asymmetry comment in agents/conversation_agent.py.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
     ).with_structured_output(SpokenVerdict, include_raw=True)
     p = load_taxonomy()[task["pattern_id"]]
     pattern_line = f'{p["label"]} — "{p["wrong"]}" → "{p["right"]}"'
@@ -105,10 +107,10 @@ async def judge_spoken(task: dict, transcript: str) -> SpokenVerdict:
         .replace("{pattern_line}", pattern_line)
         .replace("{transcript}", transcript)
     )
-    # OBS-007: the `llm` child of the route's sprechen-attempt trace.
-    with generation_span("llm", model=JUDGE_MODEL, input_text=prompt) as span:
-        result, usage = unwrap_structured_output(await llm.ainvoke(prompt))
-        record_generation_output(span, result.model_dump_json(), usage)
+    # OBS-007: the `sprechen-judge` child of the route's sprechen-attempt trace.
+    with generation_span("sprechen-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
     if result.constraint_met:
         result.constraint_note = None
     return result

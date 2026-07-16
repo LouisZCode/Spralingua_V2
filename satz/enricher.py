@@ -15,7 +15,7 @@ hidden grammar, and irregulars (gut/besser) get flagged for free.
 
 from typing import Literal, Optional
 
-from langchain_openai import ChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -167,22 +167,39 @@ def _normalize(e: EnrichedCard) -> EnrichedCard:
     return e
 
 
-async def enrich_word(word: str, user_id: str | None = None) -> EnrichedCard:
-    """One structured-output judgement call: reject or forge a rule-conformant card."""
-    llm = ChatOpenAI(
+async def enrich_word(
+    word: str,
+    user_id: str | None = None,
+    *,
+    session_id: str | None = None,
+) -> EnrichedCard:
+    """One structured-output judgement call: reject or forge a rule-conformant card.
+
+    ``session_id`` (OBS-008), when set, stamps ``langfuse.session.id`` on the
+    ``satz-forge`` span so an add-a-word call fired mid-conversation (e.g.
+    from a drill route) files into that conversation's Langfuse session
+    instead of standing alone.
+    """
+    llm = ProviderChatOpenAI(
         model=ENRICHER_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
         timeout=30,
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
+        # asymmetry comment in agents/conversation_agent.py.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
     ).with_structured_output(EnrichedCard, include_raw=True)
     # OBS-006: the forge is its own single-generation Langfuse trace — the
     # add-a-word path's latency and verdicts were previously invisible.
     with generation_span(
-        "satz-forge", model=ENRICHER_MODEL, input_text=word, user_id=user_id
+        "satz-forge",
+        model=ENRICHER_MODEL,
+        input_text=word,
+        user_id=user_id,
+        session_id=session_id,
     ) as span:
-        result, usage = unwrap_structured_output(
+        result, usage, response_metadata = unwrap_structured_output(
             await llm.ainvoke(PROMPT.replace("{word}", word))
         )
-        record_generation_output(span, result.model_dump_json(), usage)
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
     return _normalize(result)

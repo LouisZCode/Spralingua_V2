@@ -18,6 +18,7 @@ public/secret key pair from the existing ``.env``.
 """
 
 import base64
+import os
 from contextlib import contextmanager
 
 from loguru import logger
@@ -65,6 +66,20 @@ def _build_otlp_exporter() -> OTLPSpanExporter:
 # LANGFUSE_* vars) skip export entirely instead of crashing at import —
 # ``_build_otlp_exporter`` would dereference a None host.
 if langfuse_base_url and langfuse_public_key and langfuse_secret_key:
+    # OBS-008: pipecat's setup_tracing (.venv/…/pipecat/utils/tracing/setup.py)
+    # builds its Resource with an EXPLICIT dict —
+    #   Resource.create({"service.name": ..., "deployment.environment":
+    #       os.getenv("ENVIRONMENT", "development"), ...})
+    # — and opentelemetry-sdk's Resource.create() is
+    #   get_aggregated_resources(detectors, _DEFAULT_RESOURCE).merge(Resource(explicit_dict))
+    # where Resource.merge(other) has `other` WIN on key collisions. The
+    # explicit dict is `other` here, so it always overrides whatever the
+    # OTELResourceDetector parsed from OTEL_RESOURCE_ATTRIBUTES — setting
+    # that env var would be silently discarded. The var pipecat actually
+    # reads is the bare `ENVIRONMENT` name. `setdefault` only fills it when
+    # unset, so an operator-set ENVIRONMENT (Railway or otherwise) is never
+    # clobbered by our langfuse_environment default.
+    os.environ.setdefault("ENVIRONMENT", langfuse_environment)
     _tracing_enabled = setup_tracing(
         service_name=f"spralingua-{langfuse_environment}",
         exporter=_build_otlp_exporter(),
@@ -118,25 +133,81 @@ def generation_span(
         yield span
 
 
-def record_generation_output(span, output_text: str, usage: dict | None = None) -> None:
+def record_generation_output(
+    span,
+    output_text: str,
+    usage: dict | None = None,
+    response_metadata: dict | None = None,
+) -> None:
     """Stamp a generation's output + token usage (LangChain ``usage_metadata``
-    shape) onto its span — the same fields the pipeline LLM span records."""
+    shape) onto its span — the same fields the pipeline LLM span records.
+
+    ``response_metadata`` (OBS-008) is the raw AIMessage's
+    ``response_metadata`` dict, as returned by
+    :func:`unwrap_structured_output`. Empirical probe (see that function's
+    docstring): stock langchain_openai only copies a fixed allowlist of
+    fields off the raw ChatCompletion into ``response_metadata`` and
+    silently drops OpenRouter's non-standard top-level ``provider`` key
+    (the actually-served upstream, e.g. "Cerebras"), even though the openai
+    SDK preserves it in ``ChatCompletion.model_extra`` — so every judge now
+    constructs its LLM via ``agents.openrouter_llm.ProviderChatOpenAI``,
+    which rescues that field into
+    ``response_metadata["openrouter_provider"]``. NOTE:
+    ``response_metadata["model_provider"]`` is NOT the served provider — it
+    is a LangChain-internal constant equal to ``"openai"`` on every call
+    regardless of which upstream served it, so it is deliberately never
+    mapped here. ``model_name`` is the requested/routing model id OpenRouter
+    echoes back; the bare ``provider`` fallback covers a future
+    langchain_openai that starts propagating the key natively.
+    """
     span.set_attribute("langfuse.observation.output", output_text)
     if usage:
         if (n := usage.get("input_tokens")) is not None:
             span.set_attribute("gen_ai.usage.input_tokens", n)
         if (n := usage.get("output_tokens")) is not None:
             span.set_attribute("gen_ai.usage.output_tokens", n)
+    if response_metadata:
+        if (m := response_metadata.get("model_name")) is not None:
+            span.set_attribute("gen_ai.response.model", m)
+        provider = response_metadata.get("openrouter_provider") or response_metadata.get("provider")
+        if provider is not None:
+            span.set_attribute("openrouter.provider", provider)
 
 
 def unwrap_structured_output(result) -> tuple:
     """Unpack a ``with_structured_output(..., include_raw=True)`` result into
-    ``(parsed_model, usage_metadata)``, re-raising the parse error that a
-    plain ``with_structured_output`` call would have raised. ``include_raw``
-    exists purely so the raw message's token usage can reach the span."""
+    ``(parsed_model, usage_metadata, response_metadata)``, re-raising the
+    parse error that a plain ``with_structured_output`` call would have
+    raised. ``include_raw`` exists so the raw message's token usage AND
+    response metadata can reach the span.
+
+    OBS-008 empirical probe (one live ``ainvoke`` through this exact wiring,
+    ``openai/gpt-oss-120b`` via OpenRouter pinned to Cerebras): the raw
+    AIMessage's ``response_metadata`` carries ``token_usage``,
+    ``model_provider`` (LangChain's own hardcoded ``"openai"`` label — NOT
+    the upstream-served provider), ``model_name`` (``"openai/gpt-oss-120b"``,
+    the requested routing id, echoed back unchanged regardless of which
+    provider served it), ``system_fingerprint``, ``id``, ``finish_reason``,
+    ``logprobs``. A parallel raw HTTP call to the same OpenRouter endpoint
+    (bypassing LangChain) confirmed OpenRouter's response body DOES carry a
+    top-level ``provider`` string (e.g. ``"OpenInference"``/``"Cerebras"``),
+    and the openai SDK's ``ChatCompletion.model_extra`` even preserves it —
+    but stock langchain_openai's chat-result parsing never copies that key
+    into ``response_metadata`` or ``additional_kwargs``. The judges therefore
+    build their LLMs via ``agents.openrouter_llm.ProviderChatOpenAI``, whose
+    ``_create_chat_result`` override rescues it into
+    ``response_metadata["openrouter_provider"]`` — verified live to survive
+    langchain_core's post-hoc metadata merges. ``response_metadata`` is
+    returned as-is (``{}`` if the raw message has none) so
+    ``record_generation_output`` can pull ``model_name`` +
+    ``openrouter_provider`` off it.
+    """
     if result.get("parsing_error") is not None:
         raise result["parsing_error"]
-    return result["parsed"], getattr(result.get("raw"), "usage_metadata", None)
+    raw = result.get("raw")
+    usage = getattr(raw, "usage_metadata", None)
+    response_metadata = getattr(raw, "response_metadata", None) or {}
+    return result["parsed"], usage, response_metadata
 
 
 def flush_traces() -> None:

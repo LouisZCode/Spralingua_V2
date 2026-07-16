@@ -21,6 +21,13 @@ _model = ChatOpenAI(
     extra_body={
         # Pin to Cerebras for speed. Cost tracking via Langfuse is deferred —
         # see LEARNINGS.md 2026-05-19 entry.
+        # allow_fallbacks stays True here ONLY — every one-shot judge
+        # (satz/sprechen/bauteil/verbindungen/szenario judges, evaluator,
+        # error_extractor, debrief) was flipped to False (OBS-008): a slow
+        # turn beats a dead call mid-conversation for the live voice agent,
+        # but a judge that falls off Cerebras goes 2s -> 30-70s silently, so
+        # those fail fast onto the pinned provider instead. This asymmetry
+        # is deliberate — do not "fix" it into consistency.
         "provider": {
             "order": ["cerebras"],
             "allow_fallbacks": True,
