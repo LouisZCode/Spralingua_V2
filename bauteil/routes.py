@@ -30,6 +30,7 @@ from database.connection import get_db
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
+    record_drill_attempt,
     record_grammar_error,
 )
 
@@ -201,6 +202,23 @@ async def submit_attempt(
             logger.exception(
                 "Bauteil ledger write failed (pattern {})", item["pattern_id"]
             )
+
+        # Append to the cross-drill attempt log (DATA-004) — its own commit,
+        # non-fatal like the ledger write above. Deterministic greens count
+        # as `correct=True` here too, same as the ledger credit above.
+        try:
+            await record_drill_attempt(
+                db,
+                user_id=user_id,
+                exercise="bauteil",
+                item_ref=item["id"],
+                pattern_id=item["pattern_id"],
+                correct=correct,
+                modality="written",
+                session_id=body.session_id,
+            )
+        except Exception:
+            logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
         # camelCase like every other practice payload.
         return {

@@ -22,9 +22,12 @@ Indexes match the two access patterns we already know we'll need:
 from datetime import datetime
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
+    DateTime,
     ForeignKey,
     ForeignKeyConstraint,
+    Identity,
     Index,
     Integer,
     Text,
@@ -312,4 +315,52 @@ class UserVerbformen(Base):
             ["user_cards.user_id", "user_cards.card_id"],
             ondelete="CASCADE",
         ),
+    )
+
+
+# ── Drill attempts (DATA-004) ────────────────────────────────────────────
+# Append-only per-attempt event log across all six drills. Distinct from
+# ``user_errors`` (one row per user+pattern, mutated in place, lifetime
+# tally) — this is one row per attempt, never mutated, and it's what lets
+# the stats endpoint and the Tandem recency weighting answer "what
+# happened this week" instead of only "what's the running total".
+
+
+class DrillAttempt(Base):
+    __tablename__ = "drill_attempts"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger, Identity(always=False), primary_key=True
+    )
+    # CASCADE like the other per-user learning-state tables (user_cards,
+    # user_errors, user_verbformen) — an attempt log is user-owned practice
+    # history, not audit-of-record like activity_session.
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # "satz" | "verbformen" | "sprechen" | "bauteil" | "verbindungen" | "szenario"
+    exercise: Mapped[str] = mapped_column(Text, nullable=False)
+    # card id / task id / item id / scenario id — whatever the exercise
+    # itself keys attempts by. Not an FK: each exercise's item catalog is
+    # content-as-data (YAML), not a DB table.
+    item_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Taxonomy slug (grammar/taxonomy.yaml) when one applies. Not an FK —
+    # same content-as-data rule as UserError.pattern_id.
+    pattern_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # NULL = not a graded pass/fail attempt. Szenario-Sparring is a coach,
+    # not a grader — its structure judge never emits a binary verdict, so
+    # its rows always record NULL here (they still count toward attempt
+    # totals, just not toward accuracy).
+    correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # "written" | "spoken"
+    modality: Mapped[str] = mapped_column(Text, nullable=False)
+    # The client-minted practice-sitting id (OBS-007), e.g. "satz-…".
+    session_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        Index("ix_drill_attempts_user_created", "user_id", "created_at"),
+        Index("ix_drill_attempts_user_pattern", "user_id", "pattern_id"),
     )

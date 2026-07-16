@@ -1,0 +1,82 @@
+"""HTTP route for cross-drill practice stats (DATA-004).
+
+One read-only endpoint, ``GET /me/stats``. All SQL lives in
+``database/repository.py`` — this module only picks the four time windows
+and assembles them into the response contract the frontend builds against.
+
+Time windows (all against ``drill_attempts.created_at``, which is
+``TIMESTAMPTZ`` — Postgres stores/returns it as UTC regardless of session
+timezone, so every cutoff here is a tz-aware UTC ``datetime``):
+
+- ``week``     — rolling last 7 days (``now - 7d`` .. ``now``).
+- ``prevWeek`` — the 7 days before that (``now - 14d`` .. ``now - 7d``).
+- ``today``    — since UTC midnight. Not the caller's local midnight — there
+  is no per-user timezone stored anywhere in this schema yet, and UTC
+  midnight is a stable, server-side-computable boundary. A learner west of
+  UTC will see "today" roll over a few hours into their evening; documented
+  here rather than silently wrong.
+"""
+
+from datetime import datetime, time, timedelta, timezone
+
+from fastapi import APIRouter, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from auth.deps import get_current_user_id
+from database.connection import get_db
+from database.repository import (
+    load_focus_with_recency,
+    load_period_summary,
+    load_retired_patterns,
+    load_top_errors,
+)
+
+router = APIRouter(tags=["stats"])
+
+
+@router.get("/me/stats")
+async def get_my_stats(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """This week / last week / today across all six drills, plus the
+    recency-weighted grammar focus and recently retired patterns.
+
+    Every list is empty and every total is 0 for a brand-new user — there's
+    no "no data" error case, just an empty shape (200 always).
+    """
+    now = datetime.now(timezone.utc)
+    week_start = now - timedelta(days=7)
+    prev_week_start = now - timedelta(days=14)
+    today_start = datetime.combine(now.date(), time.min, tzinfo=timezone.utc)
+
+    week = await load_period_summary(db, user_id=user_id, start=week_start)
+    week["topErrors"] = await load_top_errors(
+        db, user_id=user_id, start=week_start, limit=5
+    )
+
+    prev_week = await load_period_summary(
+        db, user_id=user_id, start=prev_week_start, end=week_start
+    )
+    prev_week["topErrors"] = await load_top_errors(
+        db, user_id=user_id, start=prev_week_start, end=week_start, limit=5
+    )
+
+    today_summary = await load_period_summary(db, user_id=user_id, start=today_start)
+    today = {
+        "attemptsTotal": today_summary["attemptsTotal"],
+        "topErrors": await load_top_errors(
+            db, user_id=user_id, start=today_start, limit=3
+        ),
+    }
+
+    focus = await load_focus_with_recency(db, user_id=user_id, limit=3)
+    retired = await load_retired_patterns(db, user_id=user_id, limit=10)
+
+    return {
+        "week": week,
+        "prevWeek": prev_week,
+        "today": today,
+        "focus": focus,
+        "retired": retired,
+    }

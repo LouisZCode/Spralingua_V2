@@ -150,8 +150,58 @@ export default function PracticeMenu() {
             cta="Step into the scene"
           />
         </div>
+
+        <Link
+          href="/development"
+          className="rise-in btn-3d mt-6 flex items-center gap-5 rounded-[24px] border-[3px] border-ink bg-paper-warm px-6 py-5"
+          style={{ ...inkShadow, animationDelay: "200ms" }}
+        >
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-[3px] border-ink bg-ink text-white">
+            <ChartIcon />
+          </div>
+          <div className="flex-1">
+            <h2 className="font-display text-[17px] font-black tracking-tight text-ink">
+              Your Development
+            </h2>
+            <p className="mt-0.5 font-body text-[13px] text-ink-soft">
+              Your stats, your biggest errors, your wins
+            </p>
+          </div>
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4 shrink-0 text-ink"
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </Link>
       </main>
     </div>
+  );
+}
+
+// Chart-ish glyph — three ascending bars — for the Development entry point.
+// Kept local (not added to ModeIconName) since this card is deliberately not
+// one of the exercise tiles.
+function ChartIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-6 w-6"
+    >
+      <line x1="5" y1="19" x2="5" y2="13" />
+      <line x1="12" y1="19" x2="12" y2="8" />
+      <line x1="19" y1="19" x2="19" y2="4" />
+    </svg>
   );
 }
 

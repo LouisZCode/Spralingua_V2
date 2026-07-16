@@ -11,7 +11,7 @@ expressed via the Postgres ``ON CONFLICT DO NOTHING`` dialect helper so the
 operation is idempotent across reconnects without a SELECT-then-INSERT race.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from uuid import UUID
 
 from loguru import logger
@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from grammar import load_taxonomy
 
-from .orm import ActivitySession, User, UserError
+from .orm import ActivitySession, DrillAttempt, User, UserError
 
 
 async def create_session_row(
@@ -225,6 +225,48 @@ async def record_grammar_error(
         raise
 
 
+async def record_drill_attempt(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    exercise: str,
+    item_ref: str | None = None,
+    pattern_id: str | None = None,
+    correct: bool | None = None,
+    modality: str,
+    session_id: str | None = None,
+) -> None:
+    """Append one row to the drill-attempt event log (DATA-004).
+
+    Plain INSERT + commit, mirroring :func:`record_grammar_error`'s shape and
+    contract: re-raises on ``SQLAlchemyError``, the caller owns the non-fatal
+    wrapping — an attempt-log outage must never break the practice attempt it
+    rides on. Unlike the ledger, there's no read-modify-write here: every
+    attempt is its own row, never merged into an existing one, so there's no
+    row to lock.
+
+    ``correct=None`` is a first-class value, not a missing one — Szenario-
+    Sparring's structure judge never emits a binary pass/fail, so its rows
+    record NULL and still count toward attempt totals, just not accuracy.
+    """
+    try:
+        db.add(
+            DrillAttempt(
+                user_id=user_id,
+                exercise=exercise,
+                item_ref=item_ref,
+                pattern_id=pattern_id,
+                correct=correct,
+                modality=modality,
+                session_id=session_id,
+            )
+        )
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
 # Consecutive correct spontaneous productions in tandem sessions before a
 # pattern retires (GRAM-001: "retire on streak >= 2"). One correct use is
 # encouraging; two is acquisition evidence.
@@ -284,23 +326,37 @@ _GRAMMAR_FOCUS_EXAMPLES = 2
 async def load_grammar_focus(
     db: AsyncSession, *, user_id: str, limit: int = 3
 ) -> list[dict]:
-    """Top open ledger patterns for the tandem grammar-focus layer (TANDEM-001).
+    """Top open ledger patterns for the tandem grammar-focus layer (TANDEM-001)
+    and bauteil/verbindungen's hot-round weighting (GRAM-002).
 
-    Returns up to ``limit`` patterns ranked by ``(occurrences DESC, last_seen
-    DESC)`` — the most persistent, most recent slips first — each enriched from
-    the taxonomy with ``label`` / ``description`` / ``elicit`` and carrying the
-    learner's own most-recent examples ``[{sentence, corrected}]``. A pattern
-    whose slug is no longer in the taxonomy (a removed catalog entry) is skipped.
+    Returns up to ``limit`` patterns ranked by ``(seen in the last 7 days DESC,
+    occurrences DESC, last_seen DESC)`` — a pattern that slipped THIS WEEK
+    outranks one with a bigger lifetime tally but no recent recurrence (DATA-004).
+    The Tandem partner and the drill hot-rounds exist to chase *current*
+    weaknesses, not to keep re-litigating something the learner fixed months
+    ago and simply hasn't re-triggered since — occurrences/last_seen still
+    break ties within each recency bucket, so a stale-but-massive pattern isn't
+    erased, just deprioritized behind anything live.
 
-    Read-only: no commit, no rollback — the caller (``pipeline/factory.py``)
-    owns the non-fatal wrapping, so an outage yields a less-personalised chat,
-    never a failed connect.
+    Each result is enriched from the taxonomy with ``label`` / ``description``
+    / ``elicit`` and carries the learner's own most-recent examples
+    ``[{sentence, corrected}]``. A pattern whose slug is no longer in the
+    taxonomy (a removed catalog entry) is skipped.
+
+    Read-only: no commit, no rollback — callers (``pipeline/factory.py``,
+    ``bauteil``/``verbindungen`` routes) own the non-fatal wrapping, so an
+    outage yields a less-personalised chat/round, never a failed connect.
     """
+    # Naive, matching UserError.last_seen (plain TIMESTAMP, written via
+    # ``datetime.now()`` in record_grammar_error/credit_pattern_success) — a
+    # tz-aware cutoff here would raise at query time in asyncpg.
+    recent_cutoff = datetime.now() - timedelta(days=7)
+    recent_first = (UserError.last_seen >= recent_cutoff).desc()
     rows = (
         await db.execute(
             select(UserError.pattern_id, UserError.examples)
             .where(UserError.user_id == user_id, UserError.status == "open")
-            .order_by(UserError.occurrences.desc(), UserError.last_seen.desc())
+            .order_by(recent_first, UserError.occurrences.desc(), UserError.last_seen.desc())
             .limit(limit)
         )
     ).all()
@@ -355,3 +411,205 @@ async def load_tandem_notes(
         if note:
             notes.append(note)
     return notes
+
+
+# ── Stats (DATA-004, GET /me/stats) ──────────────────────────────────────
+# Read-only helpers over ``drill_attempts`` (the event log) and
+# ``user_errors`` (the ledger). All SQL for the stats endpoint lives here;
+# ``stats/routes.py`` only picks time windows and assembles the response.
+
+
+async def load_period_summary(
+    db: AsyncSession, *, user_id: str, start: datetime, end: datetime | None = None
+) -> dict:
+    """Attempt counts for one time window, grouped by exercise.
+
+    ``accuracy`` is computed only over rows where ``correct IS NOT NULL`` —
+    Szenario's coach rows (always NULL) count toward ``attempts`` but never
+    toward ``correct``/``accuracy``; an exercise with only NULL-correct rows
+    in the window gets ``accuracy: None`` rather than a fabricated 0 or 1.
+    ``attemptsTotal`` is the sum across exercises, so a caller that only
+    needs the total (``today``) can drop the ``exercises`` list.
+    """
+    conditions = [DrillAttempt.user_id == user_id, DrillAttempt.created_at >= start]
+    if end is not None:
+        conditions.append(DrillAttempt.created_at < end)
+    rows = (
+        await db.execute(
+            select(
+                DrillAttempt.exercise,
+                func.count().label("attempts"),
+                func.count().filter(DrillAttempt.correct.isnot(None)).label("graded"),
+                func.count().filter(DrillAttempt.correct.is_(True)).label("correct"),
+            )
+            .where(*conditions)
+            .group_by(DrillAttempt.exercise)
+        )
+    ).all()
+    exercises: list[dict] = []
+    total = 0
+    for exercise, attempts, graded, correct in rows:
+        total += attempts
+        exercises.append(
+            {
+                "exercise": exercise,
+                "attempts": attempts,
+                "correct": correct,
+                "accuracy": (correct / graded) if graded else None,
+            }
+        )
+    return {"attemptsTotal": total, "exercises": exercises}
+
+
+async def _ledger_examples_by_pattern(
+    db: AsyncSession, *, user_id: str, pattern_ids: list[str]
+) -> dict[str, dict]:
+    """Batch lookup of each pattern's most recent example from the
+    ``user_errors`` ring buffer (most recent = last in the list)."""
+    if not pattern_ids:
+        return {}
+    rows = (
+        await db.execute(
+            select(UserError.pattern_id, UserError.examples).where(
+                UserError.user_id == user_id, UserError.pattern_id.in_(pattern_ids)
+            )
+        )
+    ).all()
+    out: dict[str, dict] = {}
+    for pattern_id, examples in rows:
+        if examples:
+            last = examples[-1]
+            out[pattern_id] = {
+                "sentence": last.get("sentence"),
+                "corrected": last.get("corrected"),
+            }
+    return out
+
+
+async def load_top_errors(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    start: datetime,
+    end: datetime | None = None,
+    limit: int = 5,
+) -> list[dict]:
+    """Most-frequent missed patterns in a time window, taxonomy-enriched.
+
+    Only rows with ``correct = false`` and a non-null ``pattern_id`` count —
+    a wrong answer with no classifiable pattern (e.g. a dodge) isn't a
+    "top error". Same skip-if-retired-from-catalog guard as
+    ``load_grammar_focus``: a slug no longer in the taxonomy is dropped
+    rather than surfaced label-less.
+    """
+    conditions = [
+        DrillAttempt.user_id == user_id,
+        DrillAttempt.correct.is_(False),
+        DrillAttempt.pattern_id.isnot(None),
+        DrillAttempt.created_at >= start,
+    ]
+    if end is not None:
+        conditions.append(DrillAttempt.created_at < end)
+    rows = (
+        await db.execute(
+            select(DrillAttempt.pattern_id, func.count().label("count"))
+            .where(*conditions)
+            .group_by(DrillAttempt.pattern_id)
+            .order_by(func.count().desc())
+            .limit(limit)
+        )
+    ).all()
+    catalog = load_taxonomy()
+    pattern_ids = [pid for pid, _ in rows if pid in catalog]
+    examples = await _ledger_examples_by_pattern(
+        db, user_id=user_id, pattern_ids=pattern_ids
+    )
+    out: list[dict] = []
+    for pattern_id, count in rows:
+        pattern = catalog.get(pattern_id)
+        if pattern is None:
+            continue
+        out.append(
+            {
+                "patternId": pattern_id,
+                "label": pattern["label"],
+                "count": count,
+                "example": examples.get(pattern_id),
+            }
+        )
+    return out
+
+
+async def load_focus_with_recency(
+    db: AsyncSession, *, user_id: str, limit: int = 3
+) -> list[dict]:
+    """The stats-page ``focus`` list: the same recency-weighted top patterns
+    ``load_grammar_focus`` picks for the Tandem partner, plus two counters
+    that function doesn't carry — ``count7d`` (this week's drill-attempt
+    misses for the pattern) and ``lifetime`` (the ledger's running
+    ``occurrences`` tally). Delegates ranking to ``load_grammar_focus`` so
+    the two surfaces (Tandem prompt, stats page) can never drift apart.
+    """
+    focus = await load_grammar_focus(db, user_id=user_id, limit=limit)
+    if not focus:
+        return []
+    pattern_ids = [f["pattern_id"] for f in focus]
+    cutoff = datetime.now() - timedelta(days=7)
+    count_rows = (
+        await db.execute(
+            select(DrillAttempt.pattern_id, func.count())
+            .where(
+                DrillAttempt.user_id == user_id,
+                DrillAttempt.pattern_id.in_(pattern_ids),
+                DrillAttempt.correct.is_(False),
+                DrillAttempt.created_at >= cutoff,
+            )
+            .group_by(DrillAttempt.pattern_id)
+        )
+    ).all()
+    count7d_by_pattern = {pid: c for pid, c in count_rows}
+    occ_rows = (
+        await db.execute(
+            select(UserError.pattern_id, UserError.occurrences).where(
+                UserError.user_id == user_id, UserError.pattern_id.in_(pattern_ids)
+            )
+        )
+    ).all()
+    lifetime_by_pattern = {pid: occ for pid, occ in occ_rows}
+    return [
+        {
+            "patternId": f["pattern_id"],
+            "label": f["label"],
+            "description": f["description"],
+            "count7d": count7d_by_pattern.get(f["pattern_id"], 0),
+            "lifetime": lifetime_by_pattern.get(f["pattern_id"], 0),
+        }
+        for f in focus
+    ]
+
+
+async def load_retired_patterns(
+    db: AsyncSession, *, user_id: str, limit: int = 10
+) -> list[dict]:
+    """Retired ledger patterns, most recently retired first, cap ``limit``.
+
+    Same taxonomy-membership guard as the other stats helpers — a slug
+    dropped from the catalog since retirement is skipped rather than shown
+    without a label.
+    """
+    rows = (
+        await db.execute(
+            select(UserError.pattern_id)
+            .where(UserError.user_id == user_id, UserError.status == "retired")
+            .order_by(UserError.last_seen.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+    catalog = load_taxonomy()
+    out: list[dict] = []
+    for pattern_id in rows:
+        pattern = catalog.get(pattern_id)
+        if pattern is None:
+            continue
+        out.append({"patternId": pattern_id, "label": pattern["label"]})
+    return out

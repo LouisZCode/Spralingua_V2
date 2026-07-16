@@ -23,7 +23,7 @@ from agents.error_extractor import extract_errors
 from agents.observability import tracer
 from auth.deps import get_current_user_id
 from database.connection import get_sessionmaker
-from database.repository import record_grammar_error
+from database.repository import record_drill_attempt, record_grammar_error
 from satz.examiner import transcribe_attempt
 from szenario.content import load_scenarios
 from szenario.judge import judge_structure
@@ -206,6 +206,30 @@ async def submit_attempt(
                 "vokabelAnker": verdict.skeleton.vokabel_anker,
             },
         }
+
+    # Append to the cross-drill attempt log (DATA-004). Szenario has no
+    # request-scoped `db` (removed when the harvest went background, see
+    # `_background_harvest`'s docstring) — open a standalone session for
+    # this one INSERT, same pattern the background harvest itself uses. A
+    # single insert is ~ms, so it rides inline here rather than inside the
+    # background task: the attempt row must exist even if the (much slower,
+    # LLM-backed) grammar harvest never completes. Non-fatal like every
+    # other ledger/log write in this file — pattern_id/correct are always
+    # NULL for Szenario (a coach, not a grader; see the migration docstring).
+    try:
+        async with get_sessionmaker()() as attempt_db:
+            await record_drill_attempt(
+                attempt_db,
+                user_id=user_id,
+                exercise="szenario",
+                item_ref=scenarioId,
+                pattern_id=None,
+                correct=None,
+                modality="spoken",
+                session_id=sessionId,
+            )
+    except Exception:
+        logger.exception("Drill-attempt log write failed (scenario {})", scenarioId)
 
     # SILENT grammar enrichment (GRAM-001) — must NEVER fail, and (TASK 4)
     # must never ride on the response latency either: fire-and-forget, kicked

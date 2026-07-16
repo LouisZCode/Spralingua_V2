@@ -24,7 +24,7 @@ from agents.observability import tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import Pack, PackCard, User, UserCard, VocabCard
-from database.repository import record_grammar_error
+from database.repository import record_drill_attempt, record_grammar_error
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
@@ -660,6 +660,23 @@ async def submit_attempt(
                 logger.exception(
                     "Grammar-ledger write failed (pattern {})", judgement.pattern_id
                 )
+
+        # Append to the cross-drill attempt log (DATA-004) — its own commit,
+        # non-fatal like the ledger write above; an attempt-log outage must
+        # never break the practice attempt it rides on.
+        try:
+            await record_drill_attempt(
+                db,
+                user_id=user_id,
+                exercise="satz",
+                item_ref=card_id,
+                pattern_id=judgement.pattern_id,
+                correct=judgement.word_ok and judgement.grammar_ok,
+                modality="spoken",
+                session_id=session_id,
+            )
+        except Exception:
+            logger.exception("Drill-attempt log write failed (card {})", card_id)
 
         # camelCase like every other satz payload (poolSize, cardCount, …).
         return {

@@ -21,6 +21,7 @@ from database.connection import get_db
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
+    record_drill_attempt,
     record_grammar_error,
 )
 from verbindungen.content import TARGET_PATTERNS, load_items
@@ -178,6 +179,22 @@ async def submit_attempt(
             logger.exception(
                 "Verbindungen ledger write failed (pattern {})", item["pattern_id"]
             )
+
+        # Append to the cross-drill attempt log (DATA-004) — its own commit,
+        # non-fatal like the ledger write above, same shape as bauteil.
+        try:
+            await record_drill_attempt(
+                db,
+                user_id=user_id,
+                exercise="verbindungen",
+                item_ref=item["id"],
+                pattern_id=item["pattern_id"],
+                correct=correct,
+                modality="written",
+                session_id=body.session_id,
+            )
+        except Exception:
+            logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
         return {
             "correct": correct,

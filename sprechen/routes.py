@@ -23,6 +23,7 @@ from database.connection import get_db
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
+    record_drill_attempt,
     record_grammar_error,
 )
 from satz.examiner import transcribe_attempt
@@ -183,6 +184,23 @@ async def submit_attempt(
             logger.exception(
                 "Sprechen ledger write failed (pattern {})", task["pattern_id"]
             )
+
+        # Append to the cross-drill attempt log (DATA-004) — its own commit,
+        # non-fatal like the ledger write above. `correct` mirrors the same
+        # "clean attempt" condition that decides credit vs. record above.
+        try:
+            await record_drill_attempt(
+                db,
+                user_id=user_id,
+                exercise="sprechen",
+                item_ref=task["id"],
+                pattern_id=task["pattern_id"],
+                correct=passed,
+                modality="spoken",
+                session_id=session_id,
+            )
+        except Exception:
+            logger.exception("Drill-attempt log write failed (task {})", task_id)
 
         return {
             "transcript": transcript,

@@ -19,6 +19,7 @@ from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
+from stats import router as stats_router
 from szenario import load_scenarios as load_szenario_scenarios, router as szenario_router
 from verbformen import router as verbformen_router
 from verbindungen import (
@@ -125,6 +126,8 @@ app.include_router(verbindungen_router)
 # Szenario-Sparring (P1, thin slice): in-character question, one spoken
 # answer, structure-only judge + silent grammar-ledger credit.
 app.include_router(szenario_router)
+# Cross-drill practice stats (DATA-004): GET /me/stats.
+app.include_router(stats_router)
 
 
 @app.get("/health")
