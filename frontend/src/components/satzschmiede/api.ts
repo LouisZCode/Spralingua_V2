@@ -95,12 +95,18 @@ export async function fetchDeck(token: string): Promise<DeckCard[]> {
 
 export async function addWord(
   token: string,
-  word: string
+  word: string,
+  // Practice-sitting id (OBS-007) — set when add-word is called mid-session
+  // (e.g. from a rejected-attempt suggestion) so the backend can file the
+  // card creation under the same Langfuse session as the rest of the sitting.
+  sessionId?: string
 ): Promise<{ card: Card; created: boolean; added: number; poolSize: number }> {
   return request("/satz/cards", token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ word }),
+    body: JSON.stringify(
+      sessionId ? { word, session_id: sessionId } : { word }
+    ),
   });
 }
 

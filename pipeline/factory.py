@@ -38,7 +38,7 @@ from agents.load_goals import load_goal
 from agents.load_prompts import list_lesson_ids, load_prompts
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
-from agents.observability import flush_traces
+from agents.observability import flush_traces, tracer
 
 from grammar import load_taxonomy
 
@@ -473,212 +473,261 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 await audiobuffer.stop_recording()
             except Exception:  # noqa: BLE001 — audio buffer stop must not block cleanup
                 logger.exception("Audio buffer stop_recording failed (non-fatal)")
-            # Post-session evaluator (EVAL-001). Best-effort: any failure here
-            # (LLM outage, missing goal entry, network) is logged and swallowed
-            # so audio export and logger close always run.
-            try:
-                goal = load_goal(lesson_id)
-                if wrapper._transcript and goal is not None:
-                    result = await evaluate(
-                        transcript=wrapper.render_transcript(),
-                        goals=goal["goals"],
-                        pass_threshold=goal["pass_threshold"],
-                        # Eval language tracks the lesson's runtime language, so a
-                        # German lesson is judged as German and an English one as
-                        # English during the mixed-content migration window.
-                        language="German" if lesson_lang == "de" else "English",
-                        session_id=session_id,
-                    )
-                    session_logger.write_evaluation(result)
-                    passed_count = sum(1 for g in result.goals if g.passed)
-                    logger.info(
-                        f"Evaluation: passed={result.passed} "
-                        f"score={result.score}/{result.pass_threshold} "
-                        f"goals_passed={passed_count}/{len(result.goals)}"
-                    )
-            except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
-                logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
-            # Post-session grammar-error harvest (GRAM-001 Phase 2, Harvester B).
-            # Same non-fatal contract and goal-gate as the evaluator above, so the
-            # goal-less lessons (lesson_zero / welcome / goodbye_test) are auto-
-            # excluded — no new YAML field. Classified slips land as `error_eval`
-            # on the row AND upsert the ledger with source="situation"; deliberately
-            # NOT surfaced in the drill modal (one feedback voice per mode). The
-            # ledger keys on `db_user_id` (the real users row, like the
-            # activity_session FK), never the per-session `user_id`.
-            try:
-                if wrapper._transcript and load_goal(lesson_id) is not None:
-                    error_result = await extract_errors(
-                        transcript=wrapper.render_transcript(),
-                        session_id=session_id,
-                    )
-                    if error_result.errors:
-                        async with get_sessionmaker()() as db:
-                            for err in error_result.errors:
-                                # Each upsert is its own commit, wrapped so one
-                                # bad row can't abort the rest of the harvest.
-                                try:
-                                    await record_grammar_error(
-                                        db,
-                                        user_id=db_user_id,
-                                        pattern_id=err.pattern_id,
-                                        sentence=err.sentence,
-                                        corrected=err.corrected,
-                                        note=err.note,
-                                        source="situation",
-                                        session_id=session_id,
-                                    )
-                                except Exception:  # noqa: BLE001 — one ledger row must not block the rest
-                                    logger.exception(
-                                        f"Grammar-ledger write failed (pattern {err.pattern_id})"
-                                    )
-                    logger.info(
-                        f"Grammar harvest: patterns={len(error_result.errors)} "
-                        f"lesson={lesson_id}"
-                    )
-            except Exception as e:  # noqa: BLE001 — harvester must not block cleanup
-                logger.warning(f"Grammar extractor failed (non-fatal): {type(e).__name__}: {e}")
-            # Post-session tandem debrief (TANDEM-001 / GRAM-001 Phase 4). Gated
-            # on the tandem lesson type — tandem has no goals and no locale, so
-            # goal eval, drill harvest, and pron assessment all auto-skip and the
-            # debrief is its ONE feedback voice. One structured-output call judges
-            # the session's target patterns (the same `grammar_focus` the prompt
-            # steered toward), harvests new errors, and writes a memory note; the
-            # streak/retire lifecycle is applied to the ledger right here. Runs for
-            # ALL end reasons (a user-ended tandem still gets its debrief). Same
-            # non-fatal contract as the evaluators above; the enriched result
-            # (taxonomy labels + per-pattern `retired` flags) is stored as
-            # `error_eval` for the debrief modal, and its `session_note` is what
-            # `load_tandem_notes` feeds into the next session's memory layer.
-            try:
-                if wrapper._transcript and lesson_snapshot.get("type") == "tandem":
-                    focus = wrapper.context.grammar_focus
-                    debrief_result = await run_debrief(
-                        transcript=wrapper.render_transcript(),
-                        focus=focus,
-                        topic=topic,
-                        session_id=session_id,
-                    )
-                    retired_ids: set[str] = set()
-                    async with get_sessionmaker()() as db:
-                        # Target patterns: a clean spontaneous production advances
-                        # the streak (retire at 2); a slip reopens/resets exactly
-                        # like a fresh recurrence (record_grammar_error). Un-elicited
-                        # targets are left untouched — no evidence either way.
-                        for p in debrief_result.patterns:
-                            if not p.elicited:
-                                continue
-                            try:
-                                if p.produced_correctly:
-                                    status = await credit_pattern_success(
-                                        db,
-                                        user_id=db_user_id,
-                                        pattern_id=p.pattern_id,
-                                        session_id=session_id,
-                                    )
-                                    if status == "retired":
-                                        retired_ids.add(p.pattern_id)
-                                elif p.evidence and p.evidence.strip().lower() != "none":
-                                    await record_grammar_error(
-                                        db,
-                                        user_id=db_user_id,
-                                        pattern_id=p.pattern_id,
-                                        sentence=p.evidence,
-                                        corrected=p.corrected or None,
-                                        note=p.note or None,
-                                        source="tandem",
-                                        session_id=session_id,
-                                    )
-                            except Exception:  # noqa: BLE001 — one row must not block the rest
-                                logger.exception(
-                                    f"Tandem ledger write failed (target {p.pattern_id})"
-                                )
-                        # New (non-target) errors: plain ledger upserts, same as
-                        # the drill harvester, source="tandem".
-                        for e in debrief_result.new_errors:
-                            try:
-                                await record_grammar_error(
-                                    db,
-                                    user_id=db_user_id,
-                                    pattern_id=e.pattern_id,
-                                    sentence=e.sentence,
-                                    corrected=e.corrected,
-                                    note=e.note,
-                                    source="tandem",
-                                    session_id=session_id,
-                                )
-                            except Exception:  # noqa: BLE001 — one row must not block the rest
-                                logger.exception(
-                                    f"Tandem ledger write failed (new {e.pattern_id})"
-                                )
-                    # Enrich for the debrief modal: taxonomy labels + which
-                    # patterns retired this session. `session_note` rides along in
-                    # the stored payload (load_tandem_notes reads it) but the modal
-                    # keeps it private.
-                    catalog = load_taxonomy()
+            # Post-session evaluators (EVAL-001 / GRAM-001 Phase 2 / TANDEM-001
+            # Phase 4 / PRON-001) — OBS-009: previously ran one after another
+            # and were the bulk of the "Analyzing your session…" wall-clock
+            # time; now parallelized under one parent span. Each step below
+            # keeps its EXACT non-fatal try/except + logging contract from
+            # before (same `except Exception as e:` catch, same messages) —
+            # only the scheduling changed. Every step that touches the DB
+            # already opened its OWN standalone `get_sessionmaker()()` session
+            # scoped to its own try block (no session was ever shared between
+            # these steps), so running them concurrently needs no new
+            # session-isolation work. OTel propagates the current span via
+            # contextvars into the tasks `asyncio.gather` spawns, so each
+            # step's own `generation_span` calls auto-nest under
+            # post-session-analysis with no manual context passing.
+            with tracer.start_as_current_span("post-session-analysis") as analysis_span:
+                analysis_span.set_attribute("langfuse.session.id", session_id)
+                analysis_span.set_attribute("user.id", user_id)
+                analysis_span.set_attribute("lesson_id", lesson_id)
 
-                    def _label(pid: str) -> str:
-                        pat = catalog.get(pid)
-                        return pat["label"] if pat else pid
+                async def _run_goal_eval() -> None:
+                    """Post-session evaluator (EVAL-001). Best-effort: any
+                    failure here (LLM outage, missing goal entry, network) is
+                    logged and swallowed so the other steps and DB finalize
+                    always run."""
+                    nonlocal result
+                    try:
+                        goal = load_goal(lesson_id)
+                        if wrapper._transcript and goal is not None:
+                            result = await evaluate(
+                                transcript=wrapper.render_transcript(),
+                                goals=goal["goals"],
+                                pass_threshold=goal["pass_threshold"],
+                                # Eval language tracks the lesson's runtime language, so a
+                                # German lesson is judged as German and an English one as
+                                # English during the mixed-content migration window.
+                                language="German" if lesson_lang == "de" else "English",
+                                session_id=session_id,
+                            )
+                            session_logger.write_evaluation(result)
+                            passed_count = sum(1 for g in result.goals if g.passed)
+                            logger.info(
+                                f"Evaluation: passed={result.passed} "
+                                f"score={result.score}/{result.pass_threshold} "
+                                f"goals_passed={passed_count}/{len(result.goals)}"
+                            )
+                    except Exception as e:  # noqa: BLE001 — evaluator must not block cleanup
+                        logger.warning(f"Evaluator failed (non-fatal): {type(e).__name__}: {e}")
 
-                    debrief_eval_dict = {
-                        "kind": "tandem_debrief",
-                        "session_note": debrief_result.session_note,
-                        "patterns": [
-                            {
-                                "pattern_id": p.pattern_id,
-                                "label": _label(p.pattern_id),
-                                "elicited": p.elicited,
-                                "produced_correctly": p.produced_correctly,
-                                "evidence": p.evidence,
-                                "corrected": p.corrected,
-                                "note": p.note,
-                                "retired": p.pattern_id in retired_ids,
+                async def _run_grammar_or_tandem() -> None:
+                    """Grammar-error harvest (GRAM-001 Phase 2, Harvester B)
+                    OR tandem debrief (TANDEM-001 / GRAM-001 Phase 4) — the
+                    two are mutually exclusive by lesson-type gating (a
+                    session is one lesson, tandem or drill), so both keep
+                    living in one task rather than racing each other."""
+                    nonlocal error_result, debrief_eval_dict
+                    # Same non-fatal contract and goal-gate as the evaluator
+                    # above, so the goal-less lessons (lesson_zero / welcome /
+                    # goodbye_test) are auto-excluded — no new YAML field.
+                    # Classified slips land as `error_eval` on the row AND
+                    # upsert the ledger with source="situation"; deliberately
+                    # NOT surfaced in the drill modal (one feedback voice per
+                    # mode). The ledger keys on `db_user_id` (the real users
+                    # row, like the activity_session FK), never the
+                    # per-session `user_id`.
+                    try:
+                        if wrapper._transcript and load_goal(lesson_id) is not None:
+                            error_result = await extract_errors(
+                                transcript=wrapper.render_transcript(),
+                                session_id=session_id,
+                            )
+                            if error_result.errors:
+                                async with get_sessionmaker()() as db:
+                                    for err in error_result.errors:
+                                        # Each upsert is its own commit, wrapped so one
+                                        # bad row can't abort the rest of the harvest.
+                                        try:
+                                            await record_grammar_error(
+                                                db,
+                                                user_id=db_user_id,
+                                                pattern_id=err.pattern_id,
+                                                sentence=err.sentence,
+                                                corrected=err.corrected,
+                                                note=err.note,
+                                                source="situation",
+                                                session_id=session_id,
+                                            )
+                                        except Exception:  # noqa: BLE001 — one ledger row must not block the rest
+                                            logger.exception(
+                                                f"Grammar-ledger write failed (pattern {err.pattern_id})"
+                                            )
+                            logger.info(
+                                f"Grammar harvest: patterns={len(error_result.errors)} "
+                                f"lesson={lesson_id}"
+                            )
+                    except Exception as e:  # noqa: BLE001 — harvester must not block cleanup
+                        logger.warning(f"Grammar extractor failed (non-fatal): {type(e).__name__}: {e}")
+
+                    # Gated on the tandem lesson type — tandem has no goals
+                    # and no locale, so goal eval, drill harvest, and pron
+                    # assessment all auto-skip and the debrief is its ONE
+                    # feedback voice. One structured-output call judges the
+                    # session's target patterns (the same `grammar_focus` the
+                    # prompt steered toward), harvests new errors, and writes
+                    # a memory note; the streak/retire lifecycle is applied to
+                    # the ledger right here. Runs for ALL end reasons (a
+                    # user-ended tandem still gets its debrief). Same
+                    # non-fatal contract as the evaluators above; the
+                    # enriched result (taxonomy labels + per-pattern
+                    # `retired` flags) is stored as `error_eval` for the
+                    # debrief modal, and its `session_note` is what
+                    # `load_tandem_notes` feeds into the next session's
+                    # memory layer.
+                    try:
+                        if wrapper._transcript and lesson_snapshot.get("type") == "tandem":
+                            focus = wrapper.context.grammar_focus
+                            debrief_result = await run_debrief(
+                                transcript=wrapper.render_transcript(),
+                                focus=focus,
+                                topic=topic,
+                                session_id=session_id,
+                            )
+                            retired_ids: set[str] = set()
+                            async with get_sessionmaker()() as db:
+                                # Target patterns: a clean spontaneous production advances
+                                # the streak (retire at 2); a slip reopens/resets exactly
+                                # like a fresh recurrence (record_grammar_error). Un-elicited
+                                # targets are left untouched — no evidence either way.
+                                for p in debrief_result.patterns:
+                                    if not p.elicited:
+                                        continue
+                                    try:
+                                        if p.produced_correctly:
+                                            status = await credit_pattern_success(
+                                                db,
+                                                user_id=db_user_id,
+                                                pattern_id=p.pattern_id,
+                                                session_id=session_id,
+                                            )
+                                            if status == "retired":
+                                                retired_ids.add(p.pattern_id)
+                                        elif p.evidence and p.evidence.strip().lower() != "none":
+                                            await record_grammar_error(
+                                                db,
+                                                user_id=db_user_id,
+                                                pattern_id=p.pattern_id,
+                                                sentence=p.evidence,
+                                                corrected=p.corrected or None,
+                                                note=p.note or None,
+                                                source="tandem",
+                                                session_id=session_id,
+                                            )
+                                    except Exception:  # noqa: BLE001 — one row must not block the rest
+                                        logger.exception(
+                                            f"Tandem ledger write failed (target {p.pattern_id})"
+                                        )
+                                # New (non-target) errors: plain ledger upserts, same as
+                                # the drill harvester, source="tandem".
+                                for e in debrief_result.new_errors:
+                                    try:
+                                        await record_grammar_error(
+                                            db,
+                                            user_id=db_user_id,
+                                            pattern_id=e.pattern_id,
+                                            sentence=e.sentence,
+                                            corrected=e.corrected,
+                                            note=e.note,
+                                            source="tandem",
+                                            session_id=session_id,
+                                        )
+                                    except Exception:  # noqa: BLE001 — one row must not block the rest
+                                        logger.exception(
+                                            f"Tandem ledger write failed (new {e.pattern_id})"
+                                        )
+                            # Enrich for the debrief modal: taxonomy labels + which
+                            # patterns retired this session. `session_note` rides along in
+                            # the stored payload (load_tandem_notes reads it) but the modal
+                            # keeps it private.
+                            catalog = load_taxonomy()
+
+                            def _label(pid: str) -> str:
+                                pat = catalog.get(pid)
+                                return pat["label"] if pat else pid
+
+                            debrief_eval_dict = {
+                                "kind": "tandem_debrief",
+                                "session_note": debrief_result.session_note,
+                                "patterns": [
+                                    {
+                                        "pattern_id": p.pattern_id,
+                                        "label": _label(p.pattern_id),
+                                        "elicited": p.elicited,
+                                        "produced_correctly": p.produced_correctly,
+                                        "evidence": p.evidence,
+                                        "corrected": p.corrected,
+                                        "note": p.note,
+                                        "retired": p.pattern_id in retired_ids,
+                                    }
+                                    for p in debrief_result.patterns
+                                ],
+                                "new_errors": [
+                                    {
+                                        "pattern_id": e.pattern_id,
+                                        "label": _label(e.pattern_id),
+                                        "sentence": e.sentence,
+                                        "corrected": e.corrected,
+                                        "note": e.note,
+                                    }
+                                    for e in debrief_result.new_errors
+                                ],
                             }
-                            for p in debrief_result.patterns
-                        ],
-                        "new_errors": [
-                            {
-                                "pattern_id": e.pattern_id,
-                                "label": _label(e.pattern_id),
-                                "sentence": e.sentence,
-                                "corrected": e.corrected,
-                                "note": e.note,
-                            }
-                            for e in debrief_result.new_errors
-                        ],
-                    }
-                    logger.info(
-                        f"Tandem debrief: targets={len(debrief_result.patterns)} "
-                        f"retired={len(retired_ids)} new={len(debrief_result.new_errors)} "
-                        f"note={'yes' if debrief_result.session_note else 'no'}"
-                    )
-            except Exception as e:  # noqa: BLE001 — debrief must not block cleanup
-                logger.warning(f"Tandem debrief failed (non-fatal): {type(e).__name__}: {e}")
-            # Post-session pronunciation assessment (PRON-001). Same non-fatal
-            # contract as the goal evaluator above: any failure (missing key,
-            # Azure outage, count mismatch) is logged and swallowed so audio
-            # export and logger close still run.
-            try:
-                locale = load_pronunciation_locale(lesson_id)
-                if locale is not None and wrapper.has_user_turn_audio():
-                    pron_result = await assess_pronunciation(
-                        user_turns=wrapper.iter_user_turn_audio(),
-                        locale=locale,
-                        session_id=session_id,
-                    )
-                    session_logger.write_pronunciation(
-                        pron_result,
-                        dropped_audio=wrapper._dropped_audio_count,
-                    )
-                    logger.info(
-                        f"Pronunciation: locale={pron_result.locale} "
-                        f"pron={pron_result.aggregate.pron_score:.1f} "
-                        f"acc={pron_result.aggregate.accuracy_score:.1f} "
-                        f"turns_assessed={pron_result.aggregate.turns_assessed}"
-                    )
-            except Exception as e:  # noqa: BLE001 — pronunciation must not block cleanup
-                logger.warning(f"Pronunciation assessment failed (non-fatal): {type(e).__name__}: {e}")
+                            logger.info(
+                                f"Tandem debrief: targets={len(debrief_result.patterns)} "
+                                f"retired={len(retired_ids)} new={len(debrief_result.new_errors)} "
+                                f"note={'yes' if debrief_result.session_note else 'no'}"
+                            )
+                    except Exception as e:  # noqa: BLE001 — debrief must not block cleanup
+                        logger.warning(f"Tandem debrief failed (non-fatal): {type(e).__name__}: {e}")
+
+                async def _run_pronunciation() -> None:
+                    """Post-session pronunciation assessment (PRON-001). Same
+                    non-fatal contract as the goal evaluator above: any
+                    failure (missing key, Azure outage, count mismatch) is
+                    logged and swallowed so audio export and logger close
+                    still run."""
+                    nonlocal pron_result
+                    try:
+                        locale = load_pronunciation_locale(lesson_id)
+                        if locale is not None and wrapper.has_user_turn_audio():
+                            pron_result = await assess_pronunciation(
+                                user_turns=wrapper.iter_user_turn_audio(),
+                                locale=locale,
+                                session_id=session_id,
+                            )
+                            session_logger.write_pronunciation(
+                                pron_result,
+                                dropped_audio=wrapper._dropped_audio_count,
+                            )
+                            logger.info(
+                                f"Pronunciation: locale={pron_result.locale} "
+                                f"pron={pron_result.aggregate.pron_score:.1f} "
+                                f"acc={pron_result.aggregate.accuracy_score:.1f} "
+                                f"turns_assessed={pron_result.aggregate.turns_assessed}"
+                            )
+                    except Exception as e:  # noqa: BLE001 — pronunciation must not block cleanup
+                        logger.warning(f"Pronunciation assessment failed (non-fatal): {type(e).__name__}: {e}")
+
+                # Each wrapper above is already fully non-fatal (every branch
+                # is caught inside its own try/except and only logs), so
+                # nothing propagates out of these coroutines — no
+                # `return_exceptions=True` needed.
+                await asyncio.gather(
+                    _run_goal_eval(),
+                    _run_grammar_or_tandem(),
+                    _run_pronunciation(),
+                )
             # Finalize the activity_session row (DATA-001). Runs after both
             # evaluators so their results land in the same UPDATE. Same non-fatal
             # contract: a DB outage logs a warning and we proceed to logger

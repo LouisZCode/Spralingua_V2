@@ -514,7 +514,6 @@ function BriefingPhase({
     spotlight?: boolean;
   }> = [
     { key: "situation", label: "Situation" },
-    { key: "context", label: "Context" },
     { key: "goal", label: "Goal", spotlight: true },
   ];
   const hasContent = (v: BriefingValue | undefined): boolean => {
@@ -542,13 +541,8 @@ function BriefingPhase({
           className="rise-in mt-10 rounded-[28px] border-[3px] border-ink bg-paper-warm px-7 py-2"
           style={{ animationDelay: "100ms" }}
         >
-          {filled.map((b, i) => (
-            <div
-              key={b.key}
-              className={`py-6 ${
-                i > 0 ? "border-t-2 border-rule" : ""
-              }`}
-            >
+          {filled.map((b) => (
+            <div key={b.key} className="py-7">
               <div className="flex items-center gap-3">
                 {b.spotlight ? (
                   <span className="goal-shimmer font-display text-[24px] font-black uppercase tracking-[-0.04em]">
@@ -559,7 +553,6 @@ function BriefingPhase({
                     {b.label}
                   </span>
                 )}
-                <span className="h-px flex-1 bg-rule" />
               </div>
               <BriefingBody value={meta!.briefing[b.key]} />
             </div>

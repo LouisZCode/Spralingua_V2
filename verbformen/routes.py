@@ -175,7 +175,8 @@ async def submit_attempt(
             transcript = await transcribe_attempt(
                 data, audio.content_type, keyterms=card_keyterms
             )
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Verbformen transcription failed (card {})", card_id)
             raise HTTPException(
                 status_code=502,
@@ -190,8 +191,13 @@ async def submit_attempt(
         attempt_span.set_attribute("langfuse.trace.input", transcript)
 
         try:
-            judgement = await examine_attempt(card, transcript)
-        except Exception:
+            # TASK 1: named span so this examiner call stops colliding with
+            # Satzschmiede's "satz-judge" generation in Langfuse.
+            judgement = await examine_attempt(
+                card, transcript, span_name="verbformen-judge"
+            )
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Verbformen examiner call failed (card {})", card_id)
             raise HTTPException(
                 status_code=502,
@@ -209,6 +215,12 @@ async def submit_attempt(
             f"wordOk={judgement.word_ok} grammarOk={judgement.grammar_ok}"
             + (f" → {judgement.corrected}" if judgement.corrected else ""),
         )
+        # Structured verdict attributes so Langfuse can filter without
+        # string-parsing the free-text trace.output above.
+        attempt_span.set_attribute("verdict.word_ok", bool(judgement.word_ok))
+        attempt_span.set_attribute("verdict.grammar_ok", bool(judgement.grammar_ok))
+        if judgement.pattern_id:
+            attempt_span.set_attribute("verdict.pattern_id", judgement.pattern_id)
 
         # Record the outcome on the OVERLAY row — upserted, since the auto-fed
         # card may never have been drilled here before. `hidden` is left alone

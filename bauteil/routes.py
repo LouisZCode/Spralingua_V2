@@ -141,10 +141,15 @@ async def submit_attempt(
 
         if _matches(answer, item["answer"], item["frame"]):
             correct, case_ok, carrier_ok, note = True, True, True, None
+            # TASK 2: a deterministic green never calls the LLM judge — flag
+            # that explicitly so Langfuse can tell "judged correct" apart
+            # from "matched without a judge call".
+            attempt_span.set_attribute("judge_skipped", True)
         else:
             try:
                 diag = await judge_attempt(item, answer)
-            except Exception:
+            except Exception as exc:
+                attempt_span.record_exception(exc)
                 logger.exception("Bauteil judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
@@ -162,6 +167,11 @@ async def submit_attempt(
             f"correct={correct} caseOk={case_ok} carrierOk={carrier_ok}"
             + (f" — {note}" if note else ""),
         )
+        # Structured verdict attributes so Langfuse can filter without
+        # string-parsing the free-text trace.output above.
+        attempt_span.set_attribute("verdict.correct", bool(correct))
+        attempt_span.set_attribute("verdict.case_ok", bool(case_ok))
+        attempt_span.set_attribute("verdict.carrier_ok", bool(carrier_ok))
 
         # Feed the grammar-error ledger (design rule 4) — non-fatal, so a DB
         # outage can never break the attempt it rides on. A drilled green

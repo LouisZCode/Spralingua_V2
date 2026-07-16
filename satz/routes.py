@@ -241,14 +241,14 @@ async def _fresh_id(
 
 
 async def _forge_card(
-    db: AsyncSession, word: str, user_id: str
+    db: AsyncSession, word: str, user_id: str, *, session_id: str | None = None
 ) -> tuple[VocabCard, EnrichedCard]:
     """Catalog miss → enrich via LLM, validate against the curated card rules,
     insert a ``community`` canonical row. Flushed but not committed — the
     caller commits together with the pool link. Returns the enrichment too so
     a verb's past sibling can be forged without a second LLM call."""
     try:
-        enriched = await enrich_word(word, user_id=user_id)
+        enriched = await enrich_word(word, user_id=user_id, session_id=session_id)
     except Exception:
         logger.exception("Satz enrichment call failed for {!r}", word)
         raise HTTPException(
@@ -344,6 +344,8 @@ async def _ensure_past_sibling(
     present: VocabCard,
     user_id: str,
     enriched: EnrichedCard | None,
+    *,
+    session_id: str | None = None,
 ) -> VocabCard | None:
     """A verb comes as a pair: the base (present) card plus a spoken-past
     sibling whose answer side shows the form as actually spoken ("ist
@@ -363,7 +365,9 @@ async def _ensure_past_sibling(
 
     if enriched is None or not enriched.past_form:
         try:
-            enriched = await enrich_word(present.target, user_id=user_id)
+            enriched = await enrich_word(
+                present.target, user_id=user_id, session_id=session_id
+            )
         except Exception:
             logger.exception(
                 "Satz past-sibling enrichment failed for {!r}", present.target
@@ -411,6 +415,11 @@ async def _ensure_past_sibling(
 
 class WordIn(BaseModel):
     word: str
+    # OBS-007: optional frontend-minted practice-sitting id, threaded to
+    # enrich_word() so an add-a-word call fired mid-session files its
+    # "satz-forge" trace into that session instead of standing alone.
+    # Optional so older clients and curl keep working.
+    session_id: str | None = None
 
 
 @router.post("/cards")
@@ -446,12 +455,16 @@ async def add_word(
     created = False
     enriched = None
     if card is None:
-        card, enriched = await _forge_card(db, word, user_id)
+        card, enriched = await _forge_card(
+            db, word, user_id, session_id=body.session_id
+        )
         created = True
 
     to_link = [card]
     if card.type == "verb" and card.tense is None:
-        sibling = await _ensure_past_sibling(db, card, user_id, enriched)
+        sibling = await _ensure_past_sibling(
+            db, card, user_id, enriched, session_id=body.session_id
+        )
         if sibling is not None:
             to_link.append(sibling)
 
@@ -572,7 +585,8 @@ async def submit_attempt(
             transcript = await transcribe_attempt(
                 data, audio.content_type, keyterms=card_keyterms
             )
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Satz transcription failed (card {})", card_id)
             raise HTTPException(
                 status_code=502,
@@ -588,7 +602,8 @@ async def submit_attempt(
 
         try:
             judgement = await examine_attempt(card, transcript)
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Satz examiner call failed (card {})", card_id)
             raise HTTPException(
                 status_code=502,
@@ -606,6 +621,12 @@ async def submit_attempt(
             f"wordOk={judgement.word_ok} grammarOk={judgement.grammar_ok}"
             + (f" → {judgement.corrected}" if judgement.corrected else ""),
         )
+        # Structured verdict attributes so Langfuse can filter without
+        # string-parsing the free-text trace.output above.
+        attempt_span.set_attribute("verdict.word_ok", bool(judgement.word_ok))
+        attempt_span.set_attribute("verdict.grammar_ok", bool(judgement.grammar_ok))
+        if judgement.pattern_id:
+            attempt_span.set_attribute("verdict.pattern_id", judgement.pattern_id)
 
         # Record the outcome. A miss lands on (0, now) — still due, retryable
         # this session; a hit climbs the interval ladder.

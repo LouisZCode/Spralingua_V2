@@ -9,7 +9,7 @@
 // driven by the WS-vs-finalize race: backend evaluators run in
 // pipeline/factory.py's finally: block AFTER the WS closes, so the row's
 // `ended_at` is briefly NULL when the modal opens. We poll until
-// `ended_at` is set (or 30s timeout) and then render.
+// `ended_at` is set (or 90s timeout) and then render.
 
 import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
@@ -108,7 +108,10 @@ function parseLevel(lessonId: string): Level {
 }
 
 const POLL_INTERVAL_MS = 1000;
-const POLL_TIMEOUT_MS = 30000;
+const POLL_TIMEOUT_MS = 90000;
+// After this long still on "loading", swap to softer copy — the backend
+// evaluators can legitimately run past the old 30s ceiling.
+const SLOW_LOADING_MS = 20000;
 
 const DEFAULT_TITLE = "Session complete";
 const DEFAULT_STATUS: CompletionStatus = "info";
@@ -147,6 +150,7 @@ export default function SessionSummaryModal({
   const [evalStatus, setEvalStatus] = useState<EvalStatus>(() =>
     sessionId ? "loading" : "no-id",
   );
+  const [slowLoading, setSlowLoading] = useState(false);
 
   useEffect(() => {
     if (!sessionId || !token) return;
@@ -154,6 +158,9 @@ export default function SessionSummaryModal({
     let cancelled = false;
     let intervalId: ReturnType<typeof setInterval> | null = null;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let slowTimeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    setSlowLoading(false);
 
     const tick = async () => {
       if (cancelled) return;
@@ -170,6 +177,7 @@ export default function SessionSummaryModal({
           setEvalStatus("ready");
           if (intervalId) clearInterval(intervalId);
           if (timeoutId) clearTimeout(timeoutId);
+          if (slowTimeoutId) clearTimeout(slowTimeoutId);
         }
       } catch {
         // Swallow transient errors; keep polling until timeout.
@@ -181,13 +189,18 @@ export default function SessionSummaryModal({
     timeoutId = setTimeout(() => {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
+      if (slowTimeoutId) clearTimeout(slowTimeoutId);
       setEvalStatus((prev) => (prev === "ready" ? prev : "timeout"));
     }, POLL_TIMEOUT_MS);
+    slowTimeoutId = setTimeout(() => {
+      if (!cancelled) setSlowLoading(true);
+    }, SLOW_LOADING_MS);
 
     return () => {
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
       if (timeoutId) clearTimeout(timeoutId);
+      if (slowTimeoutId) clearTimeout(slowTimeoutId);
     };
   }, [sessionId, token]);
 
@@ -229,6 +242,7 @@ export default function SessionSummaryModal({
               status={evalStatus}
               data={sessionData}
               briefingGoal={briefingGoal ?? null}
+              slowLoading={slowLoading}
             />
           </div>
 
@@ -253,17 +267,21 @@ function EvalSection({
   status,
   data,
   briefingGoal,
+  slowLoading,
 }: {
   status: EvalStatus;
   data: SessionData | null;
   briefingGoal: string | string[] | null;
+  slowLoading: boolean;
 }) {
   if (status === "loading") {
     return (
       <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
         <div className="flex items-center gap-3 font-body text-[14px] text-ink-soft">
           <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-ink" />
-          Analyzing your session…
+          {slowLoading
+            ? "Still analyzing — this can take a minute…"
+            : "Analyzing your session…"}
         </div>
       </div>
     );

@@ -110,7 +110,8 @@ async def submit_attempt(
             transcript = await transcribe_attempt(
                 data, audio.content_type, keyterms=task.get("keyterms")
             )
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Sprechen transcription failed (task {})", task_id)
             raise HTTPException(
                 status_code=502,
@@ -126,7 +127,8 @@ async def submit_attempt(
 
         try:
             verdict = await judge_spoken(task, transcript)
-        except Exception:
+        except Exception as exc:
+            attempt_span.record_exception(exc)
             logger.exception("Sprechen judge call failed (task {})", task_id)
             raise HTTPException(
                 status_code=502,
@@ -145,6 +147,12 @@ async def submit_attempt(
             f"passed={passed} constraintMet={verdict.constraint_met} "
             f"hits={verdict.hits} slips={len(verdict.slips)}",
         )
+        # Structured verdict attributes so Langfuse can filter without
+        # string-parsing the free-text trace.output above.
+        attempt_span.set_attribute("verdict.constraint_met", bool(verdict.constraint_met))
+        attempt_span.set_attribute("verdict.hits", verdict.hits)
+        attempt_span.set_attribute("verdict.slips_count", len(verdict.slips))
+        attempt_span.set_attribute("verdict.pattern_id", task["pattern_id"])
 
         # Feed the ledger (design rule 4) — non-fatal. One write per attempt:
         # the ledger tracks patterns, not slip counts within one production.

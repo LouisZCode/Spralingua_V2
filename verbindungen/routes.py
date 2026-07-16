@@ -127,10 +127,15 @@ async def submit_attempt(
 
         if _matches(answer, item["answer"], item["frame"]):
             correct, note = True, None
+            # TASK 2: a deterministic green never calls the LLM judge — flag
+            # that explicitly so Langfuse can tell "judged correct" apart
+            # from "matched without a judge call" (same contract as bauteil).
+            attempt_span.set_attribute("judge_skipped", True)
         else:
             try:
                 diag = await judge_chunk(item, answer)
-            except Exception:
+            except Exception as exc:
+                attempt_span.record_exception(exc)
                 logger.exception("Verbindungen judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
@@ -142,6 +147,9 @@ async def submit_attempt(
             "langfuse.trace.output",
             f"correct={correct}" + (f" — {note}" if note else ""),
         )
+        # Structured verdict attribute so Langfuse can filter without
+        # string-parsing the free-text trace.output above.
+        attempt_span.set_attribute("verdict.correct", bool(correct))
 
         # Feed the ledger (design rule 4) — non-fatal, same self-correcting
         # contract as bauteil: a drill-retired pattern that still breaks in
