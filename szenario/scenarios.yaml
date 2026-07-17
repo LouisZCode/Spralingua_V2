@@ -92,3 +92,143 @@ scenarios:
       - der Flur
       - die Straße
       - der Stock
+
+  - id: arztpraxis
+    stufe: 1
+    persona:
+      name: Frau Nowak
+      role: Arzthelferin an der Anmeldung
+      attitude: friendly
+    kontext: >-
+      You're checking in at the reception desk of a doctor's office and the
+      assistant chats with you while checking your insurance card.
+    questions:
+      - Sind Sie zum ersten Mal in unserer Praxis?
+      - Hatten Sie heute einen weiten Weg hierher?
+      - Was halten Sie von unserem neuen Wartezimmer?
+      - Warum haben Sie sich für einen Termin bei uns entschieden?
+      - Wie geht es Ihnen heute, abgesehen von Ihrem Termin?
+    ziel_vokabular:
+      - die Praxis
+      - der Termin
+      - die Versicherungskarte
+      - das Wartezimmer
+      - der Arzt
+      - die Anmeldung
+
+  - id: bahnhof
+    stufe: 1
+    persona:
+      name: Herr Keller
+      role: Mitarbeiter am Infoschalter
+      attitude: friendly
+    kontext: >-
+      You're standing at the information desk in a train station and the
+      clerk chats with you while looking up your connection.
+    questions:
+      - Fahren Sie öfter mit dem Zug, oder ist das eher eine Ausnahme?
+      - Wohin soll Ihre Reise heute gehen?
+      - Was machen Sie normalerweise, wenn der Zug Verspätung hat?
+      - Reisen Sie lieber allein oder in Gesellschaft?
+      - Warum fahren Sie eigentlich nicht einfach mit dem Auto?
+    ziel_vokabular:
+      - der Bahnhof
+      - der Zug
+      - das Gleis
+      - die Verspätung
+      - der Fahrplan
+      - die Fahrkarte
+
+  - id: supermarkt
+    stufe: 1
+    persona:
+      name: Sabrina
+      role: Kassiererin im Supermarkt
+      attitude: friendly
+    kontext: >-
+      You're unloading your groceries at the checkout of a supermarket and
+      the cashier makes conversation while scanning your items.
+    questions:
+      - Kochen Sie gern, oder essen Sie lieber schnell und einfach?
+      - Haben Sie das Wochenende schon verplant?
+      - Brauchen Sie noch eine Tüte, oder haben Sie eine eigene dabei?
+      - Was ist eigentlich Ihr Lieblingsessen?
+      - Kaufen Sie meistens spontan ein, oder schreiben Sie sich vorher eine
+        Liste?
+    ziel_vokabular:
+      - die Kasse
+      - die Tüte
+      - das Kleingeld
+      - der Einkaufswagen
+      - die Quittung
+      - das Wechselgeld
+
+  - id: buergeramt
+    stufe: 1
+    persona:
+      name: Herr Vogel
+      role: Sachbearbeiter im Bürgeramt
+      attitude: friendly
+    kontext: >-
+      You're at the city registration office to register your new address,
+      and the clerk chats with you while checking your documents.
+    questions:
+      - Warum sind Sie eigentlich nach Deutschland gezogen?
+      - Wie lange wohnen Sie schon in dieser Stadt?
+      - War es schwierig, eine Wohnung zu finden?
+      - Was gefällt Ihnen an diesem Stadtteil am besten?
+      - Sind Sie mit dem Auto oder zu Fuß hierhergekommen?
+    ziel_vokabular:
+      - das Bürgeramt
+      - das Formular
+      - die Anmeldung
+      - der Ausweis
+      - die Adresse
+      - die Bescheinigung
+
+  - id: fitnessstudio
+    stufe: 1
+    persona:
+      name: Timo
+      role: Trainer im Fitnessstudio
+      attitude: friendly
+    kontext: >-
+      You're on a free trial visit at a gym and the trainer chats with you
+      while showing you around the equipment.
+    questions:
+      - Waren Sie schon einmal Mitglied in einem Fitnessstudio?
+      - Wollen Sie eher Muskeln aufbauen oder einfach fit bleiben?
+      - Wie oft könnten Sie realistisch zum Training kommen?
+      - Machen Sie lieber allein Sport oder in der Gruppe?
+      - Was hält Sie meistens davon ab, regelmäßig Sport zu treiben?
+    ziel_vokabular:
+      - das Fitnessstudio
+      - das Training
+      - der Vertrag
+      - die Umkleide
+      - das Gerät
+      - das Ziel
+
+  - id: friseur
+    stufe: 1
+    persona:
+      name: Mia
+      role: Friseurin im Salon
+      attitude: friendly
+    kontext: >-
+      You're sitting in the chair at a hair salon and the hairdresser chats
+      with you while cutting your hair.
+    questions:
+      - Möchten Sie sich die Haare eher kurz schneiden lassen, oder nur die
+        Spitzen?
+      - Waren Sie schon einmal bei einem anderen Friseur hier in der Stadt?
+      - Was machen Sie eigentlich beruflich?
+      - Haben Sie heute Abend noch etwas Besonderes vor?
+      - Wie oft lassen Sie sich normalerweise die Haare schneiden?
+    ziel_vokabular:
+      - der Friseur
+      - die Haare
+      - die Schere
+      - der Spiegel
+      - der Kamm
+      - die Frisur

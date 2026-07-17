@@ -153,3 +153,145 @@ tasks:
       ("Ich kaufe nach der Arbeit ein"). Modal + infinitive constructions
       (prefix unsplit) do not satisfy the constraint — the task forbids them.
     keyterms: [einkaufen, anrufen, fernsehen]
+
+  # ── v2-wortstellung ─────────────────────────────────────────────────────
+  - id: v2-freizeit
+    pattern_id: v2-wortstellung
+    title: Abends · Am Wochenende · Manchmal
+    prompt: >-
+      Tell me about your free time and hobbies — but start EVERY sentence
+      with something other than the subject: a time (Abends, Am Wochenende),
+      or Manchmal / Am liebsten. At least 3 sentences.
+    forces: >-
+      Constraint: at least 3 main clauses, each opening with a non-subject
+      element (time, Manchmal, Am liebsten, …). In each, the conjugated verb
+      must come IMMEDIATELY after that opener (position two) with the
+      subject after the verb. A sentence that starts with the subject does
+      not count toward the three.
+    keyterms: [abends, Wochenende, manchmal, liebsten]
+
+  - id: v2-reise
+    pattern_id: v2-wortstellung
+    title: Zuerst · Dann · Am Ende
+    prompt: >-
+      Describe your last trip or vacation — start EVERY sentence with
+      something other than the subject: a place (In Italien, Am Strand), or
+      a sequence word like Zuerst, Dann, Am Ende. At least 3 sentences.
+    forces: >-
+      Constraint: three clauses, each starting with a non-subject element (a
+      place or a sequence word). After the fronted element the conjugated
+      verb must stand in position two, subject after it ("Zuerst sind wir
+      …", never "Zuerst wir sind …").
+    keyterms: [zuerst, dann, Urlaub, Strand]
+
+  # ── nebensatz-verbende ──────────────────────────────────────────────────
+  - id: weil-jahreszeit
+    pattern_id: nebensatz-verbende
+    title: Sommer oder Winter
+    prompt: >-
+      Do you prefer summer or winter? Tell me why in two or three sentences
+      — and use "weil" twice.
+    forces: >-
+      Constraint: "weil" appears at least twice. In EVERY weil-clause the
+      conjugated verb must stand at the very end ("weil es dann wärmer
+      ist", never "weil es ist dann wärmer").
+    keyterms: [weil]
+
+  - id: dass-technik
+    pattern_id: nebensatz-verbende
+    title: Ich finde, dass … (Technik)
+    prompt: >-
+      Tell me two things you think about smartphones or social media —
+      start both with "Ich finde, dass …" or "Ich glaube, dass …".
+    forces: >-
+      Constraint: two dass-clauses. In each dass-clause the conjugated verb
+      must stand at the very end.
+    keyterms: [dass]
+
+  # ── perfekt-satzklammer ─────────────────────────────────────────────────
+  - id: perfekt-geburtstag
+    pattern_id: perfekt-satzklammer
+    title: Der Geburtstag (Perfekt)
+    prompt: >-
+      Tell me about your last birthday — what did you do? At least three
+      things, in the past.
+    forces: >-
+      Constraint: at least 3 past-tense clauses (count aux+participle pairs
+      or war/hatte clauses, not sentences). In Perfekt clauses haben/sein
+      must stand in position two and the Partizip II at the very END, with
+      objects/places inside the bracket ("Ich habe einen Kuchen gebacken",
+      never "Ich habe gebacken einen Kuchen"). Präteritum war/hatte/wollte
+      counts as a valid past sentence too.
+    keyterms: [Geburtstag]
+
+  - id: perfekt-ausflug
+    pattern_id: perfekt-satzklammer
+    title: Der Ausflug (Perfekt)
+    prompt: >-
+      Describe a day trip or outing (Ausflug) you took recently — in the
+      past, three sentences, and every sentence must say WHAT or WHERE (an
+      object or a place), so something sits between the two verb parts.
+    forces: >-
+      Constraint: 3 past-tense clauses, each with material inside the verb
+      bracket — haben/sein in position two, Partizip II at the END, and at
+      least an object or place phrase between them. An empty bracket
+      (auxiliary immediately followed by the participle) does not count
+      toward the three.
+    keyterms: [Ausflug]
+
+  # ── modalverb-infinitiv-ende ────────────────────────────────────────────
+  - id: modal-traumreise
+    pattern_id: modalverb-infinitiv-ende
+    title: Die Traumreise
+    prompt: >-
+      Tell me about a dream trip: one thing you WANT to do there, one thing
+      you'll MUST arrange beforehand, and one thing you probably CAN'T do.
+      Use wollen/möchten, müssen and können — one each.
+    forces: >-
+      Constraint: three clauses with three DIFFERENT modal verbs (wollen or
+      möchten, müssen, können). In each, the modal stands in position two
+      and the full verb goes to the very END as an infinitive ("Ich möchte
+      dort tauchen gehen", never "Ich möchte gehen dort tauchen").
+    keyterms: [möchte, muss, kann]
+
+  - id: modal-buero-regeln
+    pattern_id: modalverb-infinitiv-ende
+    title: Büro-Regeln
+    prompt: >-
+      Invent two rules for a perfect shared office — use "man muss" in one
+      and "man darf nicht" in the other.
+    forces: >-
+      Constraint: two rules, one with "man muss", one with "man darf nicht".
+      Modal in position two, the infinitive at the very END of each rule.
+    keyterms: [muss, darf]
+
+  # ── trennbare-verben ────────────────────────────────────────────────────
+  - id: trenn-wochenende
+    pattern_id: trennbare-verben
+    title: Das Wochenende, zerlegt
+    prompt: >-
+      Describe your typical weekend in three sentences, using at least
+      three of these verbs: aufräumen, ausschlafen, einladen, mitkommen,
+      vorbereiten. Present tense.
+    forces: >-
+      Constraint: at least three of the listed separable verbs, in present-
+      tense MAIN clauses — so each prefix must split off to the END of its
+      clause ("Ich räume samstags auf", never "Ich aufräume samstags"). A
+      verb hidden behind a modal (infinitive, prefix unsplit) does not
+      count toward the three.
+    keyterms: [aufräumen, ausschlafen, einladen, mitkommen, vorbereiten]
+
+  - id: trenn-arbeitstag
+    pattern_id: trennbare-verben
+    title: Der Arbeitstag
+    prompt: >-
+      Describe a typical workday — use at least three of these verbs:
+      aufhören, zurückrufen, weitermachen, vorbeikommen, abgeben. Present
+      tense.
+    forces: >-
+      Constraint: at least three of the listed separable verbs, in present-
+      tense MAIN clauses, prefix split to the clause END ("Ich höre um
+      sechzehn Uhr auf", never "Ich aufhöre um sechzehn Uhr"). Modal +
+      infinitive constructions (prefix unsplit) do not satisfy the
+      constraint.
+    keyterms: [aufhören, zurückrufen, weitermachen, vorbeikommen, abgeben]
