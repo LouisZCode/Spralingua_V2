@@ -61,3 +61,6 @@ CLAUDE.md
 
 # Local voice audition / test audio (not tracked)
 voice_tests/
+
+# Local-only speed test harness (never committed)
+speedtest/
