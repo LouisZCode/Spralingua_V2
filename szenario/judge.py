@@ -19,7 +19,7 @@ Same Cerebras ``gpt-oss-120b`` structured-output wiring as ``satz/enricher.py``.
 
 from typing import Literal, Optional
 
-from agents.openrouter_llm import ProviderChatOpenAI, judge_http_client
+from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -27,7 +27,6 @@ from agents.observability import (
     record_generation_output,
     unwrap_structured_output,
 )
-from config import openrouter_api_key, openrouter_base_url
 
 JUDGE_MODEL = "openai/gpt-oss-120b"
 
@@ -173,22 +172,9 @@ async def judge_structure(
     user_id: str | None = None,
 ) -> StructureVerdict:
     """One structured-output judgement call: complexity-coaching only, never grammar."""
-    llm = ProviderChatOpenAI(
-        model=JUDGE_MODEL,
-        base_url=openrouter_base_url,
-        api_key=openrouter_api_key,
-        # 10s/attempt x max_retries=2 ~= 31.5s worst case. Keep-alive reuse
-        # disabled (judge_http_client()) so a silently-dropped pooled socket
-        # (Railway NAT / OpenRouter LB, no RST) can't be handed out again —
-        # that cost 61-120s user-facing hangs before this (2026-07-16 prod
-        # traces).
-        timeout=10,
-        max_retries=2,
-        http_async_client=judge_http_client(),
-        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
-        # asymmetry comment in agents/conversation_agent.py.
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
-    ).with_structured_output(StructureVerdict, include_raw=True)
+    # Cerebras-direct primary + OpenRouter fallback with 12s/leg deadline —
+    # see agents/openrouter_llm.structured_judge_llm.
+    llm = structured_judge_llm(StructureVerdict)
     prompt = (
         PROMPT.replace("{question}", question)
         .replace("{transcript}", transcript)

@@ -28,7 +28,7 @@ duplicated into ``new_errors``) so each pattern is applied to the ledger once.
 body carries literal JSON braces, same as the sibling evaluators.
 """
 
-from agents.openrouter_llm import ProviderChatOpenAI, judge_http_client
+from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -36,7 +36,6 @@ from agents.observability import (
     record_generation_output,
     unwrap_structured_output,
 )
-from config import openrouter_api_key, openrouter_base_url
 from grammar import load_taxonomy, taxonomy_brief
 
 DEBRIEF_MODEL = "openai/gpt-oss-120b"
@@ -228,22 +227,9 @@ async def debrief(
         .replace("{taxonomy}", taxonomy_brief())
         .replace("{transcript}", transcript)
     )
-    llm = ProviderChatOpenAI(
-        model=DEBRIEF_MODEL,
-        base_url=openrouter_base_url,
-        api_key=openrouter_api_key,
-        # 10s/attempt x max_retries=2 ~= 31.5s worst case. Keep-alive reuse
-        # disabled (judge_http_client()) so a silently-dropped pooled socket
-        # (Railway NAT / OpenRouter LB, no RST) can't be handed out again —
-        # that cost 61-120s user-facing hangs before this (2026-07-16 prod
-        # traces).
-        timeout=10,
-        max_retries=2,
-        http_async_client=judge_http_client(),
-        # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
-        # asymmetry comment in agents/conversation_agent.py.
-        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},
-    ).with_structured_output(TandemDebrief, include_raw=True)
+    # Cerebras-direct primary + OpenRouter fallback with 12s/leg deadline —
+    # see agents/openrouter_llm.structured_judge_llm.
+    llm = structured_judge_llm(TandemDebrief)
     with generation_span(
         "tandem-debrief",
         model=DEBRIEF_MODEL,

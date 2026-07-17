@@ -19,6 +19,9 @@ minimax_group_id=os.getenv("MINIMAX_GROUP_ID")
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
 
+#Cerebras (judge primary leg — direct, no OpenRouter hop; see agents/openrouter_llm.py)
+cerebras_api_key = os.getenv("CEREBRAS_API_KEY")
+
 #Langfuse
 langfuse_public_key  = os.getenv("LANGFUSE_PUBLIC_KEY")
 langfuse_secret_key  = os.getenv("LANGFUSE_SECRET_KEY")

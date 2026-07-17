@@ -32,8 +32,14 @@ subclass would add nothing there (see the Task 3 note in
 ``agents/pipecat_wrapper.py``).
 """
 
+import asyncio
+
 import httpx
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_openai import ChatOpenAI
+from loguru import logger
+
+from config import cerebras_api_key, openrouter_api_key, openrouter_base_url
 
 
 class ProviderChatOpenAI(ChatOpenAI):
@@ -81,3 +87,194 @@ def judge_http_client() -> httpx.AsyncClient:
             follow_redirects=True,
         )
     return _judge_http_client
+
+
+class DeadlineChatOpenAI(ProviderChatOpenAI):
+    """``ProviderChatOpenAI`` with a hard TOTAL-time deadline on the async
+    non-streaming generation path (2026-07 Cerebras-direct cutover).
+
+    Why a wall-clock deadline instead of relying on ``timeout=``: OpenRouter
+    was observed to intermittently PARK a pinned, non-streaming request for
+    ~60s before serving it — the TCP connection stays open and bytes keep
+    trickling at the transport level, so httpx's per-read timeout never
+    fires. ``httpx.Timeout`` (and the openai SDK's ``timeout=``/``max_retries=``
+    on top of it) only bounds the gap between reads, not the call's total
+    duration. ``asyncio.wait_for`` is the one mechanism that bounds the
+    WHOLE await regardless of what the connection is doing underneath, so a
+    parked call reliably converts into an ``asyncio.TimeoutError`` that
+    ``RunnableWithFallbacks`` (default ``exceptions_to_handle=(Exception,)``;
+    ``asyncio.TimeoutError`` is ``TimeoutError``, an ``Exception`` subclass)
+    catches to trigger the fallback leg.
+
+    Verified override point (installed
+    ``.venv/lib/python3.12/site-packages/langchain_openai/chat_models/base.py``):
+    ``BaseChatOpenAI._agenerate`` (line ~1577) is the single async hook both
+    non-streaming code paths route through — the ``response_format``/
+    ``.with_raw_response.parse(...)`` branch (structured output via
+    ``method="json_schema"``) AND the plain ``.with_raw_response.create(...)``
+    branch (structured output via ``method="function_calling"``, which binds
+    the schema as a tool and parses the tool call afterward — no
+    ``response_format`` in the payload, so it falls through to the same
+    plain-create branch a non-structured call uses). Confirmed the dispatch
+    chain that reaches it: ``Runnable.ainvoke`` -> ``BaseChatModel.ainvoke``
+    -> ``agenerate_prompt`` -> ``agenerate`` -> ``_agenerate_with_cache``
+    (``langchain_core/language_models/chat_models.py``), which — when
+    streaming isn't implicitly requested (the judges never call
+    ``astream``/``astream_events``) — does
+    ``inspect.signature(self._agenerate).parameters.get("run_manager")`` and
+    then ``await self._agenerate(messages, stop=stop, run_manager=run_manager,
+    **kwargs)``. That inspects the BOUND method, i.e. this override, so
+    keeping the ``run_manager`` parameter name here is required for the
+    kwarg to be passed through. Both ``with_structured_output(method=...)``
+    paths build a ``RunnableSequence`` of ``(possibly tool-bound) self |
+    output_parser`` — the model half still goes through ``ainvoke`` ->
+    ``_agenerate`` exactly as above, so wrapping ``_agenerate`` here covers
+    every judge call site (all use ``.with_structured_output(..., include_raw=True)``
+    today; a hypothetical plain-text ``.ainvoke()`` call is covered too, same hook).
+
+    Worst-case math (per leg, ``deadline_s=12.0`` default):
+    - Happy path: 0.5-2s (Cerebras direct, healthy).
+    - Cerebras having a bad moment: 12s deadline trips -> fallback leg
+      serves in ~1-3s (OpenRouter, ``allow_fallbacks=True`` so the router
+      can serve off ANY upstream, not just retry the same parked path) =>
+      ~13-15s total.
+    - Absolute worst case (both legs dead/parked): ~12s + ~12s = ~24s, then
+      the ``TimeoutError`` from the fallback leg propagates out of
+      ``RunnableWithFallbacks`` and the caller's route sees an exception ->
+      existing 503 handling.
+    """
+
+    deadline_s: float = 12.0
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        return await asyncio.wait_for(
+            super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs),
+            timeout=self.deadline_s,
+        )
+
+
+# --- Cerebras-primary / OpenRouter-fallback judge factory (2026-07) --------
+#
+# Production judges used to call OpenRouter pinned to Cerebras
+# (`extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}}`).
+# OpenRouter was observed to intermittently PARK that pinned, non-streaming
+# request for ~60s before serving it. Fix: judges call Cerebras DIRECTLY
+# (fast fail-fast semantics, no router hop), with OpenRouter kept as an
+# automatic fallback leg (`allow_fallbacks=True` there — if OpenRouter itself
+# is the one serving, let it route off Cerebras rather than park waiting for
+# it), and a `DeadlineChatOpenAI` hard total deadline on both legs so a
+# parked/stuck call converts into a failure that trips the fallback instead
+# of hanging.
+
+CEREBRAS_BASE_URL = "https://api.cerebras.ai/v1"
+CEREBRAS_JUDGE_MODEL = "gpt-oss-120b"
+OPENROUTER_JUDGE_MODEL = "openai/gpt-oss-120b"
+
+_missing_cerebras_key_warned = False
+
+
+def _log_fallback_engaged(x):
+    """Loguru WARNING fired exactly once per invocation, the moment the
+    fallback leg engages — piped in front of the fallback model so it only
+    logs when the primary (Cerebras direct) leg actually failed. Production
+    signal that Cerebras is having a bad moment."""
+    logger.warning("Judge primary (Cerebras direct) failed — falling back to OpenRouter")
+    return x
+
+
+def _cerebras_leg(deadline_s: float) -> DeadlineChatOpenAI:
+    return DeadlineChatOpenAI(
+        model=CEREBRAS_JUDGE_MODEL,
+        base_url=CEREBRAS_BASE_URL,
+        api_key=cerebras_api_key,
+        timeout=10,
+        max_retries=1,
+        http_async_client=judge_http_client(),
+        deadline_s=deadline_s,
+    )
+
+
+def _openrouter_leg(deadline_s: float) -> DeadlineChatOpenAI:
+    return DeadlineChatOpenAI(
+        model=OPENROUTER_JUDGE_MODEL,
+        base_url=openrouter_base_url,
+        api_key=openrouter_api_key,
+        timeout=10,
+        max_retries=1,
+        http_async_client=judge_http_client(),
+        deadline_s=deadline_s,
+        # allow_fallbacks=True here (unlike the old pinned wiring): this leg
+        # only runs when Cerebras-direct already failed, so let OpenRouter
+        # serve off any upstream rather than risk parking again waiting
+        # specifically for Cerebras. OpenRouter's documented `order` semantics
+        # still try Cerebras first.
+        extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
+    )
+
+
+def _judge_legs(deadline_s: float) -> tuple[DeadlineChatOpenAI, DeadlineChatOpenAI | None]:
+    """Build the (primary, fallback) leg pair. ``fallback`` is ``None`` only
+    in the no-Cerebras-key degraded mode, where ``primary`` IS the OpenRouter
+    leg (deadline still applied) and there is nothing left to fall back to."""
+    if not cerebras_api_key:
+        global _missing_cerebras_key_warned
+        if not _missing_cerebras_key_warned:
+            logger.warning("CEREBRAS_API_KEY not set — judges running OpenRouter-only")
+            _missing_cerebras_key_warned = True
+        return _openrouter_leg(deadline_s), None
+    return _cerebras_leg(deadline_s), _openrouter_leg(deadline_s)
+
+
+def structured_judge_llm(
+    schema,
+    *,
+    method: str = "function_calling",
+    include_raw: bool = True,
+    deadline_s: float = 12.0,
+) -> Runnable:
+    """Cerebras-direct primary + OpenRouter-fallback structured-output judge.
+
+    Drop-in replacement for the old
+    ``ProviderChatOpenAI(...).with_structured_output(schema, include_raw=True)``
+    construction — returns a ``Runnable`` whose ``.ainvoke(prompt)`` yields
+    the same ``{"raw", "parsed", "parsing_error"}`` dict shape
+    ``agents.observability.unwrap_structured_output`` expects, whichever leg
+    served it.
+
+    ``method="function_calling"`` is pinned explicitly on BOTH legs: Cerebras
+    supports tool-calling for ``gpt-oss-120b`` but does not accept a
+    ``response_format`` (the ``method="json_schema"`` path, langchain_openai's
+    default since 0.3.0) alongside tool binding, and pinning the same method
+    on the OpenRouter fallback leg keeps the two legs' request shape
+    identical so a fallback mid-flight isn't also a method switch.
+
+    Composition order matters: structured output is applied to each ChatOpenAI
+    leg FIRST, then ``.with_fallbacks(...)`` — ``RunnableWithFallbacks`` has
+    no ``.with_structured_output`` of its own.
+    """
+    primary, fallback = _judge_legs(deadline_s)
+    primary_structured = primary.with_structured_output(
+        schema, method=method, include_raw=include_raw
+    )
+    if fallback is None:
+        return primary_structured
+    fallback_structured = fallback.with_structured_output(
+        schema, method=method, include_raw=include_raw
+    )
+    return primary_structured.with_fallbacks(
+        [RunnableLambda(_log_fallback_engaged) | fallback_structured]
+    )
+
+
+def plain_judge_llm(*, deadline_s: float = 12.0) -> Runnable:
+    """Cerebras-direct primary + OpenRouter-fallback judge for plain
+    (non-structured-output) text completions. None of the current 9 judge/
+    evaluator call sites need this today — every one of them uses
+    ``.with_structured_output(...)`` — but it exists as the plain-text
+    counterpart to :func:`structured_judge_llm` for a future non-structured
+    judge, built from the exact same legs/deadline/fallback-logging wiring.
+    """
+    primary, fallback = _judge_legs(deadline_s)
+    if fallback is None:
+        return primary
+    return primary.with_fallbacks([RunnableLambda(_log_fallback_engaged) | fallback])
