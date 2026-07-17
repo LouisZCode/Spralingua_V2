@@ -41,14 +41,69 @@ ROUND_SIZE = 3
 _MAX_AUDIO_BYTES = 2_500_000
 
 
+def _pick_round(
+    tasks: list[dict], hot: set[str], seen_task_ids: list[str]
+) -> tuple[list[dict], bool]:
+    """Pick ROUND_SIZE tasks, at most one per pattern, favoring phrasings the
+    client hasn't already been served this pool cycle (VARY-001) ahead of the
+    learner's hot ledger patterns. ``seen_task_ids`` are client-echoed task
+    ids; unknown ids are silently dropped.
+
+    If every phrasing of every pattern has been seen, the pool resets for
+    this pick (``seen_task_ids`` is treated as empty) — reported via the
+    returned cycle_reset flag.
+    """
+    known_ids = {t["id"] for t in tasks}
+    seen_set = {tid for tid in seen_task_ids if tid in known_ids}
+
+    # One variant per pattern (each pattern has 2+ task phrasings).
+    by_pattern: dict[str, list[dict]] = {}
+    for t in tasks:
+        by_pattern.setdefault(t["pattern_id"], []).append(t)
+
+    # Reset only when literally nothing is left unseen — "every pattern has
+    # a seen task" is implied by this, so it needs no separate check.
+    cycle_reset = all(t["id"] in seen_set for t in tasks)
+    if cycle_reset:
+        seen_set = set()
+
+    def pick_variant(variants: list[dict]) -> dict:
+        unseen = [t for t in variants if t["id"] not in seen_set]
+        return random.choice(unseen or variants)
+
+    def seen_grade(pattern_id: str) -> int:
+        seen_flags = [v["id"] in seen_set for v in by_pattern[pattern_id]]
+        if not any(seen_flags):
+            return 0  # untouched — no phrasing served yet
+        if not all(seen_flags):
+            return 1  # partly served — still holds an unseen phrasing
+        return 2  # exhausted — every phrasing already served
+
+    candidates = [pick_variant(v) for v in by_pattern.values()]
+    random.shuffle(candidates)
+    candidates.sort(key=lambda t: t["pattern_id"] not in hot)  # stable: hot first
+    # Outermost, applied last so it dominates while preserving the hot-first
+    # order within each grade (stable sort): patterns with unseen phrasings
+    # must drain before any exhausted pattern repeats — a repeat can only
+    # appear once fewer than ROUND_SIZE patterns still hold unseen phrasings
+    # (the unavoidable final partial round).
+    candidates.sort(key=lambda t: seen_grade(t["pattern_id"]))
+    return candidates[:ROUND_SIZE], cycle_reset
+
+
 @router.get("/round")
 async def get_round(
+    # VARY-001: comma-separated task ids the client has already been served
+    # this pool cycle. Optional — absent behaves exactly like the old
+    # stateless draw (full backward compatibility).
+    seenTasks: str | None = None,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Three tasks, at most one per pattern, the learner's hot ledger patterns
-    first. The `forces` field stays server-side — the learner sees the task,
-    the judge sees the rubric."""
+    """Three tasks, at most one per pattern, favoring phrasings the client
+    hasn't seen this pool cycle (VARY-001) and the learner's hot ledger
+    patterns. The `forces` field stays server-side — the learner sees the
+    task, the judge sees the rubric."""
     tasks = list(load_tasks().values())
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
@@ -57,20 +112,14 @@ async def get_round(
         logger.exception("Sprechen focus read failed — serving an unweighted round")
         hot = set()
 
-    # One variant per pattern (each pattern has 2+ task phrasings), then hot
-    # patterns lead the pick.
-    by_pattern: dict[str, list[dict]] = {}
-    for t in tasks:
-        by_pattern.setdefault(t["pattern_id"], []).append(t)
-    candidates = [random.choice(v) for v in by_pattern.values()]
-    random.shuffle(candidates)
-    candidates.sort(key=lambda t: t["pattern_id"] not in hot)  # stable: hot first
-    chosen = candidates[:ROUND_SIZE]
+    seen_task_ids = seenTasks.split(",") if seenTasks else []
+    chosen, cycle_reset = _pick_round(tasks, hot, seen_task_ids)
     return {
         "tasks": [
             {"id": t["id"], "title": t["title"], "prompt": t["prompt"]}
             for t in chosen
-        ]
+        ],
+        "cycleReset": cycle_reset,
     }
 
 

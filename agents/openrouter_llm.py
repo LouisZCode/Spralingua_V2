@@ -32,6 +32,7 @@ subclass would add nothing there (see the Task 3 note in
 ``agents/pipecat_wrapper.py``).
 """
 
+import httpx
 from langchain_openai import ChatOpenAI
 
 
@@ -51,3 +52,32 @@ class ProviderChatOpenAI(ChatOpenAI):
             for gen in result.generations:
                 gen.message.response_metadata["openrouter_provider"] = provider
         return result
+
+
+_judge_http_client: httpx.AsyncClient | None = None
+
+
+def judge_http_client() -> httpx.AsyncClient:
+    """Lazily-created singleton ``httpx.AsyncClient`` shared by every judge/
+    evaluator LLM call, with keep-alive reuse disabled.
+
+    langchain_openai's own default async client is ``lru_cache``d per
+    ``(base_url, timeout)`` (``langchain_openai/chat_models/_client_utils.py``)
+    — every judge shares that one pool. A connection Railway's NAT / the
+    OpenRouter LB drops without an RST looks alive to the pool but hangs on
+    first use, and the openai SDK's default ``max_retries=2`` silently retries
+    the same way twice: 61-120s user-facing waits on what should be a 1-5s
+    call (2026-07-16 prod traces). Passing this client via ``http_async_client=``
+    bypasses that cache (``langchain_openai/chat_models/base.py:983-987``), and
+    ``max_keepalive_connections=0`` means no connection is ever handed out a
+    second time — every judge call pays a fresh TCP+TLS handshake
+    (~100-300ms), which is fine for non-streaming request/response calls.
+    """
+    global _judge_http_client
+    if _judge_http_client is None:
+        _judge_http_client = httpx.AsyncClient(
+            timeout=httpx.Timeout(10.0),
+            limits=httpx.Limits(max_keepalive_connections=0, max_connections=100),
+            follow_redirects=True,
+        )
+    return _judge_http_client

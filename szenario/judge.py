@@ -19,7 +19,7 @@ Same Cerebras ``gpt-oss-120b`` structured-output wiring as ``satz/enricher.py``.
 
 from typing import Literal, Optional
 
-from agents.openrouter_llm import ProviderChatOpenAI
+from agents.openrouter_llm import ProviderChatOpenAI, judge_http_client
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -177,7 +177,14 @@ async def judge_structure(
         model=JUDGE_MODEL,
         base_url=openrouter_base_url,
         api_key=openrouter_api_key,
-        timeout=30,
+        # 10s/attempt x max_retries=2 ~= 31.5s worst case. Keep-alive reuse
+        # disabled (judge_http_client()) so a silently-dropped pooled socket
+        # (Railway NAT / OpenRouter LB, no RST) can't be handed out again —
+        # that cost 61-120s user-facing hangs before this (2026-07-16 prod
+        # traces).
+        timeout=10,
+        max_retries=2,
+        http_async_client=judge_http_client(),
         # OBS-008: pinned, no fallback off Cerebras — see LEARNINGS.md / the
         # asymmetry comment in agents/conversation_agent.py.
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": False}},

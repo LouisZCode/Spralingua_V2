@@ -18,10 +18,17 @@ export type Persona = {
 // answers cold, no vocab hint shown.
 export type Scenario = {
   scenarioId: string;
+  // VARY-001: index into the scenario's server-side `questions` list — the
+  // client's half of a "scenarioId:questionIndex" seen-token. Absent only
+  // against an old backend that predates variety tracking.
+  questionIndex?: number;
   persona: Persona;
   kontext: string;
   question: string;
   zielVokabular: string[];
+  // VARY-001: true when the server's seen-pool was exhausted and reset for
+  // this pick — the client should clear its stored seen-token list.
+  cycleReset?: boolean;
 };
 
 export type SentenceRead = {
@@ -75,8 +82,15 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-export async function fetchScenario(token: string): Promise<Scenario> {
-  return request<Scenario>("/szenario/scenario", token);
+export async function fetchScenario(
+  token: string,
+  // VARY-001: "scenarioId:questionIndex" tokens already served this pool
+  // cycle (localStorage-backed, see Szenario.tsx) — omit or pass empty for
+  // the old stateless draw.
+  seen?: string[]
+): Promise<Scenario> {
+  const qs = seen && seen.length > 0 ? `?seen=${encodeURIComponent(seen.join(","))}` : "";
+  return request<Scenario>(`/szenario/scenario${qs}`, token);
 }
 
 export async function submitAttempt(

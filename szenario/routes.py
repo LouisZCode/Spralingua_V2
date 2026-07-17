@@ -80,22 +80,83 @@ async def _background_harvest(transcript: str, session_id: str, user_id: str) ->
         logger.warning("Szenario grammar extraction failed (non-fatal)")
 
 
+def _pick_scenario(
+    scenarios: list[dict], seen_tokens: list[str]
+) -> tuple[dict, int, bool]:
+    """Pick one (scenario, questionIndex) pair, favoring pairs absent from
+    ``seen_tokens`` (VARY-001) — client-echoed "scenarioId:questionIndex"
+    strings. A malformed token, or one naming an unknown scenario or an
+    out-of-range question index, is silently dropped.
+
+    No-immediate-repeat: never reuse the LAST seen token's scenario while any
+    other scenario still has an unseen question. If every pair has already
+    been seen, reset the pool for this pick (the no-immediate-repeat rule
+    still applies against the reset pool) — reported via the returned
+    cycle_reset flag.
+    """
+    by_id = {s["id"]: s for s in scenarios}
+
+    seen_pairs: list[tuple[str, int]] = []
+    for tok in seen_tokens:
+        parts = tok.split(":")
+        if len(parts) != 2:
+            continue
+        scenario_id, idx_str = parts
+        scenario = by_id.get(scenario_id)
+        if scenario is None:
+            continue
+        try:
+            idx = int(idx_str)
+        except ValueError:
+            continue
+        if not (0 <= idx < len(scenario["questions"])):
+            continue
+        seen_pairs.append((scenario_id, idx))
+
+    last_scenario_id = seen_pairs[-1][0] if seen_pairs else None
+
+    all_pairs = [
+        (s["id"], i) for s in scenarios for i in range(len(s["questions"]))
+    ]
+    seen_set = set(seen_pairs)
+    unseen = [p for p in all_pairs if p not in seen_set]
+
+    cycle_reset = not unseen
+    if cycle_reset:
+        unseen = all_pairs
+
+    # Prefer a different scenario than the one just served, as long as one
+    # with an unseen question remains in the (possibly just-reset) pool.
+    other_scenario = [p for p in unseen if p[0] != last_scenario_id]
+    pool = other_scenario or unseen
+
+    chosen_id, chosen_idx = random.choice(pool)
+    return by_id[chosen_id], chosen_idx, cycle_reset
+
+
 @router.get("/scenario")
 async def get_scenario(
+    # VARY-001: comma-separated "scenarioId:questionIndex" tokens the client
+    # has already been served this pool cycle. Optional — absent behaves
+    # exactly like the old stateless draw (full backward compatibility).
+    seen: str | None = None,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Pick one scenario and one of its questions at random.
+    """Pick one scenario and one of its questions, avoiding repeats the
+    client has already seen (VARY-001).
 
     The `questions` list stays server-side beyond the one chosen — the
     learner sees only the picked question, so the drill stays unpredictable
     on repeat visits to the same scenario.
     """
     scenarios = list(load_scenarios().values())
-    scenario = random.choice(scenarios)
-    question = random.choice(scenario["questions"])
+    seen_tokens = seen.split(",") if seen else []
+    scenario, question_index, cycle_reset = _pick_scenario(scenarios, seen_tokens)
+    question = scenario["questions"][question_index]
     persona = scenario["persona"]
     return {
         "scenarioId": scenario["id"],
+        "questionIndex": question_index,
         "persona": {
             "name": persona["name"],
             "role": persona["role"],
@@ -104,6 +165,7 @@ async def get_scenario(
         "kontext": scenario["kontext"],
         "question": question,
         "zielVokabular": scenario["ziel_vokabular"],
+        "cycleReset": cycle_reset,
     }
 
 

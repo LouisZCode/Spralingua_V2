@@ -14,6 +14,34 @@ import {
 } from "./sprechen/api";
 import { UnauthorizedError } from "./satzschmiede/api";
 
+// VARY-001: task ids already served this pool cycle, kept in localStorage so
+// variety persists across page visits. Guarded the same way as the rest of
+// the codebase (AuthContext.tsx, SetupView.tsx): try/catch, only ever
+// touched outside the render path (inside loadRound, itself only called
+// from an effect or a click handler), never during render.
+const SEEN_STORAGE_KEY = "sprechen-seen-v1";
+
+function readSeen(): string[] {
+  try {
+    const raw = localStorage.getItem(SEEN_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSeen(list: string[]): void {
+  try {
+    localStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // Storage blocked/unavailable — variety just resets next visit.
+  }
+}
+
 // Sprechen & transkribieren — GRAM-002 Exercise B: a constrained speaking
 // task traps one verb-position structure; the learner speaks; the raw
 // transcript is judged. This component is the auth-guarded page shell +
@@ -41,10 +69,15 @@ export default function Sprechen() {
   const loadRound = useCallback(() => {
     if (!token) return;
     setRound(null);
-    fetchRound(token)
-      .then((tasks) => {
+    const seen = readSeen();
+    fetchRound(token, seen)
+      .then(({ tasks, cycleReset }) => {
         setRound(tasks);
         setRoundKey((k) => k + 1);
+        const served = tasks.map((t) => t.id);
+        // VARY-001: an old backend omits cycleReset — treat it as "no reset"
+        // (append), same as the default when the field is present but false.
+        writeSeen(cycleReset ? served : [...seen, ...served]);
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {

@@ -49,9 +49,22 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-export async function fetchRound(token: string): Promise<SpokenTask[]> {
-  const data = await request<{ tasks: SpokenTask[] }>("/sprechen/round", token);
-  return data.tasks;
+// VARY-001: a round as the backend serves it — `cycleReset` is true when the
+// server's seen-pool was exhausted and reset for this pick, absent only
+// against an old backend that predates variety tracking.
+type RoundResponse = { tasks: SpokenTask[]; cycleReset?: boolean };
+
+export async function fetchRound(
+  token: string,
+  // VARY-001: task ids already served this pool cycle (localStorage-backed,
+  // see Sprechen.tsx) — omit or pass empty for the old stateless draw.
+  seenTasks?: string[]
+): Promise<RoundResponse> {
+  const qs =
+    seenTasks && seenTasks.length > 0
+      ? `?seenTasks=${encodeURIComponent(seenTasks.join(","))}`
+      : "";
+  return request<RoundResponse>(`/sprechen/round${qs}`, token);
 }
 
 export async function submitAttempt(

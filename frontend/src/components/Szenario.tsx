@@ -14,6 +14,35 @@ import {
 } from "./szenario/api";
 import { UnauthorizedError } from "./satzschmiede/api";
 
+// VARY-001: "scenarioId:questionIndex" tokens already served this pool
+// cycle, kept in localStorage so variety persists across page visits.
+// Guarded the same way as the rest of the codebase (AuthContext.tsx,
+// SetupView.tsx): try/catch, only ever touched outside the render path
+// (inside loadScenario, itself only called from an effect or a click
+// handler), never during render.
+const SEEN_STORAGE_KEY = "szenario-seen-v1";
+
+function readSeen(): string[] {
+  try {
+    const raw = localStorage.getItem(SEEN_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === "string")
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeSeen(list: string[]): void {
+  try {
+    localStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // Storage blocked/unavailable — variety just resets next visit.
+  }
+}
+
 // Szenario-Sparring — a persona shows one German question in a scene; the
 // learner answers with one recording; the backend judges the answer's
 // STRUCTURE (anchor / one-idea-per-sentence / clean close), never grammar.
@@ -48,10 +77,17 @@ export default function Szenario() {
   const loadScenario = useCallback(() => {
     if (!token) return;
     setScenario(null);
-    fetchScenario(token)
+    const seen = readSeen();
+    fetchScenario(token, seen)
       .then((s) => {
         setScenario(s);
         setScenarioKey((k) => k + 1);
+        // VARY-001: an old backend omits questionIndex — skip the
+        // localStorage update rather than writing a malformed token.
+        if (typeof s.questionIndex === "number") {
+          const served = `${s.scenarioId}:${s.questionIndex}`;
+          writeSeen(s.cycleReset ? [served] : [...seen, served]);
+        }
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
