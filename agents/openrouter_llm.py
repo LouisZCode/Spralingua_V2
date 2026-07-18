@@ -228,8 +228,9 @@ def _judge_legs(deadline_s: float) -> tuple[DeadlineChatOpenAI, DeadlineChatOpen
 def structured_judge_llm(
     schema,
     *,
-    method: str = "function_calling",
+    method: str = "json_schema",
     include_raw: bool = True,
+    strict: bool | None = True,
     deadline_s: float = 12.0,
 ) -> Runnable:
     """Cerebras-direct primary + OpenRouter-fallback structured-output judge.
@@ -241,12 +242,18 @@ def structured_judge_llm(
     ``agents.observability.unwrap_structured_output`` expects, whichever leg
     served it.
 
-    ``method="function_calling"`` is pinned explicitly on BOTH legs: Cerebras
-    supports tool-calling for ``gpt-oss-120b`` but does not accept a
-    ``response_format`` (the ``method="json_schema"`` path, langchain_openai's
-    default since 0.3.0) alongside tool binding, and pinning the same method
-    on the OpenRouter fallback leg keeps the two legs' request shape
-    identical so a fallback mid-flight isn't also a method switch.
+    ``method="json_schema"`` + ``strict=True`` is pinned on BOTH legs
+    (2026-07-18): with the earlier ``method="function_calling"`` the model
+    wrote the verdict JSON as free-form tool args, and Cerebras
+    ``gpt-oss-120b`` intermittently omitted or ``null``-ed a required field
+    (observed in prod: ``{"word_ok": true}`` with no ``grammar_ok`` → pydantic
+    ``ValidationError`` → 502 "check hiccuped"; ~3 of 35 calls in one
+    session). Strict ``response_format`` makes the server constrain decoding
+    to the schema, so an answer missing a required field cannot be generated.
+    Note ``json_schema`` binds NO tools, so the old "Cerebras won't take
+    tools + response_format together" conflict doesn't apply. Same method on
+    the fallback leg keeps the two legs' request shape identical so a
+    fallback mid-flight isn't also a method switch.
 
     Composition order matters: structured output is applied to each ChatOpenAI
     leg FIRST, then ``.with_fallbacks(...)`` — ``RunnableWithFallbacks`` has
@@ -254,12 +261,12 @@ def structured_judge_llm(
     """
     primary, fallback = _judge_legs(deadline_s)
     primary_structured = primary.with_structured_output(
-        schema, method=method, include_raw=include_raw
+        schema, method=method, include_raw=include_raw, strict=strict
     )
     if fallback is None:
         return primary_structured
     fallback_structured = fallback.with_structured_output(
-        schema, method=method, include_raw=include_raw
+        schema, method=method, include_raw=include_raw, strict=strict
     )
     return primary_structured.with_fallbacks(
         [RunnableLambda(_log_fallback_engaged) | fallback_structured]
