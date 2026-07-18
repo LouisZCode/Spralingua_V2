@@ -255,6 +255,13 @@ def structured_judge_llm(
     the fallback leg keeps the two legs' request shape identical so a
     fallback mid-flight isn't also a method switch.
 
+    SCHEMA SIZE: Cerebras strict mode caps the generated JSON schema at
+    5,000 characters (enforced from 2026-07-21) — class docstring and Field
+    descriptions count. When adding or growing a judge schema, re-check all
+    9 with ``uv run python speedtest/strict_lint.py`` (local-only). Largest
+    today: szenario ``StructureVerdict`` at 4,202 — see the SIZE BUDGET
+    comment above that class.
+
     Composition order matters: structured output is applied to each ChatOpenAI
     leg FIRST, then ``.with_fallbacks(...)`` — ``RunnableWithFallbacks`` has
     no ``.with_structured_output`` of its own.

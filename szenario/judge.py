@@ -74,6 +74,16 @@ class Skeleton(BaseModel):
     )
 
 
+# SIZE BUDGET: Cerebras strict json_schema caps the generated schema at 5,000
+# characters (enforced from 2026-07-21). The class docstring AND every Field
+# description below are embedded in that schema, so they all count toward the
+# cap (which is also why this note is a comment, not part of the docstring).
+# This class is the largest of the 9 judges — 4,202/5,000 as of 2026-07-18.
+# Before adding fields or lengthening descriptions, re-measure with
+# `uv run python speedtest/strict_lint.py` (checks all 9 judges against every
+# Cerebras strict rule; local-only/gitignored). Overflow isn't fatal — Cerebras
+# rejects, the OpenRouter fallback still answers, a WARNING is logged — but
+# every call gets slower, so trim descriptions instead.
 class StructureVerdict(BaseModel):
     """Simplicity-coach verdict on one spoken answer: how complex was the
     sentence architecture, and how to make it lighter. Never contains a
