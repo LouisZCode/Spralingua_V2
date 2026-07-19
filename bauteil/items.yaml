@@ -13,11 +13,14 @@
 #   answer     — the correctly inflected phrase that fits the gap
 #   hint       — English rendering of the full sentence (comprehension aid)
 #
-# Design rules honored (todo GRAM-002): vocabulary is IMPOSED, not drawn from
-# the learner's Satzschmiede pool (familiar words let the ending be dodged —
-# the user's own topic-1 finding); the rotation lands the strong "flag" ending
-# in every slot: all three cases, all genders, definite / ein-type / bare,
-# including the three naked ein-spots (masc-nom, neut-nom, neut-acc); weak-
+# Design rules honored (todo GRAM-002): this catalog is the SHARED half of
+# each round — since CONT-002 (2026-07-19 user ruling) the other half is
+# forged per-user from the learner's own Satzschmiede nouns (drills/forge.py;
+# the old "imposed vocabulary only" stance is retired: deck words are still
+# being learned, so familiarity is no escape route). The rotation lands the
+# strong "flag" ending in every slot: all three cases, all genders, definite /
+# ein-type / bare, including the three naked ein-spots (masc-nom, neut-nom,
+# neut-acc); weak-
 # noun items MIX in non-weak decoys so "does this noun even bend?" stays a
 # live decision (rule 1: block the escape route).
 

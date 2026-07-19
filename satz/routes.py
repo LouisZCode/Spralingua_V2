@@ -8,6 +8,7 @@ AUTH-001/DATA-001 left ready for exactly this. CORS is app-wide in ``main.py``,
 so the Next.js origin needs no extra wiring here.
 """
 
+import asyncio
 import re
 import time
 from datetime import datetime
@@ -27,6 +28,7 @@ from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
 from database.orm import Pack, PackCard, User, UserCard, VocabCard
 from database.repository import record_drill_attempt, record_grammar_error
+from drills import forge_items_for_card
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
@@ -485,6 +487,14 @@ async def add_word(
     pool_size = await db.scalar(
         select(func.count()).select_from(UserCard).where(UserCard.user_id == user_id)
     )
+
+    # CONT-002: forge personal drill items for the newly linked word in the
+    # background — never blocks or fails the add.
+    try:
+        asyncio.create_task(forge_items_for_card(user_id, card.id))
+    except Exception:
+        logger.exception("Drill-item forge scheduling failed ({})", card.id)
+
     return {
         "card": payload,
         "created": created,

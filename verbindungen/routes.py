@@ -7,23 +7,27 @@ check first, one diagnosis call on misses, non-fatal ledger feedback, OBS-007
 tracing under the frontend-minted practice-session id.
 """
 
+import asyncio
 import random
 import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
+from database.orm import UserDrillItem
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
     record_drill_attempt,
     record_grammar_error,
 )
+from drills.forge import backfill_missing
 from verbindungen.content import TARGET_PATTERNS, load_items
 from verbindungen.judge import judge_chunk
 
@@ -33,6 +37,8 @@ ROUND_SIZE = 10
 # Hot patterns lead but never fill the round — the reflexive/non-reflexive
 # MIX is the drill's whole mechanism, so decoys must always be present.
 MAX_HOT = 6
+# CONT-002: the personal half of a 10-item round.
+PERSONAL_MAX = 5
 
 
 @router.get("/round")
@@ -41,7 +47,33 @@ async def get_round(
     db: AsyncSession = Depends(get_db),
 ):
     """One practice round; answers and chunks stay server-side (the chunk
-    line would answer the item, so it only ships with the verdict)."""
+    line would answer the item, so it only ships with the verdict).
+
+    CONT-002: half the round (up to ``PERSONAL_MAX``) is the learner's own
+    forged items; the generic catalog logic below fills whatever's left.
+    """
+    try:
+        personal_rows = (
+            await db.execute(
+                select(UserDrillItem.item).where(
+                    UserDrillItem.user_id == user_id,
+                    UserDrillItem.exercise == "verbindungen",
+                    UserDrillItem.item.is_not(None),
+                )
+            )
+        ).scalars().all()
+        # Defense in depth: the SQL filter above misses legacy rows whose
+        # tombstone landed as JSON 'null' (pre-none_as_null=True); those come
+        # back as Python None and must never reach the response builder.
+        personal = [item for item in personal_rows if item]
+        random.shuffle(personal)
+        personal = personal[:PERSONAL_MAX]
+    except Exception:
+        # A personalisation outage must never break the round.
+        logger.exception("Verbindungen personal-item read failed — serving a generic-only round")
+        personal = []
+
+    generic_size = ROUND_SIZE - len(personal)
     items = list(load_items().values())
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
@@ -54,15 +86,25 @@ async def get_round(
     rest = [i for i in items if i["pattern_id"] not in hot]
     random.shuffle(hot_items)
     random.shuffle(rest)
-    chosen = (hot_items[:MAX_HOT] + rest)[:ROUND_SIZE]
-    if len(chosen) < ROUND_SIZE:
-        chosen += hot_items[MAX_HOT : MAX_HOT + ROUND_SIZE - len(chosen)]
-    random.shuffle(chosen)
-    return {
-        "items": [
-            {"id": i["id"], "frame": i["frame"], "hint": i["hint"]} for i in chosen
-        ]
-    }
+    chosen = (hot_items[:MAX_HOT] + rest)[:generic_size]
+    if len(chosen) < generic_size:
+        chosen += hot_items[MAX_HOT : MAX_HOT + generic_size - len(chosen)]
+
+    result = [
+        {"id": i["id"], "frame": i["frame"], "hint": i["hint"]} for i in chosen
+    ] + [
+        {"id": p["id"], "frame": p["frame"], "hint": p["hint"]} for p in personal
+    ]
+    random.shuffle(result)
+
+    # CONT-002: top up any missing personal items in the background — never
+    # blocks or fails the round it rode in on.
+    try:
+        asyncio.create_task(backfill_missing(user_id, "verbindungen"))
+    except Exception:
+        logger.exception("Verbindungen backfill scheduling failed")
+
+    return {"items": result}
 
 
 _MAX_ANSWER_CHARS = 120
@@ -109,6 +151,16 @@ async def submit_attempt(
     """Judge one typed chunk completion, feed the ledger, return the verdict
     + the canonical chunk to memorize (only now — it would answer the item)."""
     item = load_items().get(body.item_id)
+    if item is None:
+        # CONT-002: personal forged items live in user_drill_items, keyed by
+        # the same id the round handed out; scoped to the caller.
+        row = await db.scalar(
+            select(UserDrillItem).where(
+                UserDrillItem.id == body.item_id,
+                UserDrillItem.user_id == user_id,
+            )
+        )
+        item = row.item if row is not None and row.item is not None else None
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
     answer = " ".join(body.answer.split())

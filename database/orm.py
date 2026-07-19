@@ -30,6 +30,7 @@ from sqlalchemy import (
     Identity,
     Index,
     Integer,
+    String,
     Text,
     TIMESTAMP,
     UniqueConstraint,
@@ -363,4 +364,36 @@ class DrillAttempt(Base):
     __table_args__ = (
         Index("ix_drill_attempts_user_created", "user_id", "created_at"),
         Index("ix_drill_attempts_user_pattern", "user_id", "pattern_id"),
+    )
+
+
+# ── Per-user drill items (CONT-002) ──────────────────────────────────────
+# One row per (user, exercise, source card): a per-user drill item forged
+# from one of the learner's own Satzschmiede cards, in the SAME dict shape
+# the drill's YAML catalog uses so round/attempt code treats both sources
+# uniformly. See ``drills/forge.py`` for the forging logic.
+
+
+class UserDrillItem(Base):
+    """CONT-002: one per-user drill item forged from one of the learner's own
+    Satzschmiede cards. ``item`` holds the SAME dict shape the drill's YAML
+    catalog uses, so round/attempt code treats both sources uniformly; a SQL-
+    NULL ``item`` is a tombstone — "forge ran, this card yields nothing for
+    this exercise" — so backfill never retries it (``none_as_null=True`` is
+    load-bearing: without it SQLAlchemy stores Python None as JSON 'null',
+    which the round handlers' ``item.is_not(None)`` SQL filter does NOT
+    exclude). One row per (user, exercise, source card): the forge is
+    idempotent by constraint, not by care."""
+
+    __tablename__ = "user_drill_items"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    exercise: Mapped[str] = mapped_column(String(32))
+    source_card_id: Mapped[str] = mapped_column(ForeignKey("cards.id"))
+    item: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "exercise", "source_card_id"),
     )
