@@ -144,6 +144,30 @@ export async function submitAttempt(
   return request("/satz/attempts", token, { method: "POST", body: form });
 }
 
+// SATZ-007: on-demand unpacking of a correction (POST /satz/explain) — one
+// short English paragraph; nothing is recorded server-side.
+export async function explainAttempt(
+  token: string,
+  cardId: string,
+  transcript: string,
+  corrected: string,
+  error: string | null,
+  sessionId?: string
+): Promise<string> {
+  const res = await request<{ explanation: string }>("/satz/explain", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      card_id: cardId,
+      transcript,
+      corrected,
+      error,
+      session_id: sessionId ?? null,
+    }),
+  });
+  return res.explanation;
+}
+
 // The learner peeked at the example instead of attempting — record the lapse
 // so the reveal can't silently keep a long interval alive. The card drops to
 // "due now"; reps stay untouched (a reveal isn't a graded attempt).

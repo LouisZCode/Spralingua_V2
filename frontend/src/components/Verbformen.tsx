@@ -14,6 +14,7 @@ import {
   UnauthorizedError,
   type AttemptResult,
 } from "./verbformen/api";
+import { explainAttempt } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 
 const redShadow = {
@@ -95,6 +96,37 @@ export default function Verbformen() {
       if (!token) throw new UnauthorizedError("/verbformen/attempts");
       try {
         return await submitAttempt(token, cardId, audio, sessionId);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  // SATZ-007: unpack a correction on demand — same /satz/explain call as
+  // Satzschmiede (keyed on the catalog card, not pool ownership, so it works
+  // against this drill's overlay deck too).
+  const handleExplain = useCallback(
+    async (
+      cardId: string,
+      transcript: string,
+      corrected: string,
+      error: string | null,
+      sessionId?: string
+    ): Promise<string> => {
+      if (!token) throw new UnauthorizedError("/satz/explain");
+      try {
+        return await explainAttempt(
+          token,
+          cardId,
+          transcript,
+          corrected,
+          error,
+          sessionId
+        );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           signOut();
@@ -189,6 +221,7 @@ export default function Verbformen() {
             onRemove={handleRemove}
             onAttempt={handleAttempt}
             onReveal={handleReveal}
+            onExplain={handleExplain}
             sessionPrefix="vf"
           />
         )}

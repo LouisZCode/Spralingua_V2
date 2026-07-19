@@ -82,6 +82,7 @@ export default function VocabTrainer({
   onRemove,
   onAttempt,
   onReveal,
+  onExplain,
   sessionPrefix = "satz",
 }: {
   deck: DeckCard[];
@@ -98,6 +99,15 @@ export default function VocabTrainer({
   ) => Promise<AttemptResult>;
   // Record a practice-mode peek as a lapse (fire-and-forget via the parent).
   onReveal: (cardId: string) => void;
+  // SATZ-007: unpack the correction on demand (POST /satz/explain via the
+  // parent). Optional — the button only renders when the parent wires it.
+  onExplain?: (
+    cardId: string,
+    transcript: string,
+    corrected: string,
+    error: string | null,
+    sessionId?: string
+  ) => Promise<string>;
   // Langfuse practice-session id prefix (OBS-007). The Verbformen mode
   // (GRAM-002 Exercise C) reuses this trainer on a verb-only sub-deck and
   // passes "vf" so its sittings group apart from regular Satzschmiede ones.
@@ -121,6 +131,8 @@ export default function VocabTrainer({
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explaining, setExplaining] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
@@ -223,6 +235,7 @@ export default function VocabTrainer({
     if (busy || flipped || !card) return;
     setAttemptError(null);
     setResult(null);
+    setExplanation(null);
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -299,11 +312,33 @@ export default function VocabTrainer({
     }
   }
 
+  // SATZ-007: one on-demand call; the paragraph replaces the button in place.
+  async function handleExplain() {
+    if (!card || !result?.corrected || !onExplain || explaining) return;
+    setExplaining(true);
+    try {
+      setExplanation(
+        await onExplain(
+          card.id,
+          result.transcript,
+          result.corrected,
+          result.error ?? null,
+          practiceSessionRef.current ?? undefined
+        )
+      );
+    } catch {
+      setExplanation("Couldn't fetch the explanation — try again in a moment.");
+    } finally {
+      setExplaining(false);
+    }
+  }
+
   // Reset the per-card scratch state on every move.
   function resetScratch() {
     setRevealed(false);
     setFlipped(false);
     setResult(null);
+    setExplanation(null);
     setAttemptError(null);
   }
 
@@ -578,6 +613,25 @@ export default function VocabTrainer({
                         )}
                       </div>
                     )}
+                    {/* SATZ-007: the terse note not enough? One tap fetches a
+                        plain-English unpacking of this exact correction. */}
+                    {result.corrected &&
+                      (!result.wordOk || !result.grammarOk) &&
+                      onExplain &&
+                      (explanation ? (
+                        <p className="mt-3 font-body text-[13px] leading-snug text-ink-soft">
+                          {explanation}
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleExplain}
+                          disabled={explaining}
+                          className="mt-3 font-body text-[11px] font-black uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red disabled:opacity-50"
+                        >
+                          {explaining ? "Explaining…" : "Explain more →"}
+                        </button>
+                      ))}
                   </>
                 ) : (
                   card.example && (

@@ -8,6 +8,7 @@ import { useAuth } from "./auth/AuthContext";
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import PackModal from "./satzschmiede/PackModal";
 import {
+  explainAttempt,
   fetchDeck,
   removeCard,
   revealCard,
@@ -101,6 +102,37 @@ export default function Satzschmiede() {
       if (!token) throw new UnauthorizedError("/satz/attempts");
       try {
         return await submitAttempt(token, cardId, audio, sessionId);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  // SATZ-007: unpack a correction on demand. Auth errors sign out here (same
+  // policy as every other call); everything else rethrows so the trainer can
+  // show its own fallback message next to the button.
+  const handleExplain = useCallback(
+    async (
+      cardId: string,
+      transcript: string,
+      corrected: string,
+      error: string | null,
+      sessionId?: string
+    ): Promise<string> => {
+      if (!token) throw new UnauthorizedError("/satz/explain");
+      try {
+        return await explainAttempt(
+          token,
+          cardId,
+          transcript,
+          corrected,
+          error,
+          sessionId
+        );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           signOut();
@@ -206,6 +238,7 @@ export default function Satzschmiede() {
             onRemove={handleRemove}
             onAttempt={handleAttempt}
             onReveal={handleReveal}
+            onExplain={handleExplain}
           />
         )}
 

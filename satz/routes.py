@@ -28,6 +28,7 @@ from database.repository import record_drill_attempt, record_grammar_error
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
+from satz.explainer import explain_correction
 from satz.scheduler import schedule
 
 router = APIRouter(prefix="/satz", tags=["satzschmiede"])
@@ -737,3 +738,58 @@ async def reveal_card(
     user_card.due_at = datetime.now()
     await db.commit()
     return {"dueInDays": 0}
+
+
+class ExplainIn(BaseModel):
+    card_id: str
+    transcript: str
+    corrected: str
+    error: str | None = None
+    # OBS-007: same optional practice-sitting id as /attempts.
+    session_id: str | None = None
+
+
+@router.post("/explain")
+async def explain_attempt(
+    body: ExplainIn,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """SATZ-007: unpack a correction the learner just saw — one on-demand LLM
+    call, no schedule/ledger/attempt-log writes. Keyed on the catalog card
+    (not pool ownership) so the Verbformen mount of the same trainer works
+    against its overlay deck too."""
+    transcript = body.transcript.strip()
+    corrected = body.corrected.strip()
+    if not transcript or not corrected:
+        raise HTTPException(status_code=422, detail="Nothing to explain yet.")
+    if len(transcript) > 600 or len(corrected) > 600 or len(body.error or "") > 300:
+        raise HTTPException(
+            status_code=422, detail="That attempt is too long to explain."
+        )
+    if body.session_id and len(body.session_id) > 64:
+        raise HTTPException(status_code=422, detail="Bad session id.")
+
+    card = await db.get(VocabCard, body.card_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail="Unknown card.")
+
+    with tracer.start_as_current_span("satz-explain-attempt") as span:
+        span.set_attribute("user.id", user_id)
+        span.set_attribute("card_id", body.card_id)
+        if body.session_id:
+            span.set_attribute("langfuse.session.id", body.session_id)
+        span.set_attribute("langfuse.trace.input", transcript)
+        try:
+            result = await explain_correction(
+                card, transcript, corrected, body.error, user_id=user_id
+            )
+        except Exception as exc:
+            span.record_exception(exc)
+            logger.exception("Satz explain call failed (card {})", body.card_id)
+            raise HTTPException(
+                status_code=502,
+                detail="The coach is unavailable right now — try again in a moment.",
+            )
+        span.set_attribute("langfuse.trace.output", result.explanation)
+    return {"explanation": result.explanation}
