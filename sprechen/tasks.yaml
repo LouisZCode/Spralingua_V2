@@ -295,3 +295,229 @@ tasks:
       infinitive constructions (prefix unsplit) do not satisfy the
       constraint.
     keyterms: [aufhören, zurückrufen, weitermachen, vorbeikommen, abgeben]
+
+  # ── CONT-001 growth batch (2026-07-19) — food/friends/weather/home lens ──
+  - id: v2-rezept
+    pattern_id: v2-wortstellung
+    title: In der Pfanne · Im Ofen · Zum Schluss
+    prompt: >-
+      Tell me how you cook your favorite dish — but start EVERY sentence with
+      something other than the subject: a place in the kitchen (In der Pfanne,
+      Im Ofen, Auf dem Teller) or a step word (Zuerst, Dann, Zum Schluss). At
+      least 3 sentences.
+    forces: >-
+      Constraint: at least 3 main clauses, each opening with a non-subject
+      element (a kitchen place or a step word). In each, the conjugated verb
+      must come IMMEDIATELY after that opener (position two), subject after
+      the verb. A sentence that starts with the subject does not count toward
+      the three.
+    keyterms: [Pfanne, Ofen, Zutaten, zuerst]
+
+  - id: v2-freunde
+    pattern_id: v2-wortstellung
+    title: Damals · Heute · Neulich
+    prompt: >-
+      Tell me about your best friend — how you met and what you do together —
+      but start EVERY sentence with something other than the subject: a time
+      word like Damals, Heute, or Neulich. At least 3 sentences.
+    forces: >-
+      Constraint: at least 3 main clauses, each opening with a non-subject
+      time word (Damals, Heute, Neulich, …). In each, the conjugated verb must
+      come IMMEDIATELY after that opener (position two), subject after the
+      verb. A sentence that starts with the subject does not count toward the
+      three.
+    keyterms: [damals, heute, neulich]
+
+  - id: wenn-wetter
+    pattern_id: nebensatz-verbende
+    title: wenn × 2
+    prompt: >-
+      What do you do when the weather is nice, and what do you do when it's
+      bad? Answer in two or three sentences — and use "wenn" twice.
+    forces: >-
+      Constraint: "wenn" appears at least twice. In EVERY wenn-clause the
+      conjugated verb must stand at the very end ("wenn das Wetter schön
+      ist", never "wenn ist das Wetter schön").
+    keyterms: [wenn, Wetter, regnet]
+
+  - id: obwohl-freundschaft
+    pattern_id: nebensatz-verbende
+    title: obwohl × 2
+    prompt: >-
+      Tell me two good things about a friendship of yours — but for each one,
+      add an "obwohl" twist: something that isn't ideal, but doesn't change
+      how you feel. Use "obwohl" twice.
+    forces: >-
+      Constraint: "obwohl" appears at least twice. In EVERY obwohl-clause the
+      conjugated verb must stand at the very end ("obwohl wir uns selten
+      sehen", never "obwohl wir sehen uns selten").
+    keyterms: [obwohl]
+
+  - id: perfekt-regentag
+    pattern_id: perfekt-satzklammer
+    title: Ein Regentag (Perfekt)
+    prompt: >-
+      Tell me about the last rainy or snowy day you remember — what did you
+      do at home? At least three things, in the past.
+    forces: >-
+      Constraint: at least 3 past-tense clauses (count aux+participle pairs
+      or war/hatte clauses, not sentences). In Perfekt clauses haben/sein must
+      stand in position two and the Partizip II at the very END, with
+      objects/places inside the bracket ("Ich habe einen Film geschaut",
+      never "Ich habe geschaut einen Film"). Präteritum war/hatte/wollte
+      counts as a valid past sentence too.
+    keyterms: [Regen, Film, Tee]
+
+  - id: perfekt-hobby
+    pattern_id: perfekt-satzklammer
+    title: Neues Hobby (Perfekt)
+    prompt: >-
+      Tell me about the last time you tried a new hobby or activity — what
+      happened? Three sentences, in the past, and every sentence must say
+      WHAT or WHERE (an object or a place), so something sits between the two
+      verb parts.
+    forces: >-
+      Constraint: 3 past-tense clauses, each with material inside the verb
+      bracket — haben/sein in position two, Partizip II at the END, and at
+      least an object or place phrase between them. An empty bracket
+      (auxiliary immediately followed by the participle) does not count
+      toward the three.
+    keyterms: [Hobby, ausprobiert, Kurs]
+
+  - id: modal-abendessen
+    pattern_id: modalverb-infinitiv-ende
+    title: Das Abendessen planen
+    prompt: >-
+      You're planning a dinner for friends: one thing you WANT to cook, one
+      thing you MUST buy beforehand, and one thing you probably CAN'T finish
+      in time. Use wollen/möchten, müssen and können — one each.
+    forces: >-
+      Constraint: three clauses with three DIFFERENT modal verbs (wollen or
+      möchten, müssen, können). In each, the modal stands in position two and
+      the full verb goes to the very END as an infinitive ("Ich möchte eine
+      Suppe kochen", never "Ich möchte kochen eine Suppe").
+    keyterms: [möchte, muss, kann]
+
+  - id: trenn-kochabend
+    pattern_id: trennbare-verben
+    title: Kochabend mit Freunden
+    prompt: >-
+      Describe a cooking night with friends — use at least three of these
+      verbs: mitbringen, ausprobieren, abwaschen, aufwärmen. Present tense,
+      main clauses (no modal verbs!).
+    forces: >-
+      Constraint: at least three of the listed separable verbs, in present-
+      tense MAIN clauses — so each prefix must split off to the END of its
+      clause ("Jeder bringt etwas mit", never "Jeder mitbringt etwas"). A verb
+      hidden behind a modal (infinitive, prefix unsplit) does not count
+      toward the three.
+    keyterms: [mitbringen, ausprobieren, abwaschen, aufwärmen]
+
+  # ── CONT-001 growth batch (2026-07-19) — work/travel/money/living lens ──
+  - id: v2-buerotag
+    pattern_id: v2-wortstellung
+    title: Morgens · Danach · Feierabend
+    prompt: >-
+      Tell me about a typical day at work — but start EVERY sentence with
+      something other than the subject: a time (Morgens, Um neun, Nach der
+      Mittagspause), or Danach / Endlich / Zum Feierabend. At least 3
+      sentences.
+    forces: >-
+      Constraint: at least 3 main clauses, each opening with a non-subject
+      element (time or sequence adverb). In each, the conjugated verb must
+      come IMMEDIATELY after that opener (position two) with the subject
+      after the verb. A sentence that starts with the subject does not count
+      toward the three.
+    keyterms: [morgens, danach, Feierabend, Büro]
+
+  - id: v2-budget
+    pattern_id: v2-wortstellung
+    title: Am Monatsanfang · Online · Leider
+    prompt: >-
+      Tell me how you handle money each month, or describe a recent shopping
+      trip — start EVERY sentence with something other than the subject: a
+      time (Am Monatsanfang, Danach), a place (Im Geschäft, Online), or
+      Leider / Zum Glück. At least 3 sentences.
+    forces: >-
+      Constraint: at least 3 main clauses, each opening with a non-subject
+      element (time, place, Leider/Zum Glück). The conjugated verb must come
+      IMMEDIATELY after that opener (position two), subject after the verb.
+      A sentence that starts with the subject does not count toward the
+      three.
+    keyterms: [Geld, Geschäft, online, leider]
+
+  - id: wenn-zukunft
+    pattern_id: nebensatz-verbende
+    title: wenn × 2 (Zukunftspläne)
+    prompt: >-
+      Tell me two things about your future plans — career, money, or a move
+      — and start both with "wenn": "Wenn ich …, (dann) …" (e.g. a
+      promotion, more money, a new city).
+    forces: >-
+      Constraint: "wenn" appears at least twice, each opening a conditional
+      clause. In EVERY wenn-clause the conjugated verb must stand at the
+      very end ("wenn ich befördert werde", never "wenn ich werde
+      befördert"). Only the wenn-clause verb position is checked, not the
+      dann-clause.
+    keyterms: [wenn, Zukunft, Geld]
+
+  - id: obwohl-job
+    pattern_id: nebensatz-verbende
+    title: obwohl × 2 (Der Job)
+    prompt: >-
+      Tell me two things about your job or work life using "obwohl" —
+      something true even though something else is the case, e.g. "Obwohl
+      die Arbeit stressig ist, mag ich sie."
+    forces: >-
+      Constraint: "obwohl" appears at least twice. In EVERY obwohl-clause
+      the conjugated verb must stand at the very end ("obwohl die Arbeit
+      stressig ist", never "obwohl die Arbeit ist stressig").
+    keyterms: [obwohl, Arbeit]
+
+  - id: perfekt-anschaffung
+    pattern_id: perfekt-satzklammer
+    title: Die große Anschaffung (Perfekt)
+    prompt: >-
+      Tell me about something expensive you bought or saved up for recently
+      — at least three sentences, in the past, and each one must say WHAT
+      you bought/saved or WHERE, so something sits between the two verb
+      parts.
+    forces: >-
+      Constraint: 3 past-tense clauses, each with material inside the verb
+      bracket — haben/sein in position two, Partizip II at the END, and at
+      least an object or place phrase between them ("Ich habe drei Monate
+      gespart", never "Ich habe gespart drei Monate"). An empty bracket does
+      not count toward the three. Präteritum war/hatte/musste counts as a
+      valid past sentence too.
+    keyterms: [gekauft, gespart, Geld]
+
+  - id: modal-flugregeln
+    pattern_id: modalverb-infinitiv-ende
+    title: Am Flughafen
+    prompt: >-
+      Three things about a flight or trip abroad: one thing you MUST do
+      before boarding, one thing you CAN'T do on the plane, and one thing
+      you WANT to do once you land. Use müssen, können (with nicht) and
+      wollen/möchten — one each.
+    forces: >-
+      Constraint: three clauses with three DIFFERENT modal verbs (müssen,
+      können + nicht, wollen or möchten). In each, the modal stands in
+      position two and the full verb goes to the very END as an infinitive
+      ("Ich muss meinen Reisepass zeigen", never "Ich muss zeigen meinen
+      Reisepass").
+    keyterms: [muss, kann, möchte, Reisepass]
+
+  - id: trenn-wohnungssuche
+    pattern_id: trennbare-verben
+    title: Die Wohnungssuche, zerlegt
+    prompt: >-
+      Describe an apartment hunt (real or imagined) — use at least three of
+      these verbs: anrufen, ausfüllen, abgeben, umziehen, einziehen. Present
+      tense.
+    forces: >-
+      Constraint: at least three of the listed separable verbs, in present-
+      tense MAIN clauses — so each prefix must split off to the END of its
+      clause ("Ich rufe den Vermieter an", never "Ich anrufe den
+      Vermieter"). A verb hidden behind a modal (infinitive, prefix
+      unsplit) does not count toward the three.
+    keyterms: [anrufen, ausfüllen, abgeben, umziehen, einziehen]

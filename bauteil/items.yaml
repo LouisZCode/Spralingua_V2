@@ -405,3 +405,203 @@ items:
     frame: "Ich war gestern bei ___."
     answer: dem Arzt
     hint: I was at the doctor's yesterday.
+
+  # ── CONT-001 growth batch (2026-07-19) — household/food/clothing lens ───
+  - id: ae-suppe-nom
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: f
+    article: die
+    parts: [die, frisch, Suppe]
+    frame: "___ duftet herrlich."
+    answer: Die frische Suppe
+    hint: The fresh soup smells wonderful.
+
+  - id: ae-schrank-dat
+    pattern_id: adjektivendungen
+    case: dative
+    gender: m
+    article: der
+    parts: [der, alt, Schrank]
+    frame: "Die Katze schläft unter ___."
+    answer: dem alten Schrank
+    hint: The cat sleeps under the old wardrobe.
+
+  - id: ae-hemd-acc
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: n
+    article: das
+    parts: [das, neu, Hemd]
+    frame: "Er bügelt ___."
+    answer: das neue Hemd
+    hint: He is ironing the new shirt.
+
+  - id: ae-sofa-acc
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: n
+    article: ein
+    parts: [ein, bequem, Sofa]
+    frame: "Wir kaufen ___."
+    answer: ein bequemes Sofa
+    hint: We are buying a comfortable sofa.
+
+  - id: ae-blumen-nom
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: pl
+    parts: [bunt, Blumen]
+    frame: "___ stehen auf dem Balkon."
+    answer: Bunte Blumen
+    hint: Colorful flowers are on the balcony.
+
+  - id: ae-teller-acc
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: m
+    article: kein
+    parts: [kein, sauber, Teller]
+    frame: "Ich finde ___ mehr."
+    answer: keinen sauberen Teller
+    hint: I can't find a clean plate anymore.
+
+  - id: pe-hund-dat
+    pattern_id: possessiv-endung
+    case: dative
+    gender: m
+    article: unser
+    parts: [unser, alt, Hund]
+    frame: "Ich gebe ___ einen Knochen."
+    answer: unserem alten Hund
+    hint: I'm giving our old dog a bone.
+
+  - id: pe-schal-nom
+    pattern_id: possessiv-endung
+    case: nominative
+    gender: m
+    article: dein
+    parts: [dein, Schal]
+    frame: "___ liegt auf dem Bett."
+    answer: Dein Schal
+    hint: Your scarf is lying on the bed.
+
+  - id: pe-blumen-acc
+    pattern_id: possessiv-endung
+    case: accusative
+    gender: pl
+    article: ihr
+    parts: [ihr, Blumen]
+    frame: "Sie gießen ___ jeden Tag."
+    answer: ihre Blumen
+    hint: They water their flowers every day.
+
+  - id: nd-nachbar-acc
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: der
+    parts: [der, Nachbar]
+    frame: "Im Garten treffe ich oft ___."
+    answer: den Nachbarn
+    hint: In the garden I often meet the neighbor.
+
+  # ── CONT-001 growth batch (2026-07-19) — city/work/travel/people lens ───
+  - id: ae-der-nom-m-flughafen
+    pattern_id: adjektivendungen
+    case: nominative
+    gender: m
+    article: der
+    parts: [der, neu, Flughafen]
+    frame: "___ liegt außerhalb der Stadt."
+    answer: Der neue Flughafen
+    hint: The new airport is located outside the city.
+
+  - id: ae-der-dat-f-stadt
+    pattern_id: adjektivendungen
+    case: dative
+    gender: f
+    article: die
+    parts: [die, alt, Stadt]
+    frame: "Wir wohnen in ___."
+    answer: der alten Stadt
+    hint: We live in the old city.
+
+  - id: ae-ein-acc-n-rathaus
+    pattern_id: adjektivendungen
+    case: accusative
+    gender: n
+    article: ein
+    parts: [ein, modern, Rathaus]
+    frame: "Die Stadt baut ___."
+    answer: ein modernes Rathaus
+    hint: The city is building a modern city hall.
+
+  - id: ae-null-dat-pl-busse
+    pattern_id: adjektivendungen
+    case: dative
+    gender: pl
+    parts: [modern, Busse]
+    frame: "Er fährt mit ___ zur Arbeit."
+    answer: modernen Bussen
+    hint: He takes modern buses to work.
+
+  - id: pe-euer-dat-m-koffer
+    pattern_id: possessiv-endung
+    case: dative
+    gender: m
+    article: euer
+    parts: [euer, Koffer]
+    frame: "In ___ ist noch Platz."
+    answer: eurem Koffer
+    hint: There's still room in your (plural) suitcase.
+
+  - id: pe-unser-adj-dat-n-buero
+    pattern_id: possessiv-endung
+    case: dative
+    gender: n
+    article: unser
+    parts: [unser, klein, Büro]
+    frame: "In ___ arbeiten vier Leute."
+    answer: unserem kleinen Büro
+    hint: Four people work in our small office.
+
+  - id: nd-der-acc-polizist
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: der
+    parts: [der, Polizist]
+    frame: "Ich frage ___ nach dem Weg."
+    answer: den Polizisten
+    hint: I'm asking the police officer for directions.
+
+  - id: nd-der-dat-tourist
+    pattern_id: n-deklination
+    case: dative
+    gender: m
+    article: der
+    parts: [der, Tourist]
+    frame: "Der Reiseleiter hilft ___."
+    answer: dem Touristen
+    hint: The tour guide is helping the tourist.
+
+  - id: nd-ein-acc-praktikant
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: ein
+    parts: [ein, Praktikant]
+    frame: "Die Firma sucht ___."
+    answer: einen Praktikanten
+    hint: The company is looking for an intern.
+
+  - id: nd-decoy-acc-fahrer
+    pattern_id: n-deklination
+    case: accusative
+    gender: m
+    article: der
+    parts: [der, Fahrer]
+    frame: "Ich sehe ___ nicht."
+    answer: den Fahrer
+    hint: I don't see the driver.

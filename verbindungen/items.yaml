@@ -191,3 +191,160 @@ items:
     answer: Wofür
     chunk: wo + für → wofür (asks about a thing)
     hint: What are you most interested in?
+
+  # ── CONT-001 growth batch (2026-07-19) — home/family/health lens ────────
+  - id: fv-entschuldigen-bei
+    pattern_id: reflexivpronomen
+    frame: "Nach dem Streit habe ich ___ meinem Bruder entschuldigt."
+    answer: mich bei
+    chunk: sich entschuldigen bei + Dativ
+    hint: After the argument, I apologized to my brother.
+
+  - id: fv-helfen-decoy
+    pattern_id: reflexivpronomen
+    frame: "Mein Vater hilft ___ der Hausarbeit."
+    answer: bei
+    chunk: helfen bei + Dativ (not reflexive!)
+    hint: My father helps with the housework.
+
+  - id: fv-treffen-mit
+    pattern_id: reflexivpronomen
+    frame: "Wir treffen ___ meinen Schwiegereltern zum Abendessen."
+    answer: uns mit
+    chunk: sich treffen mit + Dativ
+    hint: We're meeting up with my in-laws for dinner.
+
+  - id: fv-achten-decoy
+    pattern_id: reflexivpronomen
+    frame: "Meine Mutter achtet ___ ihre Gesundheit."
+    answer: auf
+    chunk: achten auf + Akkusativ (not reflexive!)
+    hint: My mother pays attention to her health.
+
+  - id: fv-unterhalten-ueber
+    pattern_id: reflexivpronomen
+    frame: "Ihr unterhaltet ___ eure Kinder beim Abendessen."
+    answer: euch über
+    chunk: sich unterhalten über + Akkusativ
+    hint: You all talk about your kids over dinner.
+
+  - id: fv-gewoehnen-an-die
+    pattern_id: verben-mit-praepositionen
+    frame: "Nach dem Umzug gewöhne ich mich langsam ___ neue Nachbarschaft."
+    answer: an die
+    chunk: sich gewöhnen an + Akkusativ
+    hint: After the move, I'm slowly getting used to the new neighborhood.
+
+  - id: fv-vorbereiten-auf-die
+    pattern_id: verben-mit-praepositionen
+    frame: "Meine Tochter bereitet sich ___ große Prüfung vor."
+    answer: auf die
+    chunk: sich vorbereiten auf + Akkusativ
+    hint: My daughter is preparing for the big exam.
+
+  - id: fv-streiten-mit-dem
+    pattern_id: verben-mit-praepositionen
+    frame: "Wir haben uns schon wieder ___ Nachbarn gestritten."
+    answer: mit dem
+    chunk: sich streiten mit + Dativ
+    hint: We argued with the neighbor again.
+
+  - id: fv-erholen-von-den
+    pattern_id: verben-mit-praepositionen
+    frame: "Mein Mann muss sich nach der Operation noch ___ Schmerzen erholen."
+    answer: von den
+    chunk: sich erholen von + Dativ
+    hint: My husband still needs to recover from the pain after the operation.
+
+  - id: fv-darum-pruefung
+    pattern_id: da-wo-komposita
+    frame: "Meine Tochter hat bald ihre Abschlussprüfung — ich mache mir ___ wirklich Sorgen."
+    answer: darum
+    chunk: da + um → darum (refers back to a thing)
+    hint: My daughter has her final exam soon — I'm really worried about it.
+
+  - id: fv-worunter-stress
+    pattern_id: da-wo-komposita
+    frame: "Meine Tochter ist seit Wochen so gestresst — ___ leidet sie eigentlich?"
+    answer: Worunter
+    chunk: wo + unter → worunter (asks about a thing)
+    hint: My daughter has been so stressed for weeks — what is she actually suffering from?
+
+  # ── CONT-001 growth batch (2026-07-19) — work/city/travel lens ──────────
+  - id: fv-bewerben-um
+    pattern_id: reflexivpronomen
+    frame: "Ich bewerbe ___ die Stelle."
+    answer: mich um
+    chunk: sich bewerben um + Akkusativ
+    hint: I'm applying for the position.
+
+  - id: fv-teilnehmen-decoy
+    pattern_id: reflexivpronomen
+    frame: "Ich nehme ___ der Konferenz teil."
+    answer: an
+    chunk: teilnehmen an + Dativ (not reflexive!)
+    hint: I'm attending the conference.
+
+  - id: fv-vorbereiten-auf
+    pattern_id: reflexivpronomen
+    frame: "Bereitest du ___ das Vorstellungsgespräch vor?"
+    answer: dich auf
+    chunk: sich vorbereiten auf + Akkusativ
+    hint: Are you preparing for the job interview?
+
+  - id: fv-konzentrieren-auf
+    pattern_id: reflexivpronomen
+    frame: "Er konzentriert ___ seine Aufgaben."
+    answer: sich auf
+    chunk: sich konzentrieren auf + Akkusativ
+    hint: He's focusing on his tasks.
+
+  - id: fv-antworten-decoy
+    pattern_id: reflexivpronomen
+    frame: "Er antwortet nicht ___ meine E-Mail."
+    answer: auf
+    chunk: antworten auf + Akkusativ (not reflexive!)
+    hint: He's not answering my email.
+
+  - id: fv-bitten-um-die
+    pattern_id: verben-mit-praepositionen
+    frame: "Der Schaffner bittet mich ___ Fahrkarte."
+    answer: um die
+    chunk: bitten um + Akkusativ
+    hint: The conductor is asking me for the ticket.
+
+  - id: fv-informieren-ueber-den
+    pattern_id: verben-mit-praepositionen
+    frame: "Ich informiere mich gerade ___ neuen Laptop."
+    answer: über den
+    chunk: sich informieren über + Akkusativ
+    hint: I'm currently researching the new laptop.
+
+  - id: fv-diskutieren-ueber-die
+    pattern_id: verben-mit-praepositionen
+    frame: "Wir diskutieren gerade ___ neue Buslinie."
+    answer: über die
+    chunk: diskutieren über + Akkusativ
+    hint: We're discussing the new bus line right now.
+
+  - id: fv-arbeiten-an-der
+    pattern_id: verben-mit-praepositionen
+    frame: "Ich arbeite gerade ___ Präsentation."
+    answer: an der
+    chunk: arbeiten an + Dativ
+    hint: I'm working on the presentation right now.
+
+  - id: fv-damit-verspaetung
+    pattern_id: da-wo-komposita
+    frame: "Der Zug hat oft Verspätung — ich rechne schon ___."
+    answer: damit
+    chunk: da + mit → damit (refers back to a thing)
+    hint: The train is often late — I already expect that.
+
+  - id: fv-wovon-verspaetung
+    pattern_id: da-wo-komposita
+    frame: "___ hängt die Verspätung ab?"
+    answer: Wovon
+    chunk: wo + von → wovon (asks about a thing)
+    hint: What does the delay depend on?
+

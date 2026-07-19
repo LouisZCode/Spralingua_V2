@@ -1,4 +1,4 @@
-# Starter set — DRAFT content for user review, not final.
+# Scenario catalog — starter set + CONT-001 growth batches.
 #
 # Szenario-Sparring (P1, thin slice) scenario catalog. Content-as-data like
 # sprechen/tasks.yaml; szenario/content.py validates fail-loud at startup.
@@ -232,3 +232,152 @@ scenarios:
       - der Spiegel
       - der Kamm
       - die Frisur
+
+  # ── CONT-001 growth batch (2026-07-19) — leisure/errands lens ───────────
+  - id: buchhandlung
+    stufe: 1
+    persona:
+      name: Frau Brandt
+      role: Buchhändlerin in der Buchhandlung
+      attitude: friendly
+    kontext: >-
+      You're browsing in a small independent bookshop and the bookseller
+      chats with you while restocking a shelf nearby.
+    questions:
+      - Lesen Sie lieber Romane oder Sachbücher?
+      - Wie oft kaufen Sie sich ein neues Buch?
+      - Was war das letzte Buch, das Sie richtig begeistert hat?
+      - Planen Sie, im Urlaub besonders viel zu lesen?
+      - Was halten Sie von E-Books im Vergleich zu gedruckten Büchern?
+    ziel_vokabular:
+      - die Buchhandlung
+      - der Roman
+      - das Sachbuch
+      - das Regal
+      - der Bestseller
+      - das Lesezeichen
+      - der Einband
+
+  - id: wochenmarkt
+    stufe: 1
+    persona:
+      name: Herr Fischer
+      role: Verkäufer am Marktstand
+      attitude: friendly
+    kontext: >-
+      You're choosing vegetables at a farmer's stall on the weekly market
+      and the vendor chats with you while weighing your purchase.
+    questions:
+      - Kaufen Sie lieber Obst oder Gemüse?
+      - Kommen Sie regelmäßig zum Wochenmarkt, oder eher selten?
+      - Haben Sie schon mal etwas ganz Neues bei uns probiert?
+      - Kochen Sie heute Abend etwas Besonderes mit dem Gemüse?
+      - "Was ist Ihnen beim Einkaufen wichtiger: der Preis oder die Qualität?"
+    ziel_vokabular:
+      - der Marktstand
+      - das Gemüse
+      - das Obst
+      - die Ware
+      - der Bauer
+      - die Saison
+      - der Korb
+
+  - id: apotheke
+    stufe: 1
+    persona:
+      name: Frau Sarwari
+      role: Apothekerin in der Apotheke
+      attitude: friendly
+    kontext: >-
+      You're waiting at the counter of a small neighborhood pharmacy and
+      the pharmacist chats with you while looking for what you need.
+    questions:
+      - Vertrauen Sie bei einer Erkältung lieber auf Hausmittel oder auf Medikamente aus der Apotheke?
+      - Wie oft sind Sie im Winter erkältet?
+      - Haben Sie in letzter Zeit gut geschlafen, oder eher schlecht?
+      - Wollen Sie sich für die kalte Jahreszeit mit ein paar Vitaminen eindecken?
+      - Wie wichtig ist Ihnen gesunde Ernährung im Alltag?
+    ziel_vokabular:
+      - die Apotheke
+      - die Tablette
+      - der Hustensaft
+      - die Salbe
+      - die Erkältung
+      - das Vitamin
+      - der Schlaf
+
+  # ── CONT-001 growth batch (2026-07-19) — social/service lens ────────────
+  - id: restaurant
+    stufe: 1
+    persona:
+      name: Tobias
+      role: Kellner im Restaurant
+      attitude: friendly
+    kontext: >-
+      You're having dinner alone at a small neighborhood restaurant and the
+      waiter chats with you while bringing your order.
+    questions:
+      - Essen Sie lieber deftig oder eher leicht?
+      - Wie oft gehen Sie abends essen, statt zu Hause zu kochen?
+      - Waren Sie schon einmal in einem Restaurant, das Ihnen besonders gut gefallen hat?
+      - Haben Sie nach dem Essen heute Abend noch etwas vor?
+      - Was ist für Sie das Wichtigste an einem guten Restaurant?
+    ziel_vokabular:
+      - die Speisekarte
+      - das Gericht
+      - die Vorspeise
+      - der Nachtisch
+      - die Portion
+      - der Tisch
+      - das Restaurant
+      - der Kellner
+
+  - id: taxi
+    stufe: 1
+    persona:
+      name: Herr Krüger
+      role: Taxifahrer
+      attitude: friendly
+    kontext: >-
+      You're riding in a taxi to the airport and the driver starts a friendly
+      conversation during the trip.
+    questions:
+      - Fahren Sie generell lieber mit dem Taxi oder mit dem Bus?
+      - Wie oft sind Sie beruflich unterwegs?
+      - Hatten Sie schon einmal eine besonders interessante Taxifahrt?
+      - Was haben Sie vor, sobald Sie am Flughafen ankommen?
+      - Was gefällt Ihnen an dieser Stadt am besten?
+    ziel_vokabular:
+      - das Taxi
+      - der Fahrer
+      - der Flughafen
+      - der Koffer
+      - der Verkehr
+      - der Stau
+      - das Gepäck
+      - die Fahrt
+
+  - id: hundepark
+    stufe: 1
+    persona:
+      name: Karin
+      role: Hundehalterin im Park
+      attitude: friendly
+    kontext: >-
+      You're sitting on a bench in the park when a stranger's dog runs up to
+      greet you, and its owner stops to chat while you pet it.
+    questions:
+      - Mögen Sie Hunde, oder sind Sie eher ein Katzenmensch?
+      - Kommen Sie oft in diesen Park?
+      - Hatten Sie selbst schon einmal ein Haustier?
+      - Haben Sie vor, sich irgendwann einen Hund anzuschaffen?
+      - Was finden Sie eigentlich an Hunden am schönsten?
+    ziel_vokabular:
+      - der Hund
+      - das Haustier
+      - die Leine
+      - der Park
+      - die Bank
+      - der Spaziergang
+      - das Fell
+      - die Pfote
