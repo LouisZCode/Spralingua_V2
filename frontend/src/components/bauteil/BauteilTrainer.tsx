@@ -306,7 +306,13 @@ export default function BauteilTrainer({
           <div className="mt-6">
             {!verdict.correct && (
               <div className="flex flex-col items-center gap-2">
-                <p className="font-body text-[14px] text-ink-soft">
+                {/* The fix leads, Satzschmiede-style: prominent phrase with a
+                    red arrow, the attempt demoted underneath (BAU-002). */}
+                <p className="font-body text-[18px] font-bold leading-snug text-ink">
+                  <span className="mr-1.5 text-flag-red-deep">→</span>
+                  {verdict.expected}
+                </p>
+                <p className="font-body text-[13px] text-ink-soft">
                   You typed:{" "}
                   <span className="font-semibold line-through decoration-flag-red decoration-2">
                     {value.trim()}
@@ -319,7 +325,7 @@ export default function BauteilTrainer({
                   <AxisPill label="Endings" ok={verdict.carrierOk} />
                 </div>
                 {verdict.note && (
-                  <p className="mt-1 max-w-[420px] text-center font-body text-[14px] font-semibold leading-snug text-ink">
+                  <p className="mt-1 max-w-[420px] text-center font-body text-[13px] leading-snug text-ink-soft">
                     {verdict.note}
                   </p>
                 )}
