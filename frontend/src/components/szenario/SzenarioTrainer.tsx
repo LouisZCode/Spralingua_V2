@@ -87,6 +87,8 @@ export default function SzenarioTrainer({
   const [elapsed, setElapsed] = useState(0);
   const [verdict, setVerdict] = useState<StructureResult | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  // SZEN-002: transcript / sentence weights / skeleton hide behind Details.
+  const [showDetails, setShowDetails] = useState(false);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
@@ -220,12 +222,35 @@ export default function SzenarioTrainer({
   }
 
   if (phase === "result" && verdict) {
-    // Soft tint for the coach message — encouraging either way, never
-    // clinical pass/fail. Only "overcomplicated" leans on the (soft) red.
+    // Soft tint for the verdict block — encouraging either way, never
+    // clinical pass/fail. Only "overcomplicated" leans on the (soft) red;
+    // a_bit_heavy sits between on amber (no flag-yellow token exists yet).
     const coachTint =
       verdict.verdict === "overcomplicated"
         ? "border-flag-red bg-flag-red-soft"
-        : "border-success bg-success-soft";
+        : verdict.verdict === "a_bit_heavy"
+          ? "border-amber-500 bg-amber-50"
+          : "border-success bg-success-soft";
+    const VERDICT_BADGE: Record<
+      StructureResult["verdict"],
+      { label: string; cls: string }
+    > = {
+      clear: { label: "✓ Clear", cls: "border-success bg-success text-white" },
+      a_bit_heavy: {
+        label: "A bit heavy",
+        cls: "border-amber-600 bg-amber-500 text-white",
+      },
+      overcomplicated: {
+        label: "Overcomplicated",
+        cls: "border-flag-red-deep bg-flag-red text-white",
+      },
+    };
+    const badge = VERDICT_BADGE[verdict.verdict];
+    // The ONE instant takeaway when something was heavy: the best lighter
+    // rebuild — a heavy sentence's if any, else the first one offered.
+    const bestSimpler =
+      verdict.sentences.find((s) => s.weight === "heavy" && s.simpler) ??
+      verdict.sentences.find((s) => s.simpler);
 
     return (
       <div>
@@ -239,123 +264,157 @@ export default function SzenarioTrainer({
           className="rounded-[28px] border-[3px] border-ink bg-white p-7"
           style={inkShadow}
         >
-          {/* The coach's message IS the headline — this is a warm nudge
-              toward simpler German, never a grade. */}
+          {/* SZEN-002: the instant verdict IS the screen — badge, coach
+              message, and the single best lighter rebuild. Everything else
+              waits behind Details. */}
           <div
             className={`rounded-[18px] border-[3px] px-5 py-5 text-center ${coachTint}`}
           >
-            <span className="inline-flex items-center rounded-full border-[2px] border-ink bg-white px-3 py-1 font-body text-[10px] font-black uppercase tracking-[0.18em] text-ink-muted">
-              {verdict.levelRead}
-            </span>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <span
+                className={`inline-flex items-center rounded-full border-[2px] px-4 py-1.5 font-display text-[13px] font-black uppercase tracking-[0.14em] ${badge.cls}`}
+              >
+                {badge.label}
+              </span>
+              <span className="inline-flex items-center rounded-full border-[2px] border-ink bg-white px-3 py-1 font-body text-[10px] font-black uppercase tracking-[0.18em] text-ink-muted">
+                {verdict.levelRead}
+              </span>
+            </div>
             <p className="mt-3 font-display text-[19px] font-black leading-snug text-ink">
               {verdict.coachMessage}
             </p>
+            {bestSimpler?.simpler && (
+              <div className="mt-4 rounded-[14px] border-[2px] border-ink/20 bg-white px-4 py-3 text-left">
+                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                  Try it lighter
+                </p>
+                <p className="mt-1 font-body text-[16px] font-bold leading-snug text-ink">
+                  {bestSimpler.simpler}
+                </p>
+              </div>
+            )}
           </div>
 
-          {/* The raw transcript IS part of the exercise — what you actually
-              said, not what you meant to say. */}
-          <div className="mt-4 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3">
-            <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-              What we heard
-            </p>
-            <p className="mt-1 font-body text-[15px] leading-relaxed text-ink">
-              {verdict.transcript}
-            </p>
+          {/* Details on demand: what we heard, per-sentence weights, skeleton. */}
+          <div className="mt-5 text-center">
+            <button
+              type="button"
+              onClick={() => setShowDetails((v) => !v)}
+              className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+              style={inkShadow}
+            >
+              {showDetails ? "Hide details ▴" : "Details ▾"}
+            </button>
           </div>
 
-          {/* One row per sentence, colored by how heavy it felt to carry —
-              this is a complexity read, not a correctness check. A non-null
-              `simpler` offers a lighter way to say the same thing. */}
-          {verdict.sentences.length > 0 && (
-            <div className="mt-6">
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                How heavy each sentence felt
-              </p>
-              <ul className="mt-2 space-y-2.5">
-                {verdict.sentences.map((s, i) => (
-                  <li
-                    key={i}
-                    className="rounded-[16px] border-[3px] border-ink bg-white px-4 py-3"
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <span
-                        aria-hidden
-                        className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${SENTENCE_WEIGHT_DOT[s.weight]}`}
-                      />
-                      <p className="font-body text-[15px] leading-relaxed text-ink">
-                        {s.text}
-                      </p>
-                    </div>
-                    {s.simpler && (
-                      <p className="mt-1.5 pl-5 font-body text-[12px] font-semibold text-ink-muted">
-                        lighter: {s.simpler}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Skeleton — the extracted shape of the answer: the core claim,
-              the supporting points, where it jumped off track, and the
-              vocabulary it anchored on. */}
-          <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-white px-4 py-4">
-            <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-              Skeleton
-            </p>
-
-            <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
-              Kern
-            </p>
-            <p className="mt-1 font-body text-[15px] font-bold leading-relaxed text-ink">
-              {verdict.skeleton.kern}
-            </p>
-
-            {verdict.skeleton.punkte.length > 0 && (
-              <>
-                <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
-                  Punkte
+          {showDetails && (
+            <>
+              {/* The raw transcript IS part of the exercise — what you actually
+                  said, not what you meant to say. */}
+              <div className="mt-4 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3">
+                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                  What we heard
                 </p>
-                <ul className="mt-1 list-disc space-y-1 pl-5">
-                  {verdict.skeleton.punkte.map((p, i) => (
-                    <li key={i} className="font-body text-[14px] text-ink-soft">
-                      {p}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
+                <p className="mt-1 font-body text-[15px] leading-relaxed text-ink">
+                  {verdict.transcript}
+                </p>
+              </div>
 
-            {verdict.skeleton.absprung && (
-              <>
-                <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
-                  Absprung
-                </p>
-                <p className="mt-1 font-body text-[14px] italic leading-relaxed text-ink-soft">
-                  {verdict.skeleton.absprung}
-                </p>
-              </>
-            )}
-
-            {verdict.skeleton.vokabelAnker.length > 0 && (
-              <>
-                <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
-                  Vokabel-Anker
-                </p>
-                <div className="mt-1.5 flex flex-wrap gap-2">
-                  {verdict.skeleton.vokabelAnker.map((w) => (
-                    <span
-                      key={w}
-                      className="rounded-full border-[2px] border-ink bg-white px-4 py-1.5 font-body text-[13px] font-black tracking-wide text-ink"
-                    >
-                      {w}
-                    </span>
-                  ))}
+              {/* One row per sentence, colored by how heavy it felt to carry —
+                  this is a complexity read, not a correctness check. A non-null
+                  `simpler` offers a lighter way to say the same thing. */}
+              {verdict.sentences.length > 0 && (
+                <div className="mt-6">
+                  <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                    How heavy each sentence felt
+                  </p>
+                  <ul className="mt-2 space-y-2.5">
+                    {verdict.sentences.map((s, i) => (
+                      <li
+                        key={i}
+                        className="rounded-[16px] border-[3px] border-ink bg-white px-4 py-3"
+                      >
+                        <div className="flex items-start gap-2.5">
+                          <span
+                            aria-hidden
+                            className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${SENTENCE_WEIGHT_DOT[s.weight]}`}
+                          />
+                          <p className="font-body text-[15px] leading-relaxed text-ink">
+                            {s.text}
+                          </p>
+                        </div>
+                        {s.simpler && (
+                          <p className="mt-1.5 pl-5 font-body text-[12px] font-semibold text-ink-muted">
+                            lighter: {s.simpler}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
-              </>
-            )}
-          </div>
+              )}
+
+              {/* Skeleton — the extracted shape of the answer: the core claim,
+                  the supporting points, where it jumped off track, and the
+                  vocabulary it anchored on. */}
+              <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-white px-4 py-4">
+                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                  Skeleton
+                </p>
+
+                <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
+                  Kern
+                </p>
+                <p className="mt-1 font-body text-[15px] font-bold leading-relaxed text-ink">
+                  {verdict.skeleton.kern}
+                </p>
+
+                {verdict.skeleton.punkte.length > 0 && (
+                  <>
+                    <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
+                      Punkte
+                    </p>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {verdict.skeleton.punkte.map((p, i) => (
+                        <li key={i} className="font-body text-[14px] text-ink-soft">
+                          {p}
+                        </li>
+                      ))}
+                    </ul>
+                  </>
+                )}
+
+                {verdict.skeleton.absprung && (
+                  <>
+                    <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
+                      Absprung
+                    </p>
+                    <p className="mt-1 font-body text-[14px] italic leading-relaxed text-ink-soft">
+                      {verdict.skeleton.absprung}
+                    </p>
+                  </>
+                )}
+
+                {verdict.skeleton.vokabelAnker.length > 0 && (
+                  <>
+                    <p className="mt-3 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red">
+                      Vokabel-Anker
+                    </p>
+                    <div className="mt-1.5 flex flex-wrap gap-2">
+                      {verdict.skeleton.vokabelAnker.map((w) => (
+                        <span
+                          key={w}
+                          className="rounded-full border-[2px] border-ink bg-white px-4 py-1.5 font-body text-[13px] font-black tracking-wide text-ink"
+                        >
+                          {w}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </>
+          )}
 
           <div className="mt-7 flex items-center justify-center gap-5">
             <button
