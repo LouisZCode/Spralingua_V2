@@ -83,6 +83,7 @@ export default function VocabTrainer({
   onAttempt,
   onReveal,
   onExplain,
+  onFlag,
   sessionPrefix = "satz",
 }: {
   deck: DeckCard[];
@@ -108,6 +109,15 @@ export default function VocabTrainer({
     error: string | null,
     sessionId?: string
   ) => Promise<string>;
+  // SATZ-008: file a disagree-flag for this verdict (POST /satz/flag via the
+  // parent). Optional — the affordance only renders when wired.
+  onFlag?: (
+    traceId: string,
+    cardId: string | null,
+    transcript: string,
+    verdict: string,
+    sessionId?: string
+  ) => Promise<void>;
   // Langfuse practice-session id prefix (OBS-007). The Verbformen mode
   // (GRAM-002 Exercise C) reuses this trainer on a verb-only sub-deck and
   // passes "vf" so its sittings group apart from regular Satzschmiede ones.
@@ -133,6 +143,9 @@ export default function VocabTrainer({
   const [attemptError, setAttemptError] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<string | null>(null);
   const [explaining, setExplaining] = useState(false);
+  const [flagState, setFlagState] = useState<"idle" | "sending" | "sent">(
+    "idle"
+  );
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
@@ -236,6 +249,7 @@ export default function VocabTrainer({
     setAttemptError(null);
     setResult(null);
     setExplanation(null);
+    setFlagState("idle");
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -333,12 +347,33 @@ export default function VocabTrainer({
     }
   }
 
+  // SATZ-008: one tap files the disagreement on the judgement's own trace —
+  // human ground truth for tuning the examiner.
+  async function handleFlag() {
+    if (!result?.traceId || !onFlag || flagState !== "idle") return;
+    setFlagState("sending");
+    try {
+      await onFlag(
+        result.traceId,
+        card?.id ?? null,
+        result.transcript,
+        `wordOk=${result.wordOk} grammarOk=${result.grammarOk}` +
+          (result.corrected ? ` corrected=${result.corrected}` : ""),
+        practiceSessionRef.current ?? undefined
+      );
+      setFlagState("sent");
+    } catch {
+      setFlagState("idle");
+    }
+  }
+
   // Reset the per-card scratch state on every move.
   function resetScratch() {
     setRevealed(false);
     setFlipped(false);
     setResult(null);
     setExplanation(null);
+    setFlagState("idle");
     setAttemptError(null);
   }
 
@@ -632,6 +667,29 @@ export default function VocabTrainer({
                           {explaining ? "Explaining…" : "Explain more →"}
                         </button>
                       ))}
+                    {/* SATZ-008: recourse for a verdict that feels wrong —
+                        shown on green cards too (a miss the examiner passed
+                        is exactly what we want flagged). */}
+                    {result.traceId && onFlag && (
+                      <p className="mt-3">
+                        {flagState === "sent" ? (
+                          <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+                            Flagged — thanks, this tunes the examiner
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={handleFlag}
+                            disabled={flagState === "sending"}
+                            className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-flag-red disabled:opacity-50"
+                          >
+                            {flagState === "sending"
+                              ? "Flagging…"
+                              : "Verdict seems wrong? Flag it"}
+                          </button>
+                        )}
+                      </p>
+                    )}
                   </>
                 ) : (
                   card.example && (

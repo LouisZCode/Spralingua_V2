@@ -14,7 +14,7 @@ import {
   UnauthorizedError,
   type AttemptResult,
 } from "./verbformen/api";
-import { explainAttempt } from "./satzschmiede/api";
+import { explainAttempt, flagVerdict } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 
 const redShadow = {
@@ -137,6 +137,30 @@ export default function Verbformen() {
     [token, signOut]
   );
 
+  // SATZ-008: file a "this verdict seems wrong" flag on the judgement's own
+  // Langfuse trace. Auth errors sign out here (same policy as every other
+  // call); everything else rethrows so the trainer can fall back its button.
+  const handleFlag = useCallback(
+    async (
+      traceId: string,
+      cardId: string | null,
+      transcript: string,
+      verdict: string,
+      sessionId?: string
+    ): Promise<void> => {
+      if (!token) throw new UnauthorizedError("/satz/flag");
+      try {
+        await flagVerdict(token, traceId, cardId, transcript, verdict, sessionId);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
   if (!ready || !token) {
     return null;
   }
@@ -222,6 +246,7 @@ export default function Verbformen() {
             onAttempt={handleAttempt}
             onReveal={handleReveal}
             onExplain={handleExplain}
+            onFlag={handleFlag}
             sessionPrefix="vf"
           />
         )}

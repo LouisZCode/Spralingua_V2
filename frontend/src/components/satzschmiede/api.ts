@@ -126,6 +126,8 @@ export type AttemptResult = {
   // When the card comes back: the interval the scheduler just wrote (0 =
   // still due today after a miss, 1 = tomorrow, then the expanding ladder).
   dueInDays: number;
+  // SATZ-008: trace id of this judgement — lets the client flag it.
+  traceId?: string;
 };
 
 export async function submitAttempt(
@@ -166,6 +168,29 @@ export async function explainAttempt(
     }),
   });
   return res.explanation;
+}
+
+// SATZ-008: file a "this verdict seems wrong" flag onto the judgement's
+// Langfuse trace (POST /satz/flag) — human ground truth for judge calibration.
+export async function flagVerdict(
+  token: string,
+  traceId: string,
+  cardId: string | null,
+  transcript: string,
+  verdict: string,
+  sessionId?: string
+): Promise<void> {
+  await request<{ flagged: boolean }>("/satz/flag", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      trace_id: traceId,
+      card_id: cardId,
+      transcript,
+      verdict,
+      session_id: sessionId ?? null,
+    }),
+  });
 }
 
 // The learner peeked at the example instead of attempting — record the lapse

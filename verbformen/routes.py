@@ -295,6 +295,9 @@ async def submit_attempt(
             "error": judgement.error,
             "corrected": judgement.corrected,
             "dueInDays": interval,
+            # SATZ-008: the OTel trace id of THIS judgement, so the client
+            # can file a disagree-flag score onto the exact trace.
+            "traceId": format(attempt_span.get_span_context().trace_id, "032x"),
         }
 
 

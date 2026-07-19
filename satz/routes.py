@@ -12,6 +12,7 @@ import re
 import time
 from datetime import datetime
 
+import aiohttp
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel
@@ -22,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import tracer
 from auth.deps import get_current_user_id
+from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
 from database.orm import Pack, PackCard, User, UserCard, VocabCard
 from database.repository import record_drill_attempt, record_grammar_error
@@ -570,6 +572,22 @@ async def submit_attempt(
     if card.tense_form:
         card_keyterms.append(card.tense_form)
 
+    # SATZ-008: a base verb card accepts spoken past forms, but strong-verb
+    # participles ("erkannt") share no stem with the infinitive — pull the
+    # past sibling's spoken form so STT biasing AND the presence guard see it.
+    extra_forms: list[str] = []
+    if card.type == "verb" and card.tense is None:
+        sibling_form = await db.scalar(
+            select(VocabCard.tense_form).where(
+                VocabCard.type == "verb",
+                func.lower(VocabCard.target) == card.target.lower(),
+                VocabCard.tense == "past",
+            )
+        )
+        if sibling_form:
+            extra_forms.append(sibling_form)
+            card_keyterms.append(sibling_form)
+
     # OBS-006: one Langfuse trace per judged attempt. The `stt` and `llm`
     # child generations (opened inside transcribe_attempt / examine_attempt
     # — start_as_current_span nests them here automatically) split the
@@ -602,7 +620,7 @@ async def submit_attempt(
         attempt_span.set_attribute("langfuse.trace.input", transcript)
 
         try:
-            judgement = await examine_attempt(card, transcript)
+            judgement = await examine_attempt(card, transcript, extra_forms=extra_forms)
         except Exception as exc:
             attempt_span.record_exception(exc)
             logger.exception("Satz examiner call failed (card {})", card_id)
@@ -687,6 +705,9 @@ async def submit_attempt(
             "error": judgement.error,
             "corrected": judgement.corrected,
             "dueInDays": interval,
+            # SATZ-008: the OTel trace id of THIS judgement, so the client
+            # can file a disagree-flag score onto the exact trace.
+            "traceId": format(attempt_span.get_span_context().trace_id, "032x"),
         }
 
 
@@ -793,3 +814,75 @@ async def explain_attempt(
             )
         span.set_attribute("langfuse.trace.output", result.explanation)
     return {"explanation": result.explanation}
+
+
+# SATZ-008 P2: learner recourse — a "this verdict seems wrong" flag lands as a
+# Langfuse score (name "user_disagree") on the attempt's own trace, so flags
+# double as human ground truth for the judge-evaluator work (OBS-009).
+_TRACE_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+class FlagIn(BaseModel):
+    trace_id: str
+    card_id: str | None = None
+    transcript: str | None = None
+    # Short client-built summary of what the examiner said, for the comment.
+    verdict: str | None = None
+    session_id: str | None = None
+
+
+@router.post("/flag")
+async def flag_verdict(
+    body: FlagIn,
+    user_id: str = Depends(get_current_user_id),
+):
+    """File a disagree-flag as a Langfuse score. No DB writes — the score
+    lives with the trace it judges."""
+    if not _TRACE_ID_RE.fullmatch(body.trace_id):
+        raise HTTPException(status_code=422, detail="Bad trace id.")
+    if len(body.transcript or "") > 600 or len(body.verdict or "") > 400:
+        raise HTTPException(status_code=422, detail="Flag context too long.")
+    if body.session_id and len(body.session_id) > 64:
+        raise HTTPException(status_code=422, detail="Bad session id.")
+    if not (langfuse_public_key and langfuse_secret_key and langfuse_base_url):
+        raise HTTPException(
+            status_code=503, detail="Flagging isn't available right now."
+        )
+
+    comment_parts = [f"user={user_id}"]
+    if body.card_id:
+        comment_parts.append(f"card={body.card_id}")
+    if body.verdict:
+        comment_parts.append(f"verdict: {body.verdict}")
+    if body.transcript:
+        comment_parts.append(f"transcript: {body.transcript}")
+
+    payload = {
+        "traceId": body.trace_id,
+        "name": "user_disagree",
+        "value": 1,
+        "dataType": "NUMERIC",
+        "comment": " | ".join(comment_parts),
+    }
+    url = f"{langfuse_base_url.rstrip('/')}/api/public/scores"
+    try:
+        timeout = aiohttp.ClientTimeout(total=10)
+        auth = aiohttp.BasicAuth(langfuse_public_key, langfuse_secret_key)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(url, json=payload, auth=auth) as resp:
+                if resp.status >= 300:
+                    detail = await resp.text()
+                    logger.warning(
+                        "Langfuse score rejected ({}): {}", resp.status, detail[:300]
+                    )
+                    raise HTTPException(
+                        status_code=502, detail="Couldn't record the flag — try again."
+                    )
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Langfuse score POST failed")
+        raise HTTPException(
+            status_code=502, detail="Couldn't record the flag — try again."
+        )
+    return {"flagged": True}

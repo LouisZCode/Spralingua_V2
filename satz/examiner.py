@@ -137,8 +137,10 @@ You examine one spoken attempt in a German vocabulary trainer. The learner saw a
 # How to judge — two SEPARATE calls
 - The transcript comes from speech recognition: IGNORE punctuation and capitalization entirely, and forgive an obviously misheard small word — judge the sentence the learner most plausibly said. A filler ("ähm") is fine.
 - `word_ok` — did the learner use the TARGET WORD correctly? This covers only the word itself: it appears (any correctly conjugated or declined form counts; separable verbs may split), in its intended meaning, with the grammar the word OWNS done right — its article/gender/case agreement, its own ending, the reflexive pronoun if it is reflexive. false when the word is missing, used in the wrong sense, or its own grammar is broken.
+- MEANING CHECK for `word_ok` (SATZ-008): before settling word_ok, first restate to yourself what the learner is trying to SAY, then ask: is the target the word a German speaker would actually use for that idea? The word being present with clean grammar is NOT enough. Worked example: card 'erkennen' (to recognize) in "Ich habe letztes Jahr eine neue App erkannt, und jetzt verkaufe ich sie" — selling it means they MADE it, and you cannot 'erkennen' something you created yourself: the fitting verb is 'entwickelt' or 'erfunden', so word_ok=false and `corrected` swaps the verb in. Fail on sense only when the mismatch is clear from the sentence itself; a genuinely plausible correct reading keeps word_ok=true.
 - {evidence_line}
 - `grammar_ok` — is the REST of the sentence grammatical German? Word order, other verbs' conjugation, other words' articles and endings. A sentence can be word_ok but not grammar_ok: "Ich hasse Winter, weil ich habe viele Allergien" uses the target 'Allergie' perfectly, but the weil-clause word order is wrong. If the sentence isn't German at all, both are false.
+- STYLE IS NOT AN ERROR (SATZ-008): if everything said is grammatical, grammar_ok=true — even when you would phrase it differently, prefer another word order, or would merge or split sentences. A learner may speak TWO short sentences instead of one — that is fine; judge them together. Two short main clauses are GOOD German („Ich habe immer die Wahrheit gesagt. Ich bin kein Lügner." is fully correct — never "fix" it into one sentence). A style preference must never set word_ok or grammar_ok to false, and `corrected` must never merely restyle a correct attempt.
 - `corrected`: whenever anything is false — repair the learner's own sentence with the smallest possible change (keep their idea and their words). If the target word was missing entirely, write the simplest sentence that expresses their idea WITH the word. When everything is right: null.
 - `error`: when grammar_ok=false, ONE short English line naming the rule that was broken (e.g. "'weil' sends the verb to the end") — the correction sits right next to it, so name the WHY, never restate the fix. When only word_ok=false, add it only when the correction alone doesn't reveal why (e.g. "'freuen' is reflexive — it needs 'mich'"), otherwise null. AT MOST 10 words. When everything is right: null.
 
@@ -256,9 +258,11 @@ def _candidate_stems(word: str) -> set[str]:
     return stems
 
 
-def _target_evidence(card, transcript: str) -> bool:
+def _target_evidence(card, transcript: str, extra_forms: list[str] | None = None) -> bool:
     """Deterministic, conservative scan: does ANY transcript token plausibly
     carry an inflected or separated form of the card's target word?
+    ``extra_forms`` carries sibling spoken forms — e.g. the past sibling's
+    tense_form for a base verb card — so strong-verb pasts count as evidence.
 
     Returns True (word present / stay conservative) when the transcript is
     empty, when no usable stem could be built from the target at all, or
@@ -274,6 +278,8 @@ def _target_evidence(card, transcript: str) -> bool:
     tense_form = getattr(card, "tense_form", None)
     if tense_form:
         candidate_words += _normalize_de(tense_form).split()
+    for form in extra_forms or []:
+        candidate_words += _normalize_de(form).split()
 
     stems: set[str] = set()
     for word in candidate_words:
@@ -288,7 +294,11 @@ def _target_evidence(card, transcript: str) -> bool:
 
 
 async def examine_attempt(
-    card, transcript: str, *, span_name: str = "satz-judge"
+    card,
+    transcript: str,
+    *,
+    span_name: str = "satz-judge",
+    extra_forms: list[str] | None = None,
 ) -> Judgement:
     """One structured-output judgement call over the card + transcript.
 
@@ -304,7 +314,7 @@ async def examine_attempt(
     # TASK 6: run the programmatic scan BEFORE the call so its result can be
     # injected into the prompt as a hint (the LLM still makes the final call
     # — this only nudges/vetoes, it doesn't replace the judgement).
-    evidence = _target_evidence(card, transcript)
+    evidence = _target_evidence(card, transcript, extra_forms=extra_forms)
     evidence_line = (
         "Programmatic scan: an inflected form of the target WAS detected in "
         "the transcript."
