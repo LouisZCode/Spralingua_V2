@@ -88,9 +88,10 @@ async def get_round(user_id: str = Depends(get_current_user_id)):
     return {"items": result}
 
 
-# The answer is one verb form, not a sentence — same guard shape as
-# bauteil/verbindungen, just a much tighter cap.
-_MAX_ANSWER_CHARS = 40
+# Learners naturally retype the whole sentence (the sibling drills support
+# that), so the cap matches verbindungen's — the grader below pulls the one
+# verb form out of a full retyped frame.
+_MAX_ANSWER_CHARS = 120
 
 _EDGE_PUNCT = " .,!?;:…\"'"
 
@@ -146,6 +147,19 @@ async def submit_attempt(
         accepted = item["answers"]
         is_doppel = item["group"] in DOPPELDEUTIG_GROUPS
         recognized = _recognized_tokens(answer)
+        if len(recognized) > 1:
+            # The learner retyped the sentence, and the FRAME itself may
+            # contain war/wurde/blieb forms ("…, und die Straßen waren
+            # leer."). Frame words are context, not the answer: discard
+            # family forms up to their frame multiplicity and grade what
+            # remains — but only when that leaves exactly one candidate
+            # (a bare "war" typed alone never enters this branch).
+            remaining = list(recognized)
+            for frame_form in _recognized_tokens(item["frame"].replace("___", " ")):
+                if frame_form in remaining:
+                    remaining.remove(frame_form)
+            if len(remaining) == 1:
+                recognized = remaining
         reading = None
         alt = None
 

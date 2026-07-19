@@ -312,7 +312,7 @@ export default function ZeitfaerbungTrainer({
                 autoComplete="off"
                 autoCorrect="off"
                 spellCheck={false}
-                maxLength={60}
+                maxLength={120}
                 className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
               />
               <button
