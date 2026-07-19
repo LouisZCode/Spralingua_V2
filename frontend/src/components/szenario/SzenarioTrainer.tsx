@@ -107,6 +107,13 @@ export default function SzenarioTrainer({
     setRecording(false);
   }, []);
 
+  // UI-006: a messed-up take — kill the clip without submitting; the next
+  // startRecording resets discardRef, so the learner just records again.
+  const discardRecording = useCallback(() => {
+    discardRef.current = true;
+    stopRecording();
+  }, [stopRecording]);
+
   // Hard cap — a forgotten mic auto-submits at the limit rather than growing.
   useEffect(() => {
     if (recording && elapsed >= MAX_RECORD_SECONDS) {
@@ -464,21 +471,37 @@ export default function SzenarioTrainer({
             </p>
           ) : (
             <>
-              <button
-                type="button"
-                onClick={recording ? stopRecording : startRecording}
-                className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] ${
-                  recording
-                    ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
-                    : "border-flag-red-deep bg-flag-red text-white"
-                }`}
-                style={redShadow}
-              >
-                {recording ? `Stop · ${elapsed}s` : "Record"}
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={recording ? stopRecording : startRecording}
+                  className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] ${
+                    recording
+                      ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
+                      : "border-flag-red-deep bg-flag-red text-white"
+                  }`}
+                  style={redShadow}
+                >
+                  {recording ? `Stop · ${elapsed}s` : "Record"}
+                </button>
+                {/* UI-006: visible only mid-recording — the escape hatch for
+                    a take you don't want judged. */}
+                {recording && (
+                  <button
+                    type="button"
+                    onClick={discardRecording}
+                    aria-label="Discard recording"
+                    title="Discard recording"
+                    className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-white font-display text-[18px] font-black text-ink"
+                    style={inkShadow}
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
               <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
                 {recording
-                  ? "speak, then tap stop"
+                  ? "speak, then tap stop — ✕ discards"
                   : "tap record — answer in German, short and simple"}
               </p>
             </>

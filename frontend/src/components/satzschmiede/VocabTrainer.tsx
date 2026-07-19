@@ -266,6 +266,15 @@ export default function VocabTrainer({
     }
   }
 
+  // UI-006: a messed-up take — stop and throw the clip away; onstop sees
+  // discardRef and never submits. startRecording resets the flag.
+  function discardRecording() {
+    if (recorderRef.current?.state === "recording") {
+      discardRef.current = true;
+      recorderRef.current.stop();
+    }
+  }
+
   async function check(audio: Blob) {
     if (!card) return;
     // Mode prefix ("satz-" / "vf-") + 32-hex tail mirrors the backend's
@@ -612,19 +621,35 @@ export default function VocabTrainer({
           learner pausing to think must never trigger a premature verdict. ── */}
       <div className={`mt-6 transition-opacity ${flipped ? "opacity-60" : ""}`}>
         <div className="flex flex-col items-center">
-          <button
-            type="button"
-            onClick={recording ? stopRecording : startRecording}
-            disabled={flipped || checking}
-            className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:pointer-events-none disabled:opacity-40 ${
-              recording
-                ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
-                : "border-flag-red-deep bg-flag-red text-white"
-            }`}
-            style={redShadow}
-          >
-            {recording ? `Stop · ${elapsed}s` : "Record"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={recording ? stopRecording : startRecording}
+              disabled={flipped || checking}
+              className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:pointer-events-none disabled:opacity-40 ${
+                recording
+                  ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
+                  : "border-flag-red-deep bg-flag-red text-white"
+              }`}
+              style={redShadow}
+            >
+              {recording ? `Stop · ${elapsed}s` : "Record"}
+            </button>
+            {/* UI-006: visible only mid-recording — the escape hatch for a
+                take you don't want judged. */}
+            {recording && (
+              <button
+                type="button"
+                onClick={discardRecording}
+                aria-label="Discard recording"
+                title="Discard recording"
+                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-white font-display text-[18px] font-black text-ink"
+                style={inkShadow}
+              >
+                ✕
+              </button>
+            )}
+          </div>
           {/* Non-breaking space when idle keeps the height stable, so the
               caption appearing doesn't shove the layout around. */}
           <p className="mt-2 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
