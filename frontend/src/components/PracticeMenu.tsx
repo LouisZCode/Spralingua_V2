@@ -80,14 +80,6 @@ export default function PracticeMenu() {
           style={{ animationDelay: "120ms" }}
         >
           <ModeCard
-            href="/learn"
-            accent="red"
-            icon="mic"
-            title="Conversation Practice"
-            body="Real-time voice conversations with your AI partner — the scenario lessons you already know."
-            cta="Start talking"
-          />
-          <ModeCard
             href="/satzschmiede"
             accent="gold"
             icon="pencil"
@@ -97,6 +89,15 @@ export default function PracticeMenu() {
             cta="Try it out"
           />
           <ModeCard
+            href="/flow"
+            accent="red"
+            icon="infinity"
+            kicker="alle Übungen · endlos"
+            title="Flow"
+            body="One stream, every exercise — words, endings, chunks, verb forms, speaking — dealt one at a time until you say stop."
+            cta="Go with the flow"
+          />
+          <ModeCard
             href="/tandem"
             accent="ink"
             icon="chat"
@@ -104,6 +105,21 @@ export default function PracticeMenu() {
             title="Tandem Partner"
             body="Daily German chat with Lena, your language-exchange partner. She remembers your last talks and gently fixes the grammar you keep missing."
             cta="Meet Lena"
+          />
+        </div>
+
+        {/* The rest of the modes — a beat of space below the top three. */}
+        <div
+          className="rise-in mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          style={{ animationDelay: "160ms" }}
+        >
+          <ModeCard
+            href="/learn"
+            accent="red"
+            icon="mic"
+            title="Conversation Practice"
+            body="Real-time voice conversations with your AI partner — the scenario lessons you already know."
+            cta="Start talking"
           />
           <ModeCard
             href="/bauteil"
@@ -157,15 +173,6 @@ export default function PracticeMenu() {
             title="Zeitfärbung"
             body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
             cta="Pick the verb"
-          />
-          <ModeCard
-            href="/flow"
-            accent="red"
-            icon="infinity"
-            kicker="alle Übungen · endlos"
-            title="Flow"
-            body="One stream, every exercise — words, endings, chunks, verb forms, speaking — dealt one at a time until you say stop."
-            cta="Go with the flow"
           />
         </div>
 
