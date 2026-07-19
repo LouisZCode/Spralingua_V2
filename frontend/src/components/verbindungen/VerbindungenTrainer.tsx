@@ -47,6 +47,8 @@ export default function VerbindungenTrainer({
   onNewRound,
   onGloss,
   onAdd,
+  flow,
+  onFlowDone,
 }: {
   round: ChunkItem[];
   // Judge one typed gap-fill (POST /verbindungen/attempts via the parent,
@@ -57,8 +59,14 @@ export default function VerbindungenTrainer({
   // UI-007: word-gloss popover wiring — optional, absent renders plain text.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<void>;
+  // FLOW-001: mixed-practice mode — the parent deals exactly one item via
+  // `round` and remounts per turn (via `key`), so this trainer only needs to
+  // skip its own intro/round chrome and hand the verdict back instead of
+  // ever reaching its own "done" phase.
+  flow?: boolean;
+  onFlowDone?: (correct: boolean) => void;
 }) {
-  const [phase, setPhase] = useState<Phase>("intro");
+  const [phase, setPhase] = useState<Phase>(flow ? "drill" : "intro");
   const [queue, setQueue] = useState<QueueItem[]>(round);
   const [index, setIndex] = useState(0);
   const [value, setValue] = useState("");
@@ -82,6 +90,15 @@ export default function VerbindungenTrainer({
   }, [phase, index, verdict]);
 
   const advance = useCallback(() => {
+    // FLOW-001: no "done" phase in flow mode — hand the verdict to the
+    // parent, which deals the next item (a fresh mount, via `key`).
+    if (flow) {
+      const correct = verdict?.correct ?? false;
+      setVerdict(null);
+      setValue("");
+      onFlowDone?.(correct);
+      return;
+    }
     setVerdict(null);
     setValue("");
     if (index + 1 >= queue.length) {
@@ -89,7 +106,7 @@ export default function VerbindungenTrainer({
     } else {
       setIndex(index + 1);
     }
-  }, [index, queue.length]);
+  }, [index, queue.length, flow, verdict, onFlowDone]);
 
   // Enter advances from the feedback state (the input is unmounted then).
   useEffect(() => {
@@ -117,7 +134,9 @@ export default function VerbindungenTrainer({
         if (!item.retry) setFirstTryGreens((n) => n + 1);
       } else if (!item.retry) {
         setMissed((m) => [...m, { item, chunk: res.chunk }]);
-        setQueue((q) => [...q, { ...item, retry: true }]);
+        // FLOW-001: no second-chance retry re-queue in flow mode — the queue
+        // stays exactly the one dealt item.
+        if (!flow) setQueue((q) => [...q, { ...item, retry: true }]);
       }
     } catch (err) {
       setFailed(
@@ -222,15 +241,18 @@ export default function VerbindungenTrainer({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
-          {index + 1} / {queue.length}
-          {item.retry ? " · second try" : ""}
-        </p>
-        <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
-          {firstTryGreens} ✓
-        </p>
-      </div>
+      {/* FLOW-001: the Flow page shows its own progress — hide this round's. */}
+      {!flow && (
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+            {index + 1} / {queue.length}
+            {item.retry ? " · second try" : ""}
+          </p>
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+            {firstTryGreens} ✓
+          </p>
+        </div>
+      )}
 
       <div
         className={`rounded-[28px] border-[3px] p-7 transition-colors ${tint}`}
@@ -330,7 +352,7 @@ export default function VerbindungenTrainer({
                 className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
-                {index + 1 >= queue.length ? "Finish" : "Next"}
+                {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
               </button>
               <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
                 or press Enter

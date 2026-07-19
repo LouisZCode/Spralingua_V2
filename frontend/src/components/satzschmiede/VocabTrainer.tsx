@@ -85,6 +85,9 @@ export default function VocabTrainer({
   onExplain,
   onFlag,
   sessionPrefix = "satz",
+  flow,
+  onFlowDone,
+  sessionId,
 }: {
   deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
@@ -122,13 +125,24 @@ export default function VocabTrainer({
   // (GRAM-002 Exercise C) reuses this trainer on a verb-only sub-deck and
   // passes "vf" so its sittings group apart from regular Satzschmiede ones.
   sessionPrefix?: string;
+  // FLOW-001: mixed-practice mode — the parent deals exactly one card via
+  // `deck` and remounts per turn (via `key`), so this trainer hands the
+  // final verdict back instead of ever reaching its own end-of-queue state.
+  flow?: boolean;
+  onFlowDone?: (correct: boolean) => void;
+  // OBS-007 override: the Flow page's one practice-session id for the whole
+  // sitting — used in place of the ref-minted one below when present.
+  sessionId?: string;
 }) {
   // Two ways to face the pool: "practice" works today's queue (due + a drip
   // of new, shuffled — green pops a card, anything else recycles it); browse
   // is the old free walk over everything, schedule untouched by peeks.
   const [browsing, setBrowsing] = useState(false);
+  // FLOW-001: the parent deals exactly one card via `deck` regardless of its
+  // SRS status — buildQueue's due/new filter would drop a "later" card, so
+  // flow mode takes the deck's id(s) directly instead.
   const [queue, setQueue] = useState<string[]>(() =>
-    buildQueue(deck, new Set())
+    flow ? deck.map((c) => c.id) : buildQueue(deck, new Set())
   );
   const [index, setIndex] = useState(0); // browse-mode position
 
@@ -306,11 +320,14 @@ export default function VocabTrainer({
     if (!card) return;
     // Mode prefix ("satz-" / "vf-") + 32-hex tail mirrors the backend's
     // uuid4().hex session ids while staying recognizable in Langfuse.
-    practiceSessionRef.current ??=
-      sessionPrefix + "-" + crypto.randomUUID().replace(/-/g, "");
+    // FLOW-001: the Flow page's own OBS-007 session id overrides this mint.
+    const activeSessionId =
+      sessionId ??
+      (practiceSessionRef.current ??=
+        sessionPrefix + "-" + crypto.randomUUID().replace(/-/g, ""));
     setChecking(true);
     try {
-      const res = await onAttempt(card.id, audio, practiceSessionRef.current);
+      const res = await onAttempt(card.id, audio, activeSessionId);
       setResult(res);
       setFlipped(true);
     } catch (err) {
@@ -337,7 +354,7 @@ export default function VocabTrainer({
           result.transcript,
           result.corrected,
           result.error ?? null,
-          practiceSessionRef.current ?? undefined
+          sessionId ?? practiceSessionRef.current ?? undefined
         )
       );
     } catch {
@@ -359,7 +376,7 @@ export default function VocabTrainer({
         result.transcript,
         `wordOk=${result.wordOk} grammarOk=${result.grammarOk}` +
           (result.corrected ? ` corrected=${result.corrected}` : ""),
-        practiceSessionRef.current ?? undefined
+        sessionId ?? practiceSessionRef.current ?? undefined
       );
       setFlagState("sent");
     } catch {
@@ -407,6 +424,13 @@ export default function VocabTrainer({
     }
     if (!card) return;
     const passed = !revealed && result?.wordOk === true;
+    // FLOW-001: the dealt deck is exactly one card — there's nothing to
+    // recycle a miss into or pop a green out of. Hand the verdict straight
+    // to the parent, which deals the next item (a fresh mount, via `key`).
+    if (flow) {
+      onFlowDone?.(passed);
+      return;
+    }
     if (passed) doneRef.current.add(card.id);
     setQueue((q) => {
       const act = q.filter((id) => byId.has(id));

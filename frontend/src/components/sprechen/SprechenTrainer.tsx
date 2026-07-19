@@ -28,6 +28,8 @@ export default function SprechenTrainer({
   onNewRound,
   onGloss,
   onAdd,
+  flow,
+  onFlowDone,
 }: {
   round: SpokenTask[];
   // Judge one recorded clip (POST /sprechen/attempts via the parent, which
@@ -38,6 +40,12 @@ export default function SprechenTrainer({
   // UI-007: word-gloss popover wiring — optional, absent renders plain text.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<void>;
+  // FLOW-001: mixed-practice mode — the parent deals exactly one item via
+  // `round` and remounts per turn (via `key`), so this trainer only needs to
+  // hand the verdict back instead of ever reaching its own "done" phase.
+  // Sprechen already starts at "drill" (no intro), so no phase-init change.
+  flow?: boolean;
+  onFlowDone?: (correct: boolean) => void;
 }) {
   const [phase, setPhase] = useState<Phase>("drill");
   const [index, setIndex] = useState(0);
@@ -155,6 +163,15 @@ export default function SprechenTrainer({
   }
 
   function next() {
+    // FLOW-001: no "done" phase in flow mode — hand the verdict to the
+    // parent, which deals the next item (a fresh mount, via `key`).
+    if (flow) {
+      const passed = verdict?.passed ?? false;
+      setVerdict(null);
+      setFailed(null);
+      onFlowDone?.(passed);
+      return;
+    }
     setVerdict(null);
     setFailed(null);
     if (index + 1 >= round.length) {
@@ -228,14 +245,17 @@ export default function SprechenTrainer({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between">
-        <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
-          Task {index + 1} / {round.length}
-        </p>
-        <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
-          {results.filter((r) => r?.passed).length} ✓
-        </p>
-      </div>
+      {/* FLOW-001: the Flow page shows its own progress — hide this round's. */}
+      {!flow && (
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+            Task {index + 1} / {round.length}
+          </p>
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+            {results.filter((r) => r?.passed).length} ✓
+          </p>
+        </div>
+      )}
 
       <div
         className={`rounded-[28px] border-[3px] p-7 transition-colors ${tint}`}
@@ -373,7 +393,7 @@ export default function SprechenTrainer({
                 className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
-                {index + 1 >= round.length ? "Finish" : "Next"}
+                {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
               </button>
             </div>
           </div>

@@ -158,6 +158,15 @@ export default function PracticeMenu() {
             body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
             cta="Pick the verb"
           />
+          <ModeCard
+            href="/flow"
+            accent="red"
+            icon="infinity"
+            kicker="alle Übungen · endlos"
+            title="Flow"
+            body="One stream, every exercise — words, endings, chunks, verb forms, speaking — dealt one at a time until you say stop."
+            cta="Go with the flow"
+          />
         </div>
 
         <Link
@@ -290,7 +299,8 @@ type ModeIconName =
   | "clock"
   | "link"
   | "target"
-  | "palette";
+  | "palette"
+  | "infinity";
 
 function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
@@ -379,6 +389,14 @@ function ModeIcon({ name }: { name: ModeIconName }) {
         <circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
         <circle cx="12" cy="7.3" r="1.1" fill="currentColor" stroke="none" />
         <circle cx="16.3" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  if (name === "infinity") {
+    // a lemniscate — "one endless stream, every exercise looping through"
+    return (
+      <svg {...common}>
+        <path d="M9.828 9.172a4 4 0 1 0 0 5.656 10 10 0 0 0 2.172-2.828 10 10 0 0 1 2.172-2.828 4 4 0 1 1 0 5.656 10 10 0 0 1-2.172-2.828 10 10 0 0 0-2.172-2.828" />
       </svg>
     );
   }
