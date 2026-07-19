@@ -213,3 +213,37 @@ export async function removeCard(
     method: "DELETE",
   });
 }
+
+// UI-007: hover/tap word-gloss popover — one German word, a short English
+// meaning, an example sentence, and whether it's already in the deck.
+export type GlossInfo = {
+  lemma: string;
+  article: string | null;
+  gloss: string;
+  example: string | null;
+  cardId: string | null;
+  inDeck: boolean;
+  source: "catalog" | "cache" | "fresh";
+};
+
+// POST /satz/gloss. `context` is the surrounding sentence the word was
+// tapped in (helps the backend disambiguate); `sessionId` files the lookup
+// under the same OBS-007 practice-sitting Langfuse session as the rest of
+// the drill. A 429 (rate-limited) surfaces as a plain Error — callers treat
+// any rejection here as a soft failure and just close the popover.
+export async function fetchGloss(
+  token: string,
+  word: string,
+  context?: string,
+  sessionId?: string
+): Promise<GlossInfo> {
+  return request("/satz/gloss", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      word,
+      context: context ?? null,
+      session_id: sessionId ?? null,
+    }),
+  });
+}

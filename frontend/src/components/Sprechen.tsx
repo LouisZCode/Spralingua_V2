@@ -12,7 +12,12 @@ import {
   type SpokenTask,
   type SprechenVerdict,
 } from "./sprechen/api";
-import { UnauthorizedError } from "./satzschmiede/api";
+import {
+  addWord,
+  fetchGloss,
+  UnauthorizedError,
+  type GlossInfo,
+} from "./satzschmiede/api";
 
 // VARY-001: task ids already served this pool cycle, kept in localStorage so
 // variety persists across page visits. Guarded the same way as the rest of
@@ -114,6 +119,43 @@ export default function Sprechen() {
     [token, signOut]
   );
 
+  // UI-007: word-gloss popover wiring — same auth-guarded pattern as
+  // handleAttempt above. Both are optional on the trainer's props.
+  const handleGloss = useCallback(
+    async (word: string, context: string): Promise<GlossInfo> => {
+      if (!token) throw new UnauthorizedError("/satz/gloss");
+      try {
+        return await fetchGloss(
+          token,
+          word,
+          context,
+          practiceSessionRef.current ?? undefined
+        );
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  const handleAddWord = useCallback(
+    async (lemma: string): Promise<void> => {
+      if (!token) throw new UnauthorizedError("/satz/cards");
+      try {
+        await addWord(token, lemma, practiceSessionRef.current ?? undefined);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
   if (!ready || !token) {
     return null;
   }
@@ -169,6 +211,8 @@ export default function Sprechen() {
             round={round}
             onAttempt={handleAttempt}
             onNewRound={loadRound}
+            onGloss={handleGloss}
+            onAdd={handleAddWord}
           />
         )}
       </main>

@@ -397,3 +397,30 @@ class UserDrillItem(Base):
     __table_args__ = (
         UniqueConstraint("user_id", "exercise", "source_card_id"),
     )
+
+
+# ── Word gloss cache (UI-007) ────────────────────────────────────────────
+# Hover/tap a German word anywhere in the app -> translation + example. Not
+# per-user: the cache key is the normalized surface form alone, so every
+# learner's hover of the same word is a shared cache hit. Not an FK-linked
+# child of anything — a throwaway lookup cache, not learning state.
+
+
+class WordGloss(Base):
+    __tablename__ = "word_glosses"
+
+    # "wg-" + uuid4().hex[:12], minted by the route on a fresh cache write.
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Normalized surface form as looked up (whitespace-collapsed, edge
+    # punctuation stripped, lowercased) — the cache key.
+    lookup: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    # Dictionary form: nouns -> nominative singular, verbs -> infinitive,
+    # adjectives -> base form.
+    lemma: Mapped[str] = mapped_column(Text, nullable=False)
+    # der/die/das — nouns only, null otherwise.
+    article: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gloss: Mapped[str] = mapped_column(Text, nullable=False)
+    example: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )

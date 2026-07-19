@@ -12,7 +12,12 @@ import {
   type ChunkItem,
   type ChunkVerdict,
 } from "./verbindungen/api";
-import { UnauthorizedError } from "./satzschmiede/api";
+import {
+  addWord,
+  fetchGloss,
+  UnauthorizedError,
+  type GlossInfo,
+} from "./satzschmiede/api";
 
 // Feste Verbindungen — GRAM-002 Exercise D: complete the fixed verb chunk
 // (reflexive pronoun? which preposition? which case?) with reflexive and
@@ -79,6 +84,43 @@ export default function Verbindungen() {
     [token, signOut]
   );
 
+  // UI-007: word-gloss popover wiring — same auth-guarded pattern as
+  // handleAttempt above. Both are optional on the trainer's props.
+  const handleGloss = useCallback(
+    async (word: string, context: string): Promise<GlossInfo> => {
+      if (!token) throw new UnauthorizedError("/satz/gloss");
+      try {
+        return await fetchGloss(
+          token,
+          word,
+          context,
+          practiceSessionRef.current ?? undefined
+        );
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  const handleAddWord = useCallback(
+    async (lemma: string): Promise<void> => {
+      if (!token) throw new UnauthorizedError("/satz/cards");
+      try {
+        await addWord(token, lemma, practiceSessionRef.current ?? undefined);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
   if (!ready || !token) {
     return null;
   }
@@ -134,6 +176,8 @@ export default function Verbindungen() {
             round={round}
             onAttempt={handleAttempt}
             onNewRound={loadRound}
+            onGloss={handleGloss}
+            onAdd={handleAddWord}
           />
         )}
       </main>

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { SpokenTask, SprechenVerdict } from "./api";
+import Glossable from "../shared/Glossable";
+import type { GlossInfo } from "../satzschmiede/api";
 
 type Phase = "drill" | "done";
 
@@ -24,6 +26,8 @@ export default function SprechenTrainer({
   round,
   onAttempt,
   onNewRound,
+  onGloss,
+  onAdd,
 }: {
   round: SpokenTask[];
   // Judge one recorded clip (POST /sprechen/attempts via the parent, which
@@ -31,6 +35,9 @@ export default function SprechenTrainer({
   onAttempt: (taskId: string, audio: Blob) => Promise<SprechenVerdict>;
   // Fetch a fresh round; the parent remounts this component with it.
   onNewRound: () => void;
+  // UI-007: word-gloss popover wiring — optional, absent renders plain text.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<void>;
 }) {
   const [phase, setPhase] = useState<Phase>("drill");
   const [index, setIndex] = useState(0);
@@ -238,7 +245,11 @@ export default function SprechenTrainer({
           {task.title}
         </p>
         <p className="mx-auto mt-3 max-w-[480px] text-center font-body text-[17px] leading-relaxed text-ink">
-          {task.prompt}
+          {onGloss ? (
+            <Glossable text={task.prompt} onGloss={onGloss} onAdd={onAdd} />
+          ) : (
+            task.prompt
+          )}
         </p>
 
         {!solved ? (

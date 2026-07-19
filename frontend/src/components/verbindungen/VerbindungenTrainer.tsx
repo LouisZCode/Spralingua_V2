@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ChunkItem, ChunkVerdict } from "./api";
+import Glossable from "../shared/Glossable";
+import type { GlossInfo } from "../satzschmiede/api";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer. `retry` marks the copy.
@@ -43,6 +45,8 @@ export default function VerbindungenTrainer({
   round,
   onAttempt,
   onNewRound,
+  onGloss,
+  onAdd,
 }: {
   round: ChunkItem[];
   // Judge one typed gap-fill (POST /verbindungen/attempts via the parent,
@@ -50,6 +54,9 @@ export default function VerbindungenTrainer({
   onAttempt: (itemId: string, answer: string) => Promise<ChunkVerdict>;
   // Fetch a fresh round; the parent remounts this component with it.
   onNewRound: () => void;
+  // UI-007: word-gloss popover wiring — optional, absent renders plain text.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<void>;
 }) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [queue, setQueue] = useState<QueueItem[]>(round);
@@ -231,7 +238,11 @@ export default function VerbindungenTrainer({
       >
         {/* The frame — pronoun? preposition? case? The gap doesn't say. */}
         <p className="text-center font-body text-[20px] leading-relaxed text-ink">
-          {before}
+          {onGloss ? (
+            <Glossable text={before} onGloss={onGloss} onAdd={onAdd} />
+          ) : (
+            before
+          )}
           {solved ? (
             <span
               className={`font-bold ${verdict.correct ? "text-success" : "text-flag-red-deep"}`}
@@ -246,7 +257,11 @@ export default function VerbindungenTrainer({
               &nbsp;
             </span>
           )}
-          {after}
+          {onGloss ? (
+            <Glossable text={after} onGloss={onGloss} onAdd={onAdd} />
+          ) : (
+            after
+          )}
         </p>
         <p className="mt-2 text-center font-body text-[13px] italic text-ink-muted">
           {item.hint}

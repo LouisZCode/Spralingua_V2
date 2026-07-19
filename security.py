@@ -50,6 +50,14 @@ LEARN_MAX_CONCURRENT_PER_USER = 3
 _learn_concurrent_by_user: dict[str, int] = {}  # user_id -> active pipeline count
 _say_last_by_user: dict[str, float] = {}        # user_id -> monotonic time of last accepted /say
 
+# Word-gloss endpoint (UI-007): hover/tap-to-translate is cheap for a catalog
+# or cache hit (plain SELECT, no LLM), but a genuine miss makes one LLM call —
+# same cost profile as the add-a-word forge. A sliding window per user caps
+# only the FRESH-LLM path; catalog/cache hits never call the admit function.
+GLOSS_MAX_PER_USER_PER_WINDOW = 30
+GLOSS_WINDOW_S = 60.0
+_gloss_by_user: dict[str, deque] = {}    # user_id -> timestamps of recent fresh-LLM glosses
+
 # Opportunistic memory reclaim so a long-running process under IP-rotation abuse
 # doesn't accumulate dead per-IP entries forever.
 _last_prune = 0.0
@@ -85,6 +93,11 @@ def _maybe_prune(now: float) -> None:
     for user_id in list(_say_last_by_user.keys()):
         if _say_last_by_user[user_id] < stale_before:
             del _say_last_by_user[user_id]
+    for user_id in list(_gloss_by_user.keys()):
+        dq = _gloss_by_user[user_id]
+        _evict(dq, now, GLOSS_WINDOW_S)
+        if not dq:
+            del _gloss_by_user[user_id]
 
 
 def client_ip(conn) -> str:
@@ -219,4 +232,22 @@ def say_user_try_admit(user_id: str) -> bool:
     if last is not None and (now - last) < say_per_ip_interval_s:
         return False
     _say_last_by_user[user_id] = now
+    return True
+
+
+def gloss_try_admit(user_id: str) -> bool:
+    """Sliding-window admit for a FRESH-LLM word gloss (UI-007): at most
+    `GLOSS_MAX_PER_USER_PER_WINDOW` per user per `GLOSS_WINDOW_S` seconds.
+
+    Catalog and cache hits in ``POST /satz/gloss`` never call this — only a
+    genuine cache-miss LLM call consumes a slot, so normal hover/tap browsing
+    of already-glossed words never runs into the cap.
+    """
+    now = time.monotonic()
+    _maybe_prune(now)
+    hits = _gloss_by_user.setdefault(user_id, deque())
+    _evict(hits, now, GLOSS_WINDOW_S)
+    if len(hits) >= GLOSS_MAX_PER_USER_PER_WINDOW:
+        return False
+    hits.append(now)
     return True

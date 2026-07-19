@@ -12,11 +12,12 @@ import asyncio
 import re
 import time
 from datetime import datetime
+from uuid import uuid4
 
 import aiohttp
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, func, literal, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -26,14 +27,16 @@ from agents.observability import tracer
 from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
-from database.orm import Pack, PackCard, User, UserCard, VocabCard
+from database.orm import Pack, PackCard, User, UserCard, VocabCard, WordGloss
 from database.repository import record_drill_attempt, record_grammar_error
 from drills import forge_items_for_card
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
+from satz.glosser import gloss_word
 from satz.scheduler import schedule
+from security import gloss_try_admit
 
 router = APIRouter(prefix="/satz", tags=["satzschmiede"])
 
@@ -824,6 +827,162 @@ async def explain_attempt(
             )
         span.set_attribute("langfuse.trace.output", result.explanation)
     return {"explanation": result.explanation}
+
+
+# UI-007: word-gloss endpoint — hover/tap any German word anywhere in the app
+# -> translation + example. The learner-facing edge punctuation a hovered
+# word might drag along ("Mänteln," at a clause boundary).
+_EDGE_PUNCT = ".,!?;:…\"'()"
+
+
+class GlossIn(BaseModel):
+    word: str
+    context: str | None = None
+    # OBS-007-style optional practice-sitting id, threaded to gloss_word()
+    # so a hover fired mid-drill files its "satz-gloss" trace into that
+    # session instead of standing alone.
+    session_id: str | None = Field(default=None, max_length=64)
+
+
+@router.post("/gloss")
+async def gloss_word_route(
+    body: GlossIn,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """UI-007: hover/tap any German word anywhere in the app -> lemma,
+    gloss, and a short example, with enough info for the frontend to offer
+    a one-tap "add to deck" (the add itself is ``POST /satz/cards``,
+    unchanged).
+
+    Three-tier lookup, cheapest first:
+    1. Shared Satzschmiede catalog — the hovered word IS a card's target as
+       typed (no LLM).
+    2. The ``word_glosses`` cache, keyed on the normalized surface form (no
+       LLM) — every earlier hover of this exact inflected form, by any
+       learner, already paid for the LLM call.
+    3. A genuine miss: one structured-output LLM call
+       (``satz/glosser.py``), rate-limited per user, then cached for every
+       later hover of the same surface form.
+    """
+    word = " ".join(body.word.split())
+    if not word:
+        raise HTTPException(status_code=422, detail="Type a word first.")
+    if " " in word:
+        raise HTTPException(status_code=422, detail="Look up one word at a time.")
+    if len(word) > 40:
+        raise HTTPException(
+            status_code=422, detail="That's too long to look up as one word."
+        )
+
+    context = (body.context or "").strip()
+    if len(context) > 300:
+        context = context[:300]
+
+    # Cache key: whitespace already collapsed above — strip edge punctuation
+    # and lowercase.
+    lookup = word.strip(_EDGE_PUNCT).lower()
+    if not lookup:
+        raise HTTPException(status_code=422, detail="Type a word first.")
+
+    with tracer.start_as_current_span("satz-gloss-request") as span:
+        span.set_attribute("user.id", user_id)
+        if body.session_id:
+            span.set_attribute("langfuse.session.id", body.session_id)
+        span.set_attribute("langfuse.trace.input", word)
+
+        # 1) Catalog hit — the hovered word is already a catalog card's
+        # target exactly as typed (e.g. hovering a word already in base
+        # form). No LLM, no cache write.
+        catalog_card = await _find_canonical(db, word)
+        if catalog_card is not None:
+            lemma, article = catalog_card.target, catalog_card.article
+            gloss_text, example = catalog_card.gloss, catalog_card.example
+            source = "catalog"
+        else:
+            # 2) Cache hit.
+            cached = await db.scalar(
+                select(WordGloss).where(WordGloss.lookup == lookup)
+            )
+            if cached is not None:
+                lemma, article = cached.lemma, cached.article
+                gloss_text, example = cached.gloss, cached.example
+                source = "cache"
+            else:
+                # 3) Miss — one fresh LLM call, rate-limited per user (only
+                # this branch ever consumes a slot).
+                if not gloss_try_admit(user_id):
+                    raise HTTPException(
+                        status_code=429,
+                        detail="Slow down a little — try that word again in a minute.",
+                    )
+                try:
+                    result = await gloss_word(
+                        word,
+                        context or word,
+                        user_id=user_id,
+                        session_id=body.session_id,
+                    )
+                except Exception as exc:
+                    span.record_exception(exc)
+                    logger.exception("Satz gloss call failed for {!r}", word)
+                    raise HTTPException(
+                        status_code=502,
+                        detail="The dictionary is unavailable right now — try again in a moment.",
+                    )
+                await db.execute(
+                    pg_insert(WordGloss)
+                    .values(
+                        id=f"wg-{uuid4().hex[:12]}",
+                        lookup=lookup,
+                        lemma=result.lemma,
+                        article=result.article,
+                        gloss=result.gloss,
+                        example=result.example,
+                    )
+                    .on_conflict_do_nothing(index_elements=["lookup"])
+                )
+                await db.commit()
+                # Two hovers of the same word can race the insert — re-select
+                # so both callers answer from whichever row actually landed.
+                winner = await db.scalar(
+                    select(WordGloss).where(WordGloss.lookup == lookup)
+                )
+                if winner is not None:
+                    lemma, article = winner.lemma, winner.article
+                    gloss_text, example = winner.gloss, winner.example
+                else:
+                    lemma, article = result.lemma, result.article
+                    gloss_text, example = result.gloss, result.example
+                source = "fresh"
+
+        # Whatever the source, try to resolve a catalog card for the LEMMA
+        # too, so the frontend can offer a one-tap "add to deck".
+        card_for_lemma = await _find_canonical(db, lemma)
+        card_id = None
+        in_deck = False
+        if card_for_lemma is not None:
+            card_id = card_for_lemma.id
+            in_deck = (
+                await db.scalar(
+                    select(UserCard).where(
+                        UserCard.user_id == user_id,
+                        UserCard.card_id == card_for_lemma.id,
+                    )
+                )
+            ) is not None
+
+        span.set_attribute("langfuse.trace.output", lemma)
+
+    return {
+        "lemma": lemma,
+        "article": article,
+        "gloss": gloss_text,
+        "example": example,
+        "cardId": card_id,
+        "inDeck": in_deck,
+        "source": source,
+    }
 
 
 # SATZ-008 P2: learner recourse — a "this verdict seems wrong" flag lands as a
