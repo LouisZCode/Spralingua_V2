@@ -26,6 +26,10 @@ from verbindungen import (
     load_items as load_verbindungen_items,
     router as verbindungen_router,
 )
+from zeitfaerbung import (
+    load_items as load_zeitfaerbung_items,
+    router as zeitfaerbung_router,
+)
 from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
@@ -86,6 +90,7 @@ async def lifespan(app: FastAPI):
     load_bauteil_items()
     load_sprechen_tasks()
     load_verbindungen_items()
+    load_zeitfaerbung_items()
     # And for Szenario-Sparring's scenario catalog (P1, thin slice) — same
     # fail-loud rule as the grammar-exercise catalogs above.
     load_szenario_scenarios()
@@ -123,6 +128,9 @@ app.include_router(bauteil_router)
 app.include_router(sprechen_router)
 app.include_router(verbformen_router)
 app.include_router(verbindungen_router)
+# Zeitfärbung (GRAM-003): war/wurde/blieb by meaning — deterministic grading,
+# no judge LLM.
+app.include_router(zeitfaerbung_router)
 # Szenario-Sparring (P1, thin slice): in-character question, one spoken
 # answer, structure-only judge + silent grammar-ledger credit.
 app.include_router(szenario_router)

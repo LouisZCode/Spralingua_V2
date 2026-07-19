@@ -149,6 +149,15 @@ export default function PracticeMenu() {
             body="Answer unpredictable questions with clear structure."
             cta="Step into the scene"
           />
+          <ModeCard
+            href="/zeitfaerbung"
+            accent="ink"
+            icon="palette"
+            kicker="war · wurde · blieb"
+            title="Zeitfärbung"
+            body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
+            cta="Pick the verb"
+          />
         </div>
 
         <Link
@@ -280,7 +289,8 @@ type ModeIconName =
   | "wave"
   | "clock"
   | "link"
-  | "target";
+  | "target"
+  | "palette";
 
 function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
@@ -358,6 +368,17 @@ function ModeIcon({ name }: { name: ModeIconName }) {
         <path d="M7.5 8.5h9M7.5 12h5.5" />
         <path d="M3.5 6.5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H9l-4 3.5V6.5Z" />
         <path d="M18 9.5h1.5a2 2 0 0 1 2 2v6L19 15" />
+      </svg>
+    );
+  }
+  if (name === "palette") {
+    // paint palette with three dabs — "color the same blank three ways"
+    return (
+      <svg {...common}>
+        <path d="M12 3a9 9 0 1 0 0 18c1.4 0 2.1-.8 2.1-1.9 0-.5-.2-1-.6-1.4-.4-.4-.6-.9-.6-1.4 0-1.1.9-2 2-2h2.1A3 3 0 0 0 20 11.6C19.8 6.9 16.3 3 12 3Z" />
+        <circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
+        <circle cx="12" cy="7.3" r="1.1" fill="currentColor" stroke="none" />
+        <circle cx="16.3" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
       </svg>
     );
   }

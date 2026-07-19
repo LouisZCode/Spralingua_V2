@@ -1,0 +1,416 @@
+# Zeitfärbung item catalog (GRAM-003) — fill a Präteritum blank by choosing
+# war / wurde / blieb by MEANING. Content-as-data; zeitfaerbung/content.py
+# validates fail-loud at startup.
+#
+# Fields per item:
+#   id         — stable slug
+#   group      — zustand | uebergang | passiv | verbleib |
+#                doppeldeutig-adjektiv | doppeldeutig-partizip
+#   pattern_id — DERIVED from group (validated): passiv + doppeldeutig-partizip
+#                → passiv-werden (the Vorgangspassiv auxiliary); every other
+#                group → praeteritum-sein-haben-modal (both in
+#                grammar/taxonomy.yaml)
+#   frame      — the sentence with ONE ___ gap holding ONLY the copula form
+#                (for passiv items the Partizip is printed in the frame, not
+#                in the gap)
+#   answers    — the accepted form(s): exactly 1 for the four "eindeutig"
+#                groups (zustand/uebergang/passiv/verbleib), exactly 2 (one
+#                war-family + one wurde-family form) for the two
+#                "doppeldeutig" groups
+#   hint       — English rendering of the sentence. REQUIRED for eindeutig
+#                groups, FORBIDDEN for doppeldeutig (an English rendering
+#                would force one reading and spoil the ambiguity)
+#   why        — one line teaching why THIS form is the only one that fits.
+#                REQUIRED for eindeutig, FORBIDDEN for doppeldeutig
+#   readings   — one entry per accepted form, in war/wurde's own words, e.g.
+#                "the state — the door was (already) shut" /
+#                "the action — someone was shutting it". REQUIRED for
+#                doppeldeutig ONLY, keys must exactly match `answers`
+#
+# THE FOUR MEANINGS (the pedagogy this drill exists to teach): simply BEING
+# in a state → war; changing INTO a state (the onset) → wurde; an action done
+# TO the subject (Vorgangspassiv) → wurde + Partizip; STAYING in a state
+# despite something → blieb. Some sentences genuinely accept BOTH war and
+# wurde with different meanings (Ich war krank = the state / Ich wurde krank
+# = the onset) — that's the doppeldeutig groups, drilled on purpose.
+#
+# Every "eindeutig" frame is built to force its single answer and rule out
+# the others: a duration/habitual marker (den ganzen Tag, die ganze Woche,
+# schon immer) forces war and rules out wurde; a punctual or gradual marker
+# (plötzlich, sofort, langsam, immer -er) forces wurde and rules out war; a
+# concessive frame (trotz, obwohl, wegen) forces blieb; and every passiv item
+# carries an agent (von + Dativ), a punctual time marker, or a verb with no
+# natural result-state reading, so "war + Partizip" (Zustandspassiv) is never
+# a natural alternative. The bare doppeldeutig items carry none of these
+# forcing markers on purpose — that's what leaves both readings open.
+
+items:
+  # ── zustand — simply BEING in a state (war only) ────────────────────────
+  - id: zf-zu-muede-tag
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Ich ___ den ganzen Tag müde."
+    answers: [war]
+    hint: "I was tired all day."
+    why: "A state that lasted all day, not a change into it — that's war."
+
+  - id: zf-zu-montag
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Es ___ Montag, und die Straßen waren leer."
+    answers: [war]
+    hint: "It was Monday, and the streets were empty."
+    why: "A plain fact about the day, not a change — war."
+
+  - id: zf-zu-schueler
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Du ___ als Kind schon immer ein braver Schüler."
+    answers: [warst]
+    hint: "You were always such a well-behaved student as a child."
+    why: "'Schon immer' names a lasting trait, not a change — war."
+
+  - id: zf-zu-krank-woche
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Wir ___ die ganze Woche krank."
+    answers: [waren]
+    hint: "We were sick the whole week."
+    why: "'Die ganze Woche' is a duration, not a change — war."
+
+  - id: zf-zu-schule-nachmittag
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Ihr ___ damals noch klein."
+    answers: [wart]
+    hint: "You (all) were still little back then."
+    why: "'Damals noch' describes how things simply were — war."
+
+  - id: zf-zu-freunde-zuhause
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Meine Freunde ___ gestern Abend alle zu Hause, als ich anrief."
+    answers: [waren]
+    hint: "My friends were all at home last night when I called."
+    why: "A snapshot of where they were at that moment — plain being, war."
+
+  - id: zf-zu-buero
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Mein Kollege ___ gerade im Büro, als der Chef anrief."
+    answers: [war]
+    hint: "My colleague was in the office just when the boss called."
+    why: "A snapshot of where he was at that moment — plain being, war."
+
+  - id: zf-zu-nervoes-pruefung
+    group: zustand
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Vor der Prüfung ___ ich die ganze Zeit nervös."
+    answers: [war]
+    hint: "I was nervous the whole time before the exam."
+    why: "'Die ganze Zeit' names a lasting state, not a change — war."
+
+  # ── uebergang — changing INTO a state, the onset (wurde only) ───────────
+  - id: zf-ue-dunkel-ploetzlich
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Plötzlich ___ es dunkel."
+    answers: [wurde]
+    hint: "Suddenly it got dark."
+    why: "A change into a state — it became dark — takes wurde."
+
+  - id: zf-ue-krank-du
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Du ___ letzte Woche plötzlich krank."
+    answers: [wurdest]
+    hint: "You suddenly got sick last week."
+    why: "'Plötzlich' marks the onset — the change into being sick — so wurde."
+
+  - id: zf-ue-muede-film
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Beim Film ___ er langsam müde."
+    answers: [wurde]
+    hint: "During the movie, he slowly got tired."
+    why: "'Langsam' marks a gradual change into a state — wurde, not war."
+
+  - id: zf-ue-kalt-abend
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Am Abend ___ es schnell kalt."
+    answers: [wurde]
+    hint: "In the evening, it quickly got cold."
+    why: "A quick change into a state — wurde."
+
+  - id: zf-ue-nervoeser-wir
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Vor der Prüfung ___ wir immer nervöser."
+    answers: [wurden]
+    hint: "Before the exam, we got more and more nervous."
+    why: "A gradual change ('immer' + comparative) — wurde, not war."
+
+  - id: zf-ue-laut-party
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Auf der Party ___ ihr im Laufe des Abends immer lauter."
+    answers: [wurdet]
+    hint: "At the party, you (all) got louder and louder over the evening."
+    why: "A progressive change over time — wurde."
+
+  - id: zf-ue-still-nachricht
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Meine Freunde ___ nach der schlechten Nachricht auf einmal ganz still."
+    answers: [wurden]
+    hint: "My friends suddenly went quiet after the bad news."
+    why: "'Auf einmal' marks the moment of change — wurde."
+
+  - id: zf-ue-rot-ich
+    group: uebergang
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Als er das sagte, ___ ich sofort rot."
+    answers: [wurde]
+    hint: "When he said that, I immediately turned red."
+    why: "'Sofort' marks a punctual change — wurde, not war."
+
+  # ── passiv — Vorgangspassiv, wurde + Partizip (wurde-family only) ───────
+  - id: zf-pa-anrufen-mutter
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Ich ___ gestern Abend von meiner Mutter angerufen."
+    answers: [wurde]
+    hint: "I was called by my mother last night."
+    why: "An agent (von meiner Mutter) plus a time marker — this is the action itself, so wurde, not war."
+
+  - id: zf-pa-einladen-hochzeit
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Du ___ gestern von deiner Kollegin zur Hochzeit eingeladen."
+    answers: [wurdest]
+    hint: "You were invited to the wedding yesterday by your colleague."
+    why: "The agent (von deiner Kollegin) names the inviting itself — wurde, not the resulting state."
+
+  - id: zf-pa-fragen-lehrer
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Ich ___ vom Lehrer nach der Hausaufgabe gefragt."
+    answers: [wurde]
+    hint: "I was asked by the teacher about the homework."
+    why: "An agent (vom Lehrer) forces the event reading — 'war gefragt' would mean something else entirely."
+
+  - id: zf-pa-operieren-vater
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Mein Vater ___ letzte Woche am Knie operiert."
+    answers: [wurde]
+    hint: "My father had knee surgery last week."
+    why: "A punctual time marker names the event itself — wurde."
+
+  - id: zf-pa-wecken-nachbar
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Wir ___ heute Morgen um sechs Uhr von unserem Nachbarn geweckt."
+    answers: [wurden]
+    hint: "We were woken up at six this morning by our neighbor."
+    why: "An agent and an exact time — the event itself, so wurde."
+
+  - id: zf-pa-bauen-grossvater
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Das Haus ___ vor zehn Jahren von meinem Großvater gebaut."
+    answers: [wurde]
+    hint: "The house was built ten years ago by my grandfather."
+    why: "An agent plus a time marker forces the building EVENT, not just its result — wurde."
+
+  - id: zf-pa-reparieren-auto
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Unser Auto ___ letzte Woche von einem Mechaniker repariert."
+    answers: [wurde]
+    hint: "Our car was repaired last week by a mechanic."
+    why: "Agent plus time marker — the repair event, so wurde."
+
+  - id: zf-pa-informieren-schule
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Ihr ___ rechtzeitig von der Schule über die Prüfung informiert."
+    answers: [wurdet]
+    hint: "You (all) were informed about the exam in time by the school."
+    why: "An agent (von der Schule) forces the event reading — wurde."
+
+  - id: zf-pa-fotografieren-schulfest
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Die Kinder ___ beim Schulfest von einem Fotografen fotografiert."
+    answers: [wurden]
+    hint: "The children were photographed by a photographer at the school festival."
+    why: "An agent forces the event reading — wurde."
+
+  - id: zf-pa-beissen-hund
+    group: passiv
+    pattern_id: passiv-werden
+    frame: "Meine Schwester ___ letztes Jahr von einem Hund gebissen."
+    answers: [wurde]
+    hint: "My sister was bitten by a dog last year."
+    why: "Agent plus time marker, and 'gebissen' has no natural result-state reading — wurde."
+
+  # ── verbleib — STAYING in a state despite something (blieb only) ───────
+  - id: zf-ve-ruhig-streit
+    group: verbleib
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Trotz des Streits ___ ich ruhig."
+    answers: [blieb]
+    hint: "Despite the argument, I stayed calm."
+    why: "Continuing in a state despite something — that's bleiben, not sein or werden."
+
+  - id: zf-ve-wach-nacht
+    group: verbleib
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Du ___ die ganze Nacht wach, obwohl du müde warst."
+    answers: [bliebst]
+    hint: "You stayed awake all night, even though you were tired."
+    why: "Staying in a state despite tiredness — bleiben."
+
+  - id: zf-ve-zuhause-sturm
+    group: verbleib
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Wegen des Sturms ___ wir den ganzen Tag zu Hause."
+    answers: [blieben]
+    hint: "Because of the storm, we stayed home all day."
+    why: "Remaining in a place, not a change — bleiben."
+
+  - id: zf-ve-freundlich-kunde
+    group: verbleib
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Obwohl der Kunde unhöflich war, ___ die Verkäuferin freundlich."
+    answers: [blieb]
+    hint: "Although the customer was rude, the salesperson stayed friendly."
+    why: "Continuing in a state despite provocation — bleiben."
+
+  - id: zf-ve-gesund-winter
+    group: verbleib
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Ihr ___ den ganzen Winter über gesund, obwohl alle anderen krank waren."
+    answers: [bliebt]
+    hint: "You (all) stayed healthy all winter, even though everyone else was sick."
+    why: "Persisting in a state against the odds — bleiben."
+
+  - id: zf-ve-still-film
+    group: verbleib
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Die Kinder ___ während des ganzen Films still."
+    answers: [blieben]
+    hint: "The children stayed quiet during the whole movie."
+    why: "Remaining in a state for a duration — bleiben."
+
+  # ── doppeldeutig-adjektiv — bare adjective, war OR wurde both fit ───────
+  - id: zf-da-krank-ich
+    group: doppeldeutig-adjektiv
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Ich ___ krank."
+    answers: [war, wurde]
+    readings:
+      war: "the state — I was already sick (describing how I felt)"
+      wurde: "the onset — I got sick (I fell ill)"
+
+  - id: zf-da-muede-du
+    group: doppeldeutig-adjektiv
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Du ___ müde."
+    answers: [warst, wurdest]
+    readings:
+      warst: "the state — you were tired (describing how you felt)"
+      wurdest: "the onset — you got tired (you became tired)"
+
+  - id: zf-da-dunkel-es
+    group: doppeldeutig-adjektiv
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Es ___ dunkel."
+    answers: [war, wurde]
+    readings:
+      war: "the state — it was already dark"
+      wurde: "the onset — it got dark (the darkness set in)"
+
+  - id: zf-da-hungrig-wir
+    group: doppeldeutig-adjektiv
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Wir ___ hungrig."
+    answers: [waren, wurden]
+    readings:
+      waren: "the state — we were hungry (describing how we felt)"
+      wurden: "the onset — we got hungry (hunger set in)"
+
+  - id: zf-da-nervoes-ihr
+    group: doppeldeutig-adjektiv
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Ihr ___ nervös."
+    answers: [wart, wurdet]
+    readings:
+      wart: "the state — you (all) were nervous (describing how you felt)"
+      wurdet: "the onset — you (all) got nervous (nervousness set in)"
+
+  - id: zf-da-kalt-zimmer
+    group: doppeldeutig-adjektiv
+    pattern_id: praeteritum-sein-haben-modal
+    frame: "Das Zimmer ___ kalt."
+    answers: [war, wurde]
+    readings:
+      war: "the state — the room was already cold"
+      wurde: "the onset — the room got cold (it cooled down)"
+
+  # ── doppeldeutig-partizip — bare Partizip, war (Zustand) OR wurde (Vorgang) ──
+  - id: zf-dp-tuer-geschlossen
+    group: doppeldeutig-partizip
+    pattern_id: passiv-werden
+    frame: "Die Tür ___ geschlossen."
+    answers: [war, wurde]
+    readings:
+      war: "the state — the door was (already) shut"
+      wurde: "the action — someone was shutting it"
+
+  - id: zf-dp-laden-geoeffnet
+    group: doppeldeutig-partizip
+    pattern_id: passiv-werden
+    frame: "Der Laden ___ geöffnet."
+    answers: [war, wurde]
+    readings:
+      war: "the state — the shop was (already) open"
+      wurde: "the action — someone opened the shop (right then)"
+
+  - id: zf-dp-verletzt-ihr
+    group: doppeldeutig-partizip
+    pattern_id: passiv-werden
+    frame: "Ihr ___ verletzt."
+    answers: [wart, wurdet]
+    readings:
+      wart: "the state — you (all) were (already) injured"
+      wurdet: "the action — you (all) got injured (something injured you) right then"
+
+  - id: zf-dp-ueberrascht-wir
+    group: doppeldeutig-partizip
+    pattern_id: passiv-werden
+    frame: "Wir ___ überrascht."
+    answers: [waren, wurden]
+    readings:
+      waren: "the state — we were (already) surprised"
+      wurden: "the action — something surprised us right then"
+
+  - id: zf-dp-licht-eingeschaltet
+    group: doppeldeutig-partizip
+    pattern_id: passiv-werden
+    frame: "Das Licht ___ eingeschaltet."
+    answers: [war, wurde]
+    readings:
+      war: "the state — the light was (already) on"
+      wurde: "the action — someone turned the light on right then"
+
+  - id: zf-dp-rauchen-verboten
+    group: doppeldeutig-partizip
+    pattern_id: passiv-werden
+    frame: "Das Rauchen hier ___ verboten."
+    answers: [war, wurde]
+    readings:
+      war: "the state — smoking here was (already) forbidden (the rule)"
+      wurde: "the action — smoking here got banned (the rule was introduced) right then"
