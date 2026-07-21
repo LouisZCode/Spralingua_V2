@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { SpokenTask, SprechenVerdict } from "./api";
 import Glossable from "../shared/Glossable";
 import type { GlossInfo } from "../satzschmiede/api";
+import { diffWords, segmentTranscript } from "./slipDiff";
 
 type Phase = "drill" | "done";
 
@@ -237,6 +238,14 @@ export default function SprechenTrainer({
   }
 
   const solved = verdict !== null;
+  // Anchor each slip inside the transcript so the error shows in context;
+  // a quote the judge paraphrased falls back to plain text on its card.
+  const slipView = verdict
+    ? segmentTranscript(
+        verdict.transcript,
+        verdict.slips.map((s) => s.quote)
+      )
+    : null;
   const tint = !solved
     ? "border-ink bg-white"
     : verdict.passed
@@ -330,7 +339,21 @@ export default function SprechenTrainer({
                 What we heard
               </p>
               <p className="mt-1 font-body text-[15px] leading-relaxed text-ink">
-                {verdict.transcript}
+                {(slipView?.segments ?? []).map((seg, i) =>
+                  seg.slip === null ? (
+                    <span key={i}>{seg.text}</span>
+                  ) : (
+                    <span
+                      key={i}
+                      className="rounded-[6px] bg-flag-red-soft px-1 py-0.5 box-decoration-clone"
+                    >
+                      {seg.text}
+                      <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-flag-red font-body text-[9px] font-black text-white">
+                        {seg.slip + 1}
+                      </sup>
+                    </span>
+                  )
+                )}
               </p>
             </div>
 
@@ -363,17 +386,52 @@ export default function SprechenTrainer({
                     key={i}
                     className="rounded-[16px] border-[3px] border-ink bg-white px-4 py-3"
                   >
-                    <p className="font-body text-[14px] text-ink-soft">
-                      <span className="line-through decoration-flag-red decoration-2">
-                        {s.quote}
+                    <div className="flex items-start gap-2.5">
+                      <span className="mt-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-flag-red font-body text-[10px] font-black text-white">
+                        {i + 1}
                       </span>
-                    </p>
-                    <p className="mt-1 font-body text-[15px] font-bold text-ink">
-                      {s.corrected}
-                    </p>
-                    <p className="mt-1 font-body text-[12px] font-semibold text-ink-muted">
-                      {s.note}
-                    </p>
+                      <div>
+                        {/* The corrected sentence, with only the changed words
+                            marked: bold + green underline = the fix, a faded
+                            ×word = drop this word. */}
+                        <p className="font-body text-[15px] leading-relaxed text-ink">
+                          {diffWords(s.quote, s.corrected).map((t, k) =>
+                            t.kind === "ghost" ? (
+                              <span
+                                key={k}
+                                className="mr-1.5 align-middle font-body text-[11px] font-semibold text-ink-faint"
+                              >
+                                ×{t.word}
+                              </span>
+                            ) : (
+                              <span
+                                key={k}
+                                className={
+                                  t.kind === "added"
+                                    ? "mr-1.5 font-black underline decoration-success decoration-[2.5px] underline-offset-4"
+                                    : "mr-1.5"
+                                }
+                              >
+                                {t.word}
+                              </span>
+                            )
+                          )}
+                        </p>
+                        {/* No transcript anchor for this slip (judge
+                            paraphrased) — show their words plainly instead. */}
+                        {!(slipView?.matched[i] ?? false) && (
+                          <p className="mt-1 font-body text-[12px] text-ink-muted">
+                            you said: “{s.quote}”
+                          </p>
+                        )}
+                        <p className="mt-1.5 font-body text-[12px] font-semibold text-ink-soft">
+                          <span className="mr-1.5 font-body text-[10px] font-black uppercase tracking-[0.18em] text-flag-red-deep">
+                            why
+                          </span>
+                          {s.note}
+                        </p>
+                      </div>
+                    </div>
                   </li>
                 ))}
               </ul>
