@@ -47,6 +47,7 @@ from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
     load_tandem_notes,
+    load_vocab_words,
     record_grammar_error,
 )
 
@@ -196,14 +197,17 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # a DB hiccup just means a less-personalised chat, never a failed connect.
         grammar_focus: list = []
         session_notes: list = []
+        vocab_words: list = []
         if lesson_snapshot.get("type") == "tandem":
             try:
                 async with get_sessionmaker()() as db:
                     grammar_focus = await load_grammar_focus(db, user_id=db_user_id)
                     session_notes = await load_tandem_notes(db, user_id=db_user_id)
+                    vocab_words = await load_vocab_words(db, user_id=db_user_id)
                 logger.info(
                     f"Tandem layers: focus_patterns={len(grammar_focus)} "
-                    f"notes={len(session_notes)} topic={topic!r} user={db_user_id}"
+                    f"notes={len(session_notes)} vocab_words={len(vocab_words)} "
+                    f"topic={topic!r} user={db_user_id}"
                 )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
                 logger.warning(
@@ -211,7 +215,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 )
 
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.

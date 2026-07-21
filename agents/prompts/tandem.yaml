@@ -3,17 +3,18 @@
 # The third practice mode's lesson. Unlike the one-off `respond` personas
 # (a1_l1, b1_l1), this is ONE fixed, recurring character (D2) with real
 # long-term memory, tied to no scenario. `type: tandem` is a third middleware
-# branch in `agents/conversational_prompt.py` that assembles four layers:
+# branch in `agents/conversational_prompt.py` that assembles five layers:
 #
 #   persona_prompt              (this file, static — character + correction contract)
 #   short_term_template         (today + the chosen topic, per session)
 #   grammar_focus_header + data (the learner's top ~3 open patterns, from the ledger)
+#   vocab_header + data         (~10 random active-window deck words for Lena to use)
 #   long_term_header + data     (recent session notes — thin memory, from the debrief)
 #
-# The last two are injected in code from `Context.grammar_focus` /
-# `Context.session_notes`, populated by an async DB query at connect time
-# (the middleware is sync). Both layers are omitted when empty (first session /
-# clean ledger).
+# The last three are injected in code from `Context.grammar_focus` /
+# `Context.vocab_words` / `Context.session_notes`, populated by async DB
+# queries at connect time (the middleware is sync). All three layers are
+# omitted when empty (first session / clean ledger / empty deck).
 #
 # Why correction is allowed here and nowhere else: the persona rule (personas
 # never teach; accommodation is natural human behaviour) stays intact — but a
@@ -89,6 +90,14 @@ short_term_template: |
 grammar_focus_header: |
   # Today's grammar focus
   These are German structures your partner has been getting wrong lately. Your quiet job this session is to steer the conversation so these structures naturally come up — ask the kinds of questions that invite them — WITHOUT ever announcing it or turning the chat into a drill. When your partner uses one and slips, follow the tandem correction approach above. Each one comes with the kind of opening that tends to draw it out, and real examples of how your partner got it wrong before.
+
+# Vocab layer header — the word list (`word — gloss` bullets) is rendered in
+# code from `Context.vocab_words` (a random sample of the learner's
+# active-window deck, `database/repository.py::load_vocab_words`) and appended
+# after this. Omitted entirely when the deck yields nothing.
+vocab_header: |
+  # Words to weave in
+  Your partner is currently learning these German words. Work EVERY one of them into your own side of the conversation at some point — naturally, inside sentences that genuinely fit what you two are talking about, spread across the whole chat rather than crammed together. Never announce that you're doing this, never quiz them on a word, never translate. The English gloss only tells you which sense they're learning — use the word in that sense:
 
 # Long-term layer header — recent session notes (topic + a couple of personal
 # facts) are rendered in code from `Context.session_notes` after this. Omitted

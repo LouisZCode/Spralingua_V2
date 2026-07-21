@@ -83,7 +83,7 @@ class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
     def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero",
-                 topic="", grammar_focus=None, session_notes=None):
+                 topic="", grammar_focus=None, session_notes=None, vocab_words=None):
         self.user_id = user_id
         self.session_id = session_id
         self.logger = logger
@@ -98,6 +98,7 @@ class ClientWrapper:
             topic=topic,
             grammar_focus=grammar_focus or [],
             session_notes=session_notes or [],
+            vocab_words=vocab_words or [],
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client

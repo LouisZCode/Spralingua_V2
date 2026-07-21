@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from grammar import load_taxonomy
 
-from .orm import ActivitySession, DrillAttempt, User, UserError
+from .orm import ActivitySession, DrillAttempt, User, UserCard, UserError, VocabCard
 
 
 async def create_session_row(
@@ -411,6 +411,96 @@ async def load_tandem_notes(
         if note:
             notes.append(note)
     return notes
+
+
+# Cards at or above this interval rung are "mature" — hearing them again in
+# conversation is nearly worthless, so the tandem vocab layer skips them.
+# 16 is the 4th rung of the Satzschmiede ladder (satz/scheduler.py STEPS).
+_VOCAB_MATURE_DAYS = 16
+
+
+def _vocab_word_display(card: VocabCard) -> str:
+    """The word as Lena should meet it: article for nouns, ``sich`` for
+    reflexive verbs, the spoken past form for tense siblings."""
+    if card.tense and card.tense_form:
+        return card.tense_form
+    if card.article:
+        return f"{card.article} {card.target}"
+    if card.reflexive:
+        return f"sich {card.target}"
+    return card.target
+
+
+async def load_vocab_words(
+    db: AsyncSession, *, user_id: str, limit: int = 10
+) -> list[dict]:
+    """Random sample of the learner's active-window vocab for the tandem
+    vocab layer (TANDEM-001 extension): words worth hearing in conversation.
+
+    The pool is every deck card the scheduler still considers in play — due
+    now, or practiced but below the mature rung (``interval_days <
+    _VOCAB_MATURE_DAYS``). ``ORDER BY random()`` inside that pool so each
+    session surfaces different words. If the pool is thinner than ``limit``,
+    tops up with untouched cards (``due_at IS NULL`` — priming: the learner
+    hears a word before ever drilling it). Mature cards never appear.
+
+    Verb tense siblings share a ``target``; the sample is deduped on it so
+    Lena never gets the same verb twice (the result may then run short of
+    ``limit`` — fine, it's a target not a quota).
+
+    Each result is ``{"word": display, "gloss": gloss}`` — display carries
+    the article / ``sich`` / spoken-past form so the prompt teaches the
+    taught sense. Same read-only, caller-wrapped contract as
+    ``load_grammar_focus``.
+    """
+    now = datetime.now()
+    active = UserCard.due_at.isnot(None) & (
+        (UserCard.due_at <= now)
+        | (func.coalesce(UserCard.interval_days, 0) < _VOCAB_MATURE_DAYS)
+    )
+    rows = (
+        (
+            await db.execute(
+                select(VocabCard)
+                .join(UserCard, UserCard.card_id == VocabCard.id)
+                .where(UserCard.user_id == user_id, active)
+                .order_by(func.random())
+                .limit(limit)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if len(rows) < limit:
+        picked_ids = [c.id for c in rows]
+        extra = (
+            (
+                await db.execute(
+                    select(VocabCard)
+                    .join(UserCard, UserCard.card_id == VocabCard.id)
+                    .where(
+                        UserCard.user_id == user_id,
+                        UserCard.due_at.is_(None),
+                        VocabCard.id.notin_(picked_ids),
+                    )
+                    .order_by(func.random())
+                    .limit(limit - len(rows))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        rows = [*rows, *extra]
+
+    words: list[dict] = []
+    seen_targets: set[str] = set()
+    for card in rows:
+        key = card.target.lower()
+        if key in seen_targets:
+            continue
+        seen_targets.add(key)
+        words.append({"word": _vocab_word_display(card), "gloss": card.gloss})
+    return words
 
 
 # ── Stats (DATA-004, GET /me/stats) ──────────────────────────────────────

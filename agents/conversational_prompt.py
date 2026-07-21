@@ -336,6 +336,16 @@ def _format_session_notes(notes: list) -> str:
     return "\n".join(f"- {n}" for n in notes)
 
 
+def _format_vocab_words(words: list) -> str:
+    """Render the tandem vocab sample as ``word — gloss`` bullets.
+
+    Reads the ``{word, gloss}`` dicts built by
+    ``database.repository.load_vocab_words`` — ``word`` already carries the
+    article / ``sich`` / spoken-past form.
+    """
+    return "\n".join(f"- {w['word']} — {w['gloss']}" for w in words)
+
+
 @dynamic_prompt
 def layered_prompt_middleware(request: ModelRequest) -> str:
     """Lesson-aware system prompt assembly.
@@ -372,9 +382,10 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         assembled = f"{base}\n---\n\n{short}\n---\n\n{long}"
     elif lesson_type == "tandem":
         # The recurring tandem partner (TANDEM-001): static persona + short-term
-        # (today + topic) + two DB-backed layers stashed on Context at connect.
-        # The grammar-focus and memory layers are omitted when empty (first
-        # session / clean ledger) so the prompt never carries dangling headers.
+        # (today + topic) + three DB-backed layers stashed on Context at connect.
+        # The grammar-focus, vocab, and memory layers are omitted when empty
+        # (first session / clean ledger / empty deck) so the prompt never
+        # carries dangling headers.
         base = lesson["persona_prompt"]
         short = lesson["short_term_template"].format(
             today=date.today().isoformat(),
@@ -384,6 +395,10 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         if ctx.grammar_focus:
             parts.append(
                 lesson["grammar_focus_header"] + _format_grammar_focus(ctx.grammar_focus)
+            )
+        if ctx.vocab_words:
+            parts.append(
+                lesson["vocab_header"] + _format_vocab_words(ctx.vocab_words)
             )
         if ctx.session_notes:
             parts.append(

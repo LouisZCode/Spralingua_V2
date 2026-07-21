@@ -63,7 +63,11 @@ class Context:
     # `topic` is the learner's chosen conversation theme (the `?topic=` WS query
     # param); `grammar_focus` is their top ~3 open ledger patterns, each
     # `{pattern_id, label, description, elicit, examples}`; `session_notes` is
-    # the thin memory (recent tandem session-note strings). Empty everywhere else.
+    # the thin memory (recent tandem session-note strings); `vocab_words` is a
+    # random sample of the learner's active-window deck words
+    # (`{word, gloss}`, from `load_vocab_words`) for Lena to weave into her
+    # own speech. Empty everywhere else.
     topic: str = ""
     grammar_focus: list = field(default_factory=list)
     session_notes: list = field(default_factory=list)
+    vocab_words: list = field(default_factory=list)
