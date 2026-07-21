@@ -23,6 +23,11 @@ const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
 } as React.CSSProperties;
 
+// The review-queue cap VocabTrainer's buildQueue applies, most-overdue
+// first — ≈25 reviews/day is the sustainable budget the 5-new/day drip
+// implies (a bigger backlog waits for tomorrow instead of burying today).
+const REVIEW_CAP = 25;
+
 // Vocabulary trainer ("Satzschmiede"). The deck is the user's own pool served
 // by GET /satz/deck. The trainer is the main surface; words and packs are
 // added via the "Add Cards" popup (PackModal) — an empty pool shows a CTA
@@ -33,6 +38,10 @@ export default function Satzschmiede() {
   const router = useRouter();
 
   const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
+  // Server-decided daily new-word drip (cap + accuracy-guard throttle both
+  // already applied) — refreshed alongside `deck` on every refetch.
+  const [newAllowance, setNewAllowance] = useState(0);
+  const [newThrottled, setNewThrottled] = useState(false);
   const [error, setError] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false); // the "Add Cards" popup
 
@@ -45,7 +54,11 @@ export default function Satzschmiede() {
   const refreshDeck = useCallback(() => {
     if (!token) return;
     fetchDeck(token)
-      .then(setDeck)
+      .then((payload) => {
+        setDeck(payload.cards);
+        setNewAllowance(payload.newAllowance);
+        setNewThrottled(payload.newThrottled);
+      })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
           // Expired session JWT — clear it; the guard above then routes to
@@ -265,6 +278,9 @@ export default function Satzschmiede() {
             onReveal={handleReveal}
             onExplain={handleExplain}
             onFlag={handleFlag}
+            newAllowance={newAllowance}
+            reviewCap={REVIEW_CAP}
+            newThrottled={newThrottled}
           />
         )}
 

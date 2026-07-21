@@ -48,9 +48,10 @@ const goldShadow = {
 // mic hot, not before it.
 const MAX_RECORD_SECONDS = 45;
 
-// How many never-practiced words one session introduces — the classic SRS
-// drip. The rest wait in the pool for tomorrow's queue (or the "+ practice
-// more" button on the done panel).
+// How many never-practiced words one session introduces when the caller
+// doesn't hand VocabTrainer a server-decided `newAllowance` — Verbformen's
+// legacy flat drip. Satzschmiede itself now gets a per-day allowance from
+// the backend instead (see buildQueue below).
 const NEW_PER_SESSION = 15;
 
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both
@@ -66,15 +67,35 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// Today's work: everything due plus a capped drip of new words, shuffled so
-// packs don't replay in authoring order. `exclude` holds cards already
-// finished this session — the deck's srs is a fetch-time snapshot, so the
-// server can't tell us that.
-function buildQueue(deck: DeckCard[], exclude: Set<string>): string[] {
+// Today's work: due cards (most-overdue first, capped at `reviewCap` so a
+// big backlog doesn't bury one session) plus a drip of new words. The drip
+// size is now server-decided for Satzschmiede — `newAllowance` is 5/day
+// minus whatever's already been started today, and drops to 0 while the
+// accuracy guard is tripped; a caller that doesn't pass it (Verbformen)
+// falls back to the old flat NEW_PER_SESSION, and a caller that doesn't pass
+// `reviewCap` (Verbformen again) stays uncapped, the old behaviour.
+// Selection is by overdueness/flatness only — presentation still gets a
+// final shuffle so packs don't replay in authoring order. `exclude` holds
+// cards already finished this session — the deck's srs is a fetch-time
+// snapshot, so the server can't tell us that.
+function buildQueue(
+  deck: DeckCard[],
+  exclude: Set<string>,
+  newAllowance?: number,
+  reviewCap?: number
+): string[] {
   const pool = deck.filter((c) => !exclude.has(c.id));
-  const due = pool.filter((c) => c.srs.status === "due").map((c) => c.id);
-  const fresh = pool.filter((c) => c.srs.status === "new").map((c) => c.id);
-  return shuffle([...due, ...shuffle(fresh).slice(0, NEW_PER_SESSION)]);
+  const due = pool
+    .filter((c) => c.srs.status === "due")
+    // Oldest dueAt first — most-overdue cards win the capped slots. Due
+    // cards always carry a dueAt; the `?? ""` is just a defensive fallback.
+    .sort((a, b) => (a.srs.dueAt ?? "").localeCompare(b.srs.dueAt ?? ""))
+    .slice(0, reviewCap ?? Infinity)
+    .map((c) => c.id);
+  const fresh = shuffle(
+    pool.filter((c) => c.srs.status === "new").map((c) => c.id)
+  ).slice(0, newAllowance ?? NEW_PER_SESSION);
+  return shuffle([...due, ...fresh]);
 }
 
 export default function VocabTrainer({
@@ -88,6 +109,9 @@ export default function VocabTrainer({
   flow,
   onFlowDone,
   sessionId,
+  newAllowance,
+  reviewCap,
+  newThrottled,
 }: {
   deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
@@ -133,6 +157,16 @@ export default function VocabTrainer({
   // OBS-007 override: the Flow page's one practice-session id for the whole
   // sitting — used in place of the ref-minted one below when present.
   sessionId?: string;
+  // Server-decided daily new-word drip for Satzschmiede (0..5 — the daily
+  // cap AND the accuracy-guard throttle are both already applied). Undefined
+  // (Verbformen's implicit default) falls back to the flat NEW_PER_SESSION.
+  newAllowance?: number;
+  // Caps how many due cards one session's queue pulls in, most-overdue
+  // first. Undefined (Verbformen's implicit default) stays uncapped.
+  reviewCap?: number;
+  // True while the accuracy guard has zeroed (or shrunk) today's allowance —
+  // drives one calm reassurance line instead of new words just not showing up.
+  newThrottled?: boolean;
 }) {
   // Two ways to face the pool: "practice" works today's queue (due + a drip
   // of new, shuffled — green pops a card, anything else recycles it); browse
@@ -142,7 +176,9 @@ export default function VocabTrainer({
   // SRS status — buildQueue's due/new filter would drop a "later" card, so
   // flow mode takes the deck's id(s) directly instead.
   const [queue, setQueue] = useState<string[]>(() =>
-    flow ? deck.map((c) => c.id) : buildQueue(deck, new Set())
+    flow
+      ? deck.map((c) => c.id)
+      : buildQueue(deck, new Set(), newAllowance, reviewCap)
   );
   const [index, setIndex] = useState(0); // browse-mode position
 
@@ -453,9 +489,26 @@ export default function VocabTrainer({
     resetScratch();
   }
 
-  // Top the queue up with the next drip of new words (done-panel button).
-  function startMore() {
-    setQueue(buildQueue(deck, doneRef.current));
+  // Done-panel "+ Review N more": pull the next capped, most-overdue-first
+  // batch of due cards. Reuses buildQueue with newAllowance forced to 0 so
+  // it can never smuggle in new words beyond today's allowance — that
+  // button only ever offers due cards.
+  function reviewMore() {
+    setQueue(buildQueue(deck, doneRef.current, 0, reviewCap));
+    resetScratch();
+  }
+
+  // Done-panel "+ Practice ahead": once due and new are both spent, offer up
+  // to 10 not-yet-due "later" cards, soonest-dueAt-first. They're graded
+  // normally like anything else, so an early success climbs the SRS ladder
+  // a rung ahead of schedule — a mild net positive, not a bug.
+  function practiceAhead() {
+    const ahead = deck
+      .filter((c) => c.srs.status === "later" && !doneRef.current.has(c.id))
+      .sort((a, b) => (a.srs.dueAt ?? "").localeCompare(b.srs.dueAt ?? ""))
+      .slice(0, 10)
+      .map((c) => c.id);
+    setQueue(shuffle(ahead));
     resetScratch();
   }
 
@@ -480,11 +533,18 @@ export default function VocabTrainer({
 
   if (!card) {
     // Practice queue exhausted (browse always has a card — the parent only
-    // mounts the trainer on a non-empty pool). New words beyond today's drip
-    // can be pulled in; otherwise the pool is resting.
-    const moreNew = deck.filter(
-      (c) => c.srs.status === "new" && !doneRef.current.has(c.id)
+    // mounts the trainer on a non-empty pool). Priority for what's next:
+    // more due beyond this session's review cap first, then a chance to get
+    // a head start on upcoming "later" cards. New words are deliberately
+    // never offered here beyond the server's allowance — that's the whole
+    // point of the re-dosed drip (see buildQueue above).
+    const dueRemaining = deck.filter(
+      (c) => c.srs.status === "due" && !doneRef.current.has(c.id)
     ).length;
+    const laterAhead = deck.filter(
+      (c) => c.srs.status === "later" && !doneRef.current.has(c.id)
+    ).length;
+    const reviewMoreCount = Math.min(dueRemaining, reviewCap ?? dueRemaining);
     return (
       <div className="mx-auto w-full max-w-xl text-center">
         <h2 className="font-display text-[clamp(26px,5vw,36px)] font-black leading-tight tracking-tight text-ink">
@@ -493,21 +553,42 @@ export default function VocabTrainer({
             : "Nothing due today."}
         </h2>
         <p className="mx-auto mt-3 max-w-[380px] font-body text-[15px] leading-relaxed text-ink-soft">
-          {moreNew > 0
-            ? `Today's round is done — ${moreNew} new ${
-                moreNew === 1 ? "word is" : "words are"
-              } still waiting in your pool.`
-            : "Your words are resting — they'll come back when it's time to forge them again."}
+          {dueRemaining > 0
+            ? `Today's round is done — ${dueRemaining} more due ${
+                dueRemaining === 1 ? "word is" : "words are"
+              } waiting.`
+            : laterAhead > 0
+              ? "Today's round is done — you can get a head start on a few upcoming words."
+              : "Your words are resting — they'll come back when it's time to forge them again."}
         </p>
-        {moreNew > 0 && (
+        {/* Re-dosed drip: the accuracy guard zeroed (or shrunk) today's
+            new-word allowance — say so instead of leaving it unexplained. */}
+        {newThrottled && (
+          <p className="mx-auto mt-2 max-w-[380px] font-body text-[12px] font-semibold text-ink-faint">
+            New words are paused while your accuracy recovers — clearing
+            reviews brings them back.
+          </p>
+        )}
+        {dueRemaining > 0 ? (
           <button
             type="button"
-            onClick={startMore}
+            onClick={reviewMore}
             className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
             style={redShadow}
           >
-            + Practice {Math.min(moreNew, NEW_PER_SESSION)} more
+            + Review {reviewMoreCount} more
           </button>
+        ) : (
+          laterAhead > 0 && (
+            <button
+              type="button"
+              onClick={practiceAhead}
+              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+              style={redShadow}
+            >
+              + Practice ahead
+            </button>
+          )
         )}
         <div className="mt-6">
           <button
@@ -547,6 +628,15 @@ export default function VocabTrainer({
           Next →
         </button>
       </div>
+
+      {/* Re-dosed drip: one calm line explaining why new words are thin
+          today, instead of the drip just silently not showing up. */}
+      {!browsing && newThrottled && (
+        <p className="mb-3 text-center font-body text-[11px] font-semibold text-ink-faint">
+          New words are paused while your accuracy recovers — clearing
+          reviews brings them back.
+        </p>
+      )}
 
       {/* Mode toggle — browse is the escape hatch, never the default. */}
       <div className="mb-4 text-center">

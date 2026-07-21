@@ -11,7 +11,7 @@ so the Next.js origin needs no extra wiring here.
 import asyncio
 import re
 import time
-from datetime import datetime
+from datetime import date, datetime, time as dtime, timedelta
 from uuid import uuid4
 
 import aiohttp
@@ -27,7 +27,7 @@ from agents.observability import tracer
 from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
-from database.orm import Pack, PackCard, User, UserCard, VocabCard, WordGloss
+from database.orm import DrillAttempt, Pack, PackCard, User, UserCard, VocabCard, WordGloss
 from database.repository import record_drill_attempt, record_grammar_error
 from drills import forge_items_for_card
 from satz.content import _validate_card
@@ -35,7 +35,7 @@ from satz.enricher import EnrichedCard, enrich_word
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
 from satz.glosser import gloss_word
-from satz.scheduler import schedule
+from satz.scheduler import lapse_interval, schedule
 from security import gloss_try_admit
 
 router = APIRouter(prefix="/satz", tags=["satzschmiede"])
@@ -660,8 +660,13 @@ async def submit_attempt(
         if judgement.pattern_id:
             attempt_span.set_attribute("verdict.pattern_id", judgement.pattern_id)
 
-        # Record the outcome. A miss lands on (0, now) — still due, retryable
-        # this session; a hit climbs the interval ladder.
+        # SATZ dosing P1: the card's first graded attempt claims its
+        # new-card slot for today (idempotent past the first attempt).
+        if user_card.started_at is None:
+            user_card.started_at = datetime.now()
+
+        # Record the outcome. A miss lands on (lapse_interval, now) — still
+        # due, retryable this session; a hit climbs the interval ladder.
         interval, due_at = schedule(
             judgement.word_ok, user_card.interval_days, datetime.now()
         )
@@ -717,11 +722,29 @@ async def submit_attempt(
             "grammarOk": judgement.grammar_ok,
             "error": judgement.error,
             "corrected": judgement.corrected,
-            "dueInDays": interval,
+            # A miss stores a punished (partially reset) interval, not zero —
+            # but the card IS due now. The client's "Back in N days" vs "due
+            # again now" copy keys off this field, so report 0 on any miss
+            # regardless of what got stored on interval_days.
+            "dueInDays": interval if judgement.word_ok else 0,
             # SATZ-008: the OTel trace id of THIS judgement, so the client
             # can file a disagree-flag score onto the exact trace.
             "traceId": format(attempt_span.get_span_context().trace_id, "032x"),
         }
+
+
+# SATZ dosing P1: new cards started per day, server-side. Each new word costs
+# roughly 5-10 eventual reviews as it climbs the ladder — the Anki manual's
+# documented rule of thumb is ~20 new/day settling into ~200 reviews/day;
+# this caps at a fifth of that.
+NEW_PER_DAY = 5
+
+# SATZ dosing P3: the desirable-difficulty guard. Retrieval practice pays off
+# most above ~75-80% success (Rowland 2014) — below that, stop adding new
+# load until the existing reviews recover.
+THROTTLE_WINDOW = 20  # most recent graded satz attempts considered
+THROTTLE_MIN = 10  # need at least this many before the throttle can fire
+THROTTLE_FLOOR = 0.8
 
 
 @router.get("/deck")
@@ -732,7 +755,12 @@ async def get_deck(
     """The caller's whole pool, oldest-added first, each card carrying its
     schedule state. One payload serves both trainer modes: the frontend builds
     today's practice queue from the due/new cards and keeps browse-all over
-    the full list."""
+    the full list.
+
+    ``newAllowance`` / ``newThrottled`` (SATZ dosing P1/P3) tell the frontend
+    how many more NEW cards it may start today, independent of the due/review
+    queue — reviews are never capped, only fresh intake is.
+    """
     now = datetime.now()
     rows = (
         await db.execute(
@@ -742,10 +770,42 @@ async def get_deck(
             .order_by(UserCard.added_at, VocabCard.id)
         )
     ).all()
+
+    today_midnight = datetime.combine(date.today(), dtime.min)
+    started_today = await db.scalar(
+        select(func.count())
+        .select_from(UserCard)
+        .where(UserCard.user_id == user_id, UserCard.started_at >= today_midnight)
+    )
+
+    # Last THROTTLE_WINDOW graded satz attempts in the last 7 days. `correct`
+    # here is satz's own field — word AND grammar both ok — the stricter read
+    # of accuracy than word_ok alone, so the throttle triggers on real trouble.
+    recent_correct = (
+        await db.execute(
+            select(DrillAttempt.correct)
+            .where(
+                DrillAttempt.user_id == user_id,
+                DrillAttempt.exercise == "satz",
+                DrillAttempt.correct.is_not(None),
+                DrillAttempt.created_at >= func.now() - timedelta(days=7),
+            )
+            .order_by(DrillAttempt.created_at.desc())
+            .limit(THROTTLE_WINDOW)
+        )
+    ).scalars().all()
+    new_throttled = (
+        len(recent_correct) >= THROTTLE_MIN
+        and (sum(recent_correct) / len(recent_correct)) < THROTTLE_FLOOR
+    )
+    new_allowance = 0 if new_throttled else max(0, NEW_PER_DAY - started_today)
+
     return {
         "cards": [
             {**_card_payload(c), "srs": _srs_payload(uc, now)} for c, uc in rows
-        ]
+        ],
+        "newAllowance": new_allowance,
+        "newThrottled": new_throttled,
     }
 
 
@@ -757,8 +817,9 @@ async def reveal_card(
 ):
     """The learner peeked at the example instead of attempting — a lapse.
 
-    Drops the card to "due now" so the peek can't silently keep a long
-    interval alive (the next green restarts the ladder honestly at 1 day).
+    Drops the card to "due now" at a quarter of its old interval so the peek
+    can't silently keep a long interval alive, while the next green climbs
+    back from that quarter rather than restarting the whole ladder.
     ``reps``/``last_score`` stay untouched: a reveal isn't a graded attempt.
     """
     user_card = await db.scalar(
@@ -768,7 +829,11 @@ async def reveal_card(
     )
     if user_card is None:
         raise HTTPException(status_code=404, detail="That card isn't in your pool.")
-    user_card.interval_days = 0
+    # A reveal consumes a new-card slot too — otherwise revealing new cards
+    # would bypass the daily allowance into review load.
+    if user_card.started_at is None:
+        user_card.started_at = datetime.now()
+    user_card.interval_days = lapse_interval(user_card.interval_days)
     user_card.due_at = datetime.now()
     await db.commit()
     return {"dueInDays": 0}

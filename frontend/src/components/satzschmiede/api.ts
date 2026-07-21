@@ -88,9 +88,19 @@ export async function addPack(
   return request(`/satz/packs/${packId}/add`, token, { method: "POST" });
 }
 
-export async function fetchDeck(token: string): Promise<DeckCard[]> {
-  const data = await request<{ cards: DeckCard[] }>("/satz/deck", token);
-  return data.cards;
+// GET /satz/deck's full response: the pool plus today's server-decided
+// new-word drip. `newAllowance` is final — the daily cap (5) AND the
+// accuracy-guard throttle are both already applied, so callers just use the
+// number as-is (0..5). `newThrottled` says whether the guard is why it's
+// low/zero, for a UI explanation rather than silence.
+export type DeckPayload = {
+  cards: DeckCard[];
+  newAllowance: number;
+  newThrottled: boolean;
+};
+
+export async function fetchDeck(token: string): Promise<DeckPayload> {
+  return request<DeckPayload>("/satz/deck", token);
 }
 
 export async function addWord(

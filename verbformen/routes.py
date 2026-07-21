@@ -28,7 +28,7 @@ from database.connection import get_db
 from database.orm import UserCard, UserVerbformen, VocabCard
 from database.repository import record_drill_attempt, record_grammar_error
 from satz.examiner import examine_attempt, transcribe_attempt
-from satz.scheduler import schedule
+from satz.scheduler import lapse_interval, schedule
 
 router = APIRouter(prefix="/verbformen", tags=["verbformen"])
 
@@ -294,7 +294,9 @@ async def submit_attempt(
             "grammarOk": judgement.grammar_ok,
             "error": judgement.error,
             "corrected": judgement.corrected,
-            "dueInDays": interval,
+            # Same reason as /satz/attempts: a miss stores a punished
+            # (partially reset) interval, not zero, but the card IS due now.
+            "dueInDays": interval if judgement.word_ok else 0,
             # SATZ-008: the OTel trace id of THIS judgement, so the client
             # can file a disagree-flag score onto the exact trace.
             "traceId": format(attempt_span.get_span_context().trace_id, "032x"),
@@ -335,8 +337,9 @@ async def reveal_card(
     db: AsyncSession = Depends(get_db),
 ):
     """The learner peeked at the example instead of attempting — a lapse,
-    recorded on the overlay (drill-local): the card drops to "due now" HERE,
-    while its Satzschmiede schedule keeps whatever interval it had."""
+    recorded on the overlay (drill-local): the card drops to "due now" at a
+    quarter of its old interval HERE, while its Satzschmiede schedule keeps
+    whatever interval it had."""
     row = (
         await db.execute(_deck_row_query(user_id).where(VocabCard.id == card_id))
     ).first()
@@ -344,13 +347,15 @@ async def reveal_card(
         raise HTTPException(
             status_code=404, detail="That verb isn't in your Verbformen deck."
         )
+    _card, uvf = row
     now = datetime.now()
+    lapsed = lapse_interval(uvf.interval_days if uvf else None)
     await db.execute(
         pg_insert(UserVerbformen)
-        .values(user_id=user_id, card_id=card_id, interval_days=0, due_at=now)
+        .values(user_id=user_id, card_id=card_id, interval_days=lapsed, due_at=now)
         .on_conflict_do_update(
             index_elements=["user_id", "card_id"],
-            set_={"interval_days": 0, "due_at": now},
+            set_={"interval_days": lapsed, "due_at": now},
         )
     )
     await db.commit()

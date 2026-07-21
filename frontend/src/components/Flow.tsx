@@ -351,8 +351,8 @@ export default function Flow() {
       loadOne(fetchSprechenRound(token), ({ tasks }) => {
         bag.sprechen = tasks;
       }),
-      loadOne(fetchSatzDeck(token), (cards) => {
-        bag.satz = { deck: cards, order: orderCycle(cards) };
+      loadOne(fetchSatzDeck(token), (payload) => {
+        bag.satz = { deck: payload.cards, order: orderCycle(payload.cards) };
       }),
       loadOne(fetchVerbformenDeck(token), (cards) => {
         bag.verbformen = { deck: cards, order: orderCycle(cards) };

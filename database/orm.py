@@ -230,6 +230,9 @@ class UserCard(Base):
         Integer, nullable=False, server_default=text("0")
     )
     last_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Stamped at the card's FIRST graded attempt or reveal; drives the
+    # 5-new-per-day allowance (NULL = still untouched).
+    started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
 
     # The deck query: "this user's cards that are due".
     __table_args__ = (Index("ix_user_cards_user_due", "user_id", "due_at"),)
