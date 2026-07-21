@@ -521,3 +521,177 @@ tasks:
       Vermieter"). A verb hidden behind a modal (infinitive, prefix
       unsplit) does not count toward the three.
     keyterms: [anrufen, ausfüllen, abgeben, umziehen, einziehen]
+
+  # ── nebensatz-verbende · Konditional-Absprung (real/present) ─────────────
+  - id: kond-real-alltag
+    pattern_id: nebensatz-verbende
+    title: Wenn …, dann … (Alltag)
+    prompt: >-
+      What do you do when it rains, when you're tired, and when you have
+      free time? Three sentences, each STARTING with the wenn-clause ("Wenn
+      es regnet, …") — present tense throughout.
+    forces: >-
+      Constraint: three fronted wenn-clauses, present tense. Two checks per
+      clause: ① the wenn-clause conjugated verb stands at the very end
+      ("wenn es regnet", never "wenn regnet es"); ② right after the comma
+      the main clause opens with its conjugated verb, subject after it —
+      "dann" may come first and the verb still follows it ("Wenn es regnet,
+      bleibe ich zu Hause" / "Wenn es regnet, dann bleibe ich zu Hause",
+      never "Wenn es regnet, ich bleibe zu Hause"). Count the fronted
+      wenn-clauses, not sentences.
+    keyterms: [wenn, dann]
+
+  - id: kond-real-plaene
+    pattern_id: nebensatz-verbende
+    title: Wenn …, … (Pläne)
+    prompt: >-
+      Tell me two or three plans for tomorrow or the weekend that depend on
+      a condition — weather, free time, money — each STARTING with the
+      wenn-clause ("Wenn ich Zeit habe, …"). German keeps these in the
+      PRESENT tense even though they're about the future.
+    forces: >-
+      Constraint: two or three fronted wenn-clauses, present tense (not
+      future with werden). Two checks per clause: ① the wenn-clause
+      conjugated verb stands at the very end ("wenn ich morgen Zeit habe");
+      ② right after the comma the main clause opens with its conjugated
+      verb, subject after it — "dann" may open the main clause and the verb
+      still follows it ("Wenn ich morgen Zeit habe, gehe ich schwimmen" /
+      "…, dann gehe ich schwimmen", never "…, ich gehe schwimmen"). Count
+      the fronted wenn-clauses, not sentences.
+    keyterms: [wenn, dann, morgen]
+
+  # ── als-vs-wenn · Konditional-Absprung (habitual past) ───────────────────
+  - id: kond-damals-kindheit
+    pattern_id: als-vs-wenn
+    title: Als … / Immer wenn … (Kindheit)
+    prompt: >-
+      Tell me about your childhood: ONE single memorable event starting
+      with "Als …", plus TWO things you always used to do starting with
+      "(Immer) wenn …" — all in the past, each sentence starting with the
+      clause.
+    forces: >-
+      Constraint: one als-clause and two wenn-clauses, past tense. Three
+      checks per clause: ① correct conjunction for what it describes — "als"
+      for the one-time event, "wenn" for the repeated habits (picking the
+      wrong one is a slip, e.g. "Wenn ich zehn war, sind wir umgezogen" →
+      "Als ich zehn war, sind wir umgezogen"); ② the fronted clause's
+      conjugated verb stands at the very end ("als ich zehn war", never "als
+      war ich zehn"); ③ right after the comma the main clause opens with its
+      conjugated verb, subject after it ("…, sind wir umgezogen", never "…,
+      wir sind umgezogen") — "dann" (or "da" after als) may come first and
+      the verb still follows it. Count the fronted als/wenn-clauses, not
+      sentences.
+    keyterms: [als, wenn, damals, immer]
+
+  - id: kond-damals-routine
+    pattern_id: als-vs-wenn
+    title: Immer wenn … (Früher)
+    prompt: >-
+      Tell me about a routine from an earlier phase of your life — an old
+      job, an old city, school — in two sentences starting with "(Immer)
+      wenn …", plus one sentence starting with "Als …" about the single
+      moment that ended or changed that phase. All in the past.
+    forces: >-
+      Constraint: two wenn-clauses and one als-clause, past tense. Three
+      checks per clause: ① correct conjunction for what it describes —
+      "wenn" for the repeated routine, "als" for the one-time change
+      (picking the wrong one is a slip, e.g. for something that happened
+      every time: "Als ich mit dem Bus gefahren bin, habe ich gelesen" →
+      "Wenn ich mit dem Bus gefahren bin, habe ich gelesen". A continuous
+      phase counts as one-time — "Als ich in Berlin gewohnt habe" is
+      correct als, NOT a slip); ② the fronted clause's conjugated verb
+      stands at the very end; ③ right after the comma the main clause opens
+      with its conjugated verb, subject after it ("…, habe ich gelesen",
+      never "…, ich habe gelesen") — "dann" (or "da" after als) may come
+      first and the verb still follows it. Count the fronted
+      wenn/als-clauses, not sentences.
+    keyterms: [als, wenn, früher]
+
+  # ── konjunktiv2-hypothese · Konditional-Absprung (unreal) ────────────────
+  - id: kond-irreal-lotto
+    pattern_id: konjunktiv2-hypothese
+    title: Wenn ich … hätte/wäre
+    prompt: >-
+      Two or three hypotheticals: winning the lottery, having more free
+      time, living somewhere else. Each sentence STARTS with the wenn-clause
+      in Konjunktiv II: "Wenn ich Zeit hätte, würde ich mehr lernen."
+    forces: >-
+      Constraint: two or three fronted wenn-clauses, Konjunktiv II
+      throughout. Three checks per clause: ① the wenn-clause verb is
+      Konjunktiv II (hätte/wäre/könnte) at the very end — plain present
+      ("wenn ich reich bin") is a mood slip, the fix is "wenn ich reich
+      wäre" — würde + infinitive at the end ("gewinnen würde") is ALSO
+      correct Konjunktiv II, never "fix" it to a literary form like
+      "gewänne"; ② right after the comma the main clause opens verb-first
+      with würde/wäre/hätte/könnte, subject after it, never subject-first —
+      "dann" may come first and the verb still follows it ("…, dann würde
+      ich mehr lernen" is correct); ③ prefer "wäre"/"hätte" over "würde
+      sein"/"würde haben" — "würde ich glücklich sein" → "wäre ich
+      glücklich" is a form slip, not a mood or order slip. Count the
+      fronted wenn-clauses, not sentences.
+    keyterms: [wenn, wäre, hätte, würde]
+
+  - id: kond-irreal-anders
+    pattern_id: konjunktiv2-hypothese
+    title: Wenn alles anders wäre
+    prompt: >-
+      Imagine a different job, a different city, or one superpower — two
+      sentences, each STARTING with the wenn-clause in Konjunktiv II: "Wenn
+      ich fliegen könnte, …"
+    forces: >-
+      Constraint: two fronted wenn-clauses, Konjunktiv II throughout. Three
+      checks per clause: ① the wenn-clause verb is Konjunktiv II (hätte/
+      wäre/könnte, or würde with its infinitive at the end) — plain present
+      is a mood slip ("wenn ich einen anderen Job habe" → "wenn ich einen
+      anderen Job hätte"); ② right after the comma the main clause opens
+      verb-first with würde/wäre/hätte/könnte, subject after it — "dann"
+      may come first and the verb still follows it; ③ prefer "wäre"/"hätte"
+      over "würde
+      sein"/"würde haben" — "würde ich reicher sein" → "wäre ich reicher" is
+      a form slip. Count the fronted wenn-clauses, not sentences.
+    keyterms: [wenn, wäre, hätte, würde]
+
+  - id: kond-irreal-rueckblick
+    pattern_id: konjunktiv2-hypothese
+    title: Wenn ich … gehabt hätte
+    prompt: >-
+      Tell me two things you would have done differently — "Wenn ich Zeit
+      gehabt hätte, hätte ich mehr gelernt." Each sentence STARTS with the
+      wenn-clause, past Konjunktiv II throughout.
+    forces: >-
+      Constraint: two fronted wenn-clauses, past Konjunktiv II (Partizip +
+      hätte/wäre) throughout. Three checks per clause: ① the wenn-clause
+      ends in Partizip II followed by hätte/wäre, in that order ("wenn ich
+      Zeit gehabt hätte", never "wenn ich hätte Zeit gehabt"); ② right after
+      the comma the main clause opens verb-first with hätte/wäre, subject
+      after it, with its own Partizip II at the very end ("…, hätte ich mehr
+      gelernt", never "…, ich hätte mehr gelernt") — "dann" may come first
+      and the verb still follows it; ③ correct auxiliary
+      choice — wäre for movement/change-of-state verbs, hätte otherwise
+      (e.g. "Wenn ich früher gegangen hätte" → "Wenn ich früher gegangen
+      wäre" is an auxiliary slip). Count the fronted wenn-clauses, not
+      sentences.
+    keyterms: [wenn, hätte, wäre, gewesen]
+
+  - id: kond-irreal-reise
+    pattern_id: konjunktiv2-hypothese
+    title: Die verpasste Reise
+    prompt: >-
+      Tell me about a trip or plan that never happened — two sentences about
+      what would have been, e.g. "Wenn wir das Hotel früher gebucht hätten,
+      wären wir nach Italien gefahren." Each sentence STARTS with the
+      wenn-clause, past Konjunktiv II throughout.
+    forces: >-
+      Constraint: two fronted wenn-clauses, past Konjunktiv II (Partizip +
+      hätte/wäre) throughout. Three checks per clause: ① the wenn-clause
+      ends in Partizip II followed by hätte/wäre/hätten/wären, in that order
+      ("wenn wir das Hotel früher gebucht hätten"); ② right after the comma
+      the main clause opens verb-first with hätte/wäre/hätten/wären, subject
+      after it, with its own Partizip II at the very end ("…, wären wir nach
+      Italien gefahren", never "…, wir wären nach Italien gefahren") —
+      "dann" may come first and the verb still follows it; ③
+      correct auxiliary choice — wären for movement verbs like fahren,
+      hätten otherwise (e.g. "Wir hätten nach Italien gefahren" → "Wir wären
+      nach Italien gefahren" is an auxiliary slip). Count the fronted
+      wenn-clauses, not sentences.
+    keyterms: [wenn, hätte, wären, gefahren]

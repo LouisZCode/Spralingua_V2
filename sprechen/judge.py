@@ -26,7 +26,9 @@ JUDGE_MODEL = "openai/gpt-oss-120b"
 class Slip(BaseModel):
     """One place the TARGET structure broke — the learner's words, repaired."""
 
-    quote: str = Field(description="The learner's own words where it broke")
+    quote: str = Field(
+        description="The learner's own words where it broke, VERBATIM from the transcript"
+    )
     corrected: str = Field(description="The minimal repair of that quote, in German")
     note: str = Field(
         description="One short English line (AT MOST 10 words) naming the broken rule"
@@ -80,8 +82,8 @@ You judge one SPOKEN attempt in a German speaking drill. The learner was given a
 - The transcript comes from speech recognition: IGNORE punctuation and capitalization, forgive obviously misheard small words and fillers ("ähm"), and judge the sentences the learner most plausibly said. Sentence boundaries may be missing — infer them.
 - `constraint_met` — did the learner ATTEMPT the task in the required quantity? Count attempts, not quality: an element with broken word order still counts toward the constraint (its break is recorded as a slip instead). constraint_met=false ONLY when the elements the forces section names are missing or too few (said "weil" once when two were asked, skipped a required verb). Count ONLY the named elements — clauses, conjunctions, openers, verbs. NEVER count "sentences": speech recognition strips the boundaries, so two spoken sentences often arrive joined as one.
 - `constraint_note` — when constraint_met=false: one short English line naming what's MISSING (never a grammar comment). null when met.
-- `hits` — how many of the attempted elements produced the TARGET structure correctly.
-- `slips` — every ATTEMPTED element where the target structure broke: `quote` (the learner's own words, from the transcript), `corrected` (the minimal repair, in German, keeping their words), `note` (ONE English line, AT MOST 10 words, naming the broken rule — the correction sits next to it, so name the WHY, never restate the fix).
+- `hits` — how many of the attempted elements produced the TARGET structure correctly. When the forces section names SEVERAL checks for one element (e.g. clause-internal verb position AND verb mood/form AND the word order of the following main clause), that element counts as a hit only when EVERY named check passes.
+- `slips` — every ATTEMPTED element where the target structure broke: `quote` (the learner's own words, copied VERBATIM from the transcript — never paraphrase, trim, or fix them; the UI locates this exact span in the transcript to highlight it), `corrected` (the minimal repair, in German, keeping their words), `note` (ONE English line, AT MOST 10 words, naming the broken rule — the correction sits next to it, so name the WHY, never restate the fix). One element can therefore yield several slips when several named checks break — record each separately, and each note must name WHICH check broke (a correct word order with a wrong verb form is a form slip, not an order slip, and vice versa).
 - An element that simply doesn't attempt the target (a subject-first sentence when the task asks for fronting, a sentence with no weil) is NOT a slip — it is grammatical German that dodged the task, and it counts only against the constraint.
 - Judge ONLY the target structure. Wrong articles, adjective endings, vocabulary choices, or other unrelated grammar are NOT slips here and must be ignored — other drills own those. A sentence still counts as a hit when its only errors are unrelated to the target structure.
 """

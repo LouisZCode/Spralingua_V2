@@ -14,12 +14,17 @@ _TASKS_PATH = Path(__file__).parent / "tasks.yaml"
 
 # The taxonomy patterns this exercise targets (todo GRAM-002, Exercise B —
 # verb position / die Satzklammer, the load-side prescription).
+# Der Konditional-Absprung expands this to fronted wenn/als-clauses: the flip
+# (main clause verb-first after the comma) plus the mood (real, habitual
+# past, or Konjunktiv II).
 TARGET_PATTERNS = (
     "v2-wortstellung",
     "nebensatz-verbende",
     "perfekt-satzklammer",
     "modalverb-infinitiv-ende",
     "trennbare-verben",
+    "konjunktiv2-hypothese",
+    "als-vs-wenn",
 )
 
 _REQUIRED = ("id", "pattern_id", "title", "prompt", "forces")
