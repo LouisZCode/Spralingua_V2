@@ -425,6 +425,27 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"{type(e).__name__}: {e}"
                 )
 
+        # User-ended sessions (Finish click, closed tab): without this handler
+        # the pipeline outlives the socket and only Pipecat's 300s idle-cancel
+        # tears it down — so the disconnect-side steps (debrief, DB finalize)
+        # run ~5 minutes late and the post-session modal's 90s poll always
+        # times out ("Notes unavailable right now."). The transport fires this
+        # only when the CLIENT closes the socket (guarded in Pipecat by
+        # `if not self._client.is_closing`), so the agent-driven goodbye path —
+        # where WE close the socket after the pipeline ends — can't re-enter.
+        # cancel(), not stop_when_done(): the listener is gone, there is no
+        # audio worth finishing, and cancel is the same path the idle-timeout
+        # took, after which the whole `finally:` below already runs cleanly.
+        @transport.event_handler("on_client_disconnected")
+        async def _on_client_disconnected(_transport, _client):
+            try:
+                await task.cancel()
+            except Exception as e:  # noqa: BLE001 — must not crash the event-handler path
+                logger.warning(
+                    f"task.cancel() on client disconnect failed (non-fatal): "
+                    f"{type(e).__name__}: {e}"
+                )
+
         runner = PipelineRunner()
 
         await audiobuffer.start_recording()
