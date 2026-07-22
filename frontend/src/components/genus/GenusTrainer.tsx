@@ -91,8 +91,10 @@ export default function GenusTrainer({
   onPhrase: (itemId: string, answer: string) => Promise<PhraseVerdict>;
   // Fetch a fresh round; the parent remounts this component with it.
   onNewRound: () => void;
-  // FLOW-001 contract (not yet wired into Flow.tsx — kept for parity with
-  // the sibling trainers so the wiring is a one-line mount later).
+  // FLOW-001: in flow mode the parent deals exactly one item per mount and
+  // this trainer runs the DRAG BEAT ONLY — the gender choice is the rep;
+  // the typed production stays a standalone-page exercise. `onPhrase` is
+  // never called in flow but stays required for prop parity.
   flow?: boolean;
   onFlowDone?: (correct: boolean) => void;
 }) {
@@ -142,7 +144,11 @@ export default function GenusTrainer({
   }, [drop, verdict]);
 
   const advance = useCallback(() => {
-    const clean = (verdict?.correct ?? false) && !slippedRef.current;
+    // Flow deals the drag beat only, so a clean item there is a first-try
+    // drop; standalone additionally needs the phrase beat green.
+    const clean = flow
+      ? drop !== null && !slippedRef.current
+      : (verdict?.correct ?? false) && !slippedRef.current;
     setDrop(null);
     setTrapNote(null);
     setVerdict(null);
@@ -161,11 +167,12 @@ export default function GenusTrainer({
     } else {
       setIndex(index + 1);
     }
-  }, [index, queue.length, flow, verdict, onFlowDone]);
+  }, [index, queue.length, flow, verdict, drop, onFlowDone]);
 
-  // Enter advances from the feedback state (the input is unmounted then).
+  // Enter advances from the feedback state (the input is unmounted then) —
+  // in flow, the item ends at the drop, so Enter advances from there.
   useEffect(() => {
-    if (verdict === null) return;
+    if (verdict === null && !(flow && drop)) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -174,7 +181,7 @@ export default function GenusTrainer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [verdict, advance]);
+  }, [verdict, flow, drop, advance]);
 
   const firstSlip = useCallback(() => {
     if (slippedRef.current) return;
@@ -469,12 +476,27 @@ export default function GenusTrainer({
           </p>
         )}
 
-        {/* Beat 2 — anchor card + production, only after the drop landed. */}
+        {/* Beat 2 — anchor card + production, only after the drop landed.
+            Flow ends the item at the drop: anchor + Next, no typing. */}
         {drop && (
           <div className="mt-5">
             <AnchorCard drop={drop} />
 
-            {!solved ? (
+            {flow ? (
+              <div className="mt-5 flex items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={advance}
+                  className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  style={inkShadow}
+                >
+                  Next
+                </button>
+                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                  or press Enter
+                </span>
+              </div>
+            ) : !solved ? (
               <form onSubmit={checkPhrase} className="mt-6">
                 <p className="text-center font-body text-[15px] text-ink">
                   Now build it:{" "}

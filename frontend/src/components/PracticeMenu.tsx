@@ -94,7 +94,7 @@ export default function PracticeMenu() {
             icon="infinity"
             kicker="alle Übungen · endlos"
             title="Flow"
-            body="One stream, every exercise — words, endings, chunks, verb forms, speaking — dealt one at a time until you say stop."
+            body="One stream, every exercise — words, endings, chunks, verb forms, articles, speaking — dealt one at a time until you say stop."
             cta="Go with the flow"
           />
           <ModeCard

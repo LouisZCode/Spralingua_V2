@@ -30,6 +30,17 @@ import {
   type ZeitVerdict,
 } from "./zeitfaerbung/api";
 
+import GenusTrainer from "./genus/GenusTrainer";
+import {
+  fetchRound as fetchGenusRound,
+  submitArticle as submitGenusArticle,
+  submitPhrase as submitGenusPhrase,
+  type Article as GenusArticle,
+  type ArticleVerdict as GenusArticleVerdict,
+  type GenusItem,
+  type PhraseVerdict as GenusPhraseVerdict,
+} from "./genus/api";
+
 import SprechenTrainer from "./sprechen/SprechenTrainer";
 import {
   fetchRound as fetchSprechenRound,
@@ -65,15 +76,18 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
 
-// FLOW-001: the six existing drills this mode draws from — Szenario, Tandem
+// FLOW-001: the seven drills this mode draws from — Szenario, Tandem
 // and Conversation Practice are deliberately not in the rotation.
+// Genus deals its DRAG BEAT only (the gender choice); the typed production
+// stays a standalone-page exercise.
 type SourceKind =
   | "satz"
   | "verbformen"
   | "bauteil"
   | "verbindungen"
   | "zeitfaerbung"
-  | "sprechen";
+  | "sprechen"
+  | "genus";
 
 const ALL_KINDS: SourceKind[] = [
   "satz",
@@ -82,6 +96,7 @@ const ALL_KINDS: SourceKind[] = [
   "verbindungen",
   "zeitfaerbung",
   "sprechen",
+  "genus",
 ];
 
 const KICKER: Record<SourceKind, string> = {
@@ -91,6 +106,7 @@ const KICKER: Record<SourceKind, string> = {
   verbindungen: "VERBINDUNGEN",
   zeitfaerbung: "ZEITFÄRBUNG",
   sprechen: "SPRECHEN",
+  genus: "ARTIKEL",
 };
 
 // One dealt turn: exactly one item from exactly one source, tagged with a
@@ -100,6 +116,7 @@ type Deal =
   | { kind: "verbindungen"; key: number; item: ChunkItem }
   | { kind: "zeitfaerbung"; key: number; item: ZeitItem }
   | { kind: "sprechen"; key: number; item: SpokenTask }
+  | { kind: "genus"; key: number; item: GenusItem }
   | { kind: "satz"; key: number; card: DeckCard }
   | { kind: "verbformen"; key: number; card: DeckCard };
 
@@ -146,6 +163,7 @@ type FlowBag = {
   verbindungen: ChunkItem[];
   zeitfaerbung: ZeitItem[];
   sprechen: SpokenTask[];
+  genus: GenusItem[];
   satz: CardCycle;
   verbformen: CardCycle;
   dealCounter: number;
@@ -157,6 +175,7 @@ function emptyBag(): FlowBag {
     verbindungen: [],
     zeitfaerbung: [],
     sprechen: [],
+    genus: [],
     satz: { deck: [], order: [] },
     verbformen: { deck: [], order: [] },
     dealCounter: 0,
@@ -168,6 +187,7 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
   if (kind === "verbindungen") return bag.verbindungen.length;
   if (kind === "zeitfaerbung") return bag.zeitfaerbung.length;
   if (kind === "sprechen") return bag.sprechen.length;
+  if (kind === "genus") return bag.genus.length;
   if (kind === "satz") return bag.satz.deck.length;
   return bag.verbformen.deck.length;
 }
@@ -201,6 +221,10 @@ function dealFromSource(bag: FlowBag, kind: SourceKind): Deal | null {
     const item = bag.sprechen.shift();
     return item ? { kind, key, item } : null;
   }
+  if (kind === "genus") {
+    const item = bag.genus.shift();
+    return item ? { kind, key, item } : null;
+  }
   if (kind === "satz") {
     const card = nextCard(bag.satz);
     return card ? { kind, key, card } : null;
@@ -213,7 +237,7 @@ function dealFromSource(bag: FlowBag, kind: SourceKind): Deal | null {
 // forget, dedupe not needed (an overlapping refill just appends twice).
 function refillIfLow(
   bag: FlowBag,
-  kind: "bauteil" | "verbindungen" | "zeitfaerbung" | "sprechen",
+  kind: "bauteil" | "verbindungen" | "zeitfaerbung" | "sprechen" | "genus",
   token: string
 ) {
   if (kind === "bauteil" && bag.bauteil.length <= 1) {
@@ -240,6 +264,12 @@ function refillIfLow(
         bag.sprechen = [...bag.sprechen, ...tasks];
       })
       .catch(() => {});
+  } else if (kind === "genus" && bag.genus.length <= 1) {
+    fetchGenusRound(token)
+      .then((items) => {
+        bag.genus = [...bag.genus, ...items];
+      })
+      .catch(() => {});
   }
 }
 
@@ -253,11 +283,12 @@ function emptyTallies(): Record<SourceKind, Tally> {
     verbindungen: { done: 0, correct: 0 },
     zeitfaerbung: { done: 0, correct: 0 },
     sprechen: { done: 0, correct: 0 },
+    genus: { done: 0, correct: 0 },
   };
 }
 
 // FLOW-001: endless mixed-practice mode — one item at a time, drawn randomly
-// across the six existing exercises, running until the learner hits Finish.
+// across the seven existing exercises, running until the learner hits Finish.
 // This component is the auth-guarded page shell + the dealing/tally state;
 // each existing trainer runs unmodified except for its opt-in `flow` prop.
 export default function Flow() {
@@ -306,7 +337,8 @@ export default function Flow() {
         (kind === "bauteil" ||
           kind === "verbindungen" ||
           kind === "zeitfaerbung" ||
-          kind === "sprechen")
+          kind === "sprechen" ||
+          kind === "genus")
       ) {
         refillIfLow(bag, kind, token);
       }
@@ -350,6 +382,9 @@ export default function Flow() {
       }),
       loadOne(fetchSprechenRound(token), ({ tasks }) => {
         bag.sprechen = tasks;
+      }),
+      loadOne(fetchGenusRound(token), (items) => {
+        bag.genus = items;
       }),
       loadOne(fetchSatzDeck(token), (payload) => {
         bag.satz = { deck: payload.cards, order: orderCycle(payload.cards) };
@@ -433,6 +468,37 @@ export default function Flow() {
       if (!token) throw new UnauthorizedError("/sprechen/attempts");
       try {
         return await submitSprechenAttempt(token, taskId, audio, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleGenusArticle = useCallback(
+    async (
+      itemId: string,
+      article: GenusArticle
+    ): Promise<GenusArticleVerdict> => {
+      if (!token) throw new UnauthorizedError("/genus/attempts");
+      try {
+        return await submitGenusArticle(token, itemId, article, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  // Never called in flow (the genus item ends at the drag beat) — passed for
+  // the trainer's required-prop parity with the standalone page.
+  const handleGenusPhrase = useCallback(
+    async (itemId: string, answer: string): Promise<GenusPhraseVerdict> => {
+      if (!token) throw new UnauthorizedError("/genus/attempts");
+      try {
+        return await submitGenusPhrase(token, itemId, answer, sid());
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
@@ -702,6 +768,17 @@ export default function Flow() {
                     onNewRound={noopNewRound}
                     flow
                     onFlowDone={(correct) => handleItemDone("sprechen", correct)}
+                  />
+                )}
+                {deal.kind === "genus" && (
+                  <GenusTrainer
+                    key={deal.key}
+                    round={[deal.item]}
+                    onArticle={handleGenusArticle}
+                    onPhrase={handleGenusPhrase}
+                    onNewRound={noopNewRound}
+                    flow
+                    onFlowDone={(correct) => handleItemDone("genus", correct)}
                   />
                 )}
                 {deal.kind === "satz" && (
