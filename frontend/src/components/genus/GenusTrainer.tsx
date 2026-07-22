@@ -97,6 +97,9 @@ export default function GenusTrainer({
   onFlowDone?: (correct: boolean) => void;
 }) {
   const [phase, setPhase] = useState<Phase>(flow ? "drill" : "intro");
+  // Mid-drill peek at the ending cheat sheet — beginners forget the endings
+  // constantly at first; the sheet stays open across items until closed.
+  const [showSheet, setShowSheet] = useState(false);
   const [queue, setQueue] = useState<QueueItem[]>(round);
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -298,36 +301,7 @@ export default function GenusTrainer({
         className="rounded-[28px] border-[3px] border-ink bg-white p-7"
         style={inkShadow}
       >
-        <div className="grid gap-4 sm:grid-cols-3">
-          {ARTICLES.map((a) => {
-            const ui = ARTICLE_UI[a];
-            return (
-              <div
-                key={a}
-                className={`rounded-[20px] border-[3px] p-4 ${ui.border} ${ui.soft}`}
-              >
-                <p
-                  className={`text-center font-display text-[22px] font-black ${ui.text}`}
-                >
-                  {a}
-                </p>
-                <p className="mt-0.5 text-center font-body text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
-                  {ui.emoji} {ui.character}
-                </p>
-                <div className="mt-3 flex flex-wrap justify-center gap-1.5">
-                  {(endings?.[a] ?? []).map((e) => (
-                    <span
-                      key={e}
-                      className="rounded-full border-2 border-ink bg-white px-2.5 py-0.5 font-body text-[12px] font-bold text-ink"
-                    >
-                      {e}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <CheatSheet endings={endings} />
         <p className="mt-5 text-center font-body text-[13px] font-semibold text-flag-gold-deep">
           ⚠️ Vorsicht, Fallen! Some words wear an ending that lies — der Name
           looks like die. No pattern? Guess der.
@@ -595,6 +569,40 @@ export default function GenusTrainer({
         )}
       </div>
 
+      {/* Peekable cheat sheet — the same columns as the intro, one tap away
+          for when the ending won't come to mind. */}
+      {endings && (
+        <div className="mt-4 text-center">
+          <button
+            type="button"
+            onClick={() => setShowSheet((v) => !v)}
+            aria-expanded={showSheet}
+            className="btn-3d inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-white px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.16em] text-ink"
+            style={inkShadow}
+          >
+            Endungen
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`h-3.5 w-3.5 transition-transform ${
+                showSheet ? "rotate-180" : ""
+              }`}
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+          {showSheet && (
+            <div className="mt-4 text-left">
+              <CheatSheet endings={endings} />
+            </div>
+          )}
+        </div>
+      )}
+
       {/* The ghost circle riding the pointer mid-drag. */}
       {dragPos && (
         <div
@@ -604,6 +612,43 @@ export default function GenusTrainer({
           {dragPos.a}
         </div>
       )}
+    </div>
+  );
+}
+
+// The ending columns — one per character. Shared between the intro screen
+// and the mid-drill "Endungen" peek.
+function CheatSheet({ endings }: { endings?: EndingSheet | null }) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-3">
+      {ARTICLES.map((a) => {
+        const ui = ARTICLE_UI[a];
+        return (
+          <div
+            key={a}
+            className={`rounded-[20px] border-[3px] p-4 ${ui.border} ${ui.soft}`}
+          >
+            <p
+              className={`text-center font-display text-[22px] font-black ${ui.text}`}
+            >
+              {a}
+            </p>
+            <p className="mt-0.5 text-center font-body text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
+              {ui.emoji} {ui.character}
+            </p>
+            <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+              {(endings?.[a] ?? []).map((e) => (
+                <span
+                  key={e}
+                  className="rounded-full border-2 border-ink bg-white px-2.5 py-0.5 font-body text-[12px] font-bold text-ink"
+                >
+                  {e}
+                </span>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
