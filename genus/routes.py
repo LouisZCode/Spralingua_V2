@@ -35,10 +35,11 @@ from database.orm import UserCard, VocabCard
 from database.repository import record_drill_attempt
 from genus.content import (
     ARTICLES,
-    build_phrase,
     classify_noun,
     load_items,
     load_rules,
+    phrase_forms,
+    trap_why,
     _match_surface,
 )
 
@@ -72,6 +73,11 @@ def _deck_item(card: VocabCard) -> dict | None:
         "gloss": card.gloss or "",
         "rule": rule_id,
         "trap": trap,
+        # Famous ending-liars get their hand-written teaching line from the
+        # exception lexicon (or the curated catalog, when the learner decked
+        # a noun we also curate); unknown traps fall back to the generic
+        # line built at attempt time.
+        "why": trap_why(noun, card.article) if trap else None,
         "adjective": _DECK_ADJECTIVES[len(noun) % len(_DECK_ADJECTIVES)],
     }
 
@@ -135,6 +141,23 @@ async def get_round(
     return {"items": result}
 
 
+@router.get("/rules")
+async def get_rules(user_id: str = Depends(get_current_user_id)):
+    """The ending cheat sheet for the intro screen — display labels per
+    article, in rules.yaml order. Labels only: anchors, reliability, and the
+    trap list stay server-side for the drill itself to reveal."""
+    endings: dict[str, list[str]] = {a: [] for a in ARTICLES}
+    for rule in load_rules().values():
+        if rule["id"] == "verbnomen":
+            label = "verb→noun"
+        elif rule["kind"] == "prefix":
+            label = f"{rule['match'][0].capitalize()}-"
+        else:
+            label = "/".join(f"-{m}" for m in rule["match"])
+        endings[rule["article"]].append(label)
+    return {"endings": endings}
+
+
 _MAX_ANSWER_CHARS = 80
 
 _EDGE_PUNCT = " .,!?;:…\"'"
@@ -148,27 +171,145 @@ def _tokens(s: str) -> list[str]:
     ]
 
 
-def _phrase_feedback(item: dict, got: list[str], exp: list[str]) -> tuple[str, str]:
-    """Name the one thing that went wrong in a missed phrase — deterministic,
-    smallest-distance-first (a wrong noun makes article/adjective moot)."""
-    if len(got) != 3:
-        return "shape", "Three words: ein/eine + adjective + noun."
-    e_art, e_adj, e_noun = exp
-    g_art, g_adj, g_noun = got
-    if g_noun != e_noun:
-        return "noun", f"Keep the noun as given: {item['noun']}."
-    if g_art != e_art:
+# Carrier-sentence openers whose case we KNOW — the whitelist that lets a
+# learner wrap the phrase in a small sentence ("Ich liebe …", "Das ist …")
+# without breaking deterministic grading. sein-openers keep the nominative;
+# the transitive verbs below force the accusative. Pronoun-verb agreement is
+# deliberately not graded here — that's Zeitfärbung/Verbformen territory,
+# this drill grades the noun phrase only.
+_NOM_OPENERS = frozenset(
+    {
+        ("das", "ist"), ("es", "ist"), ("hier", "ist"), ("da", "ist"),
+        ("dort", "ist"), ("das", "war"), ("es", "war"),
+        ("ich", "bin"), ("du", "bist"), ("er", "ist"), ("sie", "ist"),
+        ("wir", "sind"), ("ihr", "seid"), ("sie", "sind"),
+    }
+)
+_PRONOUNS = frozenset({"ich", "du", "er", "sie", "es", "wir", "ihr", "man"})
+_ACC_FORMS = frozenset(
+    {
+        "liebe", "liebst", "liebt", "lieben",
+        "mag", "magst", "mögen", "mögt",
+        "habe", "hast", "hat", "haben", "habt",
+        "kaufe", "kaufst", "kauft", "kaufen",
+        "suche", "suchst", "sucht", "suchen",
+        "sehe", "siehst", "sieht", "sehen", "seht",
+        "brauche", "brauchst", "braucht", "brauchen",
+        "nehme", "nimmst", "nimmt", "nehmen", "nehmt",
+        "finde", "findest", "findet", "finden",
+    }
+)
+
+_PHRASE_GUIDANCE = (
+    "Couldn't read that — type the phrase (ein bequemer Stuhl / der bequeme "
+    "Stuhl) or open with a small sentence: Ich liebe … / Das ist …"
+)
+
+
+def _grade_phrase(item: dict, answer: str) -> dict:
+    """Grade the typed production deterministically. Accepts the bare phrase
+    (definite or indefinite, nominative) or the phrase inside a whitelisted
+    carrier sentence — whose opener also fixes the case, so "Ich liebe der
+    bequeme Stuhl" is corrected to den, not waved through.
+
+    ``kind="unrecognized"`` is guidance, not a scored verdict — the frontend
+    keeps the item live and the DATA-004 log skips it, like Zeitfärbung.
+    ``wrongIndex`` is the offending token's index in the TYPED answer so the
+    frontend can mark exactly that word red (no strikethrough)."""
+    got = _tokens(answer)
+    case, rest = "nominative", got
+    if len(got) > 3:
+        opener = tuple(got[:2])
+        if opener in _NOM_OPENERS:
+            rest = got[2:]
+        elif got[0] in _PRONOUNS and got[1] in _ACC_FORMS:
+            case, rest = "accusative", got[2:]
+        else:
+            return {
+                "correct": False,
+                "kind": "unrecognized",
+                "expected": None,
+                "article": item["article"],
+                "note": _PHRASE_GUIDANCE,
+                "wrongIndex": None,
+            }
+
+    art, adj, noun = item["article"], item["adjective"], item["noun"]
+    forms = phrase_forms(art, adj, noun, case)
+
+    def display(triple: tuple[str, str, str]) -> str:
+        return f"{triple[0]} {triple[1]} {noun}"
+
+    if len(rest) != 3:
+        return {
+            "correct": False,
+            "kind": "shape",
+            "expected": display(forms["indefinite"]),
+            "article": art,
+            "note": "Three words for the phrase: article + adjective + noun.",
+            "wrongIndex": None,
+        }
+
+    if any(tuple(rest) == f for f in forms.values()):
+        matched = next(k for k, f in forms.items() if tuple(rest) == f)
+        return {
+            "correct": True,
+            "kind": "match",
+            "expected": display(forms[matched]),
+            "article": art,
+            "note": None,
+            "wrongIndex": None,
+        }
+
+    # Diagnose against the form family the learner was going for — someone
+    # typing "der …" gets the definite gold, not a lecture about ein.
+    family = (
+        "definite"
+        if rest[0] in ("der", "die", "das", "den", "dem")
+        else "indefinite"
+    )
+    target = forms[family]
+    offset = len(got) - 3
+    if rest[2] != target[2]:
+        kind, wrong, note = "noun", 2, f"Keep the noun as given: {noun}."
+    elif rest[0] != target[0]:
+        kind, wrong = "article", 0
+        note = f"{art}-words take {target[0]} here — {display(target)}."
+    else:
+        kind, wrong = "adjective", 1
+        ending = target[1][len(adj):]
+        note = f"After {target[0]}, the adjective needs -{ending}: {target[1]}."
+    return {
+        "correct": False,
+        "kind": kind,
+        "expected": display(target),
+        "article": art,
+        "note": note,
+        "wrongIndex": offset + wrong,
+    }
+
+
+def _format_surface(surface: str | None, kind: str) -> str:
+    """Render a matched surface the way learners read endings: "-e" for a
+    suffix, "Ge-" for a prefix."""
+    if not surface:
+        return "a pattern"
+    return f"{surface}-" if kind == "prefix" else f"-{surface.lower()}"
+
+
+def _generic_trap_why(item: dict, rule: dict | None) -> str:
+    """Fallback teaching line for deck traps outside the exception lexicon."""
+    if rule is None:
         return (
-            "article",
-            f"{item['article']}-words take {e_art} here — {e_art} {e_adj} {item['noun']}.",
+            f"Falle! It's {item['article']} {item['noun']} — "
+            f"no rule covers it, learn it."
         )
-    if g_adj != e_adj:
-        ending = e_adj[len(item["adjective"]):]
-        return (
-            "adjective",
-            f"After {e_art}, the adjective needs -{ending}: {e_adj}.",
-        )
-    return "other", "Almost — check the spelling character by character."
+    surface = _match_surface(item["noun"], rule, require_stem=False)
+    return (
+        f"Falle! {item['noun']} wears {_format_surface(surface, rule['kind'])} "
+        f"({rule['article']}-territory) but is {item['article']} "
+        f"{item['noun']} — no rule covers it, learn it."
+    )
 
 
 class AttemptIn(BaseModel):
@@ -249,16 +390,7 @@ async def submit_attempt(
                     "note": "Falle! The ending is lying to you here." if trapped else None,
                 }
             elif item.get("trap"):
-                surface = (
-                    _match_surface(item["noun"], rule, require_stem=False)
-                    if rule
-                    else None
-                )
-                why = item.get("why") or (
-                    f"Falle! {item['noun']} looks like {surface or 'a pattern'} "
-                    f"→ {rule['article'] if rule else '?'}, but it's "
-                    f"{item['article']} {item['noun']} — a memory word."
-                )
+                why = item.get("why") or _generic_trap_why(item, rule)
                 payload = {
                     "correct": True,
                     "article": item["article"],
@@ -289,26 +421,11 @@ async def submit_attempt(
                     "anchor": None,
                     "reliability": None,
                     "trap": False,
-                    "note": (
-                        f"Kein Muster — just remember: "
-                        f"{item['article']} {item['noun']}."
-                    ),
+                    # The anchor card's header already says "Kein Muster".
+                    "note": f"Just remember: {item['article']} {item['noun']}.",
                 }
         else:  # phase == "phrase"
-            expected = build_phrase(item["article"], item["adjective"], item["noun"])
-            got, exp = _tokens(answer), _tokens(expected)
-            correct = got == exp
-            if correct:
-                kind, note = "match", None
-            else:
-                kind, note = _phrase_feedback(item, got, exp)
-            payload = {
-                "correct": correct,
-                "expected": expected,
-                "article": item["article"],
-                "kind": kind,
-                "note": note,
-            }
+            payload = _grade_phrase(item, answer)
 
         attempt_span.set_attribute(
             "langfuse.trace.output",
@@ -320,8 +437,12 @@ async def submit_attempt(
         # Cross-drill attempt log (DATA-004) — its own commit, non-fatal like
         # the sibling drills. Both beats log, distinguished via item_ref, so
         # accuracy can later split "knows the gender" from "can inflect it".
+        # "unrecognized" input is NOT an attempt (the frontend keeps the item
+        # live and unscored) — it never reaches the log, like Zeitfärbung.
         # NO ledger write here on purpose — see the module docstring.
         try:
+            if payload.get("kind") == "unrecognized":
+                return payload
             await record_drill_attempt(
                 db,
                 user_id=user_id,

@@ -17,6 +17,7 @@ import yaml
 
 _RULES_PATH = Path(__file__).parent / "rules.yaml"
 _ITEMS_PATH = Path(__file__).parent / "items.yaml"
+_EXCEPTIONS_PATH = Path(__file__).parent / "exceptions.yaml"
 
 ARTICLES = ("der", "die", "das")
 
@@ -31,17 +32,48 @@ SAFE_ADJECTIVES = {
     "lecker", "gesund", "stark", "nett", "freundlich", "bunt",
 }
 
-# The production beat is nominative + indefinite article on purpose: it's the
-# one frame where all three genders produce DIFFERENT surface forms (ein
-# neuer / eine neue / ein neues) — definite articles would collapse the
-# adjective to -e across the board. Cases beyond nominative are a later knob.
-_EIN_NOM = {"der": "ein", "die": "eine", "das": "ein"}
-_ADJ_NOM_END = {"der": "er", "die": "e", "das": "es"}
+# The production beat accepts the phrase in definite OR indefinite form, in
+# nominative OR accusative (the two cases the whitelisted carrier-sentence
+# openers in routes.py can force deterministically). Table-built like
+# drills/forge.py, so the gold forms can never be wrong: weak adjective
+# endings after der-words, mixed after ein-words.
+_DEF_ART = {
+    "nominative": {"der": "der", "die": "die", "das": "das"},
+    "accusative": {"der": "den", "die": "die", "das": "das"},
+}
+_WEAK_END = {
+    "nominative": {"der": "e", "die": "e", "das": "e"},
+    "accusative": {"der": "en", "die": "e", "das": "e"},
+}
+_EIN_ART = {
+    "nominative": {"der": "ein", "die": "eine", "das": "ein"},
+    "accusative": {"der": "einen", "die": "eine", "das": "ein"},
+}
+_MIXED_END = {
+    "nominative": {"der": "er", "die": "e", "das": "es"},
+    "accusative": {"der": "en", "die": "e", "das": "es"},
+}
 
 
-def build_phrase(article: str, adjective: str, noun: str) -> str:
-    """The deterministic gold phrase — ein/eine + inflected adjective + noun."""
-    return f"{_EIN_NOM[article]} {adjective}{_ADJ_NOM_END[article]} {noun}"
+def phrase_forms(
+    article: str, adjective: str, noun: str, case: str
+) -> dict[str, tuple[str, str, str]]:
+    """The accepted gold triples for one case, lowercased for comparison:
+    ``{"definite": ("der", "bequeme", "stuhl"), "indefinite": ("ein",
+    "bequemer", "stuhl")}``."""
+    n = noun.lower()
+    return {
+        "definite": (
+            _DEF_ART[case][article],
+            adjective + _WEAK_END[case][article],
+            n,
+        ),
+        "indefinite": (
+            _EIN_ART[case][article],
+            adjective + _MIXED_END[case][article],
+            n,
+        ),
+    }
 
 
 _RULE_REQUIRED = ("id", "kind", "match", "article", "reliability", "anchor", "examples")
@@ -214,3 +246,66 @@ def load_items() -> dict[str, dict]:
 
         catalog[item["id"]] = item
     return catalog
+
+
+@lru_cache(maxsize=1)
+def load_exceptions() -> dict[str, dict]:
+    """Parse and validate the exception lexicon once; return ``{noun.lower():
+    entry}``. Every entry must actually be an ending-trap per the classifier
+    (a wrong-article word no rule matches doesn't belong here — it would
+    never be consulted), and must not duplicate a curated items.yaml noun
+    (one source of truth per word: the curated item's own ``why`` wins)."""
+    with open(_EXCEPTIONS_PATH, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    entries = (data or {}).get("exceptions")
+    if not entries:
+        raise ValueError(f"{_EXCEPTIONS_PATH}: no 'exceptions' list")
+
+    curated_nouns = {i["noun"].lower() for i in load_items().values()}
+    catalog: dict[str, dict] = {}
+    for i, entry in enumerate(entries):
+        where = f"{_EXCEPTIONS_PATH}: exceptions[{i}] ({entry.get('noun', '?')})"
+        for field in ("noun", "article", "why"):
+            if not entry.get(field):
+                raise ValueError(f"{where}: missing '{field}'")
+        key = entry["noun"].lower()
+        if key in catalog:
+            raise ValueError(f"{where}: duplicate noun")
+        if key in curated_nouns:
+            raise ValueError(
+                f"{where}: already curated in items.yaml — keep one why per word"
+            )
+        if entry["article"] not in ARTICLES:
+            raise ValueError(f"{where}: article must be one of {ARTICLES}")
+        _, _, trap = classify_noun(entry["noun"], entry["article"])
+        if not trap:
+            raise ValueError(
+                f"{where}: not an ending-trap per the classifier — "
+                f"this entry would never be consulted"
+            )
+        catalog[key] = entry
+    return catalog
+
+
+@lru_cache(maxsize=1)
+def _curated_trap_whys() -> dict[str, dict]:
+    """Curated trap teaching lines indexed by noun — so a learner who decks
+    a noun we also curate (die Mutter, der Kuchen) still gets the hand-
+    written line: the round dedupes in the deck copy's favor, which would
+    otherwise drop the curated ``why`` on the floor."""
+    return {
+        i["noun"].lower(): i
+        for i in load_items().values()
+        if i.get("trap")
+    }
+
+
+def trap_why(noun: str, article: str) -> str | None:
+    """The hand-written teaching line for a trap noun, if we have one —
+    exception lexicon first, curated items second. The article must agree
+    (der See and die See are different words), else ``None``."""
+    for source in (load_exceptions(), _curated_trap_whys()):
+        entry = source.get(noun.lower())
+        if entry is not None and entry["article"] == article:
+            return entry["why"]
+    return None

@@ -30,17 +30,26 @@ export type ArticleVerdict = {
   note?: string | null;
 };
 
-// Verdict for phase="phrase" (typed production).
+// Verdict for phase="phrase" (typed production). Accepts definite or
+// indefinite phrases, bare or wrapped in a whitelisted carrier sentence
+// ("Ich liebe …" forces the accusative and is graded in it).
 export type PhraseVerdict = {
   correct: boolean;
-  expected: string; // the gold phrase, e.g. "eine neue Wohnung"
+  expected: string | null; // the gold phrase for the attempted form family
   article: Article;
-  // What went wrong, smallest-distance-first: wrong ein-form ("article"),
-  // wrong adjective ending ("adjective"), misspelled noun ("noun"), not
-  // three words ("shape").
-  kind: "match" | "shape" | "noun" | "article" | "adjective" | "other";
+  // What went wrong: wrong article form ("article"), wrong adjective ending
+  // ("adjective"), misspelled noun ("noun"), not three phrase words
+  // ("shape"), or an opener the grader can't read ("unrecognized" —
+  // guidance only, never scored, the item stays live).
+  kind: "match" | "shape" | "noun" | "article" | "adjective" | "unrecognized";
   note: string | null;
+  // Index of the offending token in the TYPED answer — the frontend marks
+  // exactly that word red (no strikethrough). null when it's not one token.
+  wrongIndex: number | null;
 };
+
+// The intro cheat sheet: ending labels per article, in rules.yaml order.
+export type EndingSheet = Record<Article, string[]>;
 
 async function request<T>(
   path: string,
@@ -66,6 +75,11 @@ async function request<T>(
 export async function fetchRound(token: string): Promise<GenusItem[]> {
   const data = await request<{ items: GenusItem[] }>("/genus/round", token);
   return data.items;
+}
+
+export async function fetchEndings(token: string): Promise<EndingSheet> {
+  const data = await request<{ endings: EndingSheet }>("/genus/rules", token);
+  return data.endings;
 }
 
 export async function submitArticle(

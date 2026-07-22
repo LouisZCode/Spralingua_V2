@@ -1,0 +1,158 @@
+# Artikel-Anker exception lexicon — hand-written teaching lines for the
+# famous ending-liars, served when a DECK noun turns out to be a trap (the
+# curated items.yaml traps carry their own `why`; this file covers the words
+# a learner decks themselves). Content-as-data; genus/content.py validates
+# fail-loud at startup: every entry must actually BE an ending-trap per the
+# classifier (wrong-article words with no matching rule don't belong here),
+# and must not duplicate a curated items.yaml noun — one source per word.
+#
+# Fields per entry: noun, article (the truth), why (the teaching line).
+#
+# Unknown deck traps outside this list still get the generic fallback line —
+# this file is the curated fast path, not a completeness requirement. It is
+# also the natural future home for Track B per-noun images (Einzelbilder).
+
+exceptions:
+  # ── weak masculines: -e words that are der (the famous small family) ────
+  - noun: Kunde
+    article: der
+    why: "Weak masculine — der Held's spy in die Fee's -e camp. Same family: der Name, der Junge, der Kollege. Learn the small family once and -e is safe again."
+  - noun: Experte
+    article: der
+    why: "Weak masculine — der Experte, alongside der Kunde and der Kollege."
+  - noun: Riese
+    article: der
+    why: "Weak masculine — der Riese. The giant ignores the -e."
+  - noun: Löwe
+    article: der
+    why: "Weak masculine — der Löwe, like der Affe and der Hase: the -e animals are der."
+  - noun: Affe
+    article: der
+    why: "Weak masculine — der Affe. The -e animals (Löwe, Hase, Affe) are der."
+  - noun: Hase
+    article: der
+    why: "Weak masculine — der Hase, with der Löwe and der Affe."
+  - noun: Gedanke
+    article: der
+    why: "Weak masculine — der Gedanke. Both the Ge- and the -e lie here; it marches with der Name and der Glaube."
+  - noun: Glaube
+    article: der
+    why: "Weak masculine — der Glaube, in the abstract corner of the family with der Gedanke and der Wille."
+  - noun: Wille
+    article: der
+    why: "Weak masculine — der Wille, with der Glaube and der Gedanke."
+  - noun: Buchstabe
+    article: der
+    why: "Weak masculine — der Buchstabe, one of the small der-family in -e."
+  - noun: Neffe
+    article: der
+    why: "Weak masculine — der Neffe, a male person despite the -e (like der Junge, der Kollege)."
+
+  # ── -e words that are das ───────────────────────────────────────────────
+  - noun: Auge
+    article: das
+    why: "One of the few das words in die Fee's -e camp — das Auge, das Ende, das Interesse."
+  - noun: Ende
+    article: das
+    why: "das Ende — with das Auge and das Interesse, the small das corner of -e."
+  - noun: Interesse
+    article: das
+    why: "das Interesse — the -e lies; it sits with das Auge and das Ende."
+
+  # ── -e drinks that are der ──────────────────────────────────────────────
+  - noun: Kaffee
+    article: der
+    why: "The drinks resist die Fee — der Kaffee, der Tee. Pure memory."
+  - noun: Tee
+    article: der
+    why: "der Tee — drinks in -ee go with der Kaffee, not with die Fee."
+  - noun: See
+    article: der
+    why: "der See is the lake — but die See is the sea! One of the few words where gender changes the meaning."
+
+  # ── -er words that are die / das ────────────────────────────────────────
+  - noun: Butter
+    article: die
+    why: "Kitchen -er words side with die Fee — die Butter, like die Mutter."
+  - noun: Tochter
+    article: die
+    why: "Family women are die whatever the -er says — die Tochter, die Schwester, die Mutter."
+  - noun: Schwester
+    article: die
+    why: "die Schwester — family women override the -er, like die Mutter and die Tochter."
+  - noun: Nummer
+    article: die
+    why: "die Nummer — the -er lies here; no agent, no tool."
+  - noun: Zimmer
+    article: das
+    why: "das Zimmer — one of the everyday das escapes from -er (with das Fenster, das Wasser, das Messer)."
+  - noun: Messer
+    article: das
+    why: "das Messer — a tool by meaning but das by memory, like das Fenster and das Zimmer."
+  - noun: Wetter
+    article: das
+    why: "das Wetter — no one is doing the weathering; the -er lies."
+  - noun: Feuer
+    article: das
+    why: "das Feuer — elemental stuff (Feuer, Wasser) lands with das Baby despite the -er."
+
+  # ── -or words that are das ──────────────────────────────────────────────
+  - noun: Tor
+    article: das
+    why: "das Tor — the gate/goal escapes der Held's -or machines (Motor, Professor)."
+  - noun: Labor
+    article: das
+    why: "das Labor — a rare -or escape, with das Tor."
+
+  # ── -o words that are der ───────────────────────────────────────────────
+  - noun: Euro
+    article: der
+    why: "der Euro — money resists the -o toy rule; currencies are der."
+  - noun: Zoo
+    article: der
+    why: "der Zoo — a short -o word that never joined das Baby's imports."
+
+  # ── -um words that are der ──────────────────────────────────────────────
+  - noun: Reichtum
+    article: der
+    why: "-tum is usually das (das Eigentum), but der Reichtum and der Irrtum are the two famous escapees."
+  - noun: Irrtum
+    article: der
+    why: "der Irrtum — with der Reichtum, the two -tum words that escaped das."
+
+  # ── assorted famous liars ───────────────────────────────────────────────
+  - noun: Benzin
+    article: das
+    why: "das Benzin — -in here isn't the female-person suffix (just as der Termin isn't)."
+  - noun: Abitur
+    article: das
+    why: "das Abitur — the exam escapes die Fee's -ur (Natur, Kultur)."
+  - noun: Streik
+    article: der
+    why: "der Streik — borrowed from English 'strike'; it never learned the -ik rule."
+  - noun: Papagei
+    article: der
+    why: "der Papagei — -ei only counts for die Fee's shops (Bäckerei); animals pick their own article."
+  - noun: Zement
+    article: der
+    why: "der Zement — with der Moment, the two famous -ment escapes from das Baby's crib."
+
+  # ── Ge- words that are die / der ────────────────────────────────────────
+  - noun: Gebühr
+    article: die
+    why: "die Gebühr — a Ge- word that escaped das Baby, with die Geburt and die Gefahr."
+  - noun: Geburt
+    article: die
+    why: "die Geburt — Ge- suggests das, but this group (Geburt, Gefahr, Geduld) is die."
+  - noun: Gefahr
+    article: die
+    why: "die Gefahr — one of the die escapes from Ge- (with die Geburt and die Geduld)."
+  - noun: Geduld
+    article: die
+    why: "die Geduld — patience belongs to die Fee despite the Ge-."
+  - noun: Gegend
+    article: die
+    why: "die Gegend — a Ge- word gone die; memory, not pattern."
+  - noun: Geschmack
+    article: der
+    why: "der Geschmack — a Ge- word gone der, like der Gedanke."

@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import type { Article, ArticleVerdict, GenusItem, PhraseVerdict } from "./api";
+import type {
+  Article,
+  ArticleVerdict,
+  EndingSheet,
+  GenusItem,
+  PhraseVerdict,
+} from "./api";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as ZeitfaerbungTrainer. `retry` marks the copy. An item counts as
@@ -66,27 +72,9 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
 
-const RULES: { title: string; body: string }[] = [
-  {
-    title: "Drag the article onto the word",
-    body: "Three circles — der (red), die (blue), das (green). Grab the right one and drop it on the noun. The ending keeps the color.",
-  },
-  {
-    title: "Endings are anchors",
-    body: "Most endings give the gender away: -ung is always die, -chen always das. Each ending belongs to one character — der Held, die Fee, das Baby — and every word wearing it rides free.",
-  },
-  {
-    title: "Watch for traps",
-    body: "Some words wear an ending that lies: der Name looks like a die-word. Spotting the lie is the actual skill. No pattern at all? Guess der — never das.",
-  },
-  {
-    title: "Then build the phrase",
-    body: "After the drop, type the phrase: ein neuer Tisch, eine neue Wohnung, ein frisches Brötchen. The ein-form and the adjective ending must agree with the gender you just anchored.",
-  },
-];
-
 export default function GenusTrainer({
   round,
+  endings,
   onArticle,
   onPhrase,
   onNewRound,
@@ -94,6 +82,9 @@ export default function GenusTrainer({
   onFlowDone,
 }: {
   round: GenusItem[];
+  // The intro cheat sheet (GET /genus/rules) — nullable so a slow/failed
+  // fetch degrades to an intro without the columns, never a broken one.
+  endings?: EndingSheet | null;
   // Grade one dropped article / one typed phrase (POST /genus/attempts via
   // the parent, which owns the token and the OBS-007 practice-session id).
   onArticle: (itemId: string, article: Article) => Promise<ArticleVerdict>;
@@ -125,9 +116,11 @@ export default function GenusTrainer({
   const dragRef = useRef<Article | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  // Beat 2 — the typed phrase.
+  // Beat 2 — the typed phrase. `guidance` holds an "unrecognized" note:
+  // shown under the input, never scored, the item stays live.
   const [value, setValue] = useState("");
   const [verdict, setVerdict] = useState<PhraseVerdict | null>(null);
+  const [guidance, setGuidance] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   // Scoring: an item is a first-try green only when BOTH beats were clean.
@@ -151,6 +144,7 @@ export default function GenusTrainer({
     setTrapNote(null);
     setVerdict(null);
     setValue("");
+    setGuidance(null);
     setFailed(null);
     setShakeKey(0);
     slippedRef.current = false;
@@ -269,13 +263,20 @@ export default function GenusTrainer({
     setFailed(null);
     try {
       const res = await onPhrase(item.id, answer);
+      if (res.kind === "unrecognized") {
+        // Not a graded attempt — show the guidance, clear the box, stay put.
+        setGuidance(res.note);
+        setValue("");
+        return;
+      }
+      setGuidance(null);
       if (!res.correct) firstSlip();
       setVerdict(res);
       if (!item.retry) {
         if (res.correct && !slippedRef.current) {
           setFirstTryGreens((n) => n + 1);
         } else {
-          setMissed((m) => [...m, { item, expected: res.expected }]);
+          setMissed((m) => [...m, { item, expected: res.expected ?? "" }]);
         }
       }
     } catch (err) {
@@ -290,34 +291,57 @@ export default function GenusTrainer({
   }
 
   if (phase === "intro") {
+    // No instruction wall — the cheat sheet IS the intro: the endings each
+    // character owns, one trap warning, start.
     return (
       <div
         className="rounded-[28px] border-[3px] border-ink bg-white p-7"
         style={inkShadow}
       >
-        <h2 className="font-display text-[20px] font-black tracking-tight text-ink">
-          How it works
-        </h2>
-        <ul className="mt-5 space-y-4">
-          {RULES.map((r) => (
-            <li key={r.title}>
-              <p className="font-body text-[12px] font-black uppercase tracking-[0.18em] text-flag-red">
-                {r.title}
-              </p>
-              <p className="mt-1 font-body text-[14px] leading-relaxed text-ink-soft">
-                {r.body}
-              </p>
-            </li>
-          ))}
-        </ul>
-        <button
-          type="button"
-          onClick={() => setPhase("drill")}
-          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
-          style={redShadow}
-        >
-          Start · {round.length} words
-        </button>
+        <div className="grid gap-4 sm:grid-cols-3">
+          {ARTICLES.map((a) => {
+            const ui = ARTICLE_UI[a];
+            return (
+              <div
+                key={a}
+                className={`rounded-[20px] border-[3px] p-4 ${ui.border} ${ui.soft}`}
+              >
+                <p
+                  className={`text-center font-display text-[22px] font-black ${ui.text}`}
+                >
+                  {a}
+                </p>
+                <p className="mt-0.5 text-center font-body text-[11px] font-bold uppercase tracking-[0.18em] text-ink-muted">
+                  {ui.emoji} {ui.character}
+                </p>
+                <div className="mt-3 flex flex-wrap justify-center gap-1.5">
+                  {(endings?.[a] ?? []).map((e) => (
+                    <span
+                      key={e}
+                      className="rounded-full border-2 border-ink bg-white px-2.5 py-0.5 font-body text-[12px] font-bold text-ink"
+                    >
+                      {e}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className="mt-5 text-center font-body text-[13px] font-semibold text-flag-gold-deep">
+          ⚠️ Vorsicht, Fallen! Some words wear an ending that lies — der Name
+          looks like die. No pattern? Guess der.
+        </p>
+        <div className="mt-6 text-center">
+          <button
+            type="button"
+            onClick={() => setPhase("drill")}
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
+            style={redShadow}
+          >
+            Start · {round.length} words
+          </button>
+        </div>
       </div>
     );
   }
@@ -485,7 +509,8 @@ export default function GenusTrainer({
                   <span className="font-black">{item.noun}</span>
                 </p>
                 <p className="mt-1 text-center font-body text-[12px] text-ink-muted">
-                  indefinite article + adjective + noun — nominative
+                  ein/der + adjective + noun — or a small sentence: Ich liebe
+                  … / Das ist …
                 </p>
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                   <input
@@ -511,6 +536,11 @@ export default function GenusTrainer({
                     {busy ? "Checking…" : "Check"}
                   </button>
                 </div>
+                {guidance && (
+                  <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-gold-deep">
+                    {guidance}
+                  </p>
+                )}
                 {failed && (
                   <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
                     {failed}
@@ -532,9 +562,11 @@ export default function GenusTrainer({
                       </p>
                       <p className="font-body text-[13px] text-ink-soft">
                         You typed:{" "}
-                        <span className="font-semibold line-through decoration-flag-red decoration-2">
-                          {value.trim()}
-                        </span>
+                        <TypedEcho
+                          value={value.trim()}
+                          wrongIndex={verdict.wrongIndex}
+                          allWrong={verdict.kind === "shape"}
+                        />
                       </p>
                       {verdict.note && (
                         <p className="mt-1 max-w-[420px] text-center font-body text-[13px] leading-snug text-ink-soft">
@@ -573,6 +605,36 @@ export default function GenusTrainer({
         </div>
       )}
     </div>
+  );
+}
+
+// The learner's answer echoed back with ONLY the offending word in red —
+// never strikethrough (it makes the text unreadable); red alone marks the
+// error.
+function TypedEcho({
+  value,
+  wrongIndex,
+  allWrong,
+}: {
+  value: string;
+  wrongIndex: number | null;
+  allWrong: boolean;
+}) {
+  const tokens = value.split(/\s+/);
+  return (
+    <span className="font-semibold">
+      {tokens.map((t, i) => (
+        <span
+          key={i}
+          className={
+            allWrong || i === wrongIndex ? "text-flag-red-deep" : "text-ink"
+          }
+        >
+          {t}
+          {i < tokens.length - 1 ? " " : ""}
+        </span>
+      ))}
+    </span>
   );
 }
 

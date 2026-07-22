@@ -7,11 +7,13 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import GenusTrainer from "./genus/GenusTrainer";
 import {
+  fetchEndings,
   fetchRound,
   submitArticle,
   submitPhrase,
   type Article,
   type ArticleVerdict,
+  type EndingSheet,
   type GenusItem,
   type PhraseVerdict,
 } from "./genus/api";
@@ -29,6 +31,16 @@ export default function Genus() {
   const [round, setRound] = useState<GenusItem[] | null>(null); // null = loading
   const [roundKey, setRoundKey] = useState(0); // remounts the trainer per round
   const [error, setError] = useState(false);
+  // The intro cheat sheet — fetched once per visit; a failed fetch just
+  // means an intro without the ending columns, never a blocked drill.
+  const [endings, setEndings] = useState<EndingSheet | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    fetchEndings(token)
+      .then(setEndings)
+      .catch(() => {});
+  }, [token]);
 
   // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
   // first attempt, held for the whole page visit above the per-round remounts.
@@ -150,6 +162,7 @@ export default function Genus() {
           <GenusTrainer
             key={roundKey}
             round={round}
+            endings={endings}
             onArticle={handleArticle}
             onPhrase={handlePhrase}
             onNewRound={loadRound}

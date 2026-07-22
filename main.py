@@ -19,6 +19,7 @@ from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from genus import (
+    load_exceptions as load_genus_exceptions,
     load_items as load_genus_items,
     load_rules as load_genus_rules,
     router as genus_router,
@@ -101,6 +102,7 @@ async def lifespan(app: FastAPI):
     # mistagged rule/trap aborts startup here, not mid-drag.
     load_genus_rules()
     load_genus_items()
+    load_genus_exceptions()
     # And for Szenario-Sparring's scenario catalog (P1, thin slice) — same
     # fail-loud rule as the grammar-exercise catalogs above.
     load_szenario_scenarios()
