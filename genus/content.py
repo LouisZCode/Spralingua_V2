@@ -16,7 +16,7 @@ from pathlib import Path
 import yaml
 
 _RULES_PATH = Path(__file__).parent / "rules.yaml"
-_ITEMS_PATH = Path(__file__).parent / "items.yaml"
+_POOLS_DIR = Path(__file__).parent / "pools"
 _EXCEPTIONS_PATH = Path(__file__).parent / "exceptions.yaml"
 
 ARTICLES = ("der", "die", "das")
@@ -174,78 +174,140 @@ def classify_noun(noun: str, article: str) -> tuple[str | None, str | None, bool
 
 
 _ITEM_REQUIRED = ("id", "noun", "article", "gloss", "adjective")
+_POOL_REQUIRED = ("id", "title", "position")
+
+
+def _validate_item(item: dict, where: str, rules: dict[str, dict]) -> None:
+    """Field + classifier-cross-check validation for one curated item —
+    raises with a located message on the first problem."""
+    for field in _ITEM_REQUIRED:
+        if not item.get(field):
+            raise ValueError(f"{where}: missing '{field}'")
+    if item["article"] not in ARTICLES:
+        raise ValueError(f"{where}: article must be one of {ARTICLES}")
+    if item["adjective"] not in SAFE_ADJECTIVES:
+        raise ValueError(
+            f"{where}: adjective {item['adjective']!r} is not concat-safe"
+        )
+
+    rule_id = item.get("rule")
+    trap = bool(item.get("trap"))
+    why = item.get("why")
+    if trap and not why:
+        raise ValueError(f"{where}: traps need a 'why' teaching line")
+    if not trap and why:
+        raise ValueError(f"{where}: 'why' is traps-only")
+
+    if rule_id is not None:
+        rule = rules.get(rule_id)
+        if rule is None:
+            raise ValueError(f"{where}: unknown rule {rule_id!r}")
+        if _match_surface(item["noun"], rule, require_stem=False) is None:
+            raise ValueError(
+                f"{where}: rule {rule_id!r} never matches {item['noun']!r}"
+            )
+        mismatch = rule["article"] != item["article"]
+        if trap != mismatch:
+            raise ValueError(
+                f"{where}: trap={trap} but rule article "
+                f"{rule['article']!r} vs item article {item['article']!r}"
+            )
+        # Keep the YAML honest: the tag must agree with what the live
+        # classifier would say about a deck noun with the same shape.
+        # Two legitimate exceptions: auto None (stem-guard words like Ei),
+        # and a curated classify:false rule — verbnomen exists BECAUSE
+        # string shape can't see it (das Kochen literally ends in -chen);
+        # there the author's tag overrides the classifier on purpose.
+        auto_rule, _, auto_trap = classify_noun(item["noun"], item["article"])
+        if (
+            auto_rule is not None
+            and rule.get("classify", True)
+            and (auto_rule, auto_trap) != (rule_id, trap)
+        ):
+            raise ValueError(
+                f"{where}: auto-classifier disagrees — it says "
+                f"({auto_rule!r}, trap={auto_trap})"
+            )
+    else:
+        if trap:
+            raise ValueError(f"{where}: a trap needs the rule it fakes")
+        auto_rule, _, _ = classify_noun(item["noun"], item["article"])
+        if auto_rule is not None:
+            raise ValueError(
+                f"{where}: tagged pattern-free but the classifier finds "
+                f"{auto_rule!r} — tag it"
+            )
+
+
+@lru_cache(maxsize=1)
+def load_pools() -> dict[str, dict]:
+    """Parse and validate every pool under ``genus/pools/*.yaml`` once;
+    return ``{pool_id: {"id", "title", "position", "items": {item_id:
+    item}}}``. Item ids AND nouns are unique across all pools — one word,
+    one home — which also keeps the exceptions-overlap check unambiguous."""
+    rules = load_rules()
+    files = sorted(_POOLS_DIR.glob("*.yaml"))
+    if not files:
+        raise ValueError(f"{_POOLS_DIR}: no pool files")
+
+    pools: dict[str, dict] = {}
+    seen_item_ids: set[str] = set()
+    seen_nouns: dict[str, str] = {}  # noun.lower() -> pool id
+    for path in files:
+        with open(path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        meta = (data or {}).get("pool")
+        items = (data or {}).get("items")
+        if not isinstance(meta, dict):
+            raise ValueError(f"{path}: missing 'pool' metadata block")
+        for field in _POOL_REQUIRED:
+            if meta.get(field) is None:
+                raise ValueError(f"{path}: pool metadata missing '{field}'")
+        if meta["id"] != path.stem:
+            raise ValueError(
+                f"{path}: pool id {meta['id']!r} must match the filename"
+            )
+        if meta["id"] in pools:
+            raise ValueError(f"{path}: duplicate pool id")
+        if not items:
+            raise ValueError(f"{path}: no 'items' list")
+
+        catalog: dict[str, dict] = {}
+        for i, item in enumerate(items):
+            where = f"{path}: items[{i}] ({item.get('id', '?')})"
+            _validate_item(item, where, rules)
+            if item["id"] in seen_item_ids:
+                raise ValueError(f"{where}: duplicate item id across pools")
+            noun_key = item["noun"].lower()
+            if noun_key in seen_nouns:
+                raise ValueError(
+                    f"{where}: noun already in pool {seen_nouns[noun_key]!r} "
+                    f"— one word, one home"
+                )
+            seen_item_ids.add(item["id"])
+            seen_nouns[noun_key] = meta["id"]
+            catalog[item["id"]] = item
+
+        pools[meta["id"]] = {
+            "id": meta["id"],
+            "title": meta["title"],
+            "position": int(meta["position"]),
+            "items": catalog,
+        }
+
+    if "basis" not in pools:
+        raise ValueError(f"{_POOLS_DIR}: the default 'basis' pool is required")
+    return pools
 
 
 @lru_cache(maxsize=1)
 def load_items() -> dict[str, dict]:
-    """Parse and validate the curated noun catalog once; return ``{id: item}``."""
-    rules = load_rules()
-    with open(_ITEMS_PATH, "r", encoding="utf-8") as f:
-        data = yaml.safe_load(f)
-    items = (data or {}).get("items")
-    if not items:
-        raise ValueError(f"{_ITEMS_PATH}: no 'items' list")
-
-    catalog: dict[str, dict] = {}
-    for i, item in enumerate(items):
-        where = f"{_ITEMS_PATH}: items[{i}] ({item.get('id', '?')})"
-        for field in _ITEM_REQUIRED:
-            if not item.get(field):
-                raise ValueError(f"{where}: missing '{field}'")
-        if item["id"] in catalog:
-            raise ValueError(f"{where}: duplicate item id")
-        if item["article"] not in ARTICLES:
-            raise ValueError(f"{where}: article must be one of {ARTICLES}")
-        if item["adjective"] not in SAFE_ADJECTIVES:
-            raise ValueError(
-                f"{where}: adjective {item['adjective']!r} is not concat-safe"
-            )
-
-        rule_id = item.get("rule")
-        trap = bool(item.get("trap"))
-        why = item.get("why")
-        if trap and not why:
-            raise ValueError(f"{where}: traps need a 'why' teaching line")
-        if not trap and why:
-            raise ValueError(f"{where}: 'why' is traps-only")
-
-        if rule_id is not None:
-            rule = rules.get(rule_id)
-            if rule is None:
-                raise ValueError(f"{where}: unknown rule {rule_id!r}")
-            if _match_surface(item["noun"], rule, require_stem=False) is None:
-                raise ValueError(
-                    f"{where}: rule {rule_id!r} never matches {item['noun']!r}"
-                )
-            mismatch = rule["article"] != item["article"]
-            if trap != mismatch:
-                raise ValueError(
-                    f"{where}: trap={trap} but rule article "
-                    f"{rule['article']!r} vs item article {item['article']!r}"
-                )
-            # Keep the YAML honest: the tag must agree with what the live
-            # classifier would say about a deck noun with the same shape.
-            # auto None is legitimate only for stem-guard words (Ei) and
-            # classify:false rules (verbnomen) — the surface check above
-            # already vouched for those.
-            auto_rule, _, auto_trap = classify_noun(item["noun"], item["article"])
-            if auto_rule is not None and (auto_rule, auto_trap) != (rule_id, trap):
-                raise ValueError(
-                    f"{where}: auto-classifier disagrees — it says "
-                    f"({auto_rule!r}, trap={auto_trap})"
-                )
-        else:
-            if trap:
-                raise ValueError(f"{where}: a trap needs the rule it fakes")
-            auto_rule, _, _ = classify_noun(item["noun"], item["article"])
-            if auto_rule is not None:
-                raise ValueError(
-                    f"{where}: tagged pattern-free but the classifier finds "
-                    f"{auto_rule!r} — tag it"
-                )
-
-        catalog[item["id"]] = item
-    return catalog
+    """All curated items across every pool, flat ``{id: item}`` — attempt
+    resolution and the exceptions-overlap check are pool-agnostic."""
+    flat: dict[str, dict] = {}
+    for pool in load_pools().values():
+        flat.update(pool["items"])
+    return flat
 
 
 @lru_cache(maxsize=1)

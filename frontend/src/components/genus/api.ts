@@ -54,6 +54,12 @@ export type PhraseVerdict = {
 // The intro cheat sheet: ending labels per article, in rules.yaml order.
 export type EndingSheet = Record<Article, string[]>;
 
+// A selectable curated noun pool (the intro chips). The deck half of a
+// round is always the learner's own nouns, whatever pool is chosen.
+export type GenusPool = { id: string; title: string };
+
+export type GenusMeta = { endings: EndingSheet; pools: GenusPool[] };
+
 async function request<T>(
   path: string,
   token: string,
@@ -75,14 +81,20 @@ async function request<T>(
   return res.json() as Promise<T>;
 }
 
-export async function fetchRound(token: string): Promise<GenusItem[]> {
-  const data = await request<{ items: GenusItem[] }>("/genus/round", token);
+export async function fetchRound(
+  token: string,
+  pool?: string
+): Promise<GenusItem[]> {
+  const query = pool ? `?pool=${encodeURIComponent(pool)}` : "";
+  const data = await request<{ items: GenusItem[] }>(
+    `/genus/round${query}`,
+    token
+  );
   return data.items;
 }
 
-export async function fetchEndings(token: string): Promise<EndingSheet> {
-  const data = await request<{ endings: EndingSheet }>("/genus/rules", token);
-  return data.endings;
+export async function fetchMeta(token: string): Promise<GenusMeta> {
+  return request<GenusMeta>("/genus/rules", token);
 }
 
 export async function submitArticle(

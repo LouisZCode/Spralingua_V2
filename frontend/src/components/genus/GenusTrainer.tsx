@@ -7,6 +7,7 @@ import type {
   ArticleVerdict,
   EndingSheet,
   GenusItem,
+  GenusPool,
   PhraseVerdict,
 } from "./api";
 
@@ -75,6 +76,9 @@ const inkShadow = {
 export default function GenusTrainer({
   round,
   endings,
+  pools,
+  selectedPool,
+  onSelectPool,
   onArticle,
   onPhrase,
   onNewRound,
@@ -85,6 +89,11 @@ export default function GenusTrainer({
   // The intro cheat sheet (GET /genus/rules) — nullable so a slow/failed
   // fetch degrades to an intro without the columns, never a broken one.
   endings?: EndingSheet | null;
+  // The selectable curated pools (intro chips). Selecting one is handled by
+  // the parent: it refetches the round, which remounts this trainer.
+  pools?: GenusPool[] | null;
+  selectedPool?: string | null;
+  onSelectPool?: (id: string) => void;
   // Grade one dropped article / one typed phrase (POST /genus/attempts via
   // the parent, which owns the token and the OBS-007 practice-session id).
   onArticle: (itemId: string, article: Article) => Promise<ArticleVerdict>;
@@ -308,6 +317,33 @@ export default function GenusTrainer({
         className="rounded-[28px] border-[3px] border-ink bg-white p-7"
         style={inkShadow}
       >
+        {pools && pools.length > 1 && (
+          <div className="mb-6">
+            <p className="text-center font-body text-[11px] font-bold uppercase tracking-[0.24em] text-ink-muted">
+              Wortpool
+            </p>
+            <div className="mt-2.5 flex flex-wrap justify-center gap-2">
+              {pools.map((p) => {
+                const active = p.id === selectedPool;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => !active && onSelectPool?.(p.id)}
+                    aria-pressed={active}
+                    className={`rounded-full border-[3px] px-3.5 py-1.5 font-body text-[12px] font-bold transition-colors ${
+                      active
+                        ? "border-ink bg-ink text-white"
+                        : "border-ink bg-white text-ink hover:bg-paper-warm"
+                    }`}
+                  >
+                    {p.title}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <CheatSheet endings={endings} />
         <p className="mt-5 text-center font-body text-[13px] font-semibold text-flag-gold-deep">
           ⚠️ Vorsicht, Fallen! Some words wear an ending that lies — der Name

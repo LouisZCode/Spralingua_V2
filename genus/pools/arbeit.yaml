@@ -1,0 +1,69 @@
+# Artikel-Anker pool — Arbeit & Beruf. Content-as-data; genus/content.py
+# validates fail-loud at startup (rule tags cross-checked by the classifier).
+
+pool:
+  id: arbeit
+  title: "Arbeit & Beruf"
+  position: 3
+
+items:
+  - { id: gn-ar-bewerbung, noun: Bewerbung, article: die, gloss: job application, rule: ung, adjective: gut }
+  - { id: gn-ar-rechnung, noun: Rechnung, article: die, gloss: invoice, rule: ung, adjective: wichtig }
+  - { id: gn-ar-taetigkeit, noun: Tätigkeit, article: die, gloss: occupation, rule: heit-keit, adjective: neu }
+  - { id: gn-ar-faehigkeit, noun: Fähigkeit, article: die, gloss: skill, rule: heit-keit, adjective: wichtig }
+  - { id: gn-ar-wirtschaft, noun: Wirtschaft, article: die, gloss: economy, rule: schaft, adjective: stark }
+  - { id: gn-ar-belegschaft, noun: Belegschaft, article: die, gloss: workforce, rule: schaft, adjective: groß }
+  - { id: gn-ar-position, noun: Position, article: die, gloss: job position, rule: tion-sion, adjective: neu }
+  - { id: gn-ar-provision, noun: Provision, article: die, gloss: commission, rule: tion-sion, adjective: gut }
+  - { id: gn-ar-produktivitaet, noun: Produktivität, article: die, gloss: productivity, rule: taet, adjective: gut }
+  - { id: gn-ar-druckerei, noun: Druckerei, article: die, gloss: print shop, rule: ei, adjective: modern }
+  - { id: gn-ar-industrie, noun: Industrie, article: die, gloss: industry, rule: ie, adjective: stark }
+  - { id: gn-ar-fabrik, noun: Fabrik, article: die, gloss: factory, rule: ik, adjective: groß }
+  - { id: gn-ar-konjunktur, noun: Konjunktur, article: die, gloss: economic cycle, rule: ur, adjective: stark }
+  - { id: gn-ar-chefin, noun: Chefin, article: die, gloss: female boss, rule: in, adjective: freundlich }
+  - { id: gn-ar-karriere, noun: Karriere, article: die, gloss: career, rule: e, adjective: lang }
+  - { id: gn-ar-arbeiter, noun: Arbeiter, article: der, gloss: worker, rule: er, adjective: stark }
+  - { id: gn-ar-unternehmer, noun: Unternehmer, article: der, gloss: entrepreneur, rule: er, adjective: modern }
+  - { id: gn-ar-lehrling, noun: Lehrling, article: der, gloss: apprentice, rule: ling, adjective: neu }
+  - { id: gn-ar-kapitalismus, noun: Kapitalismus, article: der, gloss: capitalism, rule: ismus, adjective: modern }
+  - { id: gn-ar-direktor, noun: Direktor, article: der, gloss: director, rule: or, adjective: wichtig }
+  - { id: gn-ar-praktikant, noun: Praktikant, article: der, gloss: intern, rule: ant-ent-ist, adjective: nett }
+  - { id: gn-ar-spezialist, noun: Spezialist, article: der, gloss: specialist, rule: ant-ent-ist, adjective: gut }
+  - { id: gn-ar-gehalt, noun: Gehalt, article: das, gloss: salary, rule: ge, adjective: gut }
+
+  - { id: gn-ar-firma, noun: Firma, article: die, gloss: company, adjective: modern }
+  - { id: gn-ar-chef, noun: Chef, article: der, gloss: boss, adjective: nett }
+  - { id: gn-ar-beruf, noun: Beruf, article: der, gloss: profession, adjective: gut }
+
+  - id: gn-ar-steuer
+    noun: Steuer
+    article: die
+    gloss: tax
+    rule: er
+    adjective: wichtig
+    trap: true
+    why: "die Steuer — die Fee keeps this one even though -er usually hands the noun to der Held."
+  - id: gn-ar-bote
+    noun: Bote
+    article: der
+    gloss: messenger
+    rule: e
+    adjective: schnell
+    trap: true
+    why: "der Bote — der Held slips past die Fee's usual -e claim and takes this one for himself."
+  - id: gn-ar-prozent
+    noun: Prozent
+    article: das
+    gloss: percent
+    rule: ant-ent-ist
+    adjective: klein
+    trap: true
+    why: "das Prozent — das Baby grabs this -ent word right out of der Held's pocket."
+  - id: gn-ar-gewinn
+    noun: Gewinn
+    article: der
+    gloss: profit
+    rule: ge
+    adjective: groß
+    trap: true
+    why: "der Gewinn — der Held snatches this Ge- word before das Baby can tuck it away."

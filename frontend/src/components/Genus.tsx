@@ -7,14 +7,14 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import GenusTrainer from "./genus/GenusTrainer";
 import {
-  fetchEndings,
+  fetchMeta,
   fetchRound,
   submitArticle,
   submitPhrase,
   type Article,
   type ArticleVerdict,
-  type EndingSheet,
   type GenusItem,
+  type GenusMeta,
   type PhraseVerdict,
 } from "./genus/api";
 import { UnauthorizedError } from "./satzschmiede/api";
@@ -31,16 +31,40 @@ export default function Genus() {
   const [round, setRound] = useState<GenusItem[] | null>(null); // null = loading
   const [roundKey, setRoundKey] = useState(0); // remounts the trainer per round
   const [error, setError] = useState(false);
-  // The intro cheat sheet — fetched once per visit; a failed fetch just
-  // means an intro without the ending columns, never a blocked drill.
-  const [endings, setEndings] = useState<EndingSheet | null>(null);
+  // Cheat sheet + pool list — fetched once per visit; a failed fetch just
+  // means an intro without the columns/chips, never a blocked drill.
+  const [meta, setMeta] = useState<GenusMeta | null>(null);
+  // The selected curated pool. null until localStorage hydrates (client
+  // only), so the first round fetch waits for the real choice instead of
+  // racing it with a basis round.
+  const [pool, setPool] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPool(window.localStorage.getItem("genus-pool") ?? "basis");
+  }, []);
 
   useEffect(() => {
     if (!token) return;
-    fetchEndings(token)
-      .then(setEndings)
+    fetchMeta(token)
+      .then(setMeta)
       .catch(() => {});
   }, [token]);
+
+  // A stale saved pool (renamed/removed) falls back to basis once the pool
+  // list arrives — the backend would serve basis anyway; keep the chip UI
+  // consistent with it.
+  useEffect(() => {
+    if (!meta || !pool) return;
+    if (!meta.pools.some((p) => p.id === pool)) {
+      window.localStorage.setItem("genus-pool", "basis");
+      setPool("basis");
+    }
+  }, [meta, pool]);
+
+  const selectPool = useCallback((id: string) => {
+    window.localStorage.setItem("genus-pool", id);
+    setPool(id);
+  }, []);
 
   // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
   // first attempt, held for the whole page visit above the per-round remounts.
@@ -53,9 +77,9 @@ export default function Genus() {
   }, [ready, token, router]);
 
   const loadRound = useCallback(() => {
-    if (!token) return;
+    if (!token || !pool) return;
     setRound(null);
-    fetchRound(token)
+    fetchRound(token, pool)
       .then((items) => {
         setRound(items);
         setRoundKey((k) => k + 1);
@@ -67,7 +91,7 @@ export default function Genus() {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, pool, signOut]);
 
   useEffect(() => {
     loadRound();
@@ -162,7 +186,10 @@ export default function Genus() {
           <GenusTrainer
             key={roundKey}
             round={round}
-            endings={endings}
+            endings={meta?.endings ?? null}
+            pools={meta?.pools ?? null}
+            selectedPool={pool}
+            onSelectPool={selectPool}
             onArticle={handleArticle}
             onPhrase={handlePhrase}
             onNewRound={loadRound}

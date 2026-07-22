@@ -215,7 +215,8 @@ rules:
 
   - id: verbnomen
     kind: suffix
-    match: [en]
+    # -eln/-ern cover the bügeln/wandern infinitive shapes.
+    match: [en, eln, ern]
     article: das
     reliability: "100%"
     # A verb frozen into a noun (essen → das Essen) is always das — but

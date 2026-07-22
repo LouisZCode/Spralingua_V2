@@ -1,0 +1,72 @@
+# Artikel-Anker pool — Gesundheit & Körper. Content-as-data; genus/content.py
+# validates fail-loud at startup (rule tags cross-checked by the classifier).
+
+pool:
+  id: gesundheit
+  title: "Gesundheit & Körper"
+  position: 4
+
+items:
+  - { id: gn-gs-erkaeltung, noun: Erkältung, article: die, gloss: common cold, rule: ung, adjective: schwer }
+  - { id: gn-gs-untersuchung, noun: Untersuchung, article: die, gloss: medical exam, rule: ung, adjective: wichtig }
+  - { id: gn-gs-gesundheit, noun: Gesundheit, article: die, gloss: health, rule: heit-keit, adjective: gut }
+  - { id: gn-gs-uebelkeit, noun: Übelkeit, article: die, gloss: nausea, rule: heit-keit, adjective: stark }
+  - { id: gn-gs-infektion, noun: Infektion, article: die, gloss: infection, rule: tion-sion, adjective: schwer }
+  - { id: gn-gs-immunitaet, noun: Immunität, article: die, gloss: immunity, rule: taet, adjective: stark }
+  - { id: gn-gs-allergie, noun: Allergie, article: die, gloss: allergy, rule: ie, adjective: stark }
+  - { id: gn-gs-therapie, noun: Therapie, article: die, gloss: therapy, rule: ie, adjective: lang }
+  - { id: gn-gs-klinik, noun: Klinik, article: die, gloss: clinic, rule: ik, adjective: modern }
+  - { id: gn-gs-fraktur, noun: Fraktur, article: die, gloss: fracture, rule: ur, adjective: schwer }
+  - { id: gn-gs-aerztin, noun: Ärztin, article: die, gloss: doctor (female), rule: in, adjective: freundlich }
+  - { id: gn-gs-tablette, noun: Tablette, article: die, gloss: pill, rule: e, adjective: klein }
+  - { id: gn-gs-spritze, noun: Spritze, article: die, gloss: injection, rule: e, adjective: schnell }
+  - { id: gn-gs-apotheker, noun: Apotheker, article: der, gloss: pharmacist, rule: er, adjective: freundlich }
+  - { id: gn-gs-koerper, noun: Körper, article: der, gloss: body, rule: er, adjective: gesund }
+  - { id: gn-gs-rheumatismus, noun: Rheumatismus, article: der, gloss: rheumatism, rule: ismus, adjective: schwer }
+  - { id: gn-gs-doktor, noun: Doktor, article: der, gloss: doctor, rule: or, adjective: gut }
+  - { id: gn-gs-patient, noun: Patient, article: der, gloss: patient, rule: ant-ent-ist, adjective: ruhig }
+  - { id: gn-gs-flaeschchen, noun: Fläschchen, article: das, gloss: little bottle, rule: chen-lein, adjective: klein }
+  - { id: gn-gs-serum, noun: Serum, article: das, gloss: serum, rule: um, adjective: neu }
+  - { id: gn-gs-medikament, noun: Medikament, article: das, gloss: medication, rule: ment, adjective: stark }
+  - { id: gn-gs-gelenk, noun: Gelenk, article: das, gloss: joint, rule: ge, adjective: stark }
+  - { id: gn-gs-joggen, noun: Joggen, article: das, gloss: jogging, rule: verbnomen, adjective: gesund }
+
+  - id: gn-gs-leber
+    noun: Leber
+    article: die
+    gloss: liver
+    rule: er
+    adjective: gesund
+    trap: true
+    why: "die Leber — an -er word der Held never actually owned; die Fee had it all along."
+
+  - id: gn-gs-schulter
+    noun: Schulter
+    article: die
+    gloss: shoulder
+    rule: er
+    adjective: stark
+    trap: true
+    why: "die Schulter — another -er escapee that belongs to die Fee, not der Held."
+
+  - id: gn-gs-fieber
+    noun: Fieber
+    article: das
+    gloss: fever
+    rule: er
+    adjective: stark
+    trap: true
+    why: "das Fieber — das Baby grabs this -er word right out of der Held's usual turf."
+
+  - id: gn-gs-vitamin
+    noun: Vitamin
+    article: das
+    gloss: vitamin
+    rule: in
+    adjective: wichtig
+    trap: true
+    why: "das Vitamin — -in is normally die Fee's signature, but das Baby snuck off with this one."
+
+  - { id: gn-gs-kopf, noun: Kopf, article: der, gloss: head, adjective: groß }
+  - { id: gn-gs-herz, noun: Herz, article: das, gloss: heart, adjective: gesund }
+  - { id: gn-gs-hand, noun: Hand, article: die, gloss: hand, adjective: warm }

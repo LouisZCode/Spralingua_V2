@@ -1,0 +1,64 @@
+# Artikel-Anker pool — Zuhause & Alltag. Content-as-data; genus/content.py
+# validates fail-loud at startup (rule tags cross-checked by the classifier).
+
+pool:
+  id: alltag
+  title: "Zuhause & Alltag"
+  position: 1
+
+items:
+  - { id: gn-al-heizung, noun: Heizung, article: die, gloss: heating, rule: ung, adjective: warm }
+  - { id: gn-al-ordnung, noun: Ordnung, article: die, gloss: order, rule: ung, adjective: wichtig }
+  - { id: gn-al-sauberkeit, noun: Sauberkeit, article: die, gloss: cleanliness, rule: heit-keit, adjective: sauber }
+  - { id: gn-al-gemuetlichkeit, noun: Gemütlichkeit, article: die, gloss: coziness, rule: heit-keit, adjective: schön }
+  - { id: gn-al-waschmaschine, noun: Waschmaschine, article: die, gloss: washing machine, rule: e, adjective: modern }
+  - { id: gn-al-gluehbirne, noun: Glühbirne, article: die, gloss: lightbulb, rule: e, adjective: klein }
+  - { id: gn-al-waesche, noun: Wäsche, article: die, gloss: laundry, rule: e, adjective: frisch }
+  - { id: gn-al-kerze, noun: Kerze, article: die, gloss: candle, rule: e, adjective: bunt }
+  - { id: gn-al-staubsauger, noun: Staubsauger, article: der, gloss: vacuum cleaner, rule: er, adjective: stark }
+  - { id: gn-al-muelleimer, noun: Mülleimer, article: der, gloss: trash bin, rule: er, adjective: voll }
+  - { id: gn-al-waeschetrockner, noun: Wäschetrockner, article: der, gloss: clothes dryer, rule: er, adjective: schnell }
+  - { id: gn-al-geraet, noun: Gerät, article: das, gloss: appliance, rule: ge, adjective: modern }
+  - { id: gn-al-gelaender, noun: Geländer, article: das, gloss: railing, rule: ge, adjective: alt }
+  - { id: gn-al-kaestchen, noun: Kästchen, article: das, gloss: little box, rule: chen-lein, adjective: klein }
+  - { id: gn-al-album, noun: Album, article: das, gloss: photo album, rule: um, adjective: alt }
+  - { id: gn-al-radio, noun: Radio, article: das, gloss: radio, rule: o, adjective: laut }
+  - { id: gn-al-klo, noun: Klo, article: das, gloss: toilet, rule: o, adjective: klein }
+  - { id: gn-al-aufraeumen, noun: Aufräumen, article: das, gloss: tidying up, rule: verbnomen, adjective: wichtig }
+  - { id: gn-al-buegeln, noun: Bügeln, article: das, gloss: ironing, rule: verbnomen, adjective: langsam }
+  - { id: gn-al-korridor, noun: Korridor, article: der, gloss: corridor, rule: or, adjective: lang }
+  - { id: gn-al-batterie, noun: Batterie, article: die, gloss: battery, rule: ie, adjective: stark }
+  - { id: gn-al-technik, noun: Technik, article: die, gloss: technology, rule: ik, adjective: modern }
+  - { id: gn-al-elektrizitaet, noun: Elektrizität, article: die, gloss: electricity, rule: taet, adjective: wichtig }
+  - { id: gn-al-dekoration, noun: Dekoration, article: die, gloss: decoration, rule: tion-sion, adjective: schön }
+
+  - id: gn-al-flur
+    noun: Flur
+    article: der
+    gloss: hallway
+    rule: ur
+    trap: true
+    why: "der Flur — der Held snatched this -ur word right out of die Fee's collection."
+    adjective: lang
+
+  - id: gn-al-gitter
+    noun: Gitter
+    article: das
+    gloss: grille
+    rule: er
+    trap: true
+    why: "das Gitter — another -er runaway that das Baby claims as its own."
+    adjective: alt
+
+  - id: gn-al-feder
+    noun: Feder
+    article: die
+    gloss: feather
+    rule: er
+    trap: true
+    why: "die Feder — die Fee plucked this -er word straight from der Held's pile."
+    adjective: stark
+
+  - { id: gn-al-moebelstueck, noun: Möbelstück, article: das, gloss: piece of furniture, adjective: schön }
+  - { id: gn-al-besen, noun: Besen, article: der, gloss: broom, adjective: alt }
+  - { id: gn-al-teppich, noun: Teppich, article: der, gloss: carpet, adjective: bunt }

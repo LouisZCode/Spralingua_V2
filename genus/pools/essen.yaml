@@ -1,0 +1,53 @@
+# Artikel-Anker pool — Essen & Trinken. Content-as-data; genus/content.py
+# validates fail-loud at startup (rule tags cross-checked by the classifier).
+
+pool:
+  id: essen
+  title: "Essen & Trinken"
+  position: 2
+
+items:
+  - { id: gn-es-bestellung, noun: Bestellung, article: die, gloss: order, rule: ung, adjective: groß }
+  - { id: gn-es-zubereitung, noun: Zubereitung, article: die, gloss: preparation, rule: ung, adjective: schnell }
+  - { id: gn-es-saettigung, noun: Sättigung, article: die, gloss: satiety, rule: ung, adjective: stark }
+  - { id: gn-es-suessigkeit, noun: Süßigkeit, article: die, gloss: candy, rule: heit-keit, adjective: lecker }
+  - { id: gn-es-portion, noun: Portion, article: die, gloss: portion, rule: tion-sion, adjective: groß }
+  - { id: gn-es-torte, noun: Torte, article: die, gloss: layer cake, rule: e, adjective: lecker }
+  - { id: gn-es-metzgerei, noun: Metzgerei, article: die, gloss: "butcher shop", rule: ei, adjective: sauber }
+  - { id: gn-es-konditorei, noun: Konditorei, article: die, gloss: "pastry shop", rule: ei, adjective: schön }
+  - { id: gn-es-brauerei, noun: Brauerei, article: die, gloss: brewery, rule: ei, adjective: alt }
+  - { id: gn-es-brasserie, noun: Brasserie, article: die, gloss: brasserie, rule: ie, adjective: klein }
+  - { id: gn-es-kalorie, noun: Kalorie, article: die, gloss: calorie, rule: ie, adjective: leer }
+  - { id: gn-es-kellnerin, noun: Kellnerin, article: die, gloss: waitress, rule: in, adjective: freundlich }
+  - { id: gn-es-suppe, noun: Suppe, article: die, gloss: soup, rule: e, adjective: warm }
+  - { id: gn-es-sahne, noun: Sahne, article: die, gloss: cream, rule: e, adjective: frisch }
+  - { id: gn-es-kirsche, noun: Kirsche, article: die, gloss: cherry, rule: e, adjective: klein }
+  - { id: gn-es-teller, noun: Teller, article: der, gloss: plate, rule: er, adjective: sauber }
+  - { id: gn-es-becher, noun: Becher, article: der, gloss: cup, rule: er, adjective: voll }
+  - { id: gn-es-kaennchen, noun: Kännchen, article: das, gloss: "small pot", rule: chen-lein, adjective: warm }
+  - { id: gn-es-getraenk, noun: Getränk, article: das, gloss: drink, rule: ge, adjective: kalt }
+  - { id: gn-es-geschirr, noun: Geschirr, article: das, gloss: dishes, rule: ge, adjective: sauber }
+  - { id: gn-es-gewuerz, noun: Gewürz, article: das, gloss: spice, rule: ge, adjective: stark }
+  - { id: gn-es-bistro, noun: Bistro, article: das, gloss: bistro, rule: o, adjective: klein }
+  - id: gn-es-espresso
+    noun: Espresso
+    article: der
+    gloss: espresso
+    rule: o
+    adjective: stark
+    trap: true
+    why: "der Espresso — das Baby collects most -o imports, but this Italian one stays loyal to der Held (like der Kaffee)."
+  - { id: gn-es-kochen, noun: Kochen, article: das, gloss: cooking, rule: verbnomen, adjective: gut }
+  - { id: gn-es-backen, noun: Backen, article: das, gloss: baking, rule: verbnomen, adjective: modern }
+  - id: gn-es-restaurant
+    noun: Restaurant
+    article: das
+    gloss: restaurant
+    rule: ant-ent-ist
+    adjective: nett
+    trap: true
+    why: "das Restaurant — -ant usually means der Held's professionals, but this French place is das Baby's table."
+  - { id: gn-es-zucker, noun: Zucker, article: der, gloss: sugar, rule: er, adjective: gesund }
+  - { id: gn-es-fisch, noun: Fisch, article: der, gloss: fish, adjective: frisch }
+  - { id: gn-es-nuss, noun: Nuss, article: die, gloss: nut, adjective: klein }
+  - { id: gn-es-likoer, noun: Likör, article: der, gloss: liqueur, adjective: bunt }

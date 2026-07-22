@@ -40,6 +40,7 @@ from genus.content import (
     ARTICLES,
     classify_noun,
     load_items,
+    load_pools,
     load_rules,
     phrase_forms,
     trap_why,
@@ -88,12 +89,18 @@ def _deck_item(card: VocabCard) -> dict | None:
 
 @router.get("/round")
 async def get_round(
+    pool: str = "basis",
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
     """One practice round. Only ``{id, noun, gloss, adjective}`` ships — the
     article, rule, and anchor stay server-side until the verdict, so devtools
-    can't leak the answer mid-drag."""
+    can't leak the answer mid-drag.
+
+    ``pool`` picks the curated half's themed pool (default ``basis``); the
+    deck half is always the learner's own nouns regardless of pool. An
+    unknown pool id (stale localStorage after a pool rename) degrades to
+    basis rather than failing the round."""
     personal: list[dict] = []
     try:
         cards = (
@@ -115,11 +122,19 @@ async def get_round(
         logger.exception("Genus deck read failed — serving a curated-only round")
         personal = []
 
+    pools = load_pools()
+    selected = pools.get(pool)
+    if selected is None:
+        logger.warning("Unknown genus pool {!r} — serving basis", pool)
+        selected = pools["basis"]
+
     # A deck noun that also exists in the curated catalog must not appear
     # twice in one round — the personal copy wins.
     personal_nouns = {p["noun"].lower() for p in personal}
     catalog = [
-        i for i in load_items().values() if i["noun"].lower() not in personal_nouns
+        i
+        for i in selected["items"].values()
+        if i["noun"].lower() not in personal_nouns
     ]
     traps = [i for i in catalog if i.get("trap")]
     free = [i for i in catalog if not i.get("rule")]
@@ -159,7 +174,14 @@ async def get_rules(user_id: str = Depends(get_current_user_id)):
         else:
             label = "/".join(f"-{m}" for m in rule["match"])
         endings[rule["article"]].append(label)
-    return {"endings": endings}
+    return {
+        "endings": endings,
+        # The selectable noun pools, display order — the intro chips.
+        "pools": [
+            {"id": p["id"], "title": p["title"]}
+            for p in sorted(load_pools().values(), key=lambda p: p["position"])
+        ],
+    }
 
 
 # Free-text productions are welcome (the judge grades them) — the cap is

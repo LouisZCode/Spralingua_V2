@@ -1,8 +1,9 @@
-# Artikel-Anker curated noun catalog — the seed pool the round mixer draws
-# from (the other half of a round comes from the learner's own deck nouns,
-# classified live). Content-as-data; genus/content.py validates fail-loud at
-# startup, including a cross-check of every item against the auto-classifier
-# so a mistagged rule/trap can't ship.
+# Artikel-Anker BASE pool — the default curated catalog the round mixer
+# draws from when no themed pool is selected (the other half of a round is
+# always the learner's own deck nouns, classified live). Sibling themed
+# pools live next to this file; genus/content.py validates every pool
+# fail-loud at startup, including a cross-check of every item against the
+# auto-classifier so a mistagged rule/trap can't ship.
 #
 # Fields per item:
 #   id        — stable slug, gn- prefix
@@ -17,6 +18,11 @@
 #               concat-safe list in genus/content.py (stem+ending only, no
 #               elision) — the gold phrase "eine neue Wohnung" is built
 #               deterministically, so it can never be wrong.
+
+pool:
+  id: basis
+  title: "Basis"
+  position: 0
 
 items:
   # ── rule carriers — die ─────────────────────────────────────────────────

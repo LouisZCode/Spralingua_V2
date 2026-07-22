@@ -1,0 +1,62 @@
+# Artikel-Anker pool — Stadt & Unterwegs. Content-as-data; genus/content.py
+# validates fail-loud at startup (rule tags cross-checked by the classifier).
+
+pool:
+  id: stadt
+  title: "Stadt & Unterwegs"
+  position: 5
+
+items:
+  - { id: gn-st-kreuzung, noun: Kreuzung, article: die, gloss: intersection, rule: ung, adjective: voll }
+  - { id: gn-st-verspaetung, noun: Verspätung, article: die, gloss: delay, rule: ung, adjective: lang }
+  - { id: gn-st-sehenswuerdigkeit, noun: Sehenswürdigkeit, article: die, gloss: sight, rule: heit-keit, adjective: schön }
+  - { id: gn-st-nachbarschaft, noun: Nachbarschaft, article: die, gloss: neighborhood, rule: schaft, adjective: freundlich }
+  - { id: gn-st-station, noun: Station, article: die, gloss: station, rule: tion-sion, adjective: modern }
+  - { id: gn-st-mobilitaet, noun: Mobilität, article: die, gloss: mobility, rule: taet, adjective: wichtig }
+  - { id: gn-st-linie, noun: Linie, article: die, gloss: bus/tram line, rule: ie, adjective: neu }
+  - { id: gn-st-tour, noun: Tour, article: die, gloss: tour, rule: ur, adjective: kurz }
+  - { id: gn-st-fahrerin, noun: Fahrerin, article: die, gloss: female driver, rule: in, adjective: gut }
+  - { id: gn-st-strasse, noun: Straße, article: die, gloss: street, rule: e, adjective: laut }
+  - { id: gn-st-reise, noun: Reise, article: die, gloss: trip, rule: e, adjective: billig }
+  - { id: gn-st-haltestelle, noun: Haltestelle, article: die, gloss: bus stop, rule: e, adjective: voll }
+  - { id: gn-st-gasse, noun: Gasse, article: die, gloss: alley, rule: e, adjective: alt }
+  - { id: gn-st-bruecke, noun: Brücke, article: die, gloss: bridge, rule: e, adjective: lang }
+  - { id: gn-st-fahrer, noun: Fahrer, article: der, gloss: driver, rule: er, adjective: schnell }
+  - { id: gn-st-fussgaenger, noun: Fußgänger, article: der, gloss: pedestrian, rule: er, adjective: langsam }
+  - { id: gn-st-koffer, noun: Koffer, article: der, gloss: suitcase, rule: er, adjective: schwer }
+  - { id: gn-st-richtung, noun: Richtung, article: die, gloss: direction, rule: ung, adjective: gut }
+  - { id: gn-st-passant, noun: Passant, article: der, gloss: passerby, rule: ant-ent-ist, adjective: nett }
+  - { id: gn-st-staedtchen, noun: Städtchen, article: das, gloss: small town, rule: chen-lein, adjective: ruhig }
+  - { id: gn-st-gepaeck, noun: Gepäck, article: das, gloss: luggage, rule: ge, adjective: leicht }
+  - { id: gn-st-geschaeft, noun: Geschäft, article: das, gloss: shop, rule: ge, adjective: klein }
+  - { id: gn-st-foto, noun: Foto, article: das, gloss: photo, rule: o, adjective: bunt }
+  - { id: gn-st-umsteigen, noun: Umsteigen, article: das, gloss: changing trains, rule: verbnomen, adjective: schnell }
+
+  - { id: gn-st-ampel, noun: Ampel, article: die, gloss: traffic light, adjective: neu }
+  - { id: gn-st-stadt, noun: Stadt, article: die, gloss: city, adjective: groß }
+  - { id: gn-st-bahnsteig, noun: Bahnsteig, article: der, gloss: platform, adjective: leer }
+
+  - id: gn-st-mauer
+    noun: Mauer
+    article: die
+    gloss: wall
+    rule: er
+    trap: true
+    why: "die Mauer — the -er ending screams der Held's turf, but this wall stands guard on die Fee's side."
+    adjective: alt
+  - id: gn-st-ufer
+    noun: Ufer
+    article: das
+    gloss: riverbank
+    rule: er
+    trap: true
+    why: "das Ufer — the riverbank drifts to das Baby despite the -er (like das Wasser it borders)."
+    adjective: schön
+  - id: gn-st-info
+    noun: Info
+    article: die
+    gloss: info
+    rule: o
+    trap: true
+    why: "die Info — that closing -o looks like das Baby's badge, but it's just short for die Information, still die Fee's."
+    adjective: wichtig
