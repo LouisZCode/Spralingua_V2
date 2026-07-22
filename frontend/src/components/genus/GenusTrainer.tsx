@@ -483,8 +483,8 @@ export default function GenusTrainer({
                   <span className="font-black">{item.noun}</span>
                 </p>
                 <p className="mt-1 text-center font-body text-[12px] text-ink-muted">
-                  ein/der + adjective + noun — or a small sentence: Ich liebe
-                  … / Das ist …
+                  ein/der + adjective + noun — or write any sentence with it;
+                  only the gender is judged
                 </p>
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                   <input
@@ -498,7 +498,7 @@ export default function GenusTrainer({
                     autoComplete="off"
                     autoCorrect="off"
                     spellCheck={false}
-                    maxLength={80}
+                    maxLength={140}
                     className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
                   />
                   <button
@@ -539,7 +539,6 @@ export default function GenusTrainer({
                         <TypedEcho
                           value={value.trim()}
                           wrongIndex={verdict.wrongIndex}
-                          allWrong={verdict.kind === "shape"}
                         />
                       </p>
                       {verdict.note && (
@@ -659,11 +658,9 @@ function CheatSheet({ endings }: { endings?: EndingSheet | null }) {
 function TypedEcho({
   value,
   wrongIndex,
-  allWrong,
 }: {
   value: string;
   wrongIndex: number | null;
-  allWrong: boolean;
 }) {
   const tokens = value.split(/\s+/);
   return (
@@ -671,9 +668,7 @@ function TypedEcho({
       {tokens.map((t, i) => (
         <span
           key={i}
-          className={
-            allWrong || i === wrongIndex ? "text-flag-red-deep" : "text-ink"
-          }
+          className={i === wrongIndex ? "text-flag-red-deep" : "text-ink"}
         >
           {t}
           {i < tokens.length - 1 ? " " : ""}

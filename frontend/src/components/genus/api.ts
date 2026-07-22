@@ -30,18 +30,21 @@ export type ArticleVerdict = {
   note?: string | null;
 };
 
-// Verdict for phase="phrase" (typed production). Accepts definite or
-// indefinite phrases, bare or wrapped in a whitelisted carrier sentence
-// ("Ich liebe …" forces the accusative and is graded in it).
+// Verdict for phase="phrase" (typed production). Recognized phrase shapes
+// are graded deterministically; any other sentence containing the noun
+// (≤140 chars) goes to the one-shot gender judge, which checks ONLY that
+// the noun's gender is used correctly.
 export type PhraseVerdict = {
   correct: boolean;
-  expected: string | null; // the gold phrase for the attempted form family
+  // Deterministic misses: the gold phrase for the attempted form family.
+  // Judge misses: the learner's own sentence with the gender fixed.
+  expected: string | null;
   article: Article;
   // What went wrong: wrong article form ("article"), wrong adjective ending
-  // ("adjective"), misspelled noun ("noun"), not three phrase words
-  // ("shape"), or an opener the grader can't read ("unrecognized" —
+  // ("adjective"), misspelled noun ("noun"), judge-found gender slip
+  // ("gender"), or input that isn't a gradable attempt ("unrecognized" —
   // guidance only, never scored, the item stays live).
-  kind: "match" | "shape" | "noun" | "article" | "adjective" | "unrecognized";
+  kind: "match" | "noun" | "article" | "adjective" | "gender" | "unrecognized";
   note: string | null;
   // Index of the offending token in the TYPED answer — the frontend marks
   // exactly that word red (no strikethrough). null when it's not one token.

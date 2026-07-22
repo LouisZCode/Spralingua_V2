@@ -5,9 +5,12 @@ the physical act of attaching the gender color to the ENDING is the mnemonic.
 Beat 2 (phase="phrase"): produce the nominative indefinite carrier phrase
 ("eine neue Wohnung") so the gender immediately does grammatical work.
 
-Deterministic grading only — NO judge LLM. The article is a three-way choice
-and the gold phrase is table-built (``genus/content.py::build_phrase``), so
-string matching is the whole grader, like Zeitfärbung.
+Grading is hybrid, Bauteil-style: the article drop and the recognized phrase
+shapes are deterministic (table-built gold forms, zero LLM cost); free-text
+productions — any sentence with the target noun, ≤140 chars — fall through
+to ``genus/judge.py``'s one-shot gender judge, which checks exactly one
+axis: is the noun's gender used correctly. Only unparseable input pays for
+a judge call; every deterministic outcome stays free and instant.
 
 CONT-002 applies: up to half the round is the learner's own deck nouns
 (``VocabCard.article`` is the truth), classified live by ending shape — no
@@ -42,6 +45,7 @@ from genus.content import (
     trap_why,
     _match_surface,
 )
+from genus.judge import GenderVerdict, judge_gender
 
 router = APIRouter(prefix="/genus", tags=["genus"])
 
@@ -158,7 +162,9 @@ async def get_rules(user_id: str = Depends(get_current_user_id)):
     return {"endings": endings}
 
 
-_MAX_ANSWER_CHARS = 80
+# Free-text productions are welcome (the judge grades them) — the cap is
+# only a paste-accident guard.
+_MAX_ANSWER_CHARS = 140
 
 _EDGE_PUNCT = " .,!?;:…\"'"
 
@@ -200,23 +206,44 @@ _ACC_FORMS = frozenset(
     }
 )
 
-_PHRASE_GUIDANCE = (
-    "Couldn't read that — type the phrase (ein bequemer Stuhl / der bequeme "
-    "Stuhl) or open with a small sentence: Ich liebe … / Das ist …"
+# The determiner tokens the deterministic miss-diagnosis understands. A
+# 3-token phrase led by anything else (meine gute Absicht, diese alte Tür)
+# is perfectly legal German — it goes to the judge, never to a deterministic
+# "wrong article" verdict that would be a lie.
+_DET_TOKENS = frozenset(
+    {"der", "die", "das", "den", "dem",
+     "ein", "eine", "einen", "einem", "einer", "eines"}
 )
 
 
-def _grade_phrase(item: dict, answer: str) -> dict:
-    """Grade the typed production deterministically. Accepts the bare phrase
-    (definite or indefinite, nominative) or the phrase inside a whitelisted
-    carrier sentence — whose opener also fixes the case, so "Ich liebe der
-    bequeme Stuhl" is corrected to den, not waved through.
+def _grade_phrase(item: dict, answer: str) -> dict | None:
+    """The deterministic fast path. Accepts the bare 3-word phrase (definite
+    or indefinite) or that phrase inside a whitelisted carrier sentence —
+    whose opener also fixes the case, so "Ich liebe der bequeme Stuhl" is
+    corrected to den, not waved through. Returns ``None`` for everything
+    else — free text the judge should grade instead.
 
     ``kind="unrecognized"`` is guidance, not a scored verdict — the frontend
     keeps the item live and the DATA-004 log skips it, like Zeitfärbung.
     ``wrongIndex`` is the offending token's index in the TYPED answer so the
     frontend can mark exactly that word red (no strikethrough)."""
     got = _tokens(answer)
+    noun_l = item["noun"].lower()
+    # startswith, not equality: inflection may extend the noun (den Kunden,
+    # des Stuhls). A sentence without the target noun is guidance, not an
+    # attempt — and never worth a judge call.
+    if not any(t.startswith(noun_l) for t in got):
+        return {
+            "correct": False,
+            "kind": "unrecognized",
+            "expected": None,
+            "article": item["article"],
+            "note": (
+                f"Use {item['noun']} in your answer — the phrase, "
+                f"or any sentence of your own."
+            ),
+            "wrongIndex": None,
+        }
     case, rest = "nominative", got
     if len(got) > 3:
         opener = tuple(got[:2])
@@ -225,30 +252,15 @@ def _grade_phrase(item: dict, answer: str) -> dict:
         elif got[0] in _PRONOUNS and got[1] in _ACC_FORMS:
             case, rest = "accusative", got[2:]
         else:
-            return {
-                "correct": False,
-                "kind": "unrecognized",
-                "expected": None,
-                "article": item["article"],
-                "note": _PHRASE_GUIDANCE,
-                "wrongIndex": None,
-            }
+            return None  # free text → judge
+    if len(rest) != 3 or rest[0] not in _DET_TOKENS:
+        return None  # bare/possessive/longer NP → judge
 
     art, adj, noun = item["article"], item["adjective"], item["noun"]
     forms = phrase_forms(art, adj, noun, case)
 
     def display(triple: tuple[str, str, str]) -> str:
         return f"{triple[0]} {triple[1]} {noun}"
-
-    if len(rest) != 3:
-        return {
-            "correct": False,
-            "kind": "shape",
-            "expected": display(forms["indefinite"]),
-            "article": art,
-            "note": "Three words for the phrase: article + adjective + noun.",
-            "wrongIndex": None,
-        }
 
     if any(tuple(rest) == f for f in forms.values()):
         matched = next(k for k, f in forms.items() if tuple(rest) == f)
@@ -312,6 +324,55 @@ def _generic_trap_why(item: dict, rule: dict | None) -> str:
     )
 
 
+def _judge_payload(item: dict, answer: str, v: GenderVerdict) -> dict:
+    """Map the judge's verdict onto the phrase-payload contract. A sentence
+    where the gender never surfaces (plural, bare noun) is guidance, not a
+    scored miss — same unrecognized contract as the deterministic path."""
+    if not v.gender_shown:
+        return {
+            "correct": False,
+            "kind": "unrecognized",
+            "expected": None,
+            "article": item["article"],
+            "note": (
+                v.note
+                if v.note and v.note != "ok"
+                else (
+                    f"Use {item['noun']} in the singular with an article "
+                    f"so the gender shows."
+                )
+            ),
+            "wrongIndex": None,
+        }
+    if v.correct:
+        return {
+            "correct": True,
+            "kind": "match",
+            "expected": (v.corrected or answer).strip(),
+            "article": item["article"],
+            "note": None,
+            "wrongIndex": None,
+        }
+    # Locate the judge's offending word in the typed answer so the frontend
+    # can mark exactly that token red — same index convention the
+    # deterministic path uses (answer is already whitespace-collapsed).
+    wrong_index = None
+    wrong_word = v.wrong_word.strip(_EDGE_PUNCT).lower() if v.wrong_word else ""
+    if wrong_word:
+        for i, tok in enumerate(answer.split()):
+            if tok.strip(_EDGE_PUNCT).lower() == wrong_word:
+                wrong_index = i
+                break
+    return {
+        "correct": False,
+        "kind": "gender",
+        "expected": v.corrected or f"{item['article']} {item['noun']}",
+        "article": item["article"],
+        "note": v.note if v.note and v.note != "ok" else None,
+        "wrongIndex": wrong_index,
+    }
+
+
 class AttemptIn(BaseModel):
     item_id: str
     # "article" = the drag (beat 1), "phrase" = the typed production (beat 2).
@@ -357,7 +418,8 @@ async def submit_attempt(
         raise HTTPException(status_code=422, detail="Type your answer first.")
     if len(answer) > _MAX_ANSWER_CHARS:
         raise HTTPException(
-            status_code=422, detail="Keep it to the phrase — that looks like a paragraph."
+            status_code=422,
+            detail="Keep it under 140 characters — one sentence is plenty.",
         )
 
     rule = load_rules().get(item["rule"]) if item.get("rule") else None
@@ -426,6 +488,24 @@ async def submit_attempt(
                 }
         else:  # phase == "phrase"
             payload = _grade_phrase(item, answer)
+            if payload is not None:
+                # Deterministic outcome — flag it so Langfuse can tell
+                # "judged" apart from "matched without a judge call".
+                attempt_span.set_attribute("judge_skipped", True)
+            else:
+                try:
+                    verdict = await judge_gender(item, answer)
+                except Exception as exc:
+                    attempt_span.record_exception(exc)
+                    logger.exception("Genus judge call failed (item {})", item["id"])
+                    raise HTTPException(
+                        status_code=502,
+                        detail=(
+                            "The judge is unavailable right now — "
+                            "try again in a moment."
+                        ),
+                    )
+                payload = _judge_payload(item, answer, verdict)
 
         attempt_span.set_attribute(
             "langfuse.trace.output",
