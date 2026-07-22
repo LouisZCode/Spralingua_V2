@@ -342,7 +342,8 @@ class DrillAttempt(Base):
     user_id: Mapped[str] = mapped_column(
         Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    # "satz" | "verbformen" | "sprechen" | "bauteil" | "verbindungen" | "szenario"
+    # "satz" | "verbformen" | "sprechen" | "bauteil" | "verbindungen" |
+    # "szenario" | "zeitfaerbung" | "genus"
     exercise: Mapped[str] = mapped_column(Text, nullable=False)
     # card id / task id / item id / scenario id — whatever the exercise
     # itself keys attempts by. Not an FK: each exercise's item catalog is

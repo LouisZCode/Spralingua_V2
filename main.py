@@ -18,6 +18,11 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from agents.load_prompts import load_prompts, load_tandem_topics
 from auth import AuthError, decode_session_jwt, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
+from genus import (
+    load_items as load_genus_items,
+    load_rules as load_genus_rules,
+    router as genus_router,
+)
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
 from stats import router as stats_router
 from szenario import load_scenarios as load_szenario_scenarios, router as szenario_router
@@ -91,6 +96,11 @@ async def lifespan(app: FastAPI):
     load_sprechen_tasks()
     load_verbindungen_items()
     load_zeitfaerbung_items()
+    # And for Artikel-Anker's gender rules + noun catalog — the items loader
+    # cross-checks every curated noun against the ending classifier, so a
+    # mistagged rule/trap aborts startup here, not mid-drag.
+    load_genus_rules()
+    load_genus_items()
     # And for Szenario-Sparring's scenario catalog (P1, thin slice) — same
     # fail-loud rule as the grammar-exercise catalogs above.
     load_szenario_scenarios()
@@ -131,6 +141,9 @@ app.include_router(verbindungen_router)
 # Zeitfärbung (GRAM-003): war/wurde/blieb by meaning — deterministic grading,
 # no judge LLM.
 app.include_router(zeitfaerbung_router)
+# Artikel-Anker: noun gender via ending anchors — drag der/die/das onto the
+# word, then produce the carrier phrase. Deterministic grading, no judge LLM.
+app.include_router(genus_router)
 # Szenario-Sparring (P1, thin slice): in-character question, one spoken
 # answer, structure-only judge + silent grammar-ledger credit.
 app.include_router(szenario_router)

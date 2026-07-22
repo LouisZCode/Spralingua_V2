@@ -1,0 +1,182 @@
+# Artikel-Anker curated noun catalog — the seed pool the round mixer draws
+# from (the other half of a round comes from the learner's own deck nouns,
+# classified live). Content-as-data; genus/content.py validates fail-loud at
+# startup, including a cross-check of every item against the auto-classifier
+# so a mistagged rule/trap can't ship.
+#
+# Fields per item:
+#   id        — stable slug, gn- prefix
+#   noun      — the bare noun, dictionary capitalization
+#   article   — der | die | das (the truth, never shipped in the round payload)
+#   gloss     — short English meaning
+#   rule      — rules.yaml id this noun rides (or omits: no pattern, Track B)
+#   trap      — true when the surface SUGGESTS the rule but the article
+#               disagrees (der Name looks like -e). Requires `why`.
+#   why       — trap teaching line (required for traps, forbidden otherwise)
+#   adjective — base-form adjective for the production beat, from the
+#               concat-safe list in genus/content.py (stem+ending only, no
+#               elision) — the gold phrase "eine neue Wohnung" is built
+#               deterministically, so it can never be wrong.
+
+items:
+  # ── rule carriers — die ─────────────────────────────────────────────────
+  - { id: gn-wohnung, noun: Wohnung, article: die, gloss: apartment, rule: ung, adjective: neu }
+  - { id: gn-zeitung, noun: Zeitung, article: die, gloss: newspaper, rule: ung, adjective: alt }
+  - { id: gn-uebung, noun: Übung, article: die, gloss: exercise, rule: ung, adjective: leicht }
+  - { id: gn-krankheit, noun: Krankheit, article: die, gloss: illness, rule: heit-keit, adjective: schwer }
+  - { id: gn-moeglichkeit, noun: Möglichkeit, article: die, gloss: possibility, rule: heit-keit, adjective: gut }
+  - { id: gn-freundschaft, noun: Freundschaft, article: die, gloss: friendship, rule: schaft, adjective: lang }
+  - { id: gn-mannschaft, noun: Mannschaft, article: die, gloss: team, rule: schaft, adjective: stark }
+  - { id: gn-situation, noun: Situation, article: die, gloss: situation, rule: tion-sion, adjective: schwer }
+  - { id: gn-information, noun: Information, article: die, gloss: information, rule: tion-sion, adjective: wichtig }
+  - { id: gn-universitaet, noun: Universität, article: die, gloss: university, rule: taet, adjective: alt }
+  - { id: gn-qualitaet, noun: Qualität, article: die, gloss: quality, rule: taet, adjective: gut }
+  - { id: gn-baeckerei, noun: Bäckerei, article: die, gloss: bakery, rule: ei, adjective: klein }
+  - { id: gn-polizei, noun: Polizei, article: die, gloss: police, rule: ei, adjective: freundlich }
+  - { id: gn-familie, noun: Familie, article: die, gloss: family, rule: ie, adjective: groß }
+  - { id: gn-energie, noun: Energie, article: die, gloss: energy, rule: ie, adjective: sauber }
+  - { id: gn-musik, noun: Musik, article: die, gloss: music, rule: ik, adjective: laut }
+  - { id: gn-politik, noun: Politik, article: die, gloss: politics, rule: ik, adjective: modern }
+  - { id: gn-natur, noun: Natur, article: die, gloss: nature, rule: ur, adjective: schön }
+  - { id: gn-kultur, noun: Kultur, article: die, gloss: culture, rule: ur, adjective: alt }
+  - { id: gn-lehrerin, noun: Lehrerin, article: die, gloss: teacher (f.), rule: in, adjective: nett }
+  - { id: gn-freundin, noun: Freundin, article: die, gloss: friend (f.), rule: in, adjective: gut }
+  - { id: gn-sprache, noun: Sprache, article: die, gloss: language, rule: e, adjective: neu }
+  - { id: gn-frage, noun: Frage, article: die, gloss: question, rule: e, adjective: kurz }
+  - { id: gn-woche, noun: Woche, article: die, gloss: week, rule: e, adjective: lang }
+
+  # ── rule carriers — der ─────────────────────────────────────────────────
+  - { id: gn-lehrer, noun: Lehrer, article: der, gloss: teacher, rule: er, adjective: nett }
+  - { id: gn-computer, noun: Computer, article: der, gloss: computer, rule: er, adjective: schnell }
+  - { id: gn-fehler, noun: Fehler, article: der, gloss: mistake, rule: er, adjective: klein }
+  - { id: gn-fruehling, noun: Frühling, article: der, gloss: spring, rule: ling, adjective: warm }
+  - { id: gn-schmetterling, noun: Schmetterling, article: der, gloss: butterfly, rule: ling, adjective: bunt }
+  - { id: gn-tourismus, noun: Tourismus, article: der, gloss: tourism, rule: ismus, adjective: modern }
+  - { id: gn-optimismus, noun: Optimismus, article: der, gloss: optimism, rule: ismus, adjective: gesund }
+  - { id: gn-motor, noun: Motor, article: der, gloss: engine, rule: or, adjective: laut }
+  - { id: gn-professor, noun: Professor, article: der, gloss: professor, rule: or, adjective: freundlich }
+  - { id: gn-student, noun: Student, article: der, gloss: student, rule: ant-ent-ist, adjective: nett }
+  - { id: gn-tourist, noun: Tourist, article: der, gloss: tourist, rule: ant-ent-ist, adjective: freundlich }
+  - { id: gn-polizist, noun: Polizist, article: der, gloss: police officer, rule: ant-ent-ist, adjective: stark }
+
+  # ── rule carriers — das ─────────────────────────────────────────────────
+  - { id: gn-maedchen, noun: Mädchen, article: das, gloss: girl, rule: chen-lein, adjective: klein }
+  - { id: gn-broetchen, noun: Brötchen, article: das, gloss: bread roll, rule: chen-lein, adjective: frisch }
+  - { id: gn-museum, noun: Museum, article: das, gloss: museum, rule: um, adjective: modern }
+  - { id: gn-zentrum, noun: Zentrum, article: das, gloss: center, rule: um, adjective: voll }
+  - { id: gn-dokument, noun: Dokument, article: das, gloss: document, rule: ment, adjective: wichtig }
+  - { id: gn-instrument, noun: Instrument, article: das, gloss: instrument, rule: ment, adjective: alt }
+  - { id: gn-gespraech, noun: Gespräch, article: das, gloss: conversation, rule: ge, adjective: lang }
+  - { id: gn-gefuehl, noun: Gefühl, article: das, gloss: feeling, rule: ge, adjective: gut }
+  - { id: gn-gebaeude, noun: Gebäude, article: das, gloss: building, rule: ge, adjective: modern }
+  - { id: gn-auto, noun: Auto, article: das, gloss: car, rule: o, adjective: schnell }
+  - { id: gn-buero, noun: Büro, article: das, gloss: office, rule: o, adjective: ruhig }
+  - { id: gn-kino, noun: Kino, article: das, gloss: cinema, rule: o, adjective: voll }
+  - { id: gn-essen, noun: Essen, article: das, gloss: food / meal, rule: verbnomen, adjective: lecker }
+  - { id: gn-leben, noun: Leben, article: das, gloss: life, rule: verbnomen, adjective: gesund }
+
+  # ── traps — the ending lies (sorting rule from exception IS the skill) ──
+  - id: gn-name
+    noun: Name
+    article: der
+    gloss: name
+    rule: e
+    trap: true
+    why: "Weak masculine — der Held's most famous spy in die Fee's -e camp. Same family: der Kunde, der Junge, der Kollege."
+    adjective: neu
+  - id: gn-junge
+    noun: Junge
+    article: der
+    gloss: boy
+    rule: e
+    trap: true
+    why: "A boy is der, whatever his -e says — weak masculine, like der Name and der Kunde."
+    adjective: klein
+  - id: gn-kollege
+    noun: Kollege
+    article: der
+    gloss: colleague
+    rule: e
+    trap: true
+    why: "Weak masculine — the -e is a disguise. Learn the ~10 of these once and the -e rule is safe again."
+    adjective: nett
+  - id: gn-kaese
+    noun: Käse
+    article: der
+    gloss: cheese
+    rule: e
+    trap: true
+    why: "der Käse wears die Fee's -e but marches with der Held — pure memory word."
+    adjective: lecker
+  - id: gn-knie
+    noun: Knie
+    article: das
+    gloss: knee
+    rule: ie
+    trap: true
+    why: "The famous -ie exception — das Knie ignores die Fee's melody."
+    adjective: stark
+  - id: gn-termin
+    noun: Termin
+    article: der
+    gloss: appointment
+    rule: in
+    trap: true
+    why: "-in here isn't the female-person suffix — der Termin belongs to der Held."
+    adjective: wichtig
+  - id: gn-mutter
+    noun: Mutter
+    article: die
+    gloss: mother
+    rule: er
+    trap: true
+    why: "Family words go their own way — die Mutter, despite the -er."
+    adjective: nett
+  - id: gn-fenster
+    noun: Fenster
+    article: das
+    gloss: window
+    rule: er
+    trap: true
+    why: "-er is only ~70% der — das Fenster is one of the big exceptions (with das Zimmer, das Wasser)."
+    adjective: sauber
+  - id: gn-wasser
+    noun: Wasser
+    article: das
+    gloss: water
+    rule: er
+    trap: true
+    why: "No agent, no tool — das Wasser just ends in -er. das Baby keeps it."
+    adjective: frisch
+  - id: gn-kuchen
+    noun: Kuchen
+    article: der
+    gloss: cake
+    rule: chen-lein
+    trap: true
+    why: "Not a diminutive! Nothing was shrunk — der Kuchen is der Held's cake."
+    adjective: lecker
+  - id: gn-moment
+    noun: Moment
+    article: der
+    gloss: moment
+    rule: ment
+    trap: true
+    why: "The classic -ment exception — der Moment (and der Zement) escape das Baby's crib."
+    adjective: kurz
+  - id: gn-ei
+    noun: Ei
+    article: das
+    gloss: egg
+    rule: ei
+    trap: true
+    why: "-ei only counts as die Fee's storefront suffix (Bäckerei) — the egg itself is das Ei."
+    adjective: frisch
+
+  # ── no pattern — Track B, pure memory (guess der when stuck, never das) ─
+  - { id: gn-tisch, noun: Tisch, article: der, gloss: table, adjective: groß }
+  - { id: gn-stuhl, noun: Stuhl, article: der, gloss: chair, adjective: bequem }
+  - { id: gn-buch, noun: Buch, article: das, gloss: book, adjective: gut }
+  - { id: gn-bild, noun: Bild, article: das, gloss: picture, adjective: schön }
+  - { id: gn-tuer, noun: Tür, article: die, gloss: door, adjective: alt }
+  - { id: gn-brot, noun: Brot, article: das, gloss: bread, adjective: frisch }

@@ -174,6 +174,15 @@ export default function PracticeMenu() {
             body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
             cta="Pick the verb"
           />
+          <ModeCard
+            href="/genus"
+            accent="gold"
+            icon="circles"
+            kicker="der · die · das"
+            title="Artikel-Anker"
+            body="Drag the color onto the ending — most endings give the gender away. Then prove it: eine neue Wohnung."
+            cta="Drag the article"
+          />
         </div>
 
         <Link
@@ -307,7 +316,8 @@ type ModeIconName =
   | "link"
   | "target"
   | "palette"
-  | "infinity";
+  | "infinity"
+  | "circles";
 
 function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
@@ -396,6 +406,16 @@ function ModeIcon({ name }: { name: ModeIconName }) {
         <circle cx="7.5" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
         <circle cx="12" cy="7.3" r="1.1" fill="currentColor" stroke="none" />
         <circle cx="16.3" cy="10.5" r="1.1" fill="currentColor" stroke="none" />
+      </svg>
+    );
+  }
+  if (name === "circles") {
+    // three gender circles in a row — der · die · das
+    return (
+      <svg {...common}>
+        <circle cx="5" cy="12" r="3" />
+        <circle cx="12" cy="12" r="3" />
+        <circle cx="19" cy="12" r="3" />
       </svg>
     );
   }

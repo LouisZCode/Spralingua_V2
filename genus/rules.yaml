@@ -1,0 +1,226 @@
+# Artikel-Anker ending rules — the ~20 high-coverage gender signals, each
+# with a character anchor scene. Content-as-data; genus/content.py validates
+# fail-loud at startup.
+#
+# The three characters carry the color scheme already installed in the
+# Wortschatz-Pool (VocabTrainer's ARTICLE_COLOR): der Held (red) ·
+# die Fee (blue) · das Baby (green). Each character IS its own gender —
+# der Held, die Fee, das Baby — so the mnemonic is self-demonstrating.
+#
+# Fields per rule:
+#   id          — stable slug (referenced by items.yaml `rule`)
+#   kind        — suffix | prefix
+#   match       — lowercase surface strings this rule fires on (a rule can
+#                 bundle sibling endings: heit/keit, tion/sion, chen/lein)
+#   article     — der | die | das
+#   reliability — display string ("100%", "~90%") shown with the anchor
+#   anchor      — the one-line character scene shown after a correct drop.
+#                 Every word carrying the ending inherits this ONE image —
+#                 ~20 scenes covering thousands of nouns, instead of one
+#                 image per noun (which is why per-noun image methods fail).
+#   examples    — 2-4 canonical carriers (docs + future explainer UI)
+#   unless      — optional: skip the match when the word ALSO ends with one
+#                 of these (guards string-collisions: Wein is not -in,
+#                 Traum is not -um, Moment's -ent is really -ment)
+#   classify    — optional, default true. false = the auto-classifier never
+#                 applies this rule to deck nouns (verb→noun nominalizations
+#                 can't be detected by string shape); curated items may still
+#                 reference it by hand.
+#
+# Deliberately absent in v1: the semantic der-sets (days, months, seasons,
+# weather) and masculine -en (collides with the verb→noun class). The
+# compound rule (last element governs) is also not modeled — deck compounds
+# whose head hides the ending may get a misleading "Falle!" label; accepted
+# for now, revisit with a compound splitter.
+
+rules:
+  # ── die — die Fee (blue) ────────────────────────────────────────────────
+  - id: ung
+    kind: suffix
+    match: [ung]
+    article: die
+    reliability: "~100%"
+    anchor: "die Fee stamps every -ung — hers, no exceptions."
+    examples: [Wohnung, Zeitung, Übung]
+
+  - id: heit-keit
+    kind: suffix
+    match: [heit, keit]
+    article: die
+    reliability: "100%"
+    anchor: "-heit and -keit are die Fee's twin crowns — always hers."
+    examples: [Freiheit, Krankheit, Möglichkeit]
+
+  - id: schaft
+    kind: suffix
+    match: [schaft]
+    article: die
+    reliability: "100%"
+    anchor: "every -schaft is a guild die Fee runs."
+    examples: [Freundschaft, Mannschaft, Wirtschaft]
+
+  - id: tion-sion
+    kind: suffix
+    match: [tion, sion]
+    article: die
+    reliability: "100%"
+    anchor: "the -tion/-sion imports all landed in die Fee's harbor."
+    examples: [Situation, Information, Diskussion]
+
+  - id: taet
+    kind: suffix
+    match: [tät]
+    article: die
+    reliability: "100%"
+    anchor: "-tät — die Fee's universities, every single one."
+    examples: [Universität, Qualität, Realität]
+
+  - id: ei
+    kind: suffix
+    match: [ei]
+    article: die
+    reliability: "~90%"
+    anchor: "the -ei storefronts — Bäckerei, Polizei — belong to die Fee."
+    examples: [Bäckerei, Polizei, Konditorei]
+
+  - id: ie
+    kind: suffix
+    match: [ie]
+    article: die
+    reliability: "~95%"
+    anchor: "-ie melodies — Familie, Energie — sing in die Fee's key."
+    examples: [Familie, Energie, Technologie]
+
+  - id: ik
+    kind: suffix
+    match: [ik]
+    article: die
+    reliability: "~98%"
+    anchor: "-ik — die Fee conducts the whole orchestra: Musik, Politik."
+    examples: [Musik, Politik, Technik]
+
+  - id: ur
+    kind: suffix
+    match: [ur]
+    article: die
+    reliability: "~90%"
+    anchor: "-ur — die Fee's Natur, die Fee's Kultur."
+    examples: [Natur, Kultur, Temperatur]
+
+  - id: in
+    kind: suffix
+    match: [in]
+    article: die
+    reliability: "~90%"
+    # Wein/Stein/Bein end in the string "in" but are -ein words, not the
+    # female-person suffix — never fire there.
+    unless: [ein]
+    anchor: "the -in women — Lehrerin, Freundin — are die Fee herself."
+    examples: [Lehrerin, Freundin, Kollegin]
+
+  - id: e
+    kind: suffix
+    match: [e]
+    article: die
+    reliability: "~90%"
+    anchor: "a soft -e hums die Fee's tune — but der Held hides spies here."
+    examples: [Sprache, Frage, Woche]
+
+  # ── der — der Held (red) ────────────────────────────────────────────────
+  - id: er
+    kind: suffix
+    match: [er]
+    article: der
+    reliability: "~70%"
+    anchor: "the -er doers — Lehrer, Computer — are der Held's crew."
+    examples: [Lehrer, Computer, Fehler]
+
+  - id: ling
+    kind: suffix
+    match: [ling]
+    article: der
+    reliability: "100%"
+    anchor: "every -ling is der Held's apprentice."
+    examples: [Frühling, Schmetterling, Lehrling]
+
+  - id: ismus
+    kind: suffix
+    match: [ismus]
+    article: der
+    reliability: "100%"
+    anchor: "every -ismus is a banner der Held marches under."
+    examples: [Tourismus, Optimismus, Kapitalismus]
+
+  - id: or
+    kind: suffix
+    match: [or]
+    article: der
+    reliability: "~98%"
+    anchor: "-or — der Held's machines and masters: Motor, Professor."
+    examples: [Motor, Professor, Doktor]
+
+  - id: ant-ent-ist
+    kind: suffix
+    match: [ant, ent, ist]
+    article: der
+    reliability: "~95%"
+    # Dokument/Instrument end in the string "ent" but are -ment words —
+    # das Baby's territory, never der Held's.
+    unless: [ment]
+    anchor: "the -ant/-ent/-ist professionals all work for der Held."
+    examples: [Student, Tourist, Praktikant]
+
+  # ── das — das Baby (green) ──────────────────────────────────────────────
+  - id: chen-lein
+    kind: suffix
+    match: [chen, lein]
+    article: das
+    reliability: "100%"
+    anchor: "-chen and -lein shrink anything baby-small — das Baby owns them."
+    examples: [Mädchen, Brötchen, Büchlein]
+
+  - id: um
+    kind: suffix
+    match: [um]
+    article: das
+    reliability: "~98%"
+    # Traum/Baum/Raum end in the string "um" but are -aum words — no rule.
+    unless: [aum]
+    anchor: "-um — das Baby's marble halls: Museum, Zentrum."
+    examples: [Museum, Zentrum, Datum]
+
+  - id: ment
+    kind: suffix
+    match: [ment]
+    article: das
+    reliability: "~95%"
+    anchor: "-ment — das Baby's toys in the crib: Dokument, Instrument."
+    examples: [Dokument, Instrument, Medikament]
+
+  - id: ge
+    kind: prefix
+    match: [ge]
+    article: das
+    reliability: "~80%"
+    anchor: "Ge- gatherings — Gefühl, Gespräch — cradle das Baby."
+    examples: [Gefühl, Gespräch, Gebäude]
+
+  - id: o
+    kind: suffix
+    match: [o]
+    article: das
+    reliability: "~90%"
+    anchor: "the -o imports — Auto, Büro, Kino — are das Baby's toys."
+    examples: [Auto, Büro, Kino]
+
+  - id: verbnomen
+    kind: suffix
+    match: [en]
+    article: das
+    reliability: "100%"
+    # A verb frozen into a noun (essen → das Essen) is always das — but
+    # string shape can't tell das Essen from der Garten, so the auto-
+    # classifier never applies this; curated items reference it by hand.
+    classify: false
+    anchor: "a verb frozen into a noun — Essen, Leben — is always das Baby's."
+    examples: [Essen, Leben, Lernen]
