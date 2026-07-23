@@ -51,6 +51,11 @@ export type PhraseVerdict = {
   wrongIndex: number | null;
 };
 
+// One deck word the vocab nudge picked for the production beat: the word
+// (nouns wear their article) plus a short German example using both it and
+// the target noun. The pill shows only the count; clicking reveals these.
+export type NudgeWord = { word: string; hint: string };
+
 // The intro cheat sheet: ending labels per article, in rules.yaml order.
 export type EndingSheet = Record<Article, string[]>;
 
@@ -114,6 +119,21 @@ export async function submitArticle(
       session_id: sessionId,
     }),
   });
+}
+
+// Decorative endpoint: the backend answers {words: []} on any internal
+// failure, so callers only ever handle the happy shape (plus 401).
+export async function fetchNudge(
+  token: string,
+  itemId: string,
+  sessionId: string
+): Promise<NudgeWord[]> {
+  const data = await request<{ words: NudgeWord[] }>("/genus/nudge", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ item_id: itemId, session_id: sessionId }),
+  });
+  return data.words;
 }
 
 export async function submitPhrase(

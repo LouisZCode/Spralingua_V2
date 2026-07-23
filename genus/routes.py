@@ -47,6 +47,7 @@ from genus.content import (
     _match_surface,
 )
 from genus.judge import GenderVerdict, judge_gender
+from genus.nudge import suggest_vocab
 
 router = APIRouter(prefix="/genus", tags=["genus"])
 
@@ -559,3 +560,93 @@ async def submit_attempt(
             logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
         return payload
+
+
+class NudgeIn(BaseModel):
+    item_id: str
+    # OBS-007 practice-sitting id — groups the nudge trace with the attempts.
+    session_id: str | None = Field(None, max_length=64)
+
+
+_NUDGE_ARTICLES = frozenset(ARTICLES)
+
+
+@router.post("/nudge")
+async def vocab_nudge(
+    body: NudgeIn,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """The retrieval cue for the production beat: which of the learner's OWN
+    deck words would fit a sentence about this noun. The frontend shows only
+    the count as a pill; clicking reveals ``words`` (the graduated hint).
+
+    Decorative by contract — every failure path (empty deck, judge outage,
+    hallucinated picks) returns ``{"words": []}``, never an error the drill
+    would have to handle. Nothing here is an attempt: no DATA-004 row."""
+    item = await _resolve_item(db, user_id, body.item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Unknown item.")
+
+    # The whole deck, all card types — verbs and phrases are prime sentence
+    # material, not just nouns. Past-tense siblings are the same word again;
+    # the base card suffices.
+    cards = (
+        await db.execute(
+            select(VocabCard)
+            .join(UserCard, UserCard.card_id == VocabCard.id)
+            .where(UserCard.user_id == user_id, VocabCard.tense.is_(None))
+        )
+    ).scalars().all()
+    noun_l = item["noun"].lower()
+    deck: dict[str, tuple[str, str | None, str]] = {}
+    for c in cards:
+        target = (c.target or "").strip()
+        if target and target.lower() != noun_l:
+            deck[target.lower()] = (target, c.article, c.gloss or "")
+    if not deck:
+        return {"words": []}
+
+    with tracer.start_as_current_span("genus-nudge") as span:
+        span.set_attribute("user.id", user_id)
+        span.set_attribute("item_id", item["id"])
+        if body.session_id:
+            span.set_attribute("langfuse.session.id", body.session_id)
+        span.set_attribute("langfuse.trace.input", item["noun"])
+        span.set_attribute("deck_size", len(deck))
+        try:
+            pick = await suggest_vocab(item, list(deck.values()))
+        except Exception as exc:
+            span.record_exception(exc)
+            logger.warning("Genus nudge judge failed (item {}) — serving none", item["id"])
+            return {"words": []}
+
+        # Hallucination guard: only words that really are on the deck survive,
+        # matched with or without a leading article, deduped, capped at 3.
+        words: list[dict] = []
+        seen: set[str] = set()
+        for w in pick.words:
+            key = w.word.strip().lower()
+            parts = key.split()
+            if key not in deck and len(parts) > 1 and parts[0] in _NUDGE_ARTICLES:
+                key = " ".join(parts[1:])
+            entry = deck.get(key)
+            if entry is None or key in seen or key == noun_l:
+                continue
+            seen.add(key)
+            target, article, _ = entry
+            words.append(
+                {
+                    # Nouns wear their article in the reveal — that's how the
+                    # learner should re-encounter them.
+                    "word": f"{article} {target}" if article else target,
+                    "hint": w.hint.strip(),
+                }
+            )
+            if len(words) == 3:
+                break
+        span.set_attribute(
+            "langfuse.trace.output",
+            ", ".join(w["word"] for w in words) or "(none)",
+        )
+        return {"words": words}

@@ -8,6 +8,7 @@ import type {
   EndingSheet,
   GenusItem,
   GenusPool,
+  NudgeWord,
   PhraseVerdict,
 } from "./api";
 
@@ -81,6 +82,7 @@ export default function GenusTrainer({
   onSelectPool,
   onArticle,
   onPhrase,
+  onNudge,
   onNewRound,
   flow,
   onFlowDone,
@@ -98,6 +100,11 @@ export default function GenusTrainer({
   // the parent, which owns the token and the OBS-007 practice-session id).
   onArticle: (itemId: string, article: Article) => Promise<ArticleVerdict>;
   onPhrase: (itemId: string, answer: string) => Promise<PhraseVerdict>;
+  // The vocab nudge (POST /genus/nudge): which of the learner's own deck
+  // words would fit a sentence about this noun. Resolves to [] on any
+  // failure — the pill simply doesn't appear. Optional so Flow (drag beat
+  // only, no production) never wires or pays for it.
+  onNudge?: (itemId: string) => Promise<NudgeWord[]>;
   // Fetch a fresh round; the parent remounts this component with it.
   onNewRound: () => void;
   // FLOW-001: in flow mode the parent deals exactly one item per mount and
@@ -137,6 +144,13 @@ export default function GenusTrainer({
   const [guidance, setGuidance] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // The vocab nudge — a retrieval cue, deliberately count-first: the pill
+  // only says HOW MANY deck words would fit, so the learner rummages
+  // through their own memory before clicking reveals which (`showNudge`).
+  const [nudge, setNudge] = useState<NudgeWord[] | null>(null);
+  const [showNudge, setShowNudge] = useState(false);
+  const nudgeForRef = useRef<string | null>(null);
+
   // Scoring: an item is a first-try green only when BOTH beats were clean.
   const slippedRef = useRef(false);
   const [firstTryGreens, setFirstTryGreens] = useState(0);
@@ -152,6 +166,21 @@ export default function GenusTrainer({
     }
   }, [drop, verdict]);
 
+  // Fire the nudge fetch the moment the production beat opens (standalone
+  // only — Flow ends the item at the drop). Once per item view; a response
+  // that lands after the learner already advanced is dropped.
+  useEffect(() => {
+    if (flow || !drop || !onNudge || nudgeForRef.current === item.id) return;
+    nudgeForRef.current = item.id;
+    let stale = false;
+    onNudge(item.id).then((words) => {
+      if (!stale) setNudge(words);
+    });
+    return () => {
+      stale = true;
+    };
+  }, [flow, drop, item, onNudge]);
+
   const advance = useCallback(() => {
     // Flow deals the drag beat only, so a clean item there is a first-try
     // drop; standalone additionally needs the phrase beat green.
@@ -163,6 +192,8 @@ export default function GenusTrainer({
     setVerdict(null);
     setValue("");
     setGuidance(null);
+    setNudge(null);
+    setShowNudge(false);
     setFailed(null);
     setShakeKey(0);
     slippedRef.current = false;
@@ -544,6 +575,43 @@ export default function GenusTrainer({
                   ein/der + adjective + noun — or write any sentence with it;
                   only the gender is judged
                 </p>
+                {/* The vocab nudge: count-first so the learner searches their
+                    own memory; the click is the graduated hint. */}
+                {nudge && nudge.length > 0 && (
+                  <div className="mt-3 text-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowNudge((v) => !v)}
+                      aria-expanded={showNudge}
+                      className="inline-flex items-center gap-1.5 rounded-full border-2 border-flag-gold-deep bg-flag-gold-soft px-3.5 py-1.5 font-body text-[12px] font-bold text-flag-gold-deep transition-colors hover:bg-flag-gold/30"
+                    >
+                      💡 {nudge.length}{" "}
+                      {nudge.length === 1 ? "word" : "words"} from your
+                      vocabulary would fit here
+                    </button>
+                    {showNudge && (
+                      <div className="mx-auto mt-3 max-w-[420px] rounded-[20px] border-[3px] border-flag-gold-deep bg-flag-gold-soft p-4 text-left">
+                        <p className="font-body text-[11px] font-black uppercase tracking-[0.2em] text-flag-gold-deep">
+                          Aus deinem Wortschatz
+                        </p>
+                        <ul className="mt-2 space-y-1.5">
+                          {nudge.map((w) => (
+                            <li
+                              key={w.word}
+                              className="font-body text-[13px] leading-snug text-ink"
+                            >
+                              <span className="font-bold">{w.word}</span>
+                              <span className="mx-1.5 text-ink-muted">—</span>
+                              <span className="italic text-ink-soft">
+                                {w.hint}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                   <input
                     ref={inputRef}

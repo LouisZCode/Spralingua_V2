@@ -8,6 +8,7 @@ import { useAuth } from "./auth/AuthContext";
 import GenusTrainer from "./genus/GenusTrainer";
 import {
   fetchMeta,
+  fetchNudge,
   fetchRound,
   submitArticle,
   submitPhrase,
@@ -15,6 +16,7 @@ import {
   type ArticleVerdict,
   type GenusItem,
   type GenusMeta,
+  type NudgeWord,
   type PhraseVerdict,
 } from "./genus/api";
 import { UnauthorizedError } from "./satzschmiede/api";
@@ -133,6 +135,23 @@ export default function Genus() {
     [token, signOut, sessionId]
   );
 
+  // The vocab nudge is decorative — any failure resolves to "no pill", the
+  // drill never waits on it or surfaces its errors (401 still signs out).
+  const handleNudge = useCallback(
+    async (itemId: string): Promise<NudgeWord[]> => {
+      if (!token) return [];
+      try {
+        return await fetchNudge(token, itemId, sessionId());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        return [];
+      }
+    },
+    [token, signOut, sessionId]
+  );
+
   if (!ready || !token) {
     return null;
   }
@@ -192,6 +211,7 @@ export default function Genus() {
             onSelectPool={selectPool}
             onArticle={handleArticle}
             onPhrase={handlePhrase}
+            onNudge={handleNudge}
             onNewRound={loadRound}
           />
         )}
