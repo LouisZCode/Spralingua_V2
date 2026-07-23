@@ -48,6 +48,7 @@ from genus.content import (
 )
 from genus.judge import GenderVerdict, judge_gender
 from genus.nudge import suggest_vocab
+from vocab_nudge import filter_picks, load_deck
 
 router = APIRouter(prefix="/genus", tags=["genus"])
 
@@ -568,9 +569,6 @@ class NudgeIn(BaseModel):
     session_id: str | None = Field(None, max_length=64)
 
 
-_NUDGE_ARTICLES = frozenset(ARTICLES)
-
-
 @router.post("/nudge")
 async def vocab_nudge(
     body: NudgeIn,
@@ -588,22 +586,8 @@ async def vocab_nudge(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
 
-    # The whole deck, all card types — verbs and phrases are prime sentence
-    # material, not just nouns. Past-tense siblings are the same word again;
-    # the base card suffices.
-    cards = (
-        await db.execute(
-            select(VocabCard)
-            .join(UserCard, UserCard.card_id == VocabCard.id)
-            .where(UserCard.user_id == user_id, VocabCard.tense.is_(None))
-        )
-    ).scalars().all()
     noun_l = item["noun"].lower()
-    deck: dict[str, tuple[str, str | None, str]] = {}
-    for c in cards:
-        target = (c.target or "").strip()
-        if target and target.lower() != noun_l:
-            deck[target.lower()] = (target, c.article, c.gloss or "")
+    deck = await load_deck(db, user_id, exclude=frozenset({noun_l}))
     if not deck:
         return {"words": []}
 
@@ -621,30 +605,7 @@ async def vocab_nudge(
             logger.warning("Genus nudge judge failed (item {}) — serving none", item["id"])
             return {"words": []}
 
-        # Hallucination guard: only words that really are on the deck survive,
-        # matched with or without a leading article, deduped, capped at 3.
-        words: list[dict] = []
-        seen: set[str] = set()
-        for w in pick.words:
-            key = w.word.strip().lower()
-            parts = key.split()
-            if key not in deck and len(parts) > 1 and parts[0] in _NUDGE_ARTICLES:
-                key = " ".join(parts[1:])
-            entry = deck.get(key)
-            if entry is None or key in seen or key == noun_l:
-                continue
-            seen.add(key)
-            target, article, _ = entry
-            words.append(
-                {
-                    # Nouns wear their article in the reveal — that's how the
-                    # learner should re-encounter them.
-                    "word": f"{article} {target}" if article else target,
-                    "hint": w.hint.strip(),
-                }
-            )
-            if len(words) == 3:
-                break
+        words = filter_picks(pick, deck, exclude=frozenset({noun_l}))
         span.set_attribute(
             "langfuse.trace.output",
             ", ".join(w["word"] for w in words) or "(none)",

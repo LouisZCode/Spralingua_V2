@@ -2,6 +2,9 @@
 // same Bearer-replay + 401-signout contract as the other practice clients.
 import { HTTP_BASE } from "@/lib/api";
 import { UnauthorizedError } from "../satzschmiede/api";
+import type { NudgeWord } from "../shared/VocabNudge";
+
+export type { NudgeWord };
 
 // One constrained speaking task as the round serves it. The judge rubric
 // (`forces`) stays server-side — the learner sees only the task.
@@ -65,6 +68,25 @@ export async function fetchRound(
       ? `?seenTasks=${encodeURIComponent(seenTasks.join(","))}`
       : "";
   return request<RoundResponse>(`/sprechen/round${qs}`, token);
+}
+
+// Decorative endpoint: the backend answers {words: []} on any internal
+// failure, so callers only ever handle the happy shape (plus 401).
+export async function fetchNudge(
+  token: string,
+  taskId: string,
+  sessionId: string
+): Promise<NudgeWord[]> {
+  const data = await request<{ words: NudgeWord[] }>(
+    "/sprechen/nudge",
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: taskId, session_id: sessionId }),
+    }
+  );
+  return data.words;
 }
 
 export async function submitAttempt(

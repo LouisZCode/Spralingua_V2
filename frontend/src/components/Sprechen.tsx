@@ -7,8 +7,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import SprechenTrainer from "./sprechen/SprechenTrainer";
 import {
+  fetchNudge,
   fetchRound,
   submitAttempt,
+  type NudgeWord,
   type SpokenTask,
   type SprechenVerdict,
 } from "./sprechen/api";
@@ -119,6 +121,25 @@ export default function Sprechen() {
     [token, signOut]
   );
 
+  // The vocab nudge is decorative — any failure resolves to "no pill", the
+  // drill never waits on it or surfaces its errors (401 still signs out).
+  const handleNudge = useCallback(
+    async (taskId: string): Promise<NudgeWord[]> => {
+      if (!token) return [];
+      practiceSessionRef.current ??=
+        "spr-" + crypto.randomUUID().replace(/-/g, "");
+      try {
+        return await fetchNudge(token, taskId, practiceSessionRef.current);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        return [];
+      }
+    },
+    [token, signOut]
+  );
+
   // UI-007: word-gloss popover wiring — same auth-guarded pattern as
   // handleAttempt above. Both are optional on the trainer's props.
   const handleGloss = useCallback(
@@ -213,6 +234,7 @@ export default function Sprechen() {
             onNewRound={loadRound}
             onGloss={handleGloss}
             onAdd={handleAddWord}
+            onNudge={handleNudge}
           />
         )}
       </main>

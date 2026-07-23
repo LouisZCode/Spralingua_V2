@@ -15,6 +15,7 @@ import time
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import tracer
@@ -29,6 +30,8 @@ from database.repository import (
 from satz.examiner import transcribe_attempt
 from sprechen.content import TARGET_PATTERNS, load_tasks
 from sprechen.judge import judge_spoken
+from sprechen.nudge import suggest_vocab
+from vocab_nudge import filter_picks, load_deck
 
 router = APIRouter(prefix="/sprechen", tags=["sprechen"])
 
@@ -262,3 +265,52 @@ async def submit_attempt(
                 for s in verdict.slips
             ],
         }
+
+
+class NudgeIn(BaseModel):
+    task_id: str
+    # OBS-007 practice-sitting id — groups the nudge trace with the attempts.
+    session_id: str | None = Field(None, max_length=64)
+
+
+@router.post("/nudge")
+async def vocab_nudge(
+    body: NudgeIn,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """The retrieval cue before recording: which of the learner's OWN deck
+    words would fit an answer to this task. The frontend shows only the
+    count as a pill; clicking reveals ``words`` (the graduated hint).
+
+    Decorative by contract — every failure path (empty deck, judge outage,
+    hallucinated picks) returns ``{"words": []}``, never an error the drill
+    would have to handle. Nothing here is an attempt: no DATA-004 row."""
+    task = load_tasks().get(body.task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Unknown task.")
+
+    deck = await load_deck(db, user_id)
+    if not deck:
+        return {"words": []}
+
+    with tracer.start_as_current_span("sprechen-nudge") as span:
+        span.set_attribute("user.id", user_id)
+        span.set_attribute("task_id", task["id"])
+        if body.session_id:
+            span.set_attribute("langfuse.session.id", body.session_id)
+        span.set_attribute("langfuse.trace.input", task["title"])
+        span.set_attribute("deck_size", len(deck))
+        try:
+            pick = await suggest_vocab(task, list(deck.values()))
+        except Exception as exc:
+            span.record_exception(exc)
+            logger.warning("Sprechen nudge judge failed (task {}) — serving none", task["id"])
+            return {"words": []}
+
+        words = filter_picks(pick, deck)
+        span.set_attribute(
+            "langfuse.trace.output",
+            ", ".join(w["word"] for w in words) or "(none)",
+        )
+        return {"words": words}

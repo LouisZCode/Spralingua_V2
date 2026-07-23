@@ -8,9 +8,9 @@ import type {
   EndingSheet,
   GenusItem,
   GenusPool,
-  NudgeWord,
   PhraseVerdict,
 } from "./api";
+import VocabNudgePill, { type NudgeWord } from "../shared/VocabNudge";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as ZeitfaerbungTrainer. `retry` marks the copy. An item counts as
@@ -144,13 +144,6 @@ export default function GenusTrainer({
   const [guidance, setGuidance] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // The vocab nudge — a retrieval cue, deliberately count-first: the pill
-  // only says HOW MANY deck words would fit, so the learner rummages
-  // through their own memory before clicking reveals which (`showNudge`).
-  const [nudge, setNudge] = useState<NudgeWord[] | null>(null);
-  const [showNudge, setShowNudge] = useState(false);
-  const nudgeForRef = useRef<string | null>(null);
-
   // Scoring: an item is a first-try green only when BOTH beats were clean.
   const slippedRef = useRef(false);
   const [firstTryGreens, setFirstTryGreens] = useState(0);
@@ -166,21 +159,6 @@ export default function GenusTrainer({
     }
   }, [drop, verdict]);
 
-  // Fire the nudge fetch the moment the production beat opens (standalone
-  // only — Flow ends the item at the drop). Once per item view; a response
-  // that lands after the learner already advanced is dropped.
-  useEffect(() => {
-    if (flow || !drop || !onNudge || nudgeForRef.current === item.id) return;
-    nudgeForRef.current = item.id;
-    let stale = false;
-    onNudge(item.id).then((words) => {
-      if (!stale) setNudge(words);
-    });
-    return () => {
-      stale = true;
-    };
-  }, [flow, drop, item, onNudge]);
-
   const advance = useCallback(() => {
     // Flow deals the drag beat only, so a clean item there is a first-try
     // drop; standalone additionally needs the phrase beat green.
@@ -192,8 +170,6 @@ export default function GenusTrainer({
     setVerdict(null);
     setValue("");
     setGuidance(null);
-    setNudge(null);
-    setShowNudge(false);
     setFailed(null);
     setShakeKey(0);
     slippedRef.current = false;
@@ -576,41 +552,14 @@ export default function GenusTrainer({
                   only the gender is judged
                 </p>
                 {/* The vocab nudge: count-first so the learner searches their
-                    own memory; the click is the graduated hint. */}
-                {nudge && nudge.length > 0 && (
-                  <div className="mt-3 text-center">
-                    <button
-                      type="button"
-                      onClick={() => setShowNudge((v) => !v)}
-                      aria-expanded={showNudge}
-                      className="inline-flex items-center gap-1.5 rounded-full border-2 border-flag-gold-deep bg-flag-gold-soft px-3.5 py-1.5 font-body text-[12px] font-bold text-flag-gold-deep transition-colors hover:bg-flag-gold/30"
-                    >
-                      💡 {nudge.length}{" "}
-                      {nudge.length === 1 ? "word" : "words"} from your
-                      vocabulary would fit here
-                    </button>
-                    {showNudge && (
-                      <div className="mx-auto mt-3 max-w-[420px] rounded-[20px] border-[3px] border-flag-gold-deep bg-flag-gold-soft p-4 text-left">
-                        <p className="font-body text-[11px] font-black uppercase tracking-[0.2em] text-flag-gold-deep">
-                          Aus deinem Wortschatz
-                        </p>
-                        <ul className="mt-2 space-y-1.5">
-                          {nudge.map((w) => (
-                            <li
-                              key={w.word}
-                              className="font-body text-[13px] leading-snug text-ink"
-                            >
-                              <span className="font-bold">{w.word}</span>
-                              <span className="mx-1.5 text-ink-muted">—</span>
-                              <span className="italic text-ink-soft">
-                                {w.hint}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
+                    own memory; the click is the graduated hint. Only fires
+                    once the production beat opens (this branch is `!flow`
+                    already), and `key={item.id}` remounts it per item. */}
+                {onNudge && (
+                  <VocabNudgePill
+                    key={item.id}
+                    fetch={() => onNudge(item.id)}
+                  />
                 )}
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                   <input

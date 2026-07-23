@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import type { SpokenTask, SprechenVerdict } from "./api";
+import type { NudgeWord, SpokenTask, SprechenVerdict } from "./api";
 import Glossable from "../shared/Glossable";
+import VocabNudgePill from "../shared/VocabNudge";
 import type { GlossInfo } from "../satzschmiede/api";
 import { diffWords, segmentTranscript } from "./slipDiff";
 
@@ -29,6 +30,7 @@ export default function SprechenTrainer({
   onNewRound,
   onGloss,
   onAdd,
+  onNudge,
   flow,
   onFlowDone,
 }: {
@@ -41,6 +43,11 @@ export default function SprechenTrainer({
   // UI-007: word-gloss popover wiring — optional, absent renders plain text.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<void>;
+  // The vocab nudge (POST /sprechen/nudge): which of the learner's own deck
+  // words would fit an answer to this task. Optional — Flow never passes it,
+  // so Flow stays nudge-free by omission (no flow-gating needed here, unlike
+  // Genus's drag/production split).
+  onNudge?: (taskId: string) => Promise<NudgeWord[]>;
   // FLOW-001: mixed-practice mode — the parent deals exactly one item via
   // `round` and remounts per turn (via `key`), so this trainer only needs to
   // hand the verdict back instead of ever reaching its own "done" phase.
@@ -283,6 +290,13 @@ export default function SprechenTrainer({
 
         {!solved ? (
           <div className="mt-7 flex flex-col items-center gap-3">
+            {/* The vocab nudge: mounted above the checking/record split so it
+                stays put (no refetch) while a submit is in flight or fails.
+                A "Try again" clears `verdict`, which remounts this via
+                `key={task.id}` and fetches once more per retry — accepted. */}
+            {onNudge && (
+              <VocabNudgePill key={task.id} fetch={() => onNudge(task.id)} />
+            )}
             {checking ? (
               <p className="font-body text-[14px] font-semibold text-ink-muted">
                 Checking…

@@ -2,6 +2,7 @@
 // same contract as the other practice clients.
 import { HTTP_BASE } from "@/lib/api";
 import { UnauthorizedError } from "../satzschmiede/api";
+import type { NudgeWord } from "../shared/VocabNudge";
 
 export type Article = "der" | "die" | "das";
 
@@ -54,7 +55,9 @@ export type PhraseVerdict = {
 // One deck word the vocab nudge picked for the production beat: the word
 // (nouns wear their article) plus a short German example using both it and
 // the target noun. The pill shows only the count; clicking reveals these.
-export type NudgeWord = { word: string; hint: string };
+// Re-exported from the shared VocabNudge component so existing imports
+// (e.g. Genus.tsx) keep working.
+export type { NudgeWord };
 
 // The intro cheat sheet: ending labels per article, in rules.yaml order.
 export type EndingSheet = Record<Article, string[]>;
