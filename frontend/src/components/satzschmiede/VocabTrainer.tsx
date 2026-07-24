@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { WordRejectedError, type AttemptResult } from "./api";
 import type { DeckCard } from "./deck";
 
@@ -53,6 +54,10 @@ const MAX_RECORD_SECONDS = 45;
 // legacy flat drip. Satzschmiede itself now gets a per-day allowance from
 // the backend instead (see buildQueue below).
 const NEW_PER_SESSION = 15;
+
+// SATZ-012: the done-panel follow-up batch is deliberately small — one more
+// push, not a second full session (the initial queue keeps `reviewCap`).
+const MORE_CAP = 10;
 
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both
 // as-is, so we just pick the first container the browser supports.
@@ -112,6 +117,7 @@ export default function VocabTrainer({
   newAllowance,
   reviewCap,
   newThrottled,
+  onDoneChange,
 }: {
   deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
@@ -167,6 +173,10 @@ export default function VocabTrainer({
   // True while the accuracy guard has zeroed (or shrunk) today's allowance —
   // drives one calm reassurance line instead of new words just not showing up.
   newThrottled?: boolean;
+  // SATZ-012: fires true while the post-round clean end screen is up (queue
+  // exhausted AFTER real work), so the shell can hide its pool/add-cards
+  // chrome. The nothing-due-at-mount panel does NOT count as done.
+  onDoneChange?: (done: boolean) => void;
 }) {
   // Two ways to face the pool: "practice" works today's queue (due + a drip
   // of new, shuffled — green pops a card, anything else recycles it); browse
@@ -293,6 +303,13 @@ export default function VocabTrainer({
     },
     []
   );
+
+  // SATZ-012: `card` flipping to null is the render signal; doneRef mutates
+  // in the same updates that advance the queue, so this re-runs on time.
+  const roundDone = !card && doneRef.current.size > 0;
+  useEffect(() => {
+    onDoneChange?.(roundDone);
+  }, [roundDone, onDoneChange]);
 
   async function startRecording() {
     if (busy || flipped || !card) return;
@@ -489,12 +506,12 @@ export default function VocabTrainer({
     resetScratch();
   }
 
-  // Done-panel "+ Review N more": pull the next capped, most-overdue-first
-  // batch of due cards. Reuses buildQueue with newAllowance forced to 0 so
-  // it can never smuggle in new words beyond today's allowance — that
+  // Done-panel "+ Noch N üben": pull the next small MORE_CAP batch of due
+  // cards, most-overdue-first. Reuses buildQueue with newAllowance forced to
+  // 0 so it can never smuggle in new words beyond today's allowance — that
   // button only ever offers due cards.
   function reviewMore() {
-    setQueue(buildQueue(deck, doneRef.current, 0, reviewCap));
+    setQueue(buildQueue(deck, doneRef.current, 0, MORE_CAP));
     resetScratch();
   }
 
@@ -544,29 +561,34 @@ export default function VocabTrainer({
     const laterAhead = deck.filter(
       (c) => c.srs.status === "later" && !doneRef.current.has(c.id)
     ).length;
-    const reviewMoreCount = Math.min(dueRemaining, reviewCap ?? dueRemaining);
+    const reviewMoreCount = Math.min(dueRemaining, MORE_CAP);
+    const finished = doneRef.current.size > 0;
     return (
       <div className="mx-auto w-full max-w-xl text-center">
         <h2 className="font-display text-[clamp(26px,5vw,36px)] font-black leading-tight tracking-tight text-ink">
-          {doneRef.current.size > 0
-            ? "Alles geschmiedet!"
-            : "Nothing due today."}
+          {finished ? "Alles geschmiedet!" : "Heute ist nichts fällig."}
         </h2>
         <p className="mx-auto mt-3 max-w-[380px] font-body text-[15px] leading-relaxed text-ink-soft">
-          {dueRemaining > 0
-            ? `Today's round is done — ${dueRemaining} more due ${
-                dueRemaining === 1 ? "word is" : "words are"
-              } waiting.`
+          {finished
+            ? dueRemaining > 0
+              ? dueRemaining === 1
+                ? "Runde geschafft — ein fälliges Wort wartet noch."
+                : `Runde geschafft — ${dueRemaining} fällige Wörter warten noch.`
+              : laterAhead > 0
+                ? "Runde geschafft — du kannst ein paar kommende Wörter vorziehen."
+                : "Runde geschafft — deine Wörter ruhen sich jetzt aus."
             : laterAhead > 0
-              ? "Today's round is done — you can get a head start on a few upcoming words."
-              : "Your words are resting — they'll come back when it's time to forge them again."}
+              ? "Du kannst ein paar kommende Wörter vorziehen."
+              : "Deine Wörter ruhen sich aus — sie kommen zurück, wenn es Zeit ist."}
         </p>
-        {/* Re-dosed drip: the accuracy guard zeroed (or shrunk) today's
-            new-word allowance — say so instead of leaving it unexplained. */}
-        {newThrottled && (
+        {/* SATZ-012: the clean end keeps exactly two actions — one small
+            follow-up batch and the way back. The throttle note and the
+            browse link stay off the post-round screen; the nothing-due
+            panel keeps them, it's a landing state, not an ending. */}
+        {!finished && newThrottled && (
           <p className="mx-auto mt-2 max-w-[380px] font-body text-[12px] font-semibold text-ink-faint">
-            New words are paused while your accuracy recovers — clearing
-            reviews brings them back.
+            Neue Wörter pausieren, bis sich deine Genauigkeit erholt hat —
+            erledigte Reviews bringen sie zurück.
           </p>
         )}
         {dueRemaining > 0 ? (
@@ -576,7 +598,7 @@ export default function VocabTrainer({
             className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
             style={redShadow}
           >
-            + Review {reviewMoreCount} more
+            + Noch {reviewMoreCount} üben
           </button>
         ) : (
           laterAhead > 0 && (
@@ -586,19 +608,30 @@ export default function VocabTrainer({
               className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
               style={redShadow}
             >
-              + Practice ahead
+              + Ein paar vorziehen
             </button>
           )
         )}
-        <div className="mt-6">
-          <button
-            type="button"
-            onClick={() => setBrowsing(true)}
-            className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+        <div className="mt-4">
+          <Link
+            href="/practice"
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+            style={inkShadow}
           >
-            Browse all {total} words →
-          </button>
+            Zurück zum Menü
+          </Link>
         </div>
+        {!finished && (
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => setBrowsing(true)}
+              className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Alle {total} Wörter ansehen →
+            </button>
+          </div>
+        )}
       </div>
     );
   }

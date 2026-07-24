@@ -44,6 +44,8 @@ export default function Satzschmiede() {
   const [newThrottled, setNewThrottled] = useState(false);
   const [error, setError] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false); // the "Add Cards" popup
+  // SATZ-012: true while VocabTrainer shows its post-round end screen.
+  const [trainerDone, setTrainerDone] = useState(false);
 
   useEffect(() => {
     if (ready && !token) {
@@ -231,20 +233,22 @@ export default function Satzschmiede() {
           <h1 className="font-display text-[24px] font-black tracking-tight text-ink">
             Satzschmiede
           </h1>
-          <div className="mt-1.5 flex items-center justify-center gap-4">
-            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-              {label}
-            </p>
-            {!error && deck !== null && !emptyPool && (
-              <button
-                type="button"
-                onClick={() => setPacksOpen(true)}
-                className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-flag-red-deep"
-              >
-                + Add Cards
-              </button>
-            )}
-          </div>
+          {!trainerDone && (
+            <div className="mt-1.5 flex items-center justify-center gap-4">
+              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+                {label}
+              </p>
+              {!error && deck !== null && !emptyPool && (
+                <button
+                  type="button"
+                  onClick={() => setPacksOpen(true)}
+                  className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-flag-red-deep"
+                >
+                  + Add Cards
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {error ? (
@@ -281,6 +285,7 @@ export default function Satzschmiede() {
             newAllowance={newAllowance}
             reviewCap={REVIEW_CAP}
             newThrottled={newThrottled}
+            onDoneChange={setTrainerDone}
           />
         )}
 
