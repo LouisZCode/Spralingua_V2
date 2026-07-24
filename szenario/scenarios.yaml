@@ -10,6 +10,10 @@
 #   persona        — { name, role, attitude }. role is German
 #                    (e.g. "Verkäufer im Spieleladen"); attitude is "friendly"
 #                    for every Stufe-1 scenario
+#   register       — "du" | "Sie": the address form the persona uses. du is
+#                    the default (daily life in Germany runs on du); Sie only
+#                    where the scene genuinely demands it (official desks,
+#                    medical counters, surname-addressed strangers).
 #   kontext        — ONE English sentence setting the scene, shown to the
 #                    learner before the question
 #   questions      — 3-5 German questions this persona might casually ask;
@@ -20,6 +24,7 @@
 scenarios:
   - id: spieleladen
     stufe: 1
+    register: du
     persona:
       name: Jonas
       role: Verkäufer im Spieleladen
@@ -28,10 +33,10 @@ scenarios:
       You're browsing in a small board-game shop and the clerk starts
       chatting with you while you look at the shelves.
     questions:
-      - Suchen Sie ein Geschenk oder ist das für Sie selbst?
-      - Spielen Sie lieber mit Freunden oder in der Familie?
-      - Mögen Sie eher einfache Spiele oder komplizierte Strategiespiele?
-      - Haben Sie schon mal ein Kartenspiel gespielt?
+      - Suchst du ein Geschenk oder ist das für dich selbst?
+      - Spielst du lieber mit Freunden oder in der Familie?
+      - Magst du eher einfache Spiele oder komplizierte Strategiespiele?
+      - Hast du schon mal ein Kartenspiel gespielt?
       - Wie viele Spieler sollen mitspielen können?
     ziel_vokabular:
       - der Spieleladen
@@ -45,6 +50,7 @@ scenarios:
 
   - id: cafe
     stufe: 1
+    register: du
     persona:
       name: Lea
       role: Barista im Café
@@ -53,11 +59,11 @@ scenarios:
       You're standing at the counter of a small café and the barista makes
       conversation while preparing your order.
     questions:
-      - Trinken Sie lieber Kaffee oder Tee?
-      - Wollen Sie das hier trinken oder mitnehmen?
-      - Kennen Sie unser Café schon lange?
-      - Möchten Sie auch etwas Süßes dazu?
-      - Sitzen Sie gern drinnen oder lieber draußen?
+      - Trinkst du lieber Kaffee oder Tee?
+      - Willst du das hier trinken oder mitnehmen?
+      - Kennst du unser Café schon lange?
+      - Möchtest du auch etwas Süßes dazu?
+      - Sitzt du gern drinnen oder lieber draußen?
     ziel_vokabular:
       - der Kaffee
       - der Tee
@@ -70,6 +76,7 @@ scenarios:
 
   - id: nachbarin
     stufe: 1
+    register: Sie
     persona:
       name: Frau Bauer
       role: Nachbarin im Haus
@@ -95,6 +102,7 @@ scenarios:
 
   - id: arztpraxis
     stufe: 1
+    register: Sie
     persona:
       name: Frau Nowak
       role: Arzthelferin an der Anmeldung
@@ -118,6 +126,7 @@ scenarios:
 
   - id: bahnhof
     stufe: 1
+    register: Sie
     persona:
       name: Herr Keller
       role: Mitarbeiter am Infoschalter
@@ -141,6 +150,7 @@ scenarios:
 
   - id: supermarkt
     stufe: 1
+    register: du
     persona:
       name: Sabrina
       role: Kassiererin im Supermarkt
@@ -149,11 +159,11 @@ scenarios:
       You're unloading your groceries at the checkout of a supermarket and
       the cashier makes conversation while scanning your items.
     questions:
-      - Kochen Sie gern, oder essen Sie lieber schnell und einfach?
-      - Haben Sie das Wochenende schon verplant?
-      - Brauchen Sie noch eine Tüte, oder haben Sie eine eigene dabei?
-      - Was ist eigentlich Ihr Lieblingsessen?
-      - Kaufen Sie meistens spontan ein, oder schreiben Sie sich vorher eine
+      - Kochst du gern, oder isst du lieber schnell und einfach?
+      - Hast du das Wochenende schon verplant?
+      - Brauchst du noch eine Tüte, oder hast du eine eigene dabei?
+      - Was ist eigentlich dein Lieblingsessen?
+      - Kaufst du meistens spontan ein, oder schreibst du dir vorher eine
         Liste?
     ziel_vokabular:
       - die Kasse
@@ -165,6 +175,7 @@ scenarios:
 
   - id: buergeramt
     stufe: 1
+    register: Sie
     persona:
       name: Herr Vogel
       role: Sachbearbeiter im Bürgeramt
@@ -188,6 +199,7 @@ scenarios:
 
   - id: fitnessstudio
     stufe: 1
+    register: du
     persona:
       name: Timo
       role: Trainer im Fitnessstudio
@@ -196,11 +208,11 @@ scenarios:
       You're on a free trial visit at a gym and the trainer chats with you
       while showing you around the equipment.
     questions:
-      - Waren Sie schon einmal Mitglied in einem Fitnessstudio?
-      - Wollen Sie eher Muskeln aufbauen oder einfach fit bleiben?
-      - Wie oft könnten Sie realistisch zum Training kommen?
-      - Machen Sie lieber allein Sport oder in der Gruppe?
-      - Was hält Sie meistens davon ab, regelmäßig Sport zu treiben?
+      - Warst du schon einmal Mitglied in einem Fitnessstudio?
+      - Willst du eher Muskeln aufbauen oder einfach fit bleiben?
+      - Wie oft könntest du realistisch zum Training kommen?
+      - Machst du lieber allein Sport oder in der Gruppe?
+      - Was hält dich meistens davon ab, regelmäßig Sport zu treiben?
     ziel_vokabular:
       - das Fitnessstudio
       - das Training
@@ -211,6 +223,7 @@ scenarios:
 
   - id: friseur
     stufe: 1
+    register: du
     persona:
       name: Mia
       role: Friseurin im Salon
@@ -219,12 +232,12 @@ scenarios:
       You're sitting in the chair at a hair salon and the hairdresser chats
       with you while cutting your hair.
     questions:
-      - Möchten Sie sich die Haare eher kurz schneiden lassen, oder nur die
+      - Möchtest du dir die Haare eher kurz schneiden lassen, oder nur die
         Spitzen?
-      - Waren Sie schon einmal bei einem anderen Friseur hier in der Stadt?
-      - Was machen Sie eigentlich beruflich?
-      - Haben Sie heute Abend noch etwas Besonderes vor?
-      - Wie oft lassen Sie sich normalerweise die Haare schneiden?
+      - Warst du schon einmal bei einem anderen Friseur hier in der Stadt?
+      - Was machst du eigentlich beruflich?
+      - Hast du heute Abend noch etwas Besonderes vor?
+      - Wie oft lässt du dir normalerweise die Haare schneiden?
     ziel_vokabular:
       - der Friseur
       - die Haare
@@ -236,19 +249,20 @@ scenarios:
   # ── CONT-001 growth batch (2026-07-19) — leisure/errands lens ───────────
   - id: buchhandlung
     stufe: 1
+    register: du
     persona:
-      name: Frau Brandt
+      name: Anna
       role: Buchhändlerin in der Buchhandlung
       attitude: friendly
     kontext: >-
       You're browsing in a small independent bookshop and the bookseller
       chats with you while restocking a shelf nearby.
     questions:
-      - Lesen Sie lieber Romane oder Sachbücher?
-      - Wie oft kaufen Sie sich ein neues Buch?
-      - Was war das letzte Buch, das Sie richtig begeistert hat?
-      - Planen Sie, im Urlaub besonders viel zu lesen?
-      - Was halten Sie von E-Books im Vergleich zu gedruckten Büchern?
+      - Liest du lieber Romane oder Sachbücher?
+      - Wie oft kaufst du dir ein neues Buch?
+      - Was war das letzte Buch, das dich richtig begeistert hat?
+      - Planst du, im Urlaub besonders viel zu lesen?
+      - Was hältst du von E-Books im Vergleich zu gedruckten Büchern?
     ziel_vokabular:
       - die Buchhandlung
       - der Roman
@@ -260,6 +274,7 @@ scenarios:
 
   - id: wochenmarkt
     stufe: 1
+    register: du
     persona:
       name: Herr Fischer
       role: Verkäufer am Marktstand
@@ -268,11 +283,11 @@ scenarios:
       You're choosing vegetables at a farmer's stall on the weekly market
       and the vendor chats with you while weighing your purchase.
     questions:
-      - Kaufen Sie lieber Obst oder Gemüse?
-      - Kommen Sie regelmäßig zum Wochenmarkt, oder eher selten?
-      - Haben Sie schon mal etwas ganz Neues bei uns probiert?
-      - Kochen Sie heute Abend etwas Besonderes mit dem Gemüse?
-      - "Was ist Ihnen beim Einkaufen wichtiger: der Preis oder die Qualität?"
+      - Kaufst du lieber Obst oder Gemüse?
+      - Kommst du regelmäßig zum Wochenmarkt, oder eher selten?
+      - Hast du schon mal etwas ganz Neues bei uns probiert?
+      - Kochst du heute Abend etwas Besonderes mit dem Gemüse?
+      - Was ist dir beim Einkaufen wichtiger — der Preis oder die Qualität?
     ziel_vokabular:
       - der Marktstand
       - das Gemüse
@@ -284,6 +299,7 @@ scenarios:
 
   - id: apotheke
     stufe: 1
+    register: Sie
     persona:
       name: Frau Sarwari
       role: Apothekerin in der Apotheke
@@ -309,6 +325,7 @@ scenarios:
   # ── CONT-001 growth batch (2026-07-19) — social/service lens ────────────
   - id: restaurant
     stufe: 1
+    register: du
     persona:
       name: Tobias
       role: Kellner im Restaurant
@@ -317,11 +334,11 @@ scenarios:
       You're having dinner alone at a small neighborhood restaurant and the
       waiter chats with you while bringing your order.
     questions:
-      - Essen Sie lieber deftig oder eher leicht?
-      - Wie oft gehen Sie abends essen, statt zu Hause zu kochen?
-      - Waren Sie schon einmal in einem Restaurant, das Ihnen besonders gut gefallen hat?
-      - Haben Sie nach dem Essen heute Abend noch etwas vor?
-      - Was ist für Sie das Wichtigste an einem guten Restaurant?
+      - Isst du lieber deftig oder eher leicht?
+      - Wie oft gehst du abends essen, statt zu Hause zu kochen?
+      - Warst du schon einmal in einem Restaurant, das dir besonders gut gefallen hat?
+      - Hast du nach dem Essen heute Abend noch etwas vor?
+      - Was ist für dich das Wichtigste an einem guten Restaurant?
     ziel_vokabular:
       - die Speisekarte
       - das Gericht
@@ -334,6 +351,7 @@ scenarios:
 
   - id: taxi
     stufe: 1
+    register: Sie
     persona:
       name: Herr Krüger
       role: Taxifahrer
@@ -359,6 +377,7 @@ scenarios:
 
   - id: hundepark
     stufe: 1
+    register: du
     persona:
       name: Karin
       role: Hundehalterin im Park
@@ -367,11 +386,11 @@ scenarios:
       You're sitting on a bench in the park when a stranger's dog runs up to
       greet you, and its owner stops to chat while you pet it.
     questions:
-      - Mögen Sie Hunde, oder sind Sie eher ein Katzenmensch?
-      - Kommen Sie oft in diesen Park?
-      - Hatten Sie selbst schon einmal ein Haustier?
-      - Haben Sie vor, sich irgendwann einen Hund anzuschaffen?
-      - Was finden Sie eigentlich an Hunden am schönsten?
+      - Magst du Hunde, oder bist du eher ein Katzenmensch?
+      - Kommst du oft in diesen Park?
+      - Hattest du selbst schon einmal ein Haustier?
+      - Hast du vor, dir irgendwann einen Hund anzuschaffen?
+      - Was findest du eigentlich an Hunden am schönsten?
     ziel_vokabular:
       - der Hund
       - das Haustier

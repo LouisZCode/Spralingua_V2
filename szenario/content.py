@@ -11,7 +11,15 @@ import yaml
 
 _SCENARIOS_PATH = Path(__file__).parent / "scenarios.yaml"
 
-_REQUIRED = ("id", "stufe", "persona", "kontext", "questions", "ziel_vokabular")
+_REQUIRED = (
+    "id",
+    "stufe",
+    "persona",
+    "register",
+    "kontext",
+    "questions",
+    "ziel_vokabular",
+)
 _PERSONA_REQUIRED = ("name", "role", "attitude")
 
 # Keep round content tight — one persona, one unpredictable question, not a
@@ -38,6 +46,12 @@ def load_scenarios() -> dict[str, dict]:
 
         if not isinstance(scenario["stufe"], int):
             raise ValueError(f"{where}: 'stufe' must be an int")
+
+        # SZEN-004: the address form is declared data, never inferred — new
+        # scenes must commit to du (the default) or Sie (only where the scene
+        # genuinely demands it).
+        if scenario["register"] not in ("du", "Sie"):
+            raise ValueError(f"{where}: 'register' must be 'du' or 'Sie'")
 
         persona = scenario["persona"]
         if not isinstance(persona, dict):
