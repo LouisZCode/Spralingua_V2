@@ -131,7 +131,7 @@ class VocabCard(Base):
     # Slug id from the pack YAML ("n-rechnung", "v-freuen"); community cards
     # get the same shape minted at insert time.
     id: Mapped[str] = mapped_column(Text, primary_key=True)
-    type: Mapped[str] = mapped_column(Text, nullable=False)  # noun|verb|phrase
+    type: Mapped[str] = mapped_column(Text, nullable=False)  # noun|verb|phrase|adjective|preposition
     target: Mapped[str] = mapped_column(Text, nullable=False)
     article: Mapped[str | None] = mapped_column(Text, nullable=True)  # nouns
     # Verbs whose taught sense needs a reflexive pronoun — hidden on the clue,
