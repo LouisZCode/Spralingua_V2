@@ -18,6 +18,10 @@
 #                    learner before the question
 #   questions      — 3-5 German questions this persona might casually ask;
 #                    one is picked at random at runtime
+#   questions_b2   — 4 harder (B2) questions for the same persona/scene —
+#                    opinion + justification, hypotheticals (Konjunktiv II),
+#                    trade-offs, nuanced experience. Same register as the
+#                    scene. Served when the learner toggles B2 (SZEN-005)
 #   ziel_vokabular — 4-8 German domain nouns for the scene, each WITH its
 #                    article
 
@@ -38,6 +42,11 @@ scenarios:
       - Magst du eher einfache Spiele oder komplizierte Strategiespiele?
       - Hast du schon mal ein Kartenspiel gespielt?
       - Wie viele Spieler sollen mitspielen können?
+    questions_b2:
+      - Warum, glaubst du, werden komplizierte Strategiespiele gerade wieder so beliebt?
+      - Was würdest du machen, wenn die Anleitung komplett auf Englisch wäre?
+      - Was spricht für dich eigentlich gegen ein teures Sammlerspiel als Geschenk?
+      - Gab es mal ein Spiel, bei dem du dich richtig über die Regeln geärgert hast?
     ziel_vokabular:
       - der Spieleladen
       - das Brettspiel
@@ -64,6 +73,11 @@ scenarios:
       - Kennst du unser Café schon lange?
       - Möchtest du auch etwas Süßes dazu?
       - Sitzt du gern drinnen oder lieber draußen?
+    questions_b2:
+      - Was würdest du machen, wenn hier plötzlich kein Kaffee mehr da wäre?
+      - Manche sagen, Cafés sind die besseren Büros — wie siehst du das?
+      - Warum, glaubst du, geben Leute so viel Geld für guten Kaffee aus?
+      - Gab es mal ein Café, das dich richtig enttäuscht hat?
     ziel_vokabular:
       - der Kaffee
       - der Tee
@@ -90,6 +104,11 @@ scenarios:
       - Gefällt Ihnen die Wohnung schon?
       - Haben Sie schon die Nachbarn kennengelernt?
       - Brauchen Sie Hilfe beim Einziehen?
+    questions_b2:
+      - Warum, glauben Sie, ziehen heutzutage so viele Leute so oft um?
+      - Was würden Sie machen, wenn es im Haus plötzlich laute neue Nachbarn gäbe?
+      - Was spricht für Sie eigentlich gegen ein Haus mit mehr Nachbarn im Flur?
+      - Manche sagen, man kennt seine Nachbarn heute kaum noch — wie sehen Sie das?
     ziel_vokabular:
       - die Wohnung
       - das Haus
@@ -116,6 +135,11 @@ scenarios:
       - Was halten Sie von unserem neuen Wartezimmer?
       - Warum haben Sie sich für einen Termin bei uns entschieden?
       - Wie geht es Ihnen heute, abgesehen von Ihrem Termin?
+    questions_b2:
+      - Was würden Sie machen, wenn Sie kurzfristig keinen Termin mehr bekämen?
+      - Was spricht für Sie eigentlich gegen eine Praxis mit noch längeren Öffnungszeiten?
+      - Gab es mal einen Moment, wo Sie sich in einer Praxis richtig gut aufgehoben gefühlt haben?
+      - Manche sagen, man geht heute zu schnell zum Arzt — wie sehen Sie das?
     ziel_vokabular:
       - die Praxis
       - der Termin
@@ -140,6 +164,11 @@ scenarios:
       - Was machen Sie normalerweise, wenn der Zug Verspätung hat?
       - Reisen Sie lieber allein oder in Gesellschaft?
       - Warum fahren Sie eigentlich nicht einfach mit dem Auto?
+    questions_b2:
+      - Warum, glauben Sie, sind Verspätungen bei der Bahn eigentlich so häufig?
+      - Was würden Sie tun, wenn Ihr Zug den letzten Anschluss verpassen würde?
+      - Was spricht für Sie eigentlich gegen eine Fahrkarte ohne feste Zugbindung?
+      - Gab es mal eine Zugfahrt, die Ihnen trotz Verspätung richtig gut gefallen hat?
     ziel_vokabular:
       - der Bahnhof
       - der Zug
@@ -165,6 +194,11 @@ scenarios:
       - Was ist eigentlich dein Lieblingsessen?
       - Kaufst du meistens spontan ein, oder schreibst du dir vorher eine
         Liste?
+    questions_b2:
+      - Warum, glaubst du, kaufen so viele Leute heute lieber online statt hier ein?
+      - Was würdest du machen, wenn du an der Kasse dein Portemonnaie vergessen hättest?
+      - Was spricht für dich eigentlich gegen Selbstbedienungskassen im Supermarkt?
+      - Manche sagen, Plastiktüten sollte man ganz verbieten — wie siehst du das?
     ziel_vokabular:
       - die Kasse
       - die Tüte
@@ -189,6 +223,11 @@ scenarios:
       - War es schwierig, eine Wohnung zu finden?
       - Was gefällt Ihnen an diesem Stadtteil am besten?
       - Sind Sie mit dem Auto oder zu Fuß hierhergekommen?
+    questions_b2:
+      - Warum, glauben Sie, dauert so ein Formular hier oft länger als erwartet?
+      - Was würden Sie machen, wenn Ihre Bescheinigung heute nicht fertig würde?
+      - Was spricht für Sie eigentlich gegen einen Termin komplett online statt hier vor Ort?
+      - Gab es mal ein Amt, bei dem die Anmeldung überraschend schnell ging?
     ziel_vokabular:
       - das Bürgeramt
       - das Formular
@@ -213,6 +252,11 @@ scenarios:
       - Wie oft könntest du realistisch zum Training kommen?
       - Machst du lieber allein Sport oder in der Gruppe?
       - Was hält dich meistens davon ab, regelmäßig Sport zu treiben?
+    questions_b2:
+      - Was spricht für dich eigentlich gegen einen längeren Vertrag mit besserem Preis?
+      - Was würdest du machen, wenn dir nach ein paar Wochen die Motivation fehlen würde?
+      - Manche sagen, Fitnessstudios sind reine Geldmacherei — wie siehst du das?
+      - Gab es mal ein Ziel beim Training, das du wirklich erreicht hast?
     ziel_vokabular:
       - das Fitnessstudio
       - das Training
@@ -238,6 +282,11 @@ scenarios:
       - Was machst du eigentlich beruflich?
       - Hast du heute Abend noch etwas Besonderes vor?
       - Wie oft lässt du dir normalerweise die Haare schneiden?
+    questions_b2:
+      - Warum, glaubst du, probieren viele Leute ungern eine ganz neue Frisur aus?
+      - Was würdest du machen, wenn dir der Schnitt am Ende gar nicht gefallen würde?
+      - Was spricht für dich eigentlich gegen einen teureren Friseur in der Innenstadt?
+      - Gab es mal eine Frisur, mit der du im Spiegel richtig unzufrieden warst?
     ziel_vokabular:
       - der Friseur
       - die Haare
@@ -263,6 +312,11 @@ scenarios:
       - Was war das letzte Buch, das dich richtig begeistert hat?
       - Planst du, im Urlaub besonders viel zu lesen?
       - Was hältst du von E-Books im Vergleich zu gedruckten Büchern?
+    questions_b2:
+      - Warum, glaubst du, werden manche Bücher zu echten Bestsellern und andere nicht?
+      - Was würdest du machen, wenn es diese kleine Buchhandlung irgendwann nicht mehr gäbe?
+      - Was spricht für dich eigentlich gegen einen schön gestalteten Einband als Kaufgrund?
+      - Gab es mal einen Roman, den du erst gehasst und dann richtig geliebt hast?
     ziel_vokabular:
       - die Buchhandlung
       - der Roman
@@ -288,6 +342,11 @@ scenarios:
       - Hast du schon mal etwas ganz Neues bei uns probiert?
       - Kochst du heute Abend etwas Besonderes mit dem Gemüse?
       - Was ist dir beim Einkaufen wichtiger — der Preis oder die Qualität?
+    questions_b2:
+      - Warum, glaubst du, schmeckt Gemüse direkt vom Bauern eigentlich oft besser?
+      - Was würdest du machen, wenn es hier plötzlich nur noch Ware aus dem Supermarkt gäbe?
+      - Manche sagen, Wochenmärkte sind heute nur noch was für Touristen — wie siehst du das?
+      - Gab es mal eine Saison, in der du hier kaum ein Gemüse wiedererkannt hast?
     ziel_vokabular:
       - der Marktstand
       - das Gemüse
@@ -313,6 +372,11 @@ scenarios:
       - Haben Sie in letzter Zeit gut geschlafen, oder eher schlecht?
       - Wollen Sie sich für die kalte Jahreszeit mit ein paar Vitaminen eindecken?
       - Wie wichtig ist Ihnen gesunde Ernährung im Alltag?
+    questions_b2:
+      - Warum, glauben Sie, greifen viele Menschen bei einer Erkältung zu schnell zu Tabletten?
+      - Was würden Sie machen, wenn der Hustensaft bei Ihnen einfach nicht wirken würde?
+      - Was spricht für Sie eigentlich gegen eine Salbe statt einer Tablette bei Schmerzen?
+      - Gab es mal eine Erkältung, die trotz aller Mittel besonders hartnäckig war?
     ziel_vokabular:
       - die Apotheke
       - die Tablette
@@ -339,6 +403,11 @@ scenarios:
       - Warst du schon einmal in einem Restaurant, das dir besonders gut gefallen hat?
       - Hast du nach dem Essen heute Abend noch etwas vor?
       - Was ist für dich das Wichtigste an einem guten Restaurant?
+    questions_b2:
+      - Was würdest du machen, wenn dein Gericht kalt statt warm serviert würde?
+      - Was spricht für dich eigentlich gegen eine kleinere Portion zu einem günstigeren Preis?
+      - Manche sagen, Trinkgeld sollte einfach in den Preis eingerechnet werden — wie siehst du das?
+      - Gab es mal eine Vorspeise, die dich mehr überzeugt hat als das Hauptgericht?
     ziel_vokabular:
       - die Speisekarte
       - das Gericht
@@ -365,6 +434,11 @@ scenarios:
       - Hatten Sie schon einmal eine besonders interessante Taxifahrt?
       - Was haben Sie vor, sobald Sie am Flughafen ankommen?
       - Was gefällt Ihnen an dieser Stadt am besten?
+    questions_b2:
+      - Warum, glauben Sie, ärgern sich hier eigentlich fast alle über den Stau?
+      - Was würden Sie machen, wenn wir wegen des Verkehrs Ihren Flug verpassen würden?
+      - Was spricht für Sie eigentlich gegen ein Taxi im Vergleich zu einem Mietwagen?
+      - Gab es mal eine Fahrt, bei der Ihr Gepäck fast nicht ins Taxi gepasst hat?
     ziel_vokabular:
       - das Taxi
       - der Fahrer
@@ -391,6 +465,11 @@ scenarios:
       - Hattest du selbst schon einmal ein Haustier?
       - Hast du vor, dir irgendwann einen Hund anzuschaffen?
       - Was findest du eigentlich an Hunden am schönsten?
+    questions_b2:
+      - Was würdest du machen, wenn dir so ein fremder Hund einfach nach Hause folgen würde?
+      - Was spricht für dich eigentlich gegen einen großen Hund in einer kleinen Wohnung?
+      - Manche sagen, Hunde gehören eigentlich nicht in die Stadt — wie siehst du das?
+      - Gab es mal einen Spaziergang, bei dem dich ein fremder Hund richtig überrascht hat?
     ziel_vokabular:
       - der Hund
       - das Haustier
@@ -418,6 +497,11 @@ scenarios:
       - Warst du schon mal ganz früh hier, wenn das Brot noch warm ist?
       - Backst du heute Abend noch selbst etwas, oder reicht dir das hier?
       - Welches Brot magst du bei uns eigentlich am liebsten?
+    questions_b2:
+      - Warum, glaubst du, schmeckt Brot aus dem Ofen hier eigentlich immer besser als abgepacktes?
+      - Was würdest du machen, wenn dein Lieblingsbrot heute schon ausverkauft wäre?
+      - Was spricht für dich eigentlich gegen frisches Brot vom Supermarkt statt von hier?
+      - Gab es mal eine Bestellung, bei der wir uns komplett vertan haben?
     ziel_vokabular:
       - das Brot
       - die Brezel
@@ -443,6 +527,11 @@ scenarios:
       - Wartest du lieber hier draußen oder drinnen im Wartehäuschen?
       - Schaffst du bei der Verspätung eigentlich noch deinen Anschluss?
       - Regt dich sowas eigentlich noch auf, oder bist du das schon gewohnt?
+    questions_b2:
+      - Warum, glaubst du, informiert die Bahn bei Verspätungen oft so schlecht?
+      - Was würdest du machen, wenn hier gleich eine Durchsage über noch mehr Verspätung käme?
+      - Was spricht für dich eigentlich gegen ein Auto statt des Zuges bei so einer Verspätung?
+      - Gab es mal eine Verspätung, bei der dir komplett die Geduld ausgegangen ist?
     ziel_vokabular:
       - der Bahnsteig
       - die Verspätung
@@ -468,6 +557,11 @@ scenarios:
       - Hatten Sie hier in der Wohnung schon öfter Probleme mit dem Wasser?
       - Haben Sie heute noch weitere Termine, wenn ich hier fertig bin?
       - Was nervt Sie eigentlich am meisten an dieser alten Wohnung?
+    questions_b2:
+      - Was würden Sie machen, wenn der Abfluss morgen schon wieder verstopft wäre?
+      - Was spricht für Sie eigentlich gegen eine komplette Reparatur statt nur der Dichtung?
+      - Manche sagen, in alten Häusern lohnt sich Reparieren kaum noch — wie sehen Sie das?
+      - Gab es mal eine Reparatur, die sich am Ende viel schwieriger gestaltet hat als gedacht?
     ziel_vokabular:
       - das Rohr
       - der Wasserhahn
@@ -492,6 +586,11 @@ scenarios:
       - Hast du diese neue Kaffeemaschine schon mal benutzt?
       - Hast du heute Mittag schon Pläne, oder isst du wieder am Schreibtisch?
       - Was hältst du eigentlich von unserer Kaffeequalität hier?
+    questions_b2:
+      - Warum, glaubst du, quatschen eigentlich alle am liebsten hier in der Büroküche?
+      - Was würdest du machen, wenn die Kaffeemaschine heute komplett kaputt wäre?
+      - Was spricht für dich eigentlich gegen eine kurze Pause draußen statt hier drinnen?
+      - Gab es mal eine Pause, in der du mit einem Kollegen richtig gut geredet hast?
     ziel_vokabular:
       - die Kaffeemaschine
       - die Tasse
@@ -516,6 +615,11 @@ scenarios:
       - Hilfst du öfter mal Freunden beim Umzug?
       - Feierst du heute Abend noch die neue Wohnung?
       - Kennst du die neue Nachbarschaft hier eigentlich schon ein bisschen?
+    questions_b2:
+      - Warum, glaubst du, wird ein Umzug eigentlich immer stressiger als gedacht?
+      - Was würdest du machen, wenn der Möbelwagen heute gar nicht durchs Treppenhaus passen würde?
+      - Was spricht für dich eigentlich gegen eine Umzugsfirma statt Freunden mit Kisten?
+      - Gab es mal einen Umzug, bei dem richtig was schiefgelaufen ist?
     ziel_vokabular:
       - die Kiste
       - der Umzug
@@ -540,6 +644,11 @@ scenarios:
       - Hast du schon mal aus Versehen die falsche Wäsche erwischt?
       - Was machst du gleich, wenn die Wäsche fertig ist?
       - Nervt dich das Warten hier eigentlich, oder ist es dir egal?
+    questions_b2:
+      - Warum, glaubst du, haben viele Leute hier gar keine eigene Waschmaschine?
+      - Was würdest du machen, wenn du plötzlich keine Münzen mehr für den Trockner hättest?
+      - Was spricht für dich eigentlich gegen einen eigenen Trockner statt hier zu warten?
+      - Gab es mal einen Tag, an dem hier alle Waschmaschinen gleichzeitig besetzt waren?
     ziel_vokabular:
       - die Waschmaschine
       - der Trockner
@@ -564,6 +673,11 @@ scenarios:
       - Waren Sie schon einmal in einer anderen Bibliothek angemeldet?
       - Wollen Sie sich heute gleich ein paar Bücher mitnehmen?
       - Was gefällt Ihnen an unserer Bibliothek besonders gut?
+    questions_b2:
+      - Warum, glauben Sie, gehen heute eigentlich weniger Leute in Bibliotheken?
+      - Was würden Sie machen, wenn Ihr gewünschtes Buch schon ausgeliehen wäre?
+      - Manche sagen, Bibliotheken braucht man wegen des Internets kaum noch — wie sehen Sie das?
+      - Gab es mal ein Buch, das Sie hier durch Zufall im Regal entdeckt haben?
     ziel_vokabular:
       - die Bibliothek
       - der Bibliotheksausweis
@@ -588,6 +702,11 @@ scenarios:
       - Warst du schon mal bei einem Schwimmwettkampf dabei?
       - Drehst du gleich noch ein paar Bahnen, oder reicht es dir für heute?
       - Was gefällt dir am Schwimmen eigentlich am meisten?
+    questions_b2:
+      - Warum, glaubst du, ist Schwimmen eigentlich so ein gutes Ganzkörpertraining?
+      - Was würdest du machen, wenn deine Schwimmbrille mitten in der Bahn kaputtgehen würde?
+      - Was spricht für dich eigentlich gegen Schwimmen im See statt hier im Hallenbad?
+      - Gab es mal einen Moment, wo du im Becken richtig an deine Grenzen gekommen bist?
     ziel_vokabular:
       - das Hallenbad
       - die Bahn
@@ -612,6 +731,11 @@ scenarios:
       - Hast du den Trailer zu diesem Film schon mal gesehen?
       - Hast du nach dem Film noch was vor?
       - Welches Filmgenre magst du eigentlich am liebsten?
+    questions_b2:
+      - Warum, glaubst du, gehen trotz Streaming immer noch so viele Leute ins Kino?
+      - Was würdest du machen, wenn die Vorstellung heute kurzfristig ausfallen würde?
+      - Was spricht für dich eigentlich gegen einen Film zu Hause statt auf der großen Leinwand?
+      - Gab es mal einen Film, der im Kinosaal komplett anders gewirkt hat als zu Hause?
     ziel_vokabular:
       - das Popcorn
       - der Kinosaal
@@ -636,6 +760,11 @@ scenarios:
       - Hast du hier schon mal ein echtes Schnäppchen gefunden?
       - Schaust du dir gleich noch die anderen Stände an?
       - Was suchst du eigentlich am liebsten auf einem Flohmarkt?
+    questions_b2:
+      - Warum, glaubst du, werden alte Schallplatten eigentlich wieder so beliebt?
+      - Was würdest du machen, wenn du hier eine unglaublich billige Ware entdecken würdest?
+      - Was spricht für dich eigentlich gegen neue Ware statt gebrauchter vom Flohmarkt?
+      - Gab es mal einen Stand, an dem du ein echtes Schnäppchen gemacht hast?
     ziel_vokabular:
       - der Flohmarkt
       - die Schallplatte
@@ -660,6 +789,11 @@ scenarios:
       - Hast du schon mal mit einem Muttersprachler Deutsch gesprochen?
       - Machst du nach dem Kurs heute noch etwas?
       - Was fällt dir beim Deutschlernen eigentlich am schwersten?
+    questions_b2:
+      - Was würdest du machen, wenn du plötzlich nur noch mit Muttersprachlern sprechen müsstest?
+      - Was spricht für dich eigentlich gegen einen Kurs nur mit Grammatikübungen?
+      - Manche sagen, man lernt eine Sprache nur richtig im Ausland — wie siehst du das?
+      - Gab es mal eine Übung in der Pause, bei der dir plötzlich alles klar wurde?
     ziel_vokabular:
       - der Deutschkurs
       - die Grammatik
@@ -684,6 +818,11 @@ scenarios:
       - Hast du mit diesem Fahrrad schon mal eine Panne gehabt?
       - Machst du heute noch eine längere Tour, oder geht's nur kurz nach Hause?
       - Was ist dir bei einem Fahrrad eigentlich am wichtigsten?
+    questions_b2:
+      - Warum, glaubst du, geben viele Leute eigentlich immer mehr Geld für ihr Fahrrad aus?
+      - Was würdest du machen, wenn dir mitten auf der Tour die Kette reißen würde?
+      - Was spricht für dich eigentlich gegen ein E-Bike statt eines normalen Fahrrads?
+      - Gab es mal eine Reparatur hier, die viel komplizierter war als gedacht?
     ziel_vokabular:
       - das Fahrrad
       - die Bremse

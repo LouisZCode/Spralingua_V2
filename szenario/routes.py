@@ -140,6 +140,10 @@ async def get_scenario(
     # has already been served this pool cycle. Optional — absent behaves
     # exactly like the old stateless draw (full backward compatibility).
     seen: str | None = None,
+    # SZEN-005: "b2" serves each scene's harder questions_b2 tier; anything
+    # else (absent, "b1", junk) serves the base tier. The seen-token contract
+    # is per-tier — the client keeps separate lists.
+    level: str | None = None,
     user_id: str = Depends(get_current_user_id),
 ):
     """Pick one scenario and one of its questions, avoiding repeats the
@@ -150,6 +154,8 @@ async def get_scenario(
     on repeat visits to the same scenario.
     """
     scenarios = list(load_scenarios().values())
+    if level == "b2":
+        scenarios = [{**s, "questions": s["questions_b2"]} for s in scenarios]
     seen_tokens = seen.split(",") if seen else []
     scenario, question_index, cycle_reset = _pick_scenario(scenarios, seen_tokens)
     question = scenario["questions"][question_index]

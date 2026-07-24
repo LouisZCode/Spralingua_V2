@@ -18,6 +18,7 @@ _REQUIRED = (
     "register",
     "kontext",
     "questions",
+    "questions_b2",
     "ziel_vokabular",
 )
 _PERSONA_REQUIRED = ("name", "role", "attitude")
@@ -72,6 +73,17 @@ def load_scenarios() -> dict[str, dict]:
         if not (_MIN_QUESTIONS <= len(questions) <= _MAX_QUESTIONS):
             raise ValueError(
                 f"{where}: 'questions' must have {_MIN_QUESTIONS}-{_MAX_QUESTIONS} entries"
+            )
+
+        # SZEN-005: the harder tier, same shape rules as the base list.
+        questions_b2 = scenario["questions_b2"]
+        if not isinstance(questions_b2, list) or not all(
+            isinstance(q, str) and q.strip() for q in questions_b2
+        ):
+            raise ValueError(f"{where}: 'questions_b2' must be a list of non-empty strings")
+        if not (_MIN_QUESTIONS <= len(questions_b2) <= _MAX_QUESTIONS):
+            raise ValueError(
+                f"{where}: 'questions_b2' must have {_MIN_QUESTIONS}-{_MAX_QUESTIONS} entries"
             )
 
         ziel_vokabular = scenario["ziel_vokabular"]

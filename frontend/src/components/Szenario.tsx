@@ -27,9 +27,27 @@ import {
 // handler), never during render.
 const SEEN_STORAGE_KEY = "szenario-seen-v1";
 
-function readSeen(): string[] {
+// SZEN-005: manual level toggle (B1 base tier / B2 harder tier), persisted
+// like the seen-tokens. Per-tier seen lists so each tier cycles its own
+// pool without cross-contaminating variety state. Migrates into a users
+// table column when profile machinery lands.
+const LEVEL_STORAGE_KEY = "szenario-level-v1";
+
+function readLevel(): "b1" | "b2" {
   try {
-    const raw = localStorage.getItem(SEEN_STORAGE_KEY);
+    return localStorage.getItem(LEVEL_STORAGE_KEY) === "b2" ? "b2" : "b1";
+  } catch {
+    return "b1";
+  }
+}
+
+function seenKey(level: "b1" | "b2"): string {
+  return level === "b2" ? "szenario-seen-b2-v1" : SEEN_STORAGE_KEY;
+}
+
+function readSeen(level: "b1" | "b2"): string[] {
+  try {
+    const raw = localStorage.getItem(seenKey(level));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
@@ -40,9 +58,9 @@ function readSeen(): string[] {
   }
 }
 
-function writeSeen(list: string[]): void {
+function writeSeen(level: "b1" | "b2", list: string[]): void {
   try {
-    localStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(seenKey(level), JSON.stringify(list));
   } catch {
     // Storage blocked/unavailable — variety just resets next visit.
   }
@@ -62,6 +80,24 @@ export default function Szenario() {
   const [scenarioKey, setScenarioKey] = useState(0); // remounts the trainer per question
   const [error, setError] = useState(false);
 
+  // SZEN-005: manual B1/B2 tier toggle. Default to "b1" and hydrate from
+  // localStorage in an effect — same SSR-safe pattern as AuthContext.tsx's
+  // `ready` flag and SetupView.tsx's dev-unlock hydration (reading storage
+  // during render would mismatch server HTML). `levelReady` gates the first
+  // fetch below so a stored "b2" can't leak an initial "b1" request: without
+  // it, loadScenario's effect would fire once on mount with the default
+  // "b1" (before this hydration effect's setLevel has committed) and again
+  // right after with "b2", double-fetching.
+  const [level, setLevel] = useState<"b1" | "b2">("b1");
+  const [levelReady, setLevelReady] = useState(false);
+
+  useEffect(() => {
+    if (readLevel() === "b2") {
+      setLevel("b2");
+    }
+    setLevelReady(true);
+  }, []);
+
   // Once the learner has clicked past the "How it works" card, later
   // remounts (New question) should land straight on "scene" — the intro is
   // a one-time thing, not per-question. A ref (not state) so flipping it
@@ -80,10 +116,10 @@ export default function Szenario() {
   }, [ready, token, router]);
 
   const loadScenario = useCallback(() => {
-    if (!token) return;
+    if (!token || !levelReady) return;
     setScenario(null);
-    const seen = readSeen();
-    fetchScenario(token, seen)
+    const seen = readSeen(level);
+    fetchScenario(token, seen, level)
       .then((s) => {
         setScenario(s);
         setScenarioKey((k) => k + 1);
@@ -91,7 +127,7 @@ export default function Szenario() {
         // localStorage update rather than writing a malformed token.
         if (typeof s.questionIndex === "number") {
           const served = `${s.scenarioId}:${s.questionIndex}`;
-          writeSeen(s.cycleReset ? [served] : [...seen, served]);
+          writeSeen(level, s.cycleReset ? [served] : [...seen, served]);
         }
       })
       .catch((e) => {
@@ -101,7 +137,7 @@ export default function Szenario() {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, signOut, level, levelReady]);
 
   useEffect(() => {
     loadScenario();
@@ -214,6 +250,30 @@ export default function Szenario() {
           <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
             structure, not grammar
           </p>
+          {/* SZEN-005: manual tier switch — B2 swaps every scene's questions
+              for the harder set. Personal-level DB column comes later. */}
+          <div className="mt-3 inline-flex overflow-hidden rounded-full border-[3px] border-ink">
+            {(["b1", "b2"] as const).map((l) => (
+              <button
+                key={l}
+                type="button"
+                onClick={() => {
+                  if (l === level) return;
+                  setLevel(l);
+                  try {
+                    localStorage.setItem(LEVEL_STORAGE_KEY, l);
+                  } catch {}
+                }}
+                className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
+                  l === level
+                    ? "bg-ink text-white"
+                    : "bg-white text-ink hover:text-flag-red"
+                }`}
+              >
+                {l === "b1" ? "B1" : "B2"}
+              </button>
+            ))}
+          </div>
         </div>
 
         {error ? (

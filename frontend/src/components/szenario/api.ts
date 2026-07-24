@@ -87,9 +87,18 @@ export async function fetchScenario(
   // VARY-001: "scenarioId:questionIndex" tokens already served this pool
   // cycle (localStorage-backed, see Szenario.tsx) — omit or pass empty for
   // the old stateless draw.
-  seen?: string[]
+  seen?: string[],
+  // SZEN-005: "b2" asks for the harder tier; omit for the base tier.
+  level?: "b1" | "b2"
 ): Promise<Scenario> {
-  const qs = seen && seen.length > 0 ? `?seen=${encodeURIComponent(seen.join(","))}` : "";
+  const params: string[] = [];
+  if (seen && seen.length > 0) {
+    params.push(`seen=${encodeURIComponent(seen.join(","))}`);
+  }
+  if (level === "b2") {
+    params.push("level=b2");
+  }
+  const qs = params.length > 0 ? `?${params.join("&")}` : "";
   return request<Scenario>(`/szenario/scenario${qs}`, token);
 }
 
