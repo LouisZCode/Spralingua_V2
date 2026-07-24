@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ZeitItem, ZeitVerdict } from "./api";
+import { FeedbackCard } from "../shared/feedback";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer / VerbindungenTrainer. `retry` marks the copy.
@@ -385,33 +386,12 @@ export default function ZeitfaerbungTrainer({
           </div>
         ) : (
           <div className="mt-6">
-            <div className="flex flex-col items-center gap-2">
-              {/* The fix leads, expected-first (BauteilTrainer's layout):
-                  prominent correct form, the attempt demoted underneath. */}
-              <p className="font-body text-[18px] font-bold leading-snug text-ink">
-                <span
-                  className={`mr-1.5 ${
-                    verdict.kind === "form"
-                      ? "text-flag-gold-deep"
-                      : "text-flag-red-deep"
-                  }`}
-                >
-                  →
-                </span>
-                {verdict.expected}
-              </p>
-              <p className="font-body text-[13px] text-ink-soft">
-                You typed:{" "}
-                <span className="font-semibold line-through decoration-flag-red decoration-2">
-                  {value.trim()}
-                </span>
-              </p>
-              {verdict.note && (
-                <p className="mt-1 max-w-[420px] text-center font-body text-[13px] leading-snug text-ink-soft">
-                  {verdict.note}
-                </p>
-              )}
-            </div>
+            <FeedbackCard
+              attempt={value.trim()}
+              corrected={verdict.expected}
+              note={verdict.note}
+              accent={verdict.kind === "form" ? "gold" : "red"}
+            />
             <div className="mt-5 flex items-center justify-center gap-4">
               <button
                 type="button"

@@ -11,6 +11,7 @@ import type {
   PhraseVerdict,
 } from "./api";
 import VocabNudgePill, { type NudgeWord } from "../shared/VocabNudge";
+import { FeedbackCard } from "../shared/feedback";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as ZeitfaerbungTrainer. `retry` marks the copy. An item counts as
@@ -604,24 +605,11 @@ export default function GenusTrainer({
                       {verdict.expected}
                     </p>
                   ) : (
-                    <>
-                      <p className="font-body text-[18px] font-bold leading-snug text-ink">
-                        <span className="mr-1.5 text-flag-red-deep">→</span>
-                        {verdict.expected}
-                      </p>
-                      <p className="font-body text-[13px] text-ink-soft">
-                        You typed:{" "}
-                        <TypedEcho
-                          value={value.trim()}
-                          wrongIndex={verdict.wrongIndex}
-                        />
-                      </p>
-                      {verdict.note && (
-                        <p className="mt-1 max-w-[420px] text-center font-body text-[13px] leading-snug text-ink-soft">
-                          {verdict.note}
-                        </p>
-                      )}
-                    </>
+                    <FeedbackCard
+                      attempt={value.trim()}
+                      corrected={verdict.expected}
+                      note={verdict.note}
+                    />
                   )}
                 </div>
                 <div className="mt-5 flex items-center justify-center gap-4">
@@ -724,32 +712,6 @@ function CheatSheet({ endings }: { endings?: EndingSheet | null }) {
         );
       })}
     </div>
-  );
-}
-
-// The learner's answer echoed back with ONLY the offending word in red —
-// never strikethrough (it makes the text unreadable); red alone marks the
-// error.
-function TypedEcho({
-  value,
-  wrongIndex,
-}: {
-  value: string;
-  wrongIndex: number | null;
-}) {
-  const tokens = value.split(/\s+/);
-  return (
-    <span className="font-semibold">
-      {tokens.map((t, i) => (
-        <span
-          key={i}
-          className={i === wrongIndex ? "text-flag-red-deep" : "text-ink"}
-        >
-          {t}
-          {i < tokens.length - 1 ? " " : ""}
-        </span>
-      ))}
-    </span>
   );
 }
 

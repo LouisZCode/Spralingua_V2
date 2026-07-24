@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { BauteilVerdict, RoundItem } from "./api";
+import { FeedbackCard } from "../shared/feedback";
 
 // A missed item returns once at the end of the round — a second chance from
 // memory, after the correction has had time to fade. `retry` marks the copy
@@ -327,31 +328,18 @@ export default function BauteilTrainer({
         ) : (
           <div className="mt-6">
             {!verdict.correct && (
-              <div className="flex flex-col items-center gap-2">
-                {/* The fix leads, Satzschmiede-style: prominent phrase with a
-                    red arrow, the attempt demoted underneath (BAU-002). */}
-                <p className="font-body text-[18px] font-bold leading-snug text-ink">
-                  <span className="mr-1.5 text-flag-red-deep">→</span>
-                  {verdict.expected}
-                </p>
-                <p className="font-body text-[13px] text-ink-soft">
-                  You typed:{" "}
-                  <span className="font-semibold line-through decoration-flag-red decoration-2">
-                    {value.trim()}
-                  </span>
-                </p>
+              <FeedbackCard
+                attempt={value.trim()}
+                corrected={verdict.expected}
+                note={verdict.note}
+              >
                 {/* The two axes, never conflated (GRAM-002 rule 6): did they
                     aim at the right case, and did the endings execute it. */}
                 <div className="mt-1 flex gap-2.5">
                   <AxisPill label="Case" ok={verdict.caseOk} />
                   <AxisPill label="Endings" ok={verdict.carrierOk} />
                 </div>
-                {verdict.note && (
-                  <p className="mt-1 max-w-[420px] text-center font-body text-[13px] leading-snug text-ink-soft">
-                    {verdict.note}
-                  </p>
-                )}
-              </div>
+              </FeedbackCard>
             )}
             <div className="mt-5 flex items-center justify-center gap-4">
               <button

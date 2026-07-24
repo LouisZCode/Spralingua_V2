@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { WordRejectedError, type AttemptResult } from "./api";
 import type { DeckCard } from "./deck";
+import { diffTokens, MarkedText } from "../shared/feedback";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -658,6 +659,14 @@ export default function VocabTrainer({
     );
   }
 
+  // UI-008: light the changed tokens — red in the attempt, green in the fix —
+  // so an ending-level correction ("die schlechte Dinge" → "die schlechten
+  // Dinge") registers without rereading.
+  const fixDiff =
+    result?.corrected != null
+      ? diffTokens(result.transcript, result.corrected)
+      : null;
+
   return (
     <div className="mx-auto w-full max-w-xl">
       {/* Progress + navigation. Practice counts down today's queue; browse
@@ -780,13 +789,23 @@ export default function VocabTrainer({
                       <span className={`mr-1.5 font-black ${v.tone}`}>
                         {verdict === "correct" ? "✓" : "✕"}
                       </span>
-                      „{result.transcript}“
+                      „
+                      {fixDiff ? (
+                        <MarkedText tokens={fixDiff.attempt} mark="red" />
+                      ) : (
+                        result.transcript
+                      )}
+                      “
                     </p>
                     {/* Word error (red): correction + optional hint inline. */}
                     {!result.wordOk && result.corrected && (
                       <p className="mt-3.5 font-body text-[17px] font-bold leading-snug text-ink">
                         <span className={`mr-1.5 ${v.tone}`}>→</span>
-                        {result.corrected}
+                        {fixDiff ? (
+                          <MarkedText tokens={fixDiff.corrected} mark="green" />
+                        ) : (
+                          result.corrected
+                        )}
                       </p>
                     )}
                     {!result.wordOk && result.error && (
@@ -807,7 +826,11 @@ export default function VocabTrainer({
                         {result.corrected && (
                           <p className="mt-1.5 font-body text-[17px] font-bold leading-snug text-ink">
                             <span className="mr-1.5 text-ink-muted">→</span>
-                            {result.corrected}
+                            {fixDiff ? (
+                              <MarkedText tokens={fixDiff.corrected} mark="green" />
+                            ) : (
+                              result.corrected
+                            )}
                           </p>
                         )}
                         {result.error && (

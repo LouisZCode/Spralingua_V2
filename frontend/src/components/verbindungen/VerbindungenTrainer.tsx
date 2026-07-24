@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { ChunkItem, ChunkVerdict } from "./api";
 import Glossable from "../shared/Glossable";
 import type { GlossInfo } from "../satzschmiede/api";
+import { FeedbackCard } from "../shared/feedback";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer. `retry` marks the copy.
@@ -325,19 +326,11 @@ export default function VerbindungenTrainer({
           <div className="mt-6">
             <div className="flex flex-col items-center gap-2">
               {!verdict.correct && (
-                <>
-                  <p className="font-body text-[14px] text-ink-soft">
-                    You typed:{" "}
-                    <span className="font-semibold line-through decoration-flag-red decoration-2">
-                      {value.trim()}
-                    </span>
-                  </p>
-                  {verdict.note && (
-                    <p className="max-w-[420px] text-center font-body text-[14px] font-semibold leading-snug text-ink">
-                      {verdict.note}
-                    </p>
-                  )}
-                </>
+                <FeedbackCard
+                  attempt={value.trim()}
+                  corrected={verdict.expected}
+                  note={verdict.note}
+                />
               )}
               {/* The canonical chunk — the actual thing to memorize, shown on
                   green AND red (the drill exists to burn these in). */}

@@ -15,6 +15,7 @@ import {
   type FocusPattern,
   type RetiredPattern,
 } from "./development/api";
+import { diffTokens, MarkedText } from "./shared/feedback";
 
 // Development — the learner's own progress dashboard: this week's activity
 // and accuracy per exercise, their biggest current errors, what the coach is
@@ -316,18 +317,21 @@ function ErrorRow({ error }: { error: TopError }) {
           {error.count}×
         </span>
       </div>
-      {error.example && (
-        <div className="mt-1.5">
-          <p className="font-body text-[13px] text-ink-soft">
-            <span className="line-through decoration-flag-red decoration-2">
-              {error.example.sentence}
-            </span>
-          </p>
-          <p className="mt-0.5 font-body text-[14px] font-bold text-ink">
-            {error.example.corrected}
-          </p>
-        </div>
-      )}
+      {error.example &&
+        (() => {
+          const ex = error.example;
+          const d = diffTokens(ex.sentence, ex.corrected);
+          return (
+            <div className="mt-1.5">
+              <p className="font-body text-[13px] text-ink-soft">
+                <MarkedText tokens={d.attempt} mark="red" />
+              </p>
+              <p className="mt-0.5 font-body text-[14px] font-bold text-ink">
+                <MarkedText tokens={d.corrected} mark="green" />
+              </p>
+            </div>
+          );
+        })()}
     </li>
   );
 }
