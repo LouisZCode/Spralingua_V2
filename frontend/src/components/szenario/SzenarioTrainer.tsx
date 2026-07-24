@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Scenario, StructureResult } from "./api";
-import { WordRejectedError } from "../satzschmiede/api";
+import Glossable from "../shared/Glossable";
+import { WordRejectedError, type GlossInfo } from "../satzschmiede/api";
 
 type Phase = "intro" | "scene" | "result";
 
@@ -65,6 +66,8 @@ export default function SzenarioTrainer({
   onStart,
   onAttempt,
   onNewQuestion,
+  onGloss,
+  onAdd,
 }: {
   scenario: Scenario;
   initialPhase: Phase;
@@ -80,6 +83,9 @@ export default function SzenarioTrainer({
   ) => Promise<StructureResult>;
   // Fetch a fresh scenario; the parent remounts this component with it.
   onNewQuestion: () => void;
+  // UI-007: word-gloss popover wiring — optional, absent renders plain text.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<void>;
 }) {
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [recording, setRecording] = useState(false);
@@ -461,7 +467,11 @@ export default function SzenarioTrainer({
           {scenario.kontext}
         </p>
         <p className="mx-auto mt-4 max-w-[480px] text-center font-body text-[20px] font-bold leading-relaxed text-ink">
-          {scenario.question}
+          {onGloss ? (
+            <Glossable text={scenario.question} onGloss={onGloss} onAdd={onAdd} />
+          ) : (
+            scenario.question
+          )}
         </p>
 
         <div className="mt-7 flex flex-col items-center gap-3">
