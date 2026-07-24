@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
+    load_attempt_series,
     load_focus_with_recency,
     load_period_summary,
     load_retired_patterns,
@@ -72,6 +73,9 @@ async def get_my_stats(
 
     focus = await load_focus_with_recency(db, user_id=user_id, limit=3)
     retired = await load_retired_patterns(db, user_id=user_id, limit=10)
+    # DATA-005: 56 days of daily buckets — the frontend derives both the day
+    # and the week view from this one series.
+    series = await load_attempt_series(db, user_id=user_id, start=now - timedelta(days=56))
 
     return {
         "week": week,
@@ -79,4 +83,5 @@ async def get_my_stats(
         "today": today,
         "focus": focus,
         "retired": retired,
+        "series": series,
     }

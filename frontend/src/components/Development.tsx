@@ -9,29 +9,20 @@ import {
   fetchStats,
   UnauthorizedError,
   type DevelopmentStats,
-  type ExerciseKey,
-  type ExerciseStat,
   type TopError,
   type FocusPattern,
   type RetiredPattern,
+  type SeriesPoint,
 } from "./development/api";
 import { diffTokens, MarkedText } from "./shared/feedback";
 
-// Development — the learner's own progress dashboard: this week's activity
-// and accuracy per exercise, their biggest current errors, what the coach is
-// focusing on next, and patterns they've already conquered. Read-only, no
-// interaction beyond the entry point back to /practice. Mirrors the
-// auth-guarded page-shell pattern from Szenario.tsx (useAuth + redirect +
-// header) rather than any drill trainer, since there's nothing to attempt
-// here.
-const EXERCISE_LABELS: Record<ExerciseKey, string> = {
-  satz: "Satzschmiede",
-  verbformen: "Past-Tense Verbs",
-  sprechen: "Speaking Drills",
-  bauteil: "Declension",
-  verbindungen: "Feste Verbindungen",
-  szenario: "Szenario-Sparring",
-};
+// Development — the learner's own progress dashboard: positives first (what's
+// already conquered + this week's effort), then what still needs work — the
+// coach's focus, the biggest current errors, and one attempts chart. Read-only,
+// no interaction beyond the entry point back to /practice and the chart's
+// day/week toggle. Mirrors the auth-guarded page-shell pattern from
+// Szenario.tsx (useAuth + redirect + header) rather than any drill trainer,
+// since there's nothing to attempt here.
 
 export default function Development() {
   const { token, ready, signOut } = useAuth();
@@ -128,22 +119,19 @@ export default function Development() {
           </p>
         ) : (
           <div className="flex flex-col gap-6">
-            <FocusCard focus={stats.focus} />
+            <PositiveCard
+              retired={stats.retired}
+              weekTotal={stats.week.attemptsTotal}
+              prevWeekTotal={stats.prevWeek.attemptsTotal}
+            />
 
             {noActivity ? (
               <EmptyActivityCard />
             ) : (
               <>
-                <WeekComparisonCard
-                  weekTotal={stats.week.attemptsTotal}
-                  prevWeekTotal={stats.prevWeek.attemptsTotal}
-                  exercises={stats.week.exercises}
-                />
-                <ErrorsCard
-                  todayErrors={stats.today.topErrors}
-                  weekErrors={stats.week.topErrors}
-                />
-                <RetiredCard retired={stats.retired} />
+                <FocusCard focus={stats.focus} />
+                <ErrorsCard errors={stats.week.topErrors.slice(0, 3)} />
+                <AttemptsChart series={stats.series} />
               </>
             )}
           </div>
@@ -153,7 +141,51 @@ export default function Development() {
   );
 }
 
-// ─── Focus card — the hero. What the coach wants worked on next. ──────────
+// ─── Positives first (DATA-005): what's already conquered + the week's
+// effort, before anything that needs work. ────────────────────────────────
+function PositiveCard({
+  retired,
+  weekTotal,
+  prevWeekTotal,
+}: {
+  retired: RetiredPattern[];
+  weekTotal: number;
+  prevWeekTotal: number;
+}) {
+  return (
+    <section className="rounded-[28px] border-[3px] border-success bg-success-soft p-7">
+      <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-success">
+        Conquered
+      </p>
+      <h2 className="mt-1 font-display text-[22px] font-black tracking-tight text-ink">
+        What you&apos;ve already nailed
+      </h2>
+      {retired.length === 0 ? (
+        <p className="mt-4 font-body text-[15px] leading-relaxed text-ink-soft">
+          Every error pattern you retire lands here — keep practicing.
+        </p>
+      ) : (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {retired.map((r) => (
+            <span
+              key={r.patternId}
+              className="inline-flex items-center rounded-full border-[3px] border-success bg-white px-3.5 py-1.5 font-body text-[13px] font-bold text-success"
+            >
+              ✓ {r.label}
+            </span>
+          ))}
+        </div>
+      )}
+      {weekTotal > 0 && (
+        <p className="mt-4 font-body text-[13px] font-semibold text-ink-soft">
+          {weekTotal} attempts this week · {prevWeekTotal} last week
+        </p>
+      )}
+    </section>
+  );
+}
+
+// ─── Focus card — what the coach wants worked on next. ────────────────────
 
 function FocusCard({ focus }: { focus: FocusPattern[] }) {
   return (
@@ -200,108 +232,27 @@ function FocusCard({ focus }: { focus: FocusPattern[] }) {
   );
 }
 
-// ─── This week vs last week — attempts + per-exercise accuracy bars. ──────
+// ─── Biggest errors — the week's top misses, simplified (DATA-005: dropped
+// the today/this-week split). ──────────────────────────────────────────────
 
-function WeekComparisonCard({
-  weekTotal,
-  prevWeekTotal,
-  exercises,
-}: {
-  weekTotal: number;
-  prevWeekTotal: number;
-  exercises: ExerciseStat[];
-}) {
-  return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
-      <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
-        This week vs last week
-      </h2>
-      <p className="mt-1 font-body text-[13px] font-semibold text-ink-muted">
-        {weekTotal} attempts this week · {prevWeekTotal} last week
-      </p>
-
-      {exercises.length === 0 ? (
-        <p className="mt-5 font-body text-[14px] text-ink-soft">
-          No attempts yet this week.
-        </p>
-      ) : (
-        <div className="mt-5 flex flex-col gap-4">
-          {exercises.map((ex) => (
-            <div key={ex.exercise}>
-              <div className="flex items-center justify-between gap-3">
-                <span className="font-body text-[14px] font-bold text-ink">
-                  {EXERCISE_LABELS[ex.exercise]}
-                </span>
-                <span className="font-body text-[12px] font-semibold text-ink-muted">
-                  {ex.attempts} attempt{ex.attempts === 1 ? "" : "s"}
-                </span>
-              </div>
-              {ex.accuracy === null ? (
-                <p className="mt-1.5 font-body text-[12px] font-semibold text-ink-faint">
-                  —
-                </p>
-              ) : (
-                <div className="mt-1.5 h-2.5 w-full overflow-hidden rounded-full border-2 border-ink bg-paper">
-                  <div
-                    className="h-full rounded-full bg-success"
-                    style={{
-                      width: `${Math.round(ex.accuracy * 100)}%`,
-                    }}
-                  />
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ─── Biggest errors — today (if any) then the weekly list. ────────────────
-
-function ErrorsCard({
-  todayErrors,
-  weekErrors,
-}: {
-  todayErrors: TopError[];
-  weekErrors: TopError[];
-}) {
+function ErrorsCard({ errors }: { errors: TopError[] }) {
   return (
     <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
       <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
         Biggest errors
       </h2>
 
-      {todayErrors.length > 0 && (
-        <div className="mt-5">
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-            Today
-          </p>
-          <ul className="mt-2.5 flex flex-col gap-2.5">
-            {todayErrors.map((e) => (
-              <ErrorRow key={`today-${e.patternId}`} error={e} />
-            ))}
-          </ul>
-        </div>
-      )}
-
-      <div className="mt-5">
-        <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-          This week
+      {errors.length === 0 ? (
+        <p className="mt-4 font-body text-[14px] text-ink-soft">
+          No errors logged this week — nice.
         </p>
-        {weekErrors.length === 0 ? (
-          <p className="mt-2.5 font-body text-[14px] text-ink-soft">
-            No errors logged this week — nice.
-          </p>
-        ) : (
-          <ul className="mt-2.5 flex flex-col gap-2.5">
-            {weekErrors.map((e) => (
-              <ErrorRow key={`week-${e.patternId}`} error={e} />
-            ))}
-          </ul>
-        )}
-      </div>
+      ) : (
+        <ul className="mt-4 flex flex-col gap-2.5">
+          {errors.map((e) => (
+            <ErrorRow key={e.patternId} error={e} />
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -336,25 +287,119 @@ function ErrorRow({ error }: { error: TopError }) {
   );
 }
 
-// ─── Retired patterns — conquered, celebratory chips. Hidden when empty. ──
+// ─── The one progress graph (DATA-005): attempts vs mistakes vs
+// first-try-correct, day buckets by default, week buckets one tap away.
+// Derived entirely from the 56-day daily series — no second endpoint. ─────
+function AttemptsChart({ series }: { series: SeriesPoint[] }) {
+  const [view, setView] = useState<"day" | "week">("day");
+  const byDate = new Map(series.map((p) => [p.date, p]));
 
-function RetiredCard({ retired }: { retired: RetiredPattern[] }) {
-  if (retired.length === 0) return null;
+  // Buckets, oldest → newest. Day view: the last 14 UTC days, gaps
+  // zero-filled. Week view: the last 8 Monday-anchored weeks summed.
+  const buckets: { label: string; attempts: number; mistakes: number; firstTryCorrect: number }[] = [];
+  const today = new Date();
+  if (view === "day") {
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - i));
+      const key = d.toISOString().slice(0, 10);
+      const p = byDate.get(key);
+      buckets.push({
+        label: `${d.getUTCDate()}.`,
+        attempts: p?.attempts ?? 0,
+        mistakes: p?.mistakes ?? 0,
+        firstTryCorrect: p?.firstTryCorrect ?? 0,
+      });
+    }
+  } else {
+    const dow = (today.getUTCDay() + 6) % 7; // Monday = 0
+    for (let w = 7; w >= 0; w--) {
+      const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - dow - w * 7));
+      const bucket = { label: `${monday.getUTCDate()}.${monday.getUTCMonth() + 1}.`, attempts: 0, mistakes: 0, firstTryCorrect: 0 };
+      for (let i = 0; i < 7; i++) {
+        const d = new Date(monday);
+        d.setUTCDate(monday.getUTCDate() + i);
+        const p = byDate.get(d.toISOString().slice(0, 10));
+        if (p) {
+          bucket.attempts += p.attempts;
+          bucket.mistakes += p.mistakes;
+          bucket.firstTryCorrect += p.firstTryCorrect;
+        }
+      }
+      buckets.push(bucket);
+    }
+  }
+
+  const max = Math.max(1, ...buckets.map((b) => b.attempts));
+  const empty = buckets.every((b) => b.attempts === 0);
+
   return (
     <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
-      <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
-        Conquered
-      </h2>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {retired.map((r) => (
-          <span
-            key={r.patternId}
-            className="inline-flex items-center rounded-full border-[3px] border-success bg-success-soft px-3.5 py-1.5 font-body text-[13px] font-bold text-success"
-          >
-            ✓ {r.label}
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
+          Your attempts
+        </h2>
+        <div className="inline-flex overflow-hidden rounded-full border-[3px] border-ink">
+          {(["day", "week"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => setView(v)}
+              className={`px-3.5 py-1 font-display text-[11px] font-black uppercase tracking-[0.14em] transition-colors ${
+                v === view ? "bg-ink text-white" : "bg-white text-ink hover:text-flag-red"
+              }`}
+            >
+              {v === "day" ? "Days" : "Weeks"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+        {(
+          [
+            ["bg-ink", "Attempts"],
+            ["bg-flag-red", "Mistakes"],
+            ["bg-success", "First-try correct"],
+          ] as const
+        ).map(([dot, label]) => (
+          <span key={label} className="inline-flex items-center gap-1.5 font-body text-[11px] font-semibold text-ink-soft">
+            <span aria-hidden className={`h-2.5 w-2.5 rounded-full ${dot}`} />
+            {label}
           </span>
         ))}
       </div>
+
+      {empty ? (
+        <p className="mt-5 font-body text-[14px] text-ink-soft">
+          No attempts in this window yet.
+        </p>
+      ) : (
+        <div className="mt-5 flex items-end justify-between gap-1">
+          {buckets.map((b, i) => (
+            <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
+              <div className="flex h-32 items-end gap-[3px]">
+                {(
+                  [
+                    [b.attempts, "bg-ink"],
+                    [b.mistakes, "bg-flag-red"],
+                    [b.firstTryCorrect, "bg-success"],
+                  ] as const
+                ).map(([value, color], j) => (
+                  <div
+                    key={j}
+                    className={`w-[7px] rounded-t-[3px] ${color} ${value === 0 ? "opacity-15" : ""}`}
+                    style={{ height: `${value === 0 ? 2 : Math.max(4, Math.round((value / max) * 128))}px` }}
+                    title={`${value}`}
+                  />
+                ))}
+              </div>
+              <span className="font-body text-[9px] font-semibold text-ink-faint">
+                {view === "day" ? (i % 2 === 0 ? b.label : " ") : b.label}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </section>
   );
 }

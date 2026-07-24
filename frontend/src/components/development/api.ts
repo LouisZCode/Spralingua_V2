@@ -60,12 +60,22 @@ export type RetiredPattern = {
   label: string;
 };
 
+// DATA-005: one daily bucket of the attempts chart. Weeks are derived
+// client-side from the same series.
+export type SeriesPoint = {
+  date: string; // "2026-07-24" (UTC day)
+  attempts: number;
+  mistakes: number;
+  firstTryCorrect: number;
+};
+
 export type DevelopmentStats = {
   week: PeriodStats;
   prevWeek: PeriodStats;
   today: TodayStats;
   focus: FocusPattern[];
   retired: RetiredPattern[];
+  series: SeriesPoint[];
 };
 
 export async function fetchStats(token: string): Promise<DevelopmentStats> {

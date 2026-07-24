@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import func, select, update
+from sqlalchemy import Text, cast, func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -549,6 +549,81 @@ async def load_period_summary(
             }
         )
     return {"attemptsTotal": total, "exercises": exercises}
+
+
+async def load_attempt_series(
+    db: AsyncSession, *, user_id: str, start: datetime
+) -> list[dict]:
+    """Per-day practice series for the Development chart (DATA-005).
+
+    ``attempts`` counts every row (coach rows included); ``mistakes`` counts
+    graded misses; ``firstTryCorrect`` counts items whose FIRST graded
+    attempt of that UTC day was correct — right without a warm-up. Item
+    identity is (exercise, item_ref); rows with no item_ref each count as
+    their own item. Days with no practice don't appear — the frontend
+    fills the gaps with zeros.
+    """
+    # created_at is TIMESTAMPTZ: date_trunc on it follows the session
+    # timezone, so convert to UTC first — the /me/stats contract is UTC days
+    # regardless of where the Postgres server thinks it lives.
+    day = func.date_trunc("day", func.timezone("UTC", DrillAttempt.created_at)).label("day")
+    rows = (
+        await db.execute(
+            select(
+                day,
+                func.count().label("attempts"),
+                func.count()
+                .filter(DrillAttempt.correct.is_(False))
+                .label("mistakes"),
+            )
+            .where(DrillAttempt.user_id == user_id, DrillAttempt.created_at >= start)
+            .group_by(day)
+            .order_by(day)
+        )
+    ).all()
+
+    rn = (
+        func.row_number()
+        .over(
+            partition_by=[
+                DrillAttempt.exercise,
+                func.coalesce(DrillAttempt.item_ref, cast(DrillAttempt.id, Text)),
+                func.date_trunc("day", func.timezone("UTC", DrillAttempt.created_at)),
+            ],
+            order_by=DrillAttempt.created_at,
+        )
+        .label("rn")
+    )
+    graded = (
+        select(
+            func.date_trunc("day", func.timezone("UTC", DrillAttempt.created_at)).label("day"),
+            DrillAttempt.correct.label("correct"),
+            rn,
+        )
+        .where(
+            DrillAttempt.user_id == user_id,
+            DrillAttempt.created_at >= start,
+            DrillAttempt.correct.isnot(None),
+        )
+        .subquery()
+    )
+    ft_rows = (
+        await db.execute(
+            select(graded.c.day, func.count().label("ft"))
+            .where(graded.c.rn == 1, graded.c.correct.is_(True))
+            .group_by(graded.c.day)
+        )
+    ).all()
+    first_try = {d: ft for d, ft in ft_rows}
+    return [
+        {
+            "date": d.date().isoformat(),
+            "attempts": attempts,
+            "mistakes": mistakes,
+            "firstTryCorrect": first_try.get(d, 0),
+        }
+        for d, attempts, mistakes in rows
+    ]
 
 
 async def _ledger_examples_by_pattern(
