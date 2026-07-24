@@ -59,6 +59,14 @@ const NEW_PER_SESSION = 15;
 // push, not a second full session (the initial queue keeps `reviewCap`).
 const MORE_CAP = 10;
 
+// SATZ-011: after this many in-session lapses (failed verdicts or reveals)
+// on one card, the next advance completes it for the session instead of
+// recycling it — silently. STT can genuinely lose a word (a learner needed
+// 7 tries on "bestehen"), and the round must never be hostage to one card.
+// Every lapse already punished the schedule server-side, so the card comes
+// back soon anyway — exactly what "failed for today" should mean.
+const MISS_CAP = 3;
+
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both
 // as-is, so we just pick the first container the browser supports.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
@@ -218,6 +226,10 @@ export default function VocabTrainer({
   // Cards finished (green) this session — the deck's srs snapshot still calls
   // them due/new, so re-queueing has to exclude them by hand.
   const doneRef = useRef<Set<string>>(new Set());
+  // SATZ-011: per-card lapse tally for this sitting — graded misses and
+  // reveals both count (both are server-side lapses); inaudible-audio
+  // rejections don't (no verdict, no lapse).
+  const missesRef = useRef<Map<string, number>>(new Map());
 
   const total = deck.length;
   const byId = new Map(deck.map((c) => [c.id, c] as const));
@@ -382,6 +394,12 @@ export default function VocabTrainer({
     try {
       const res = await onAttempt(card.id, audio, activeSessionId);
       setResult(res);
+      if (!browsing && res.wordOk !== true) {
+        missesRef.current.set(
+          card.id,
+          (missesRef.current.get(card.id) ?? 0) + 1
+        );
+      }
       setFlipped(true);
     } catch (err) {
       if (err instanceof WordRejectedError) {
@@ -484,12 +502,16 @@ export default function VocabTrainer({
       onFlowDone?.(passed);
       return;
     }
-    if (passed) doneRef.current.add(card.id);
+    // SATZ-011: a card that already lapsed MISS_CAP times this sitting is
+    // done for today — pop it like a pass (silently; the schedule state is
+    // already punished), never hold the round hostage.
+    const missedOut = (missesRef.current.get(card.id) ?? 0) >= MISS_CAP;
+    if (passed || missedOut) doneRef.current.add(card.id);
     setQueue((q) => {
       const act = q.filter((id) => byId.has(id));
       if (act.length === 0) return act;
       const [head, ...rest] = act;
-      return passed ? rest : [...rest, head];
+      return passed || missedOut ? rest : [...rest, head];
     });
     resetScratch();
   }
@@ -943,7 +965,13 @@ export default function VocabTrainer({
                 }
                 setRevealed(true);
                 setFlipped(true);
-                if (!browsing) onReveal(card.id);
+                if (!browsing) {
+                  onReveal(card.id);
+                  missesRef.current.set(
+                    card.id,
+                    (missesRef.current.get(card.id) ?? 0) + 1
+                  );
+                }
               }}
               disabled={flipped || checking}
               className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-gold-deep bg-flag-gold px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink disabled:pointer-events-none disabled:opacity-40"
