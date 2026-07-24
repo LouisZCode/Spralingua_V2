@@ -29,7 +29,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import tracer
@@ -68,6 +68,10 @@ _FREE_QUOTA = 1
 # only — a deck noun can be a person or an abstract, so food/texture words
 # ("lecker", "frisch") would pair absurdly. crc32 (process-stable, unlike
 # hash()) spreads nouns across the pool far better than len() ever did.
+# GEN-001b: this is now the fallback half — when the learner has concat-safe
+# adjectives of their own decked, half the deck items wear those instead
+# (see _deck_item's adj_pool split), so the drill keeps pace with their
+# actual vocabulary rather than looping the same 12 words forever.
 _DECK_ADJECTIVES = (
     "neu", "alt", "klein", "groß", "gut", "schön",
     "modern", "wichtig", "nett", "ruhig", "stark", "schnell",
@@ -77,13 +81,63 @@ _DECK_ADJECTIVES = (
 assert set(_DECK_ADJECTIVES) <= SAFE_ADJECTIVES, "deck adjective not concat-safe"
 
 
-def _deck_item(card: VocabCard) -> dict | None:
+def _concat_safe(adjective: str) -> bool:
+    """Can this adjective take its endings by pure concatenation?
+
+    Conservative shape check for learner-decked adjectives that aren't in
+    the curated SAFE_ADJECTIVES set: reject anything that declines with
+    elision or suppletion (dunkel→dunkle, teuer→teure, hoch→hohe), ends in
+    a vowel (leise+e, rosa is indeclinable), or isn't a single lowercase
+    word. False negatives are fine — the static pool covers the noun.
+    """
+    a = adjective.strip()
+    if a in SAFE_ADJECTIVES:
+        return True
+    return (
+        a.isalpha()
+        and a == a.lower()
+        and len(a) >= 3
+        and not a.endswith(("a", "e", "i", "o", "u", "el", "er"))
+        and a != "hoch"
+    )
+
+
+def _safe_deck_adjectives(cards) -> tuple[str, ...]:
+    """The learner's own concat-safe adjectives, sorted for determinism.
+
+    GEN-001b: sorted so the crc32 pick below is stable across requests as
+    long as the deck's adjective set is unchanged. (If the set changes
+    between a round being served and its attempt being graded, one item's
+    re-derived adjective can differ — accepted: rare, self-healing next
+    round.)
+    """
+    return tuple(
+        sorted(
+            {
+                t
+                for card in cards
+                if card.type == "adjective"
+                and (t := (card.target or "").strip())
+                and " " not in t
+                and _concat_safe(t)
+            }
+        )
+    )
+
+
+def _deck_item(card: VocabCard, deck_adjs: tuple[str, ...] = ()) -> dict | None:
     """Build the drill item for one deck noun, or ``None`` when the card
     can't carry the drill (multi-word target, missing/odd article)."""
     noun = (card.target or "").strip()
     if not noun or " " in noun or card.article not in ARTICLES:
         return None
     rule_id, _, trap = classify_noun(noun, card.article)
+    h = zlib.crc32(noun.encode("utf-8"))
+    # GEN-001b: the learner's own adjectives carry half the deck items
+    # (hash-deterministic, so round and attempt re-derive identically);
+    # the static neutral pool carries the rest — and everything, when
+    # the deck has no safe adjective yet.
+    adj_pool = deck_adjs if deck_adjs and h & 1 else _DECK_ADJECTIVES
     return {
         "id": f"deck-{card.id}",
         "noun": noun,
@@ -96,9 +150,7 @@ def _deck_item(card: VocabCard) -> dict | None:
         # a noun we also curate); unknown traps fall back to the generic
         # line built at attempt time.
         "why": trap_why(noun, card.article) if trap else None,
-        "adjective": _DECK_ADJECTIVES[
-            zlib.crc32(noun.encode("utf-8")) % len(_DECK_ADJECTIVES)
-        ],
+        "adjective": adj_pool[(h >> 1) % len(adj_pool)],
     }
 
 
@@ -124,12 +176,22 @@ async def get_round(
                 .join(UserCard, UserCard.card_id == VocabCard.id)
                 .where(
                     UserCard.user_id == user_id,
-                    VocabCard.type == "noun",
-                    VocabCard.article.is_not(None),
+                    VocabCard.type.in_(("noun", "adjective")),
                 )
             )
         ).scalars().all()
-        candidates = [item for card in cards if (item := _deck_item(card))]
+        # Adjective cards have no article — the ``noun`` + non-NULL-article
+        # filter that used to live in SQL now runs in Python so this one
+        # query can also pull the learner's adjectives for GEN-001b.
+        noun_cards = [
+            c for c in cards if c.type == "noun" and c.article is not None
+        ]
+        deck_adjs = _safe_deck_adjectives(cards)
+        candidates = [
+            item
+            for card in noun_cards
+            if (item := _deck_item(card, deck_adjs))
+        ]
         random.shuffle(candidates)
         personal = candidates[:PERSONAL_MAX]
     except Exception:
@@ -423,19 +485,31 @@ async def _resolve_item(
     db: AsyncSession, user_id: str, item_id: str
 ) -> dict | None:
     """Catalog items by id; deck items re-derived from the card — scoped to
-    the caller so one user can't probe another's deck by id."""
+    the caller so one user can't probe another's deck by id.
+
+    GEN-001b: also pulls the user's adjective cards in the same query so the
+    re-derived item's ``adj_pool`` matches what ``get_round`` served — round
+    and attempt must agree bit-for-bit for grading to stay deterministic."""
     if item_id.startswith("deck-"):
-        card = (
+        rows = (
             await db.execute(
                 select(VocabCard)
                 .join(UserCard, UserCard.card_id == VocabCard.id)
                 .where(
                     UserCard.user_id == user_id,
-                    VocabCard.id == item_id[len("deck-"):],
+                    or_(
+                        VocabCard.id == item_id[len("deck-"):],
+                        VocabCard.type == "adjective",
+                    ),
                 )
             )
-        ).scalars().first()
-        return _deck_item(card) if card is not None else None
+        ).scalars().all()
+        card = next(
+            (c for c in rows if c.id == item_id[len("deck-"):]), None
+        )
+        if card is None:
+            return None
+        return _deck_item(card, _safe_deck_adjectives(rows))
     return load_items().get(item_id)
 
 
