@@ -23,6 +23,7 @@ the cross-drill DATA-004 log only, as ``exercise="genus"``.
 """
 
 import random
+import zlib
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -38,6 +39,7 @@ from database.orm import UserCard, VocabCard
 from database.repository import record_drill_attempt
 from genus.content import (
     ARTICLES,
+    SAFE_ADJECTIVES,
     classify_noun,
     load_items,
     load_pools,
@@ -62,8 +64,17 @@ _FREE_QUOTA = 1
 
 # Deck nouns get a semantically-neutral adjective, picked deterministically
 # (never randomly) so the item is bit-identical when the attempt endpoint
-# re-derives it from the card.
-_DECK_ADJECTIVES = ("neu", "klein", "gut", "alt", "schön")
+# re-derives it from the card. Neutral subset of content.SAFE_ADJECTIVES
+# only — a deck noun can be a person or an abstract, so food/texture words
+# ("lecker", "frisch") would pair absurdly. crc32 (process-stable, unlike
+# hash()) spreads nouns across the pool far better than len() ever did.
+_DECK_ADJECTIVES = (
+    "neu", "alt", "klein", "groß", "gut", "schön",
+    "modern", "wichtig", "nett", "ruhig", "stark", "schnell",
+)
+# Fail loud at import if the tuple ever drifts outside the concat-safe set —
+# a non-safe adjective would silently produce wrong gold endings.
+assert set(_DECK_ADJECTIVES) <= SAFE_ADJECTIVES, "deck adjective not concat-safe"
 
 
 def _deck_item(card: VocabCard) -> dict | None:
@@ -85,7 +96,9 @@ def _deck_item(card: VocabCard) -> dict | None:
         # a noun we also curate); unknown traps fall back to the generic
         # line built at attempt time.
         "why": trap_why(noun, card.article) if trap else None,
-        "adjective": _DECK_ADJECTIVES[len(noun) % len(_DECK_ADJECTIVES)],
+        "adjective": _DECK_ADJECTIVES[
+            zlib.crc32(noun.encode("utf-8")) % len(_DECK_ADJECTIVES)
+        ],
     }
 
 
