@@ -400,3 +400,294 @@ scenarios:
       - der Spaziergang
       - das Fell
       - die Pfote
+
+  # ── SZEN-006 growth batch (2026-07-24) — fresh life-areas, du-first ─────
+  - id: baeckerei
+    stufe: 1
+    register: du
+    persona:
+      name: Emma
+      role: Verkäuferin in der Bäckerei
+      attitude: friendly
+    kontext: >-
+      You're at the bakery counter early in the morning and the clerk chats
+      with you while bagging your order.
+    questions:
+      - Nimmst du lieber ein Brötchen oder ein Stück Kuchen zum Frühstück?
+      - Kommst du jeden Morgen schon so früh hierher?
+      - Warst du schon mal ganz früh hier, wenn das Brot noch warm ist?
+      - Backst du heute Abend noch selbst etwas, oder reicht dir das hier?
+      - Welches Brot magst du bei uns eigentlich am liebsten?
+    ziel_vokabular:
+      - das Brot
+      - die Brezel
+      - das Brötchen
+      - der Kuchen
+      - die Theke
+      - der Ofen
+      - die Bestellung
+
+  - id: verspaeteter-zug
+    stufe: 1
+    register: du
+    persona:
+      name: Niklas
+      role: Mitreisender auf dem Bahnsteig
+      attitude: friendly
+    kontext: >-
+      Your train is running forty minutes late and the young traveler next
+      to you on the platform starts chatting out of boredom.
+    questions:
+      - Ist dir das mit der Verspätung schon öfter passiert?
+      - Hast du deswegen schon mal einen Anschlusszug verpasst?
+      - Wartest du lieber hier draußen oder drinnen im Wartehäuschen?
+      - Schaffst du bei der Verspätung eigentlich noch deinen Anschluss?
+      - Regt dich sowas eigentlich noch auf, oder bist du das schon gewohnt?
+    ziel_vokabular:
+      - der Bahnsteig
+      - die Verspätung
+      - der Anschluss
+      - das Gleis
+      - die Durchsage
+      - der Koffer
+      - die Geduld
+
+  - id: handwerker
+    stufe: 1
+    register: Sie
+    persona:
+      name: Herr Lindner
+      role: Klempner in Ihrer Wohnung
+      attitude: friendly
+    kontext: >-
+      A plumber is fixing your leaking kitchen sink and chats with you
+      while working underneath it.
+    questions:
+      - Reparieren Sie zu Hause gern selbst, oder rufen Sie lieber einen Handwerker?
+      - Wie oft haben Sie schon Ärger mit alten Rohren gehabt?
+      - Hatten Sie hier in der Wohnung schon öfter Probleme mit dem Wasser?
+      - Haben Sie heute noch weitere Termine, wenn ich hier fertig bin?
+      - Was nervt Sie eigentlich am meisten an dieser alten Wohnung?
+    ziel_vokabular:
+      - das Rohr
+      - der Wasserhahn
+      - die Dichtung
+      - das Werkzeug
+      - die Reparatur
+      - der Abfluss
+
+  - id: bueros-kueche
+    stufe: 1
+    register: du
+    persona:
+      name: Jan
+      role: Kollege in der Büroküche
+      attitude: friendly
+    kontext: >-
+      You and a colleague are both waiting for the coffee machine in the
+      office kitchen and start chatting to pass the time.
+    questions:
+      - Arbeitest du diese Woche eigentlich viel, oder ist es gerade ruhig?
+      - Wie oft holst du dir hier eigentlich einen Kaffee?
+      - Hast du diese neue Kaffeemaschine schon mal benutzt?
+      - Hast du heute Mittag schon Pläne, oder isst du wieder am Schreibtisch?
+      - Was hältst du eigentlich von unserer Kaffeequalität hier?
+    ziel_vokabular:
+      - die Kaffeemaschine
+      - die Tasse
+      - die Büroküche
+      - die Pause
+      - der Kollege
+      - der Kaffee
+
+  - id: umzugstag
+    stufe: 1
+    register: du
+    persona:
+      name: Basti
+      role: Freund eines Freundes beim Umzug
+      attitude: friendly
+    kontext: >-
+      A friend of a friend is helping you carry boxes on moving day and
+      chats with you on the stairs between trips.
+    questions:
+      - Bist du selbst eigentlich schon oft umgezogen?
+      - Trägst du lieber die schweren Kisten oder die leichten?
+      - Hilfst du öfter mal Freunden beim Umzug?
+      - Feierst du heute Abend noch die neue Wohnung?
+      - Kennst du die neue Nachbarschaft hier eigentlich schon ein bisschen?
+    ziel_vokabular:
+      - die Kiste
+      - der Umzug
+      - das Treppenhaus
+      - der Karton
+      - der Möbelwagen
+      - die Treppe
+
+  - id: waschsalon
+    stufe: 1
+    register: du
+    persona:
+      name: Lisa
+      role: andere Kundin im Waschsalon
+      attitude: friendly
+    kontext: >-
+      You're both waiting for your laundry to finish at the laundromat and
+      start chatting on the bench by the machines.
+    questions:
+      - Wie oft kommst du eigentlich hierher zum Waschen?
+      - Wartest du lieber hier, oder gehst du in der Zeit einkaufen?
+      - Hast du schon mal aus Versehen die falsche Wäsche erwischt?
+      - Was machst du gleich, wenn die Wäsche fertig ist?
+      - Nervt dich das Warten hier eigentlich, oder ist es dir egal?
+    ziel_vokabular:
+      - die Waschmaschine
+      - der Trockner
+      - die Wäsche
+      - das Waschmittel
+      - die Münze
+      - der Wäschekorb
+
+  - id: bibliothek
+    stufe: 1
+    register: Sie
+    persona:
+      name: Frau Albrecht
+      role: Bibliothekarin in der Stadtbibliothek
+      attitude: friendly
+    kontext: >-
+      You're getting a library card at the city library and the librarian
+      chats with you while filling in the form.
+    questions:
+      - Suchen Sie heute etwas Bestimmtes, oder schauen Sie sich erst mal um?
+      - Wie oft kommen Sie ungefähr in die Bibliothek?
+      - Waren Sie schon einmal in einer anderen Bibliothek angemeldet?
+      - Wollen Sie sich heute gleich ein paar Bücher mitnehmen?
+      - Was gefällt Ihnen an unserer Bibliothek besonders gut?
+    ziel_vokabular:
+      - die Bibliothek
+      - der Bibliotheksausweis
+      - das Formular
+      - das Buch
+      - das Regal
+      - die Ausleihe
+
+  - id: schwimmbad
+    stufe: 1
+    register: du
+    persona:
+      name: Erik
+      role: anderer Schwimmer im Hallenbad
+      attitude: friendly
+    kontext: >-
+      You're both catching your breath at the edge of the pool after a few
+      laps and start chatting.
+    questions:
+      - Wie oft schwimmst du eigentlich hier im Hallenbad?
+      - Machst du lieber Brustschwimmen oder Kraulen?
+      - Warst du schon mal bei einem Schwimmwettkampf dabei?
+      - Drehst du gleich noch ein paar Bahnen, oder reicht es dir für heute?
+      - Was gefällt dir am Schwimmen eigentlich am meisten?
+    ziel_vokabular:
+      - das Hallenbad
+      - die Bahn
+      - das Becken
+      - die Schwimmbrille
+      - der Umkleideraum
+      - das Wasser
+
+  - id: kino
+    stufe: 1
+    register: du
+    persona:
+      name: Melina
+      role: Mitarbeiterin am Kino-Snackstand
+      attitude: friendly
+    kontext: >-
+      You're buying popcorn at the cinema snack counter before the film
+      starts and the clerk chats with you while filling your tub.
+    questions:
+      - Isst du dein Popcorn lieber süß oder salzig?
+      - Gehst du öfter allein ins Kino, oder meistens mit Freunden?
+      - Hast du den Trailer zu diesem Film schon mal gesehen?
+      - Hast du nach dem Film noch was vor?
+      - Welches Filmgenre magst du eigentlich am liebsten?
+    ziel_vokabular:
+      - das Popcorn
+      - der Kinosaal
+      - die Leinwand
+      - die Kinokarte
+      - der Snackstand
+      - die Vorstellung
+
+  - id: flohmarkt
+    stufe: 1
+    register: du
+    persona:
+      name: Rolf
+      role: Verkäufer am Flohmarktstand
+      attitude: friendly
+    kontext: >-
+      You're browsing a flea market stall full of old books and records
+      and the vendor chats with you while rearranging his table.
+    questions:
+      - Sammelst du lieber alte Bücher oder eher Schallplatten?
+      - Kommst du öfter hierher auf den Flohmarkt?
+      - Hast du hier schon mal ein echtes Schnäppchen gefunden?
+      - Schaust du dir gleich noch die anderen Stände an?
+      - Was suchst du eigentlich am liebsten auf einem Flohmarkt?
+    ziel_vokabular:
+      - der Flohmarkt
+      - die Schallplatte
+      - das Buch
+      - der Stand
+      - das Schnäppchen
+      - die Ware
+
+  - id: sprachkurs
+    stufe: 1
+    register: du
+    persona:
+      name: Marta
+      role: Mitschülerin im Deutschkurs
+      attitude: friendly
+    kontext: >-
+      You're on a break during your evening German class and a classmate
+      starts chatting with you in the hallway.
+    questions:
+      - Wie oft übst du eigentlich zu Hause Deutsch?
+      - Lernst du lieber Grammatik oder neue Vokabeln?
+      - Hast du schon mal mit einem Muttersprachler Deutsch gesprochen?
+      - Machst du nach dem Kurs heute noch etwas?
+      - Was fällt dir beim Deutschlernen eigentlich am schwersten?
+    ziel_vokabular:
+      - der Deutschkurs
+      - die Grammatik
+      - die Vokabel
+      - die Übung
+      - der Muttersprachler
+      - die Pause
+
+  - id: fahrradwerkstatt
+    stufe: 1
+    register: du
+    persona:
+      name: Tom
+      role: Mechaniker im Fahrradladen
+      attitude: friendly
+    kontext: >-
+      A mechanic is checking over your bike and chats with you while
+      adjusting the brakes.
+    questions:
+      - Fährst du eigentlich jeden Tag mit dem Fahrrad?
+      - Bist du lieber im Wald unterwegs oder mehr in der Stadt?
+      - Hast du mit diesem Fahrrad schon mal eine Panne gehabt?
+      - Machst du heute noch eine längere Tour, oder geht's nur kurz nach Hause?
+      - Was ist dir bei einem Fahrrad eigentlich am wichtigsten?
+    ziel_vokabular:
+      - das Fahrrad
+      - die Bremse
+      - der Reifen
+      - die Kette
+      - der Sattel
+      - die Werkstatt
