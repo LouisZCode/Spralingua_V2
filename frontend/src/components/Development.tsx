@@ -169,9 +169,10 @@ function PositiveCard({
           {retired.map((r) => (
             <span
               key={r.patternId}
-              className="inline-flex items-center rounded-full border-[3px] border-success bg-white px-3.5 py-1.5 font-body text-[13px] font-bold text-success"
+              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-success bg-white px-3.5 py-1.5 font-body text-[13px] font-bold text-ink"
             >
-              ✓ {r.label}
+              <span className="text-success">✓</span>
+              {r.label}
             </span>
           ))}
         </div>
@@ -374,26 +375,36 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
           No attempts in this window yet.
         </p>
       ) : (
-        <div className="mt-5 flex items-end justify-between gap-1">
+        <div className="mt-5 flex">
           {buckets.map((b, i) => (
-            <div key={i} className="flex min-w-0 flex-1 flex-col items-center gap-1.5">
-              <div className="flex h-32 items-end gap-[3px]">
+            <div key={i} className="flex min-w-0 flex-1 flex-col items-center">
+              {/* Every bucket's bar area carries its own border-b segment;
+                  with no gap between buckets they join into one continuous
+                  baseline, so zero days read as flat ground instead of
+                  floating nubs. */}
+              <div className="flex h-32 w-full items-end justify-center gap-[3px] border-b-2 border-ink">
                 {(
                   [
                     [b.attempts, "bg-ink"],
                     [b.mistakes, "bg-flag-red"],
                     [b.firstTryCorrect, "bg-success"],
                   ] as const
-                ).map(([value, color], j) => (
-                  <div
-                    key={j}
-                    className={`w-[7px] rounded-t-[3px] ${color} ${value === 0 ? "opacity-15" : ""}`}
-                    style={{ height: `${value === 0 ? 2 : Math.max(4, Math.round((value / max) * 128))}px` }}
-                    title={`${value}`}
-                  />
-                ))}
+                ).map(([value, color], j) =>
+                  value === 0 ? null : (
+                    <div
+                      key={j}
+                      className={`w-2 rounded-t-[3px] ${color}`}
+                      style={{
+                        height: `${Math.max(5, Math.round((value / max) * 122))}px`,
+                      }}
+                      title={`${value}`}
+                    />
+                  )
+                )}
               </div>
-              <span className="font-body text-[9px] font-semibold text-ink-faint">
+              {/*   keeps the label slot's height on unlabeled buckets —
+                  a bare " " collapses and un-aligns the baselines. */}
+              <span className="mt-1.5 font-body text-[9px] font-semibold text-ink-faint">
                 {view === "day" ? (i % 2 === 0 ? b.label : " ") : b.label}
               </span>
             </div>
