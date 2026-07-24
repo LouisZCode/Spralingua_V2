@@ -34,6 +34,17 @@ const ARTICLE_COLOR: Record<string, string> = {
   das: "text-success",
 };
 
+// SATZ-010: the gate balls wear Artikel-Anker's exact colours — one mnemonic
+// across the whole app (der=red, die=blue, das=green).
+const GENDER_BALL: Record<
+  "der" | "die" | "das",
+  { bg: string; text: string; shadow: string }
+> = {
+  der: { bg: "bg-flag-red", text: "text-flag-red", shadow: "var(--color-flag-red-deep)" },
+  die: { bg: "bg-[#2563eb]", text: "text-[#2563eb]", shadow: "#1e40af" },
+  das: { bg: "bg-success", text: "text-success", shadow: "#166534" },
+};
+
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
 } as React.CSSProperties;
@@ -127,6 +138,8 @@ export default function VocabTrainer({
   reviewCap,
   newThrottled,
   onDoneChange,
+  onGenderMiss,
+  onGenderCues,
 }: {
   deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
@@ -186,6 +199,12 @@ export default function VocabTrainer({
   // exhausted AFTER real work), so the shell can hide its pool/add-cards
   // chrome. The nothing-due-at-mount panel does NOT count as done.
   onDoneChange?: (done: boolean) => void;
+  // SATZ-010: record a wrong gender pick as a lapse (fire-and-forget via the
+  // parent, like onReveal). The gate only renders when this is wired.
+  onGenderMiss?: (cardId: string) => void;
+  // SATZ-010 hint: lazily fetch Artikel-Anker's ending-cue labels per gender
+  // (the /genus/rules sheet) — reason the gender out, never reveal it.
+  onGenderCues?: () => Promise<Record<"der" | "die" | "das", string[]>>;
 }) {
   // Two ways to face the pool: "practice" works today's queue (due + a drip
   // of new, shuffled — green pops a card, anything else recycles it); browse
@@ -215,6 +234,15 @@ export default function VocabTrainer({
   const [flagState, setFlagState] = useState<"idle" | "sending" | "sent">(
     "idle"
   );
+  // SATZ-010 gender gate. Keyed by card id, so it self-invalidates on every
+  // card change (including the same card returning later in the round) and
+  // deliberately survives resetScratch — a red spoken attempt's "Try again"
+  // must not re-ask a gender the learner already proved.
+  const [genderOkFor, setGenderOkFor] = useState<string | null>(null);
+  const [wrongPick, setWrongPick] = useState<string | null>(null);
+  const [cues, setCues] = useState<Record<"der" | "die" | "das", string[]> | null>(null);
+  const [showCues, setShowCues] = useState(false);
+  const wrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
@@ -241,8 +269,16 @@ export default function VocabTrainer({
   const card = browsing ? deck[safeIndex] : byId.get(activeQueue[0]);
 
   // Card navigation stays locked while a recording or check is in flight, so
-  // the verdict that comes back always belongs to the card on screen.
-  const busy = recording || checking;
+  // the verdict that comes back always belongs to the card on screen. The
+  // wrong-gender flash locks it too: its queued advance (pickGender's timer)
+  // must be the only move that fires during that beat.
+  const busy = recording || checking || wrongPick !== null;
+
+  // SATZ-010: nouns must commit to a gender before the mic unlocks. Practice
+  // and Flow gate; browse is just looking. Unwired parents (Verbformen's
+  // verb-only deck) never gate.
+  const needsGate = !browsing && !!card?.article && !!onGenderMiss;
+  const genderOk = genderOkFor === card?.id;
 
   // The word is what the card tests: wordOk alone decides green vs red. A
   // grammar slip elsewhere in the sentence stays green and shows up as a
@@ -313,6 +349,7 @@ export default function VocabTrainer({
       if (recorderRef.current?.state === "recording") {
         recorderRef.current.stop();
       }
+      if (wrongTimerRef.current) clearTimeout(wrongTimerRef.current);
     },
     []
   );
@@ -527,6 +564,36 @@ export default function VocabTrainer({
   function tryAgain() {
     if (busy) return;
     resetScratch();
+  }
+
+  // SATZ-010: one tap decides. Correct unlocks the mic; wrong is a full fail —
+  // schedule lapse + a tick toward the miss cap — and the card returns later
+  // in the round (handleNext already implements requeue, missed-out pop, and
+  // Flow's hand-back, so the wrong path just rides it after a short beat).
+  function pickGender(article: string) {
+    if (!card || busy || flipped || genderOk || wrongPick) return;
+    if (article === card.article) {
+      setGenderOkFor(card.id);
+      return;
+    }
+    setWrongPick(article);
+    missesRef.current.set(card.id, (missesRef.current.get(card.id) ?? 0) + 1);
+    onGenderMiss?.(card.id);
+    wrongTimerRef.current = setTimeout(() => {
+      setWrongPick(null);
+      handleNext();
+    }, 900);
+  }
+
+  // SATZ-010 hint: fetch once, then toggle.
+  async function toggleCues() {
+    setShowCues((s) => !s);
+    if (cues || !onGenderCues) return;
+    try {
+      setCues(await onGenderCues());
+    } catch {
+      setShowCues(false);
+    }
   }
 
   // Done-panel "+ Noch N üben": pull the next small MORE_CAP batch of due
@@ -925,11 +992,74 @@ export default function VocabTrainer({
           learner pausing to think must never trigger a premature verdict. ── */}
       <div className={`mt-6 transition-opacity ${flipped ? "opacity-60" : ""}`}>
         <div className="flex flex-col items-center">
+          {/* SATZ-010: the gender gate — Artikel-Anker's three balls (der=red,
+              die=blue, das=green). Commit before you speak. A wrong pick
+              flashes ✕, lapses the card, and moves on — no answer shown; the
+              card returns later this round with the remaining candidates. */}
+          {needsGate && !flipped && (
+            <div className="mb-4 flex flex-col items-center">
+              <div className="flex items-center gap-3">
+                {(["der", "die", "das"] as const).map((a) => {
+                  const ui = GENDER_BALL[a];
+                  const picked = genderOk && card.article === a;
+                  const missed = wrongPick === a;
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => pickGender(a)}
+                      disabled={busy || flipped || genderOk || wrongPick !== null}
+                      className={`btn-3d inline-flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink font-display text-[15px] font-black text-white transition-opacity ${ui.bg} ${
+                        (genderOk && !picked) || (wrongPick && !missed)
+                          ? "opacity-30"
+                          : ""
+                      }`}
+                      style={{ ["--shadow-color"]: ui.shadow } as React.CSSProperties}
+                    >
+                      {missed ? "✕" : a}
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-2 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
+                {wrongPick
+                  ? "Wrong gender — back later this round"
+                  : genderOk
+                    ? " "
+                    : "Pick the gender to unlock the mic"}
+              </p>
+              {!genderOk && !wrongPick && onGenderCues && (
+                <button
+                  type="button"
+                  onClick={toggleCues}
+                  className="mt-1 font-body text-[11px] font-black uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-flag-red"
+                >
+                  {showCues ? "Hide endings hint" : "Endings hint"}
+                </button>
+              )}
+              {showCues && !genderOk && !wrongPick && (
+                <div className="mt-3 flex max-w-[420px] flex-col gap-1.5">
+                  {cues ? (
+                    (["der", "die", "das"] as const).map((a) => (
+                      <p key={a} className="font-body text-[12px] leading-snug text-ink-soft">
+                        <span className={`font-black ${GENDER_BALL[a].text}`}>
+                          {a}
+                        </span>{" "}
+                        {cues[a].join(" · ")}
+                      </p>
+                    ))
+                  ) : (
+                    <p className="font-body text-[12px] text-ink-faint">…</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={recording ? stopRecording : startRecording}
-              disabled={flipped || checking}
+              disabled={flipped || checking || (needsGate && !genderOk)}
               className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:pointer-events-none disabled:opacity-40 ${
                 recording
                   ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
@@ -996,7 +1126,7 @@ export default function VocabTrainer({
                   );
                 }
               }}
-              disabled={flipped || checking}
+              disabled={flipped || checking || wrongPick !== null}
               className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-gold-deep bg-flag-gold px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink disabled:pointer-events-none disabled:opacity-40"
               style={goldShadow}
             >

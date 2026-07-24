@@ -215,6 +215,18 @@ export async function revealCard(
   });
 }
 
+// SATZ-010: a wrong gender pick at the pre-record gate — same schedule
+// consequence as a reveal (lapse to "due now"), separate endpoint so the
+// causes stay distinguishable.
+export async function genderMissCard(
+  token: string,
+  cardId: string
+): Promise<{ dueInDays: number }> {
+  return request(`/satz/deck/${encodeURIComponent(cardId)}/gender-miss`, token, {
+    method: "POST",
+  });
+}
+
 export async function removeCard(
   token: string,
   cardId: string

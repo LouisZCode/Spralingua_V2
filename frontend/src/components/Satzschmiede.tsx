@@ -11,6 +11,7 @@ import {
   explainAttempt,
   fetchDeck,
   flagVerdict,
+  genderMissCard,
   removeCard,
   revealCard,
   submitAttempt,
@@ -18,6 +19,7 @@ import {
   type AttemptResult,
 } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
+import { fetchMeta } from "./genus/api";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -105,6 +107,29 @@ export default function Satzschmiede() {
     },
     [token, signOut]
   );
+
+  // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
+  // reveal.
+  const handleGenderMiss = useCallback(
+    (cardId: string) => {
+      if (!token) return;
+      genderMissCard(token, cardId).catch((e) => {
+        if (e instanceof UnauthorizedError) signOut();
+      });
+    },
+    [token, signOut]
+  );
+
+  // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
+  const handleGenderCues = useCallback(async () => {
+    if (!token) throw new UnauthorizedError("/genus/rules");
+    try {
+      return (await fetchMeta(token)).endings;
+    } catch (e) {
+      if (e instanceof UnauthorizedError) signOut();
+      throw e;
+    }
+  }, [token, signOut]);
 
   // Judge one recorded sentence. Auth errors sign out here (same policy as
   // every other call); everything else rethrows so the trainer can show a
@@ -286,6 +311,8 @@ export default function Satzschmiede() {
             reviewCap={REVIEW_CAP}
             newThrottled={newThrottled}
             onDoneChange={setTrainerDone}
+            onGenderMiss={handleGenderMiss}
+            onGenderCues={handleGenderCues}
           />
         )}
 

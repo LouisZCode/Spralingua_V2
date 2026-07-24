@@ -839,6 +839,34 @@ async def reveal_card(
     return {"dueInDays": 0}
 
 
+@router.post("/deck/{card_id}/gender-miss")
+async def gender_miss_card(
+    card_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """SATZ-010: the learner picked the wrong gender at the pre-record gate.
+
+    Same schedule consequence as a reveal — a lapse, not a graded attempt:
+    the card drops to "due now" at a quarter of its old interval, and
+    ``reps``/``last_score`` stay untouched. A separate endpoint (rather than
+    reusing /reveal) so the two lapse causes stay distinguishable in logs.
+    """
+    user_card = await db.scalar(
+        select(UserCard).where(
+            UserCard.user_id == user_id, UserCard.card_id == card_id
+        )
+    )
+    if user_card is None:
+        raise HTTPException(status_code=404, detail="That card isn't in your pool.")
+    if user_card.started_at is None:
+        user_card.started_at = datetime.now()
+    user_card.interval_days = lapse_interval(user_card.interval_days)
+    user_card.due_at = datetime.now()
+    await db.commit()
+    return {"dueInDays": 0}
+
+
 class ExplainIn(BaseModel):
     card_id: str
     transcript: str

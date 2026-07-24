@@ -33,6 +33,7 @@ import {
 import GenusTrainer from "./genus/GenusTrainer";
 import {
   fetchRound as fetchGenusRound,
+  fetchMeta as fetchGenusMeta,
   submitArticle as submitGenusArticle,
   submitPhrase as submitGenusPhrase,
   type Article as GenusArticle,
@@ -55,6 +56,7 @@ import {
   submitAttempt as submitSatzAttempt,
   removeCard as removeSatzCard,
   revealCard as revealSatzCard,
+  genderMissCard as genderMissSatzCard,
   explainAttempt,
   flagVerdict,
   UnauthorizedError,
@@ -593,6 +595,29 @@ export default function Flow() {
     [token, signOut]
   );
 
+  // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
+  // reveal. Wired only to the Satzschmiede deal, not Verbformen's verb-only one.
+  const handleSatzGenderMiss = useCallback(
+    (cardId: string) => {
+      if (!token) return;
+      genderMissSatzCard(token, cardId).catch((e) => {
+        if (e instanceof UnauthorizedError) signOut();
+      });
+    },
+    [token, signOut]
+  );
+
+  // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
+  const handleSatzGenderCues = useCallback(async () => {
+    if (!token) throw new UnauthorizedError("/genus/rules");
+    try {
+      return (await fetchGenusMeta(token)).endings;
+    } catch (e) {
+      if (e instanceof UnauthorizedError) signOut();
+      throw e;
+    }
+  }, [token, signOut]);
+
   const handleVerbformenReveal = useCallback(
     (cardId: string) => {
       if (!token) return;
@@ -794,6 +819,8 @@ export default function Flow() {
                     flow
                     onFlowDone={(correct) => handleItemDone("satz", correct)}
                     sessionId={sid()}
+                    onGenderMiss={handleSatzGenderMiss}
+                    onGenderCues={handleSatzGenderCues}
                   />
                 )}
                 {deal.kind === "verbformen" && (
