@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
 import { useAuth } from "./auth/AuthContext";
 import type { CompletionData, CompletionStatus } from "./SessionSummaryModal";
+import { diffTokens, MarkedText } from "./shared/feedback";
 
 interface DebriefPattern {
   pattern_id: string;
@@ -318,54 +319,57 @@ function PracticedBlock({ patterns }: { patterns: DebriefPattern[] }) {
       </div>
 
       <ul className="mt-4 space-y-4">
-        {patterns.map((p) => (
-          <li
-            key={p.pattern_id}
-            className={`rounded-2xl border-2 px-4 py-3.5 ${
-              p.produced_correctly
-                ? "border-success/35 bg-success-soft/40"
-                : "border-flag-gold/55 bg-flag-gold-soft/50"
-            }`}
-          >
-            <div className="flex items-start gap-3">
-              <span
-                aria-hidden
-                className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white ${
-                  p.produced_correctly ? "bg-success" : "bg-flag-gold-deep"
-                }`}
-              >
-                {p.produced_correctly ? "✓" : "↻"}
-              </span>
-              <div className="min-w-0">
-                <p className="font-body text-[15px] font-semibold leading-snug text-ink">
-                  {p.label}
-                </p>
-                {p.produced_correctly ? (
-                  <p className="mt-1 font-body text-[14px] leading-snug text-ink-soft">
-                    You got it right — “{p.evidence}”
+        {patterns.map((p) => {
+          const d = p.corrected ? diffTokens(p.evidence, p.corrected) : null;
+          return (
+            <li
+              key={p.pattern_id}
+              className={`rounded-2xl border-2 px-4 py-3.5 ${
+                p.produced_correctly
+                  ? "border-success/35 bg-success-soft/40"
+                  : "border-flag-gold/55 bg-flag-gold-soft/50"
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                <span
+                  aria-hidden
+                  className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white ${
+                    p.produced_correctly ? "bg-success" : "bg-flag-gold-deep"
+                  }`}
+                >
+                  {p.produced_correctly ? "✓" : "↻"}
+                </span>
+                <div className="min-w-0">
+                  <p className="font-body text-[15px] font-semibold leading-snug text-ink">
+                    {p.label}
                   </p>
-                ) : (
-                  <p className="mt-1 font-body text-[14px] leading-snug text-ink-soft">
-                    Came up again: “{p.evidence}”
-                    {p.corrected && (
-                      <>
-                        {" → "}
-                        <span className="font-semibold text-ink">
-                          “{p.corrected}”
-                        </span>
-                      </>
-                    )}
-                  </p>
-                )}
-                {!p.produced_correctly && p.note && (
-                  <p className="mt-1 font-body text-[12px] italic text-ink-muted">
-                    {p.note}
-                  </p>
-                )}
+                  {p.produced_correctly ? (
+                    <p className="mt-1 font-body text-[14px] leading-snug text-ink-soft">
+                      You got it right — “{p.evidence}”
+                    </p>
+                  ) : (
+                    <p className="mt-1 font-body text-[14px] leading-snug text-ink-soft">
+                      Came up again: “{d ? <MarkedText tokens={d.attempt} mark="red" /> : p.evidence}”
+                      {d && (
+                        <>
+                          {" → "}
+                          <span className="font-semibold text-ink">
+                            “<MarkedText tokens={d.corrected} mark="green" />”
+                          </span>
+                        </>
+                      )}
+                    </p>
+                  )}
+                  {!p.produced_correctly && p.note && (
+                    <p className="mt-1 font-body text-[12px] italic text-ink-muted">
+                      {p.note}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
@@ -382,30 +386,35 @@ function NewErrorsBlock({ errors }: { errors: DebriefNewError[] }) {
       </div>
 
       <ul className="mt-4 space-y-4">
-        {errors.map((e, i) => (
-          <li
-            key={`${e.pattern_id}-${i}`}
-            className="rounded-2xl border-2 border-flag-red/40 bg-flag-red-soft/40 px-4 py-3.5"
-          >
-            <p className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-              {e.label}
-            </p>
-            <p className="mt-1.5 font-body text-[14px] leading-snug text-ink-soft">
-              “{e.sentence}”
-              {e.corrected && (
-                <>
-                  {" → "}
-                  <span className="font-semibold text-ink">“{e.corrected}”</span>
-                </>
-              )}
-            </p>
-            {e.note && (
-              <p className="mt-1 font-body text-[12px] italic text-ink-muted">
-                {e.note}
+        {errors.map((e, i) => {
+          const d = e.corrected ? diffTokens(e.sentence, e.corrected) : null;
+          return (
+            <li
+              key={`${e.pattern_id}-${i}`}
+              className="rounded-2xl border-2 border-flag-red/40 bg-flag-red-soft/40 px-4 py-3.5"
+            >
+              <p className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+                {e.label}
               </p>
-            )}
-          </li>
-        ))}
+              <p className="mt-1.5 font-body text-[14px] leading-snug text-ink-soft">
+                “{d ? <MarkedText tokens={d.attempt} mark="red" /> : e.sentence}”
+                {d && (
+                  <>
+                    {" → "}
+                    <span className="font-semibold text-ink">
+                      “<MarkedText tokens={d.corrected} mark="green" />”
+                    </span>
+                  </>
+                )}
+              </p>
+              {e.note && (
+                <p className="mt-1 font-body text-[12px] italic text-ink-muted">
+                  {e.note}
+                </p>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );
