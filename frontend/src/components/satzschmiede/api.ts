@@ -109,14 +109,29 @@ export async function addWord(
   // Practice-sitting id (OBS-007) — set when add-word is called mid-session
   // (e.g. from a rejected-attempt suggestion) so the backend can file the
   // card creation under the same Langfuse session as the rest of the sitting.
-  sessionId?: string
-): Promise<{ card: Card; created: boolean; added: number; poolSize: number }> {
+  sessionId?: string,
+  // SATZ-013: "gloss" when this add came from the hover/tap GLOSS popover's
+  // one-tap add button — the only path subject to the daily gloss-add cap.
+  // Omitted by the manual add-word form (AddWordForm.tsx), which stays
+  // uncapped.
+  source?: "gloss"
+): Promise<{
+  card: Card;
+  created: boolean;
+  added: number;
+  poolSize: number;
+  // Present only when `source: "gloss"` was sent — remaining gloss-path
+  // adds allowed today (0..3), already accounting for this call.
+  glossRemaining?: number;
+}> {
   return request("/satz/cards", token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(
-      sessionId ? { word, session_id: sessionId } : { word }
-    ),
+    body: JSON.stringify({
+      word,
+      ...(sessionId ? { session_id: sessionId } : {}),
+      ...(source ? { source } : {}),
+    }),
   });
 }
 
@@ -246,6 +261,9 @@ export type GlossInfo = {
   cardId: string | null;
   inDeck: boolean;
   source: "catalog" | "cache" | "fresh";
+  // SATZ-013: remaining gloss-path adds allowed today (0..3), computed up
+  // front so the popover can render the state before any add attempt.
+  glossAddsRemaining?: number;
 };
 
 // POST /satz/gloss. `context` is the surrounding sentence the word was

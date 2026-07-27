@@ -12,6 +12,7 @@ import asyncio
 import re
 import time
 from datetime import date, datetime, time as dtime, timedelta
+from typing import Literal
 from uuid import uuid4
 
 import aiohttp
@@ -428,6 +429,11 @@ class WordIn(BaseModel):
     # "satz-forge" trace into that session instead of standing alone.
     # Optional so older clients and curl keep working.
     session_id: str | None = None
+    # SATZ-013: "gloss" when this add came from the hover/tap GLOSS popover's
+    # one-tap add button — the only path subject to GLOSS_ADDS_PER_DAY.
+    # Absent/None for the manual add-word form and pack adds, which stay
+    # uncapped.
+    source: Literal["gloss"] | None = None
 
 
 @router.post("/cards")
@@ -476,14 +482,51 @@ async def add_word(
         if sibling is not None:
             to_link.append(sibling)
 
-    added = 0
-    for c in to_link:
-        result = await db.execute(
-            pg_insert(UserCard)
-            .values(user_id=user_id, card_id=c.id)
-            .on_conflict_do_nothing(index_elements=["user_id", "card_id"])
+    # SATZ-013: the GLOSS popover's one-tap add is capped at
+    # GLOSS_ADDS_PER_DAY/day; every other path (manual add-word form, pack
+    # add) leaves `gloss_path` False and behaves exactly as before.
+    gloss_path = body.source == "gloss"
+    gloss_used = 0
+    gloss_blocked = False
+    if gloss_path:
+        gloss_used = await _gloss_adds_used_today(db, user_id)
+        # A dedupe no-op (the tapped card is already in the caller's pool)
+        # must never consume allowance — only a click that would actually
+        # link the tapped card can be blocked. Sibling links are free (see
+        # the stamping rule below), so they neither block nor get blocked.
+        already_linked = set(
+            (
+                await db.execute(
+                    select(UserCard.card_id).where(
+                        UserCard.user_id == user_id,
+                        UserCard.card_id.in_([c.id for c in to_link]),
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
-        added += result.rowcount
+        would_create_new = card.id not in already_linked
+        gloss_blocked = would_create_new and gloss_used >= GLOSS_ADDS_PER_DAY
+
+    added = 0
+    gloss_spent = 0
+    if not gloss_blocked:
+        for c in to_link:
+            values = {"user_id": user_id, "card_id": c.id}
+            # One popover click = one allowance unit: stamp (and count) only
+            # the card the learner tapped — a verb's auto-created past-tense
+            # sibling rides along unstamped so it can't burn a second slot.
+            if gloss_path and c.id == card.id:
+                values["source"] = "gloss"
+            result = await db.execute(
+                pg_insert(UserCard)
+                .values(**values)
+                .on_conflict_do_nothing(index_elements=["user_id", "card_id"])
+            )
+            added += result.rowcount
+            if gloss_path and c.id == card.id and result.rowcount:
+                gloss_spent = 1
     payload = _card_payload(card)  # serialize before commit expires the ORM row
     await db.commit()
 
@@ -492,18 +535,26 @@ async def add_word(
     )
 
     # CONT-002: forge personal drill items for the newly linked word in the
-    # background — never blocks or fails the add.
-    try:
-        asyncio.create_task(forge_items_for_card(user_id, card.id))
-    except Exception:
-        logger.exception("Drill-item forge scheduling failed ({})", card.id)
+    # background — never blocks or fails the add. Skipped when the gloss cap
+    # blocked the link: the card never entered this user's pool, so there is
+    # nothing of theirs to forge drill items from.
+    if not gloss_blocked:
+        try:
+            asyncio.create_task(forge_items_for_card(user_id, card.id))
+        except Exception:
+            logger.exception("Drill-item forge scheduling failed ({})", card.id)
 
-    return {
+    response = {
         "card": payload,
         "created": created,
         "added": added,
         "poolSize": pool_size,
     }
+    if gloss_path:
+        response["glossRemaining"] = max(
+            0, GLOSS_ADDS_PER_DAY - (gloss_used + gloss_spent)
+        )
+    return response
 
 
 @router.delete("/deck/{card_id}")
@@ -745,6 +796,28 @@ NEW_PER_DAY = 5
 THROTTLE_WINDOW = 20  # most recent graded satz attempts considered
 THROTTLE_MIN = 10  # need at least this many before the throttle can fire
 THROTTLE_FLOOR = 0.8
+
+# SATZ-013: the GLOSS popover's one-tap add is a casual-reading collector,
+# not a study decision — capped far below NEW_PER_DAY so a browsing session
+# can't silently balloon the pool. Manual add-word and pack adds are untouched.
+GLOSS_ADDS_PER_DAY = 3
+
+
+async def _gloss_adds_used_today(db: AsyncSession, user_id: str) -> int:
+    """SATZ-013: how many of the caller's GLOSS_ADDS_PER_DAY slots are
+    already spent today — rows in ``user_cards`` stamped ``source='gloss'``
+    with ``added_at`` today. Same naive-TIMESTAMP/UTC day-boundary convention
+    already used by the ``started_at`` / NEW_PER_DAY allowance below."""
+    today_midnight = datetime.combine(date.today(), dtime.min)
+    return await db.scalar(
+        select(func.count())
+        .select_from(UserCard)
+        .where(
+            UserCard.user_id == user_id,
+            UserCard.source == "gloss",
+            UserCard.added_at >= today_midnight,
+        )
+    )
 
 
 @router.get("/deck")
@@ -1067,6 +1140,13 @@ async def gloss_word_route(
 
         span.set_attribute("langfuse.trace.output", lemma)
 
+    # SATZ-013: today's remaining gloss-path allowance, computed up front so
+    # the popover can render "noch N heute" / the limit line BEFORE the
+    # learner ever attempts an add.
+    gloss_adds_remaining = max(
+        0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
+    )
+
     return {
         "lemma": lemma,
         "article": article,
@@ -1075,6 +1155,7 @@ async def gloss_word_route(
         "cardId": card_id,
         "inDeck": in_deck,
         "source": source,
+        "glossAddsRemaining": gloss_adds_remaining,
     }
 
 

@@ -163,10 +163,18 @@ export default function Sprechen() {
   );
 
   const handleAddWord = useCallback(
-    async (lemma: string): Promise<void> => {
+    async (lemma: string): Promise<{ glossRemaining?: number } | void> => {
       if (!token) throw new UnauthorizedError("/satz/cards");
       try {
-        await addWord(token, lemma, practiceSessionRef.current ?? undefined);
+        // SATZ-013: this is the gloss popover's one-tap add — mark it so
+        // the backend counts it against the daily gloss-add cap.
+        const res = await addWord(
+          token,
+          lemma,
+          practiceSessionRef.current ?? undefined,
+          "gloss"
+        );
+        return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           signOut();

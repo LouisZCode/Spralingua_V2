@@ -233,6 +233,12 @@ class UserCard(Base):
     # Stamped at the card's FIRST graded attempt or reveal; drives the
     # 5-new-per-day allowance (NULL = still untouched).
     started_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
+    # SATZ-013: gloss-path daily allowance — "gloss" when this link was made
+    # via the hover/tap GLOSS popover's one-tap add, NULL for everything else
+    # (manual add-word form, pack add, auto-forged verb-past sibling). The
+    # only signal POST /satz/cards needs to count "gloss adds today" against
+    # the hard cap of 3/day without touching the uncapped manual/pack paths.
+    source: Mapped[str | None] = mapped_column(String(16), nullable=True)
 
     # The deck query: "this user's cards that are due".
     __table_args__ = (Index("ix_user_cards_user_due", "user_id", "due_at"),)

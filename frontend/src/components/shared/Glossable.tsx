@@ -56,10 +56,16 @@ function tokenize(text: string): Token[] {
 
 type AddState = "idle" | "pending" | "done";
 
+// SATZ-013: a successful add through the gloss path reports back how many
+// gloss-adds remain today (0..3) so the popover can update its own counter
+// without a second round trip. `void` covers callers with nothing to report
+// (there are none left in this codebase, but the type stays permissive).
+type AddResult = { glossRemaining?: number } | void;
+
 type GlossableProps = {
   text: string;
   onGloss: (word: string, context: string) => Promise<GlossInfo>;
-  onAdd?: (lemma: string) => Promise<void>;
+  onAdd?: (lemma: string) => Promise<AddResult>;
   className?: string;
 };
 
@@ -135,6 +141,11 @@ function GlossableInner({ text, onGloss, onAdd, className }: GlossableProps) {
     activeWordKeyRef.current = key;
     const cached = glossCache.get(key);
     if (cached) {
+      // SATZ-013: `cached.glossAddsRemaining` (if set) is whatever the
+      // count was the moment this word was first glossed this session — a
+      // later add elsewhere can move the real count without this entry
+      // refreshing. Acceptable: it's a soft "about how many are left"
+      // hint, not the enforcement (the backend re-checks on every add).
       setGlossData(cached);
       setGlossLoading(false);
       return;
@@ -232,8 +243,17 @@ function GlossableInner({ text, onGloss, onAdd, className }: GlossableProps) {
     setAddError(false);
     setAddState("pending");
     try {
-      await onAdd(glossData.lemma);
-      const updated: GlossInfo = { ...glossData, inDeck: true };
+      const result = await onAdd(glossData.lemma);
+      // SATZ-013: fold the post-add remaining count back in when the caller
+      // reports one; older callers returning void leave glossAddsRemaining
+      // as it was (absent field stays absent, rendering unchanged below).
+      const updated: GlossInfo = {
+        ...glossData,
+        inDeck: true,
+        ...(result && typeof result.glossRemaining === "number"
+          ? { glossAddsRemaining: result.glossRemaining }
+          : {}),
+      };
       setGlossData(updated);
       setAddState("done");
       if (activeWordKeyRef.current) {
@@ -361,15 +381,28 @@ function GlossableInner({ text, onGloss, onAdd, className }: GlossableProps) {
                     <span className="block text-[11px] font-semibold text-success">
                       Hinzugefügt ✓
                     </span>
+                  ) : glossData.glossAddsRemaining === 0 ? (
+                    // SATZ-013: cap hit — the button never renders, so there
+                    // is no way to fire an add this backend would reject.
+                    <span className="block text-[11px] font-semibold text-ink-muted">
+                      Tageslimit erreicht
+                    </span>
                   ) : (
-                    <button
-                      type="button"
-                      onClick={handleAdd}
-                      disabled={addState === "pending"}
-                      className="inline-flex items-center rounded-full border-2 border-flag-red-deep bg-flag-red px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-white disabled:opacity-50"
-                    >
-                      {addState === "pending" ? "…" : "＋ Zu meinen Wörtern"}
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        onClick={handleAdd}
+                        disabled={addState === "pending"}
+                        className="inline-flex items-center rounded-full border-2 border-flag-red-deep bg-flag-red px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-white disabled:opacity-50"
+                      >
+                        {addState === "pending" ? "…" : "＋ Zu meinen Wörtern"}
+                      </button>
+                      {typeof glossData.glossAddsRemaining === "number" && (
+                        <span className="mt-1 block text-[10px] font-semibold text-ink-faint">
+                          {`noch ${glossData.glossAddsRemaining} heute`}
+                        </span>
+                      )}
+                    </>
                   )}
                   {addError && (
                     <span className="mt-1 block text-[11px] font-semibold text-flag-red-deep">
