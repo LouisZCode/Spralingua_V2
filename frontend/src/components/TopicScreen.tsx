@@ -8,9 +8,10 @@ import { HTTP_BASE } from "@/lib/api";
 // The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP;
 // TAND-005 grew the topic pool and reworked the suggestions below). The
 // learner picks what to talk about with Lena: one of 3 randomly recommended
-// topics (tap a card to start immediately, or shuffle for a fresh 3), or
-// their own free-text theme. The chosen string becomes the `topic` param
-// handed to ConversationView.
+// topics (tap a card to select it, or shuffle for a fresh 3), or their own
+// free-text theme — either way, the Start button is what actually begins
+// the chat. The chosen string becomes the `topic` param handed to
+// ConversationView.
 const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
@@ -55,6 +56,7 @@ export default function TopicScreen({
   const [topics, setTopics] = useState<string[]>([]);
   const [recommended, setRecommended] = useState<string[]>([]);
   const [custom, setCustom] = useState<string>("");
+  const [selectedCard, setSelectedCard] = useState<string | null>(null);
 
   // TAND-003: default to "natural" and hydrate from localStorage in an
   // effect — SSR-safe, same pattern Szenario.tsx uses for its level toggle
@@ -90,12 +92,19 @@ export default function TopicScreen({
     };
   }, []);
 
-  // What the free-text Start button sends. The 3 recommendation cards below
-  // start the chat directly on tap and don't go through this at all.
-  const effectiveTopic = useMemo(() => custom.trim(), [custom]);
+  // What the Start button sends: a selected recommendation card takes
+  // precedence, falling back to the free-text field. In practice this is
+  // always "whichever was touched last" — selecting a card doesn't clear
+  // the input, but typing in the input does clear the card selection
+  // (see the input's onChange below), so the two can never disagree.
+  const effectiveTopic = useMemo(
+    () => selectedCard ?? custom.trim(),
+    [selectedCard, custom]
+  );
 
   const shuffle = () => {
     setRecommended(pickThree(topics));
+    setSelectedCard(null);
   };
 
   return (
@@ -200,17 +209,27 @@ export default function TopicScreen({
               </button>
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-3">
-              {recommended.map((t) => (
-                <button
-                  key={t}
-                  type="button"
-                  onClick={() => onStart(t, mode)}
-                  className="rounded-2xl border-[3px] border-ink bg-flag-gold-soft px-5 py-5 text-left font-display text-[17px] font-black leading-tight text-ink transition hover:bg-white hover:text-flag-red"
-                  style={inkShadow}
-                >
-                  {t}
-                </button>
-              ))}
+              {recommended.map((t) => {
+                const selected = selectedCard === t;
+                return (
+                  <button
+                    key={t}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() =>
+                      setSelectedCard((prev) => (prev === t ? null : t))
+                    }
+                    className={`rounded-2xl border-[3px] border-ink px-5 py-5 text-left font-display text-[17px] font-black leading-tight transition ${
+                      selected
+                        ? "bg-ink text-white"
+                        : "bg-flag-gold-soft text-ink hover:bg-white hover:text-flag-red"
+                    }`}
+                    style={inkShadow}
+                  >
+                    {t}
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -227,7 +246,10 @@ export default function TopicScreen({
             id="tandem-custom-topic"
             type="text"
             value={custom}
-            onChange={(e) => setCustom(e.target.value)}
+            onChange={(e) => {
+              setCustom(e.target.value);
+              setSelectedCard(null);
+            }}
             placeholder="Type your own topic"
             maxLength={120}
             className="mt-3 w-full rounded-2xl border-[3px] border-ink bg-white px-5 py-3.5 font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
