@@ -4,13 +4,17 @@ Drives a REAL local pipeline session over text only: a background `hold`
 process keeps the WebSocket open (audio frames are received and discarded),
 and each student turn goes in through `POST /say/{user_id}` — which the
 endpoint guarantees is identical to a spoken turn (TTS, Langfuse, goodbye
-detection, exchange count all fire). Lena's replies are read from the live
-session transcript that `logs/session_logger.py` writes.
+detection, exchange count all fire). STT is skipped entirely; TTS still
+synthesizes and streams at real-time pace, so a turn completes when the bot
+"finishes speaking" into the discarding holder.
 
-STT is skipped entirely (no audio in). TTS still synthesizes in the
-background; the audio is discarded by the holder.
+Lena's replies are recovered from the BACKEND LOG (the uvicorn process must
+be started with its output redirected to a file; pass it via --backend-log
+or SIM_BACKEND_LOG). The session .md transcript can't be used: typed /say
+turns have no VAD timestamps, so `session_logger._write_turn_summary`
+discards them as incomplete turns and they never land in the .md.
 
-Usage (from repo root, backend running on :8765, Postgres up):
+Usage (from repo root, backend running on :8765 with logs to a file):
     uv run python sim/chat.py start --topic "Der Alltag"
     uv run python sim/chat.py say "Hallo Lena!"
     uv run python sim/chat.py transcript
@@ -31,6 +35,7 @@ import signal
 import subprocess
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -38,13 +43,12 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 RUN_DIR = Path(__file__).resolve().parent / ".run"
 STATE = RUN_DIR / "state.json"
-LOG_ROOT = REPO / "logs" / "conversations"
 BASE = os.environ.get("SIM_BASE", "http://127.0.0.1:8765")
 WS_BASE = BASE.replace("http", "ws", 1)
 
-# One message block in the transcript: "Label: text" (text may wrap onto
-# following lines until a blank line or the --- separator).
-_MSG_RE = re.compile(r"^([A-Za-zÄÖÜäöüß_ .-]{1,40}): (.*)$")
+_INVOKE_RE = re.compile(r"Invoking chain with (.+)$", re.MULTILINE)
+_TTS_RE = re.compile(r"Generating TTS \[(.+)\]$", re.MULTILINE)
+_BOT_DONE = "Bot stopped speaking"
 
 
 def _load_state() -> dict:
@@ -55,7 +59,7 @@ def _load_state() -> dict:
 
 def _save_state(state: dict) -> None:
     RUN_DIR.mkdir(exist_ok=True)
-    STATE.write_text(json.dumps(state, indent=2))
+    STATE.write_text(json.dumps(state, indent=2, ensure_ascii=False))
 
 
 def _alive(pid: int) -> bool:
@@ -64,37 +68,6 @@ def _alive(pid: int) -> bool:
         return True
     except OSError:
         return False
-
-
-def _parse_messages(md_path: Path) -> list[tuple[str, str]]:
-    """[(speaker, text)] from the '## Conversation' section, in order."""
-    if not md_path.exists():
-        return []
-    text = md_path.read_text(encoding="utf-8")
-    _, _, conv = text.partition("## Conversation")
-    messages: list[tuple[str, str]] = []
-    current: list[str] | None = None
-    speaker = ""
-    for line in conv.splitlines():
-        m = _MSG_RE.match(line)
-        if m:
-            if current is not None:
-                messages.append((speaker, " ".join(current).strip()))
-            speaker, first = m.group(1), m.group(2)
-            current = [first]
-        elif current is not None:
-            if line.strip() in ("", "---"):
-                messages.append((speaker, " ".join(current).strip()))
-                current = None
-            else:
-                current.append(line.strip())
-    if current is not None:
-        messages.append((speaker, " ".join(current).strip()))
-    return messages
-
-
-def _bot_messages(md_path: Path) -> list[str]:
-    return [t for s, t in _parse_messages(md_path) if s != "User"]
 
 
 def cmd_hold(args: argparse.Namespace) -> None:
@@ -118,6 +91,10 @@ def cmd_hold(args: argparse.Namespace) -> None:
 
 
 def cmd_start(args: argparse.Namespace) -> None:
+    backend_log = Path(args.backend_log or os.environ.get("SIM_BACKEND_LOG", ""))
+    if not backend_log.is_file():
+        sys.exit("--backend-log (or SIM_BACKEND_LOG) must point at the uvicorn log file")
+
     # Kill any stale holder from a previous run.
     if STATE.exists():
         old = json.loads(STATE.read_text())
@@ -135,7 +112,6 @@ def cmd_start(args: argparse.Namespace) -> None:
     )
     url = f"{WS_BASE}/ws/{args.user}?{qs}"
 
-    before = set(LOG_ROOT.glob("*/session_*.md"))
     RUN_DIR.mkdir(exist_ok=True)
     ready = RUN_DIR / "ready"
     ready.unlink(missing_ok=True)
@@ -147,7 +123,6 @@ def cmd_start(args: argparse.Namespace) -> None:
         start_new_session=True,
     )
 
-    # Wait for the WS to be accepted, then for the session logger's new files.
     deadline = time.time() + 20
     while time.time() < deadline and not ready.exists():
         if proc.poll() is not None:
@@ -160,35 +135,30 @@ def cmd_start(args: argparse.Namespace) -> None:
         proc.terminate()
         sys.exit("timed out waiting for the WebSocket to connect")
 
-    md_path: Path | None = None
-    deadline = time.time() + 15
-    while time.time() < deadline and md_path is None:
-        new = set(LOG_ROOT.glob("*/session_*.md")) - before
-        if new:
-            md_path = sorted(new)[-1]
-        else:
-            time.sleep(0.3)
-    if md_path is None:
-        proc.terminate()
-        sys.exit("no new session transcript appeared — check backend logs")
-
+    time.sleep(1.5)  # let the pipeline finish assembling before the first /say
     _save_state(
         {
             "pid": proc.pid,
-            "md": str(md_path),
-            "bot_seen": 0,
             "user": args.user,
             "token": token,
             "topic": args.topic,
+            "backend_log": str(backend_log),
+            "offset": backend_log.stat().st_size,
+            "conversation": [],
         }
     )
-    print(f"session started (transcript: {md_path.name}, topic: {args.topic!r})")
-    print("you speak first — send a greeting with: say \"Hallo Lena!\"")
+    print(f"session started (topic: {args.topic!r}, user: {args.user})")
+    print('you speak first — send a greeting with: say "Hallo Lena!"')
+
+
+def _read_new(state: dict) -> str:
+    with open(state["backend_log"], encoding="utf-8", errors="replace") as f:
+        f.seek(state["offset"])
+        return f.read()
 
 
 def cmd_say(args: argparse.Namespace) -> None:
     state = _load_state()
-    md_path = Path(state["md"])
     payload = json.dumps({"text": args.text}).encode()
 
     for attempt in range(3):
@@ -211,39 +181,57 @@ def cmd_say(args: argparse.Namespace) -> None:
                 print("SESSION_ENDED (no active pipeline — goodbye or cap reached)")
                 return
             sys.exit(f"/say failed: HTTP {e.code} {e.read().decode()[:200]}")
+        except urllib.error.URLError as e:
+            sys.exit(f"/say failed: {e}")
 
-    # Wait for a NEW bot message in the transcript.
-    deadline = time.time() + 90
+    def reply_from(chunk: str) -> str | None:
+        """Full reply once the bot finished speaking it; None while pending."""
+        invokes = list(_INVOKE_RE.finditer(chunk))
+        if not invokes:
+            return None
+        tail = chunk[invokes[-1].end():]
+        if _BOT_DONE not in tail:
+            return None
+        spoken = tail[: tail.index(_BOT_DONE)]
+        parts = [m.group(1) for m in _TTS_RE.finditer(spoken)]
+        return " ".join(parts).strip() if parts else None
+
+    deadline = time.time() + 120
     while time.time() < deadline:
-        bots = _bot_messages(md_path)
-        if len(bots) > state["bot_seen"]:
-            time.sleep(1.2)  # settle: let the full block flush to disk
-            bots = _bot_messages(md_path)
-            state["bot_seen"] = len(bots)
-            _save_state(state)
-            print(bots[-1])
-            return
-        if not _alive(state["pid"]):
-            # Pipeline may have closed AFTER answering (goodbye detection).
-            time.sleep(1.5)
-            bots = _bot_messages(md_path)
-            if len(bots) > state["bot_seen"]:
-                state["bot_seen"] = len(bots)
+        chunk = _read_new(state)
+        reply = reply_from(chunk)
+        holder_up = _alive(state["pid"])
+        if reply is None and not holder_up:
+            time.sleep(2.0)  # teardown may still be flushing log lines
+            chunk = _read_new(state)
+            reply = reply_from(chunk)
+            if reply is None:
+                # Last resort: TTS chunks were generated but "Bot stopped
+                # speaking" never logged before the pipeline closed.
+                parts = [m.group(1) for m in _TTS_RE.finditer(chunk)]
+                reply = " ".join(parts).strip() if parts else None
+            if reply:
+                state["offset"] += len(chunk.encode())
+                state["conversation"] += [("STUDENT", args.text), ("LENA", reply)]
                 _save_state(state)
-                print(bots[-1])
-                print("SESSION_ENDED (pipeline closed after this reply)")
-                return
-            print("SESSION_ENDED (connection closed, no reply)")
+                print(reply)
+            print("SESSION_ENDED (connection closed)")
+            return
+        if reply is not None:
+            done_at = chunk.index(_BOT_DONE) + len(_BOT_DONE)
+            state["offset"] += len(chunk[:done_at].encode())
+            state["conversation"] += [("STUDENT", args.text), ("LENA", reply)]
+            _save_state(state)
+            print(reply)
             return
         time.sleep(0.5)
-    sys.exit("timed out waiting for Lena's reply (90s)")
+    sys.exit("timed out waiting for Lena's reply (120s)")
 
 
 def cmd_transcript(_args: argparse.Namespace) -> None:
     state = _load_state()
-    for speaker, text in _parse_messages(Path(state["md"])):
-        who = "STUDENT" if speaker == "User" else "LENA"
-        print(f"{who}: {text}")
+    for speaker, text in state["conversation"]:
+        print(f"{speaker}: {text}\n")
 
 
 def cmd_stop(_args: argparse.Namespace) -> None:
@@ -251,7 +239,7 @@ def cmd_stop(_args: argparse.Namespace) -> None:
     if _alive(state["pid"]):
         os.kill(state["pid"], signal.SIGTERM)
         time.sleep(1.0)
-    print(f"stopped (transcript: {state['md']})")
+    print(f"stopped ({len(state['conversation']) // 2} exchanges)")
 
 
 def main() -> None:
@@ -262,6 +250,7 @@ def main() -> None:
     s.add_argument("--topic", required=True)
     s.add_argument("--user", default="0001")
     s.add_argument("--voice", default="German_Female")
+    s.add_argument("--backend-log", default=None)
     s.set_defaults(fn=cmd_start)
 
     s = sub.add_parser("say", help="send a student turn, print Lena's reply")
