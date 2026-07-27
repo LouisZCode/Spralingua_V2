@@ -110,15 +110,22 @@ class ClientWrapper:
         # turn context → falls back to service-level parent → separate trace).
         self._end_pending: bool = False
 
-        self._max_exchanges = load_prompts(lesson_id)["max_exchanges"]
+        lesson = load_prompts(lesson_id)
+        self._max_exchanges = lesson["max_exchanges"]
         self._exchange_count = 0
-        # Goodbye detection is only armed in the lesson's final exchange (the
-        # count cap minus one, floored at 1 for single-turn lessons). This
-        # prevents the persona's OPENING line — e.g. "great to see you!"
-        # matching the "see you" goodbye phrase — from ending the call on turn 1.
-        # Scales with each lesson: a1_l1 (max 1) is armed from the start, b1_l1
-        # (max 5) only from exchange 4.
-        self._goodbye_after = max(1, self._max_exchanges - 1)
+        # Goodbye detection arms at the lesson's optional `goodbye_after` (an
+        # exchange number, 1-based), or by default only in the final exchange
+        # (count cap minus one, floored at 1 for single-turn lessons). The
+        # late default prevents the persona's OPENING line — e.g. "great to
+        # see you!" matching the "see you" goodbye phrase — from ending the
+        # call on turn 1, and scales per lesson: a1_l1 (max 1) armed from the
+        # start, b1_l1 (max 5) from exchange 4. Lessons where the partner may
+        # genuinely end the chat mid-session set an early explicit value:
+        # tandem uses goodbye_after: 3 (mutual goodbyes, or Lena walking away
+        # from an abusive partner) — without it, TAND-004's cap raise to 30
+        # silently moved the default arming to exchange 29 and disabled
+        # goodbye-driven endings at realistic session lengths.
+        self._goodbye_after = lesson.get("goodbye_after") or max(1, self._max_exchanges - 1)
 
         # Bot reply is buffered here at the end of each LLM stream. The push to
         # the client happens later, when TTSDurationTracker fires its on_turn_complete

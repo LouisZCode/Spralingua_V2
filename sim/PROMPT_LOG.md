@@ -58,3 +58,27 @@ CODE-SIDE (not the prompt): goodbye detection arms at max_exchanges-1 = 29
 (pipecat_wrapper `_goodbye_after`), so mutual goodbyes ended NO sim session
 — TAND-004's 14→30 raise silently disabled goodbye-driven endings. Debrief
 note misattributed Lena's Elbe training to the learner (session 006 note).
+
+## v3 — focus-only nudges, question brake, real goodbyes (2026-07-27)
+
+Targets the five v2 fails + activates goodbye endings:
+- Echo-nudge explicitly scoped to focus structures ONLY (ladder step 1 +
+  hardened NEVER bullet quoting the v2 violations "Mit dem Zucker?" /
+  "Meintest du …?" as counter-examples).
+- Question brake: two question-ended replies in a row → the next reply must
+  contain NO question (was the toothless "every few turns").
+- Vocab soft target: "aim to work two or three in over the whole chat"
+  (v2's "fine if none come up" collapsed usage to ~zero).
+- Rule requests get a dedicated bullet with a model answer ("Hm, Regeln
+  kenne ich nicht, ich sag's einfach so: …") — v2 leaked "Nebensatz"/"Verb"
+  on the first direct ask.
+- Nudge one-turn lifetime (ladder step 4) — kills the stale "Weil ich …?"
+  repeat on an already-correct sentence.
+- NEW: "If it goes badly" block — one calm boundary, then a firm goodbye
+  ends the chat with an abusive partner.
+- CODE: `goodbye_after` per-lesson YAML override in pipecat_wrapper;
+  tandem.yaml sets 3 — farewell in Lena's reply from exchange 3 on ends the
+  session (mutual goodbyes work again; the exit above actually exits).
+  Prompt adds: farewell words are never casual filler mid-conversation.
+
+Sim verdict: (pending)
