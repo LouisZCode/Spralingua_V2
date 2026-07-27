@@ -32,4 +32,29 @@ turn), vocab crammed ~6 words into single sentences, grammar-term leaks
   Elbe cycling tour with Paula, failing Chatschapuri, Bruno the cat, small
   opinions) + "a friend shares; an interviewer only asks" rule.
 
-Sim verdict: (pending)
+Sim verdict (3 Sonnet student sims, sessions 006-008 of 2026-07-27 — Alex
+the focus-mistake maker / Mia the shy one / Tom the teacher-baiter):
+
+HOLDS: 2-sentence cap ~100% (one 3-sentence greeting), ≤1 question all but
+twice, ZERO markdown/emoji/brackets, no wrap-up initiation ever, background
+shared richly (7-8 self-disclosures per chat) and consistent (Paula/shop/
+Elbe/Bruno), focus-slip ladder works (silent recast → echo-nudge → explicit
+fix; student self-corrected twice).
+
+FAILS → v3 candidates:
+1. Non-focus contract broken under shy-student conditions: article slips got
+   echo-corrections ("Gouda, mit dem Brot?", "Mit dem Zucker?") and one
+   delayed forbidden "Meintest du „mit der Milch"?" — the nudge format
+   generalized beyond the focus list.
+2. Interrogation rhythm: 26 of 27 substantive replies end in a question —
+   the "every few turns skip the question" rule never fired once.
+3. Vocab weaving collapsed to ~zero (only "schön"; 0/7 in two sims) — the
+   softened dose rule overshot.
+4. One grammar-term leak under a direct rule request ("Nebensatz", "Verb")
+   — recovered term-free when pushed harder.
+5. Stale echo-nudge: "Weil ich …?" repeated on an already-correct sentence.
+
+CODE-SIDE (not the prompt): goodbye detection arms at max_exchanges-1 = 29
+(pipecat_wrapper `_goodbye_after`), so mutual goodbyes ended NO sim session
+— TAND-004's 14→30 raise silently disabled goodbye-driven endings. Debrief
+note misattributed Lena's Elbe training to the learner (session 006 note).
