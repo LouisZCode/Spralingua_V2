@@ -85,7 +85,9 @@ export default function SzenarioTrainer({
   onNewQuestion: () => void;
   // UI-007: word-gloss popover wiring — optional, absent renders plain text.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
-  onAdd?: (lemma: string) => Promise<void>;
+  // SATZ-013: resolves with the remaining gloss-path adds today (0..3) so
+  // the popover can update its own counter after a successful add.
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
 }) {
   const [phase, setPhase] = useState<Phase>(initialPhase);
   const [recording, setRecording] = useState(false);

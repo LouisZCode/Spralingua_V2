@@ -59,8 +59,11 @@ import {
   genderMissCard as genderMissSatzCard,
   explainAttempt,
   flagVerdict,
+  addWord,
+  fetchGloss,
   UnauthorizedError,
   type AttemptResult,
+  type GlossInfo,
 } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 
@@ -673,6 +676,39 @@ export default function Flow() {
     [token, signOut]
   );
 
+  // UI-009: word-gloss popover wiring — Flow mounts SprechenTrainer,
+  // VerbindungenTrainer and VocabTrainer without onGloss/onAdd, silently
+  // dropping the glossing those trainers offer on their standalone pages.
+  // Same auth-guarded pattern as every handler above, filed under the
+  // sitting's own OBS-007 session id (sid()) like every other Flow attempt.
+  const handleGloss = useCallback(
+    async (word: string, context: string): Promise<GlossInfo> => {
+      if (!token) throw new UnauthorizedError("/satz/gloss");
+      try {
+        return await fetchGloss(token, word, context, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleAddWord = useCallback(
+    async (lemma: string): Promise<{ glossRemaining?: number } | void> => {
+      if (!token) throw new UnauthorizedError("/satz/cards");
+      try {
+        // SATZ-013: gloss-popover add — counts against the daily gloss cap.
+        const res = await addWord(token, lemma, sid(), "gloss");
+        return { glossRemaining: res.glossRemaining };
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
   if (!ready || !token) {
     return null;
   }
@@ -767,6 +803,8 @@ export default function Flow() {
                     round={[deal.item]}
                     onAttempt={handleVerbindungenAttempt}
                     onNewRound={noopNewRound}
+                    onGloss={handleGloss}
+                    onAdd={handleAddWord}
                     flow
                     onFlowDone={(correct) =>
                       handleItemDone("verbindungen", correct)
@@ -791,6 +829,8 @@ export default function Flow() {
                     round={[deal.item]}
                     onAttempt={handleSprechenAttempt}
                     onNewRound={noopNewRound}
+                    onGloss={handleGloss}
+                    onAdd={handleAddWord}
                     flow
                     onFlowDone={(correct) => handleItemDone("sprechen", correct)}
                   />
@@ -821,6 +861,8 @@ export default function Flow() {
                     sessionId={sid()}
                     onGenderMiss={handleSatzGenderMiss}
                     onGenderCues={handleSatzGenderCues}
+                    onGloss={handleGloss}
+                    onAdd={handleAddWord}
                   />
                 )}
                 {deal.kind === "verbformen" && (
@@ -838,6 +880,8 @@ export default function Flow() {
                       handleItemDone("verbformen", correct)
                     }
                     sessionId={sid()}
+                    onGloss={handleGloss}
+                    onAdd={handleAddWord}
                   />
                 )}
               </>

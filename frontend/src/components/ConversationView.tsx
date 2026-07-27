@@ -13,6 +13,8 @@ import SessionSummaryModal, {
 import TandemDebriefModal from "./TandemDebriefModal";
 import { useAuth } from "./auth/AuthContext";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
+import Glossable from "./shared/Glossable";
+import type { GlossInfo } from "./satzschmiede/api";
 
 // Briefing field values are either a single prose string OR a list of
 // short items (renders as bullets). Authors pick per field per lesson.
@@ -59,6 +61,8 @@ export default function ConversationView({
   params,
   onFinish,
   onBack,
+  onGloss,
+  onAdd,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -66,6 +70,11 @@ export default function ConversationView({
   // tandem passes its own so backing out returns to the topic picker while a
   // finished session's "Back to modes" leaves for /practice (BUG-008).
   onBack?: () => void;
+  // UI-009: word-gloss popover wiring for the partner's chat bubbles —
+  // optional, absent renders plain text exactly as before. Only TandemChat
+  // wires these; the /learn lesson flow (VoiceChat) passes nothing.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -391,6 +400,8 @@ export default function ConversationView({
             transcriptRef={transcriptRef}
             onFinish={() => setShowFinishConfirm(true)}
             prominentFinish={params.lesson === "tandem"}
+            onGloss={onGloss}
+            onAdd={onAdd}
           />
         )}
 
@@ -635,6 +646,8 @@ function LivePhase({
   transcriptRef,
   onFinish,
   prominentFinish,
+  onGloss,
+  onAdd,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -645,6 +658,10 @@ function LivePhase({
   // rarely-hit backstop — so tandem gets an unmissable primary button here
   // instead of the small "✕ Finish" other lessons keep.
   prominentFinish?: boolean;
+  // UI-009: word-gloss popover wiring, forwarded from ConversationView —
+  // see that component's props for the contract.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   return (
@@ -748,7 +765,13 @@ function LivePhase({
             }`}
           >
             <div className={`bubble ${m.speaker === "you" ? "bubble-you" : "bubble-them"}`}>
-              {m.text}
+              {/* UI-009: only the partner's own words get glossed — the
+                  learner's bubbles stay plain, they wrote them. */}
+              {m.speaker === "bot" && onGloss ? (
+                <Glossable text={m.text} onGloss={onGloss} onAdd={onAdd} />
+              ) : (
+                m.text
+              )}
             </div>
           </div>
         ))}

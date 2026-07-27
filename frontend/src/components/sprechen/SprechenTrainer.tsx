@@ -42,7 +42,9 @@ export default function SprechenTrainer({
   onNewRound: () => void;
   // UI-007: word-gloss popover wiring — optional, absent renders plain text.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
-  onAdd?: (lemma: string) => Promise<void>;
+  // SATZ-013: resolves with the remaining gloss-path adds today (0..3) so
+  // the popover can update its own counter after a successful add.
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
   // The vocab nudge (POST /sprechen/nudge): which of the learner's own deck
   // words would fit an answer to this task. Optional — Flow never passes it,
   // so Flow stays nudge-free by omission (no flow-gating needed here, unlike

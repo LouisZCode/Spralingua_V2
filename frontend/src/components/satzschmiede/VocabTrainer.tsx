@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { WordRejectedError, type AttemptResult } from "./api";
+import { WordRejectedError, type AttemptResult, type GlossInfo } from "./api";
 import type { DeckCard } from "./deck";
 import { diffTokens, MarkedText } from "../shared/feedback";
+import Glossable from "../shared/Glossable";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -140,6 +141,8 @@ export default function VocabTrainer({
   onDoneChange,
   onGenderMiss,
   onGenderCues,
+  onGloss,
+  onAdd,
 }: {
   deck: DeckCard[];
   // Drop the current card from the pool; the parent refetches the deck and
@@ -205,6 +208,12 @@ export default function VocabTrainer({
   // SATZ-010 hint: lazily fetch Artikel-Anker's ending-cue labels per gender
   // (the /genus/rules sheet) — reason the gender out, never reveal it.
   onGenderCues?: () => Promise<Record<"der" | "die" | "das", string[]>>;
+  // UI-009: word-gloss popover wiring for the card's example sentence — same
+  // optional signatures as SprechenTrainer/VerbindungenTrainer's, absent
+  // renders plain text. Never wired into the attempt/correction area
+  // (UI-008's red/green marking lives there instead).
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
 }) {
   // Two ways to face the pool: "practice" works today's queue (due + a drip
   // of new, shuffled — green pops a card, anything else recycles it); browse
@@ -734,6 +743,11 @@ export default function VocabTrainer({
       ? diffTokens(result.transcript, result.corrected)
       : null;
 
+  // UI-009: the word this card tests must never itself be glossable — strip
+  // a leading article defensively (card.target is already bare per the Card
+  // type, but a stray "der Kühlschrank" still resolves to "Kühlschrank").
+  const glossExclude = card.target.replace(/^(der|die|das)\s+/i, "").trim();
+
   return (
     <div className="mx-auto w-full max-w-xl">
       {/* Progress + navigation. Practice counts down today's queue; browse
@@ -953,7 +967,18 @@ export default function VocabTrainer({
                 ) : (
                   card.example && (
                     <p className="mt-1.5 font-body text-[15px] leading-snug text-ink">
-                      {card.example}
+                      {/* UI-009: glossable only when the parent wires it in —
+                          the target word itself stays excluded, it's the clue. */}
+                      {onGloss ? (
+                        <Glossable
+                          text={card.example}
+                          onGloss={onGloss}
+                          onAdd={onAdd}
+                          exclude={glossExclude}
+                        />
+                      ) : (
+                        card.example
+                      )}
                     </p>
                   )
                 )}

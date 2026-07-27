@@ -59,7 +59,9 @@ export default function VerbindungenTrainer({
   onNewRound: () => void;
   // UI-007: word-gloss popover wiring — optional, absent renders plain text.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
-  onAdd?: (lemma: string) => Promise<void>;
+  // SATZ-013: resolves with the remaining gloss-path adds today (0..3) so
+  // the popover can update its own counter after a successful add.
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
   // FLOW-001: mixed-practice mode — the parent deals exactly one item via
   // `round` and remounts per turn (via `key`), so this trainer only needs to
   // skip its own intro/round chrome and hand the verdict back instead of

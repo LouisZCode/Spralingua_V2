@@ -67,6 +67,10 @@ type GlossableProps = {
   onGloss: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<AddResult>;
   className?: string;
+  // UI-009: a word to skip glossing (case-insensitive, exact token match) —
+  // e.g. the vocab card's own target, which the learner is meant to recall,
+  // not look up. Absent means every word is glossable, as before.
+  exclude?: string;
 };
 
 // `key={text}` forces a full remount whenever the underlying text changes
@@ -76,8 +80,11 @@ export default function Glossable(props: GlossableProps) {
   return <GlossableInner key={props.text} {...props} />;
 }
 
-function GlossableInner({ text, onGloss, onAdd, className }: GlossableProps) {
+function GlossableInner({ text, onGloss, onAdd, className, exclude }: GlossableProps) {
   const tokens = useMemo(() => tokenize(text), [text]);
+  // UI-009: lowercased once — compared per-token below instead of allocating
+  // a new lowercase string per render.
+  const excludeLower = exclude ? exclude.toLowerCase() : null;
 
   // Which word token (by index into `tokens`) currently owns the popover —
   // null = closed. Only one popover open per Glossable instance.
@@ -323,7 +330,7 @@ function GlossableInner({ text, onGloss, onAdd, className }: GlossableProps) {
   return (
     <span className={className}>
       {tokens.map((tok, i) =>
-        tok.isWord ? (
+        tok.isWord && tok.text.toLowerCase() !== excludeLower ? (
           <span
             key={i}
             ref={(el) => {
