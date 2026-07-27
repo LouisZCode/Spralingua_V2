@@ -468,6 +468,7 @@ export default function ConversationView({
             recordError={recorder.error ?? practiceError}
             onStartRecording={recorder.start}
             onStopRecording={recorder.stop}
+            onCancelRecording={recorder.cancel}
           />
         )}
 
@@ -721,6 +722,7 @@ function LivePhase({
   recordError,
   onStartRecording,
   onStopRecording,
+  onCancelRecording,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -735,7 +737,7 @@ function LivePhase({
   // see that component's props for the contract.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
-  // TAND-003: Practice input mode — all six are only meaningful (and only
+  // TAND-003: Practice input mode — all seven are only meaningful (and only
   // ever passed as real values) when practiceMode is true. Natural mode
   // (practiceMode undefined/false, the untouched default) renders none of
   // the record-control JSX below.
@@ -746,6 +748,8 @@ function LivePhase({
   recordError?: string | null;
   onStartRecording?: () => void;
   onStopRecording?: () => void;
+  // UI-006: escape hatch for a take the learner doesn't want sent.
+  onCancelRecording?: () => void;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   // No barge-in by design: while Lena is composing or speaking, recording a
@@ -848,24 +852,40 @@ function LivePhase({
           className="rise-in flex flex-col items-center gap-2 pb-2"
           style={{ animationDelay: "120ms" }}
         >
-          <button
-            type="button"
-            onClick={recording ? onStopRecording : onStartRecording}
-            disabled={recordDisabled}
-            className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
-              recording
-                ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
-                : "border-flag-red-deep bg-flag-red text-white"
-            }`}
-            style={
-              { ["--shadow-color"]: "var(--color-flag-red-deep)" } as React.CSSProperties
-            }
-          >
-            {recording ? `Stop · ${elapsed}s` : sending ? "Sending…" : "Record"}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={recording ? onStopRecording : onStartRecording}
+              disabled={recordDisabled}
+              className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
+                recording
+                  ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
+                  : "border-flag-red-deep bg-flag-red text-white"
+              }`}
+              style={
+                { ["--shadow-color"]: "var(--color-flag-red-deep)" } as React.CSSProperties
+              }
+            >
+              {recording ? `Stop · ${elapsed}s` : sending ? "Sending…" : "Record"}
+            </button>
+            {/* UI-006: visible only mid-recording — the escape hatch for a
+                take you don't want sent. */}
+            {recording && (
+              <button
+                type="button"
+                onClick={onCancelRecording}
+                aria-label="Discard recording"
+                title="Discard recording"
+                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-white font-display text-[18px] font-black text-ink"
+                style={{ ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties}
+              >
+                ✕
+              </button>
+            )}
+          </div>
           <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
             {recording
-              ? "tap stop to send"
+              ? "speak, then tap stop — ✕ discards"
               : botBusy
                 ? "wait for Lena to finish"
                 : sending

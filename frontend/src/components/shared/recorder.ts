@@ -24,12 +24,13 @@ export interface UseRecorderResult {
   error: string | null;
   start: () => Promise<void>;
   stop: () => void;
+  cancel: () => void;
 }
 
 /**
  * `onStop` fires once per completed recording with the finished clip — never
- * for a recording discarded by unmounting mid-take. Callers decide what
- * "auto-send on stop" means (e.g. POST the blob).
+ * for a recording discarded via `cancel()` OR by unmounting mid-take. Callers
+ * decide what "auto-send on stop" means (e.g. POST the blob).
  */
 export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   const [recording, setRecording] = useState(false);
@@ -50,6 +51,20 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   onStopRef.current = onStop;
 
   const stop = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (recorderRef.current && recorderRef.current.state !== "inactive") {
+      recorderRef.current.stop();
+    }
+    setRecording(false);
+  }, []);
+
+  // UI-006: a messed-up take — kill the clip without handing it to onStop;
+  // the next start() resets discardRef, so the caller just records again.
+  const cancel = useCallback(() => {
+    discardRef.current = true;
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -115,5 +130,5 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
     }
   }, []);
 
-  return { recording, elapsed, error, start, stop };
+  return { recording, elapsed, error, start, stop, cancel };
 }
