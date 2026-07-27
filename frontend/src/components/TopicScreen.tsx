@@ -5,13 +5,29 @@ import Link from "next/link";
 import Image from "next/image";
 import { HTTP_BASE } from "@/lib/api";
 
-// The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP). The
-// learner picks what to talk about with Lena: a suggested topic (random pick +
-// shuffle), a tap-to-choose chip from the list, or their own free-text theme.
-// The chosen string becomes the `topic` param handed to ConversationView.
+// The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP;
+// TAND-005 grew the topic pool and reworked the suggestions below). The
+// learner picks what to talk about with Lena: one of 3 randomly recommended
+// topics (tap a card to start immediately, or shuffle for a fresh 3), or
+// their own free-text theme. The chosen string becomes the `topic` param
+// handed to ConversationView.
 const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
+
+// Draw 3 distinct topics from the pool. Only ever called from the mount
+// effect below and the shuffle click handler — never during render — so the
+// pick can't disagree with the server-rendered HTML (no hydration mismatch;
+// same rule Szenario.tsx follows for its own random picks).
+function pickThree(pool: string[]): string[] {
+  const remaining = [...pool];
+  const picks: string[] = [];
+  while (remaining.length > 0 && picks.length < 3) {
+    const i = Math.floor(Math.random() * remaining.length);
+    picks.push(remaining.splice(i, 1)[0]);
+  }
+  return picks;
+}
 
 export default function TopicScreen({
   onStart,
@@ -19,12 +35,12 @@ export default function TopicScreen({
   onStart: (topic: string) => void;
 }) {
   const [topics, setTopics] = useState<string[]>([]);
-  const [selected, setSelected] = useState<string>("");
+  const [recommended, setRecommended] = useState<string[]>([]);
   const [custom, setCustom] = useState<string>("");
 
-  // Load the suggestion list once; seed a random highlighted pick so the
-  // learner can start in one click. A fetch failure leaves the list empty —
-  // the free-text field still works, so the screen is never a dead end.
+  // Load the topic pool once; seed today's 3 recommendations from it. A
+  // fetch failure leaves both lists empty — the free-text field still works,
+  // so the screen is never a dead end.
   useEffect(() => {
     let alive = true;
     fetch(`${HTTP_BASE}/tandem/topics`)
@@ -33,9 +49,7 @@ export default function TopicScreen({
         if (!alive) return;
         const list = data.topics ?? [];
         setTopics(list);
-        if (list.length > 0) {
-          setSelected(list[Math.floor(Math.random() * list.length)]);
-        }
+        setRecommended(pickThree(list));
       })
       .catch(() => {
         /* free-text remains available */
@@ -45,21 +59,12 @@ export default function TopicScreen({
     };
   }, []);
 
-  // What actually gets sent: a typed theme always wins over a picked chip.
-  const effectiveTopic = useMemo(
-    () => custom.trim() || selected,
-    [custom, selected],
-  );
+  // What the free-text Start button sends. The 3 recommendation cards below
+  // start the chat directly on tap and don't go through this at all.
+  const effectiveTopic = useMemo(() => custom.trim(), [custom]);
 
   const shuffle = () => {
-    if (topics.length < 2) return;
-    // Pick a different one when we can, so the button visibly does something.
-    let next = selected;
-    for (let i = 0; i < 8 && next === selected; i++) {
-      next = topics[Math.floor(Math.random() * topics.length)];
-    }
-    setSelected(next);
-    setCustom("");
+    setRecommended(pickThree(topics));
   };
 
   return (
@@ -107,60 +112,38 @@ export default function TopicScreen({
           </p>
         </div>
 
-        {/* Highlighted suggestion + shuffle */}
-        <div
-          className="rise-in mt-9 rounded-[24px] border-[3px] border-ink bg-flag-gold-soft p-6"
-          style={{ ...inkShadow, animationDelay: "80ms" }}
-        >
-          <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-            Suggested topic
-          </p>
-          <div className="mt-2 flex items-center justify-between gap-4">
-            <p className="font-display text-[22px] font-black leading-tight text-ink">
-              {selected || "Anything you like"}
-            </p>
-            <button
-              type="button"
-              onClick={shuffle}
-              disabled={topics.length < 2}
-              className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-40"
-              style={inkShadow}
-            >
-              Shuffle
-            </button>
-          </div>
-        </div>
-
-        {/* All topics as tappable chips */}
-        {topics.length > 0 && (
+        {/* Today's 3 recommended topics + shuffle */}
+        {recommended.length > 0 && (
           <div
-            className="rise-in mt-7"
-            style={{ animationDelay: "140ms" }}
+            className="rise-in mt-9"
+            style={{ animationDelay: "80ms" }}
           >
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-              Or choose another
-            </p>
-            <div className="mt-3 flex flex-wrap gap-2.5">
-              {topics.map((t) => {
-                const active = !custom.trim() && t === selected;
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => {
-                      setSelected(t);
-                      setCustom("");
-                    }}
-                    className={`rounded-full border-[2px] border-ink px-4 py-2 font-body text-[14px] font-semibold transition ${
-                      active
-                        ? "bg-ink text-white"
-                        : "bg-white text-ink hover:bg-flag-gold-soft"
-                    }`}
-                  >
-                    {t}
-                  </button>
-                );
-              })}
+            <div className="flex items-center justify-between gap-4">
+              <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+                Our recommendation for you today
+              </p>
+              <button
+                type="button"
+                onClick={shuffle}
+                disabled={topics.length <= 3}
+                className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-40"
+                style={inkShadow}
+              >
+                Shuffle
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-3">
+              {recommended.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onStart(t)}
+                  className="rounded-2xl border-[3px] border-ink bg-flag-gold-soft px-5 py-5 text-left font-display text-[17px] font-black leading-tight text-ink transition hover:bg-white hover:text-flag-red"
+                  style={inkShadow}
+                >
+                  {t}
+                </button>
+              ))}
             </div>
           </div>
         )}
