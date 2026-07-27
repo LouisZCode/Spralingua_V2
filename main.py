@@ -7,8 +7,9 @@ import re
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Request, WebSocket
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import text
 
@@ -16,7 +17,7 @@ from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts, load_tandem_topics
-from auth import AuthError, decode_session_jwt, router as auth_router
+from auth import AuthError, decode_session_jwt, get_current_user_id, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from genus import (
     load_exceptions as load_genus_exceptions,
@@ -40,8 +41,9 @@ from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
-from pipeline.factory import ACTIVE_TASKS, validate_lesson_languages
+from pipeline.factory import ACTIVE_TASKS, lesson_language, validate_lesson_languages
 from satz import router as satz_router, sync_curated_content
+from satz.examiner import transcribe_attempt
 from security import (
     client_ip,
     demo_release,
@@ -51,6 +53,17 @@ from security import (
     origin_allowed,
     say_try_admit,
     say_user_try_admit,
+)
+
+# TAND-003: /tandem/say-audio (below) reuses satz/examiner.py::transcribe_attempt
+# as-is — that helper hardcodes German + nova-3 for its prerecorded Deepgram
+# call rather than taking a language param. That happens to already match
+# tandem's own runtime language (pipeline/factory.py::lesson_language), so no
+# new param/plumbing was added. Fail loud at import time if that ever drifts
+# (e.g. tandem joining ENGLISH_LESSONS) instead of silently mis-transcribing.
+assert lesson_language("tandem") == "de", (
+    "tandem's runtime language changed — satz.examiner.transcribe_attempt is "
+    "hardcoded to German and no longer matches; update /tandem/say-audio"
 )
 
 # The session JWT rides as ``?token=`` on the WS handshake URL (see
@@ -442,3 +455,79 @@ async def say(user_id: str, body: SayBody, request: Request):
     context = LLMContext([{"role": "user", "content": text}])
     await task.queue_frame(LLMContextFrame(context=context))
     return {"ok": True}
+
+
+# Practice-mode (TAND-003): a whole recorded utterance is comfortably under a
+# minute of opus/aac at typical bitrates — same cap style/order-of-magnitude
+# as sprechen/routes.py's _MAX_AUDIO_BYTES, sized up for the 90s recorder cap
+# (frontend/src/components/shared/recorder.ts) instead of Sprechen's shorter one.
+_TANDEM_AUDIO_MAX_BYTES = 4_000_000
+
+
+@app.post("/tandem/say-audio")
+async def tandem_say_audio(
+    audio: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Practice-mode counterpart to ``/say`` (TAND-003): the learner records a
+    whole utterance at their own pace (tap record -> speak -> tap stop) instead
+    of using the streaming-VAD Natural mode. The browser uploads the finished
+    clip here; we transcribe it and inject the transcript into the SAME live
+    pipeline ``/say/{user_id}`` feeds — same ``LLMContextFrame`` mechanism, so
+    exchange counting, goodbye detection, and the tandem debrief (all hanging
+    off ``ClientWrapper.astream``) keep working exactly as they do for a typed
+    or spoken-streaming turn.
+
+    Auth is ``get_current_user_id`` (the session JWT), same dependency every
+    other authenticated HTTP route in this codebase uses. The JWT subject IS
+    the ``ACTIVE_TASKS`` lookup key — there is no path/body user id to trust
+    or spoof, unlike ``/say``'s two-branch dance (that route also serves the
+    token-free public demo, which this one never does). Same per-user rate
+    gate as ``/say``'s authenticated branch (``say_user_try_admit``) — without
+    it a scripted caller could hammer Deepgram + the LLM for free.
+
+    Transcription reuses ``satz/examiner.py::transcribe_attempt`` verbatim
+    (Deepgram's prerecorded REST endpoint, nova-3, German) — the exact model +
+    language ``services/stt.py``'s streaming STT already uses for tandem (see
+    the module-level assert above this route). No new HTTP client/SDK needed:
+    aiohttp is the established pattern for one-shot Deepgram calls in this
+    codebase (satz/examiner.py, also used by sprechen/szenario/verbformen).
+    """
+    if not say_user_try_admit(user_id):
+        raise HTTPException(status_code=429, detail="too many requests")
+
+    task = ACTIVE_TASKS.get(user_id)
+    if task is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No active session — start or resume the conversation first.",
+        )
+
+    data = await audio.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="We didn't get any audio — try again.")
+    if len(data) > _TANDEM_AUDIO_MAX_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="That recording is too long — try a shorter turn.",
+        )
+
+    try:
+        transcript = await transcribe_attempt(data, audio.content_type)
+    except Exception as e:  # noqa: BLE001 — a Deepgram outage must 502, not 500
+        logger.warning(f"Tandem say-audio transcription failed: {type(e).__name__}: {e}")
+        raise HTTPException(
+            status_code=502,
+            detail="Couldn't process the audio — try again in a moment.",
+        )
+
+    text = (transcript or "").strip()
+    if not text:
+        raise HTTPException(
+            status_code=422,
+            detail="We couldn't hear anything — try again a bit closer to the mic.",
+        )
+
+    context = LLMContext([{"role": "user", "content": text}])
+    await task.queue_frame(LLMContextFrame(context=context))
+    return {"transcript": text}

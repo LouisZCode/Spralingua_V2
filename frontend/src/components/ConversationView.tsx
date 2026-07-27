@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { PipecatClient } from "@pipecat-ai/client-js";
 import {
   WebSocketTransport,
@@ -14,6 +14,7 @@ import TandemDebriefModal from "./TandemDebriefModal";
 import { useAuth } from "./auth/AuthContext";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import Glossable from "./shared/Glossable";
+import { useRecorder } from "./shared/recorder";
 import type { GlossInfo } from "./satzschmiede/api";
 
 // Briefing field values are either a single prose string OR a list of
@@ -63,6 +64,7 @@ export default function ConversationView({
   onBack,
   onGloss,
   onAdd,
+  practiceMode,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -75,6 +77,11 @@ export default function ConversationView({
   // wires these; the /learn lesson flow (VoiceChat) passes nothing.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
+  // TAND-003: Practice input mode — tap record / speak at your own pace / tap
+  // stop, instead of the streaming-VAD Natural mode. Undefined/false (every
+  // existing caller) is Natural and stays byte-identical: the mic connects
+  // exactly as before and none of the practice branches below ever render.
+  practiceMode?: boolean;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -237,7 +244,13 @@ export default function ConversationView({
       const client = new PipecatClient({
         transport,
         enableCam: false,
-        enableMic: true,
+        // TAND-003: Practice mode never streams mic audio up — the learner
+        // records locally and the finished clip goes through
+        // POST /tandem/say-audio instead. Bot audio-out + RTVI messages are
+        // unaffected either way (enableMic only gates the transport's own
+        // getUserMedia/upstream-audio path, verified against
+        // @pipecat-ai/websocket-transport).
+        enableMic: !practiceMode,
         callbacks: {
           onConnected: () => setStatus("Connected"),
           onDisconnected: () => {
@@ -366,6 +379,52 @@ export default function ConversationView({
     }
   };
 
+  // TAND-003 Practice mode: fires once per completed recording (never for one
+  // discarded by unmounting mid-take — see useRecorder). Uploads the clip,
+  // appends the returned transcript as a "you" bubble (Natural mode gets that
+  // bubble via onUserTranscript, which never fires here since the mic is
+  // off), and flips to "agent_thinking" so the UI reads right until the bot's
+  // reply streams in. Errors surface inline and never touch `status`/the
+  // session — a failed upload can always be retried by recording again.
+  const [practiceError, setPracticeError] = useState<string | null>(null);
+  const [practiceSending, setPracticeSending] = useState(false);
+
+  const handlePracticeStop = useCallback(
+    async (blob: Blob) => {
+      if (!token || !user) return;
+      setPracticeSending(true);
+      setPracticeError(null);
+      try {
+        const form = new FormData();
+        form.append("audio", blob, "practice-turn.webm");
+        const r = await fetch(`${HTTP_BASE}/tandem/say-audio`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body: form,
+        });
+        if (!r.ok) {
+          const detail = (await r.json().catch(() => null))?.detail;
+          setPracticeError(
+            typeof detail === "string" ? detail : "Couldn't send that — try again."
+          );
+          return;
+        }
+        const data: { transcript?: string } = await r.json();
+        if (data.transcript) {
+          setMessages((prev) => [...prev, { speaker: "you", text: data.transcript! }]);
+          setSpeakerState("agent_thinking");
+        }
+      } catch {
+        setPracticeError("Couldn't send that — check your connection and try again.");
+      } finally {
+        setPracticeSending(false);
+      }
+    },
+    [token, user]
+  );
+
+  const recorder = useRecorder(handlePracticeStop);
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-white text-ink">
       {/* Bauhaus decorations — quieter than SetupView so chat reads cleanly */}
@@ -402,6 +461,13 @@ export default function ConversationView({
             prominentFinish={params.lesson === "tandem"}
             onGloss={onGloss}
             onAdd={onAdd}
+            practiceMode={practiceMode}
+            recording={recorder.recording}
+            elapsed={recorder.elapsed}
+            sending={practiceSending}
+            recordError={recorder.error ?? practiceError}
+            onStartRecording={recorder.start}
+            onStopRecording={recorder.stop}
           />
         )}
 
@@ -648,6 +714,13 @@ function LivePhase({
   prominentFinish,
   onGloss,
   onAdd,
+  practiceMode,
+  recording,
+  elapsed,
+  sending,
+  recordError,
+  onStartRecording,
+  onStopRecording,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -662,8 +735,25 @@ function LivePhase({
   // see that component's props for the contract.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
   onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
+  // TAND-003: Practice input mode — all six are only meaningful (and only
+  // ever passed as real values) when practiceMode is true. Natural mode
+  // (practiceMode undefined/false, the untouched default) renders none of
+  // the record-control JSX below.
+  practiceMode?: boolean;
+  recording?: boolean;
+  elapsed?: number;
+  sending?: boolean;
+  recordError?: string | null;
+  onStartRecording?: () => void;
+  onStopRecording?: () => void;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
+  // No barge-in by design: while Lena is composing or speaking, recording a
+  // new turn is disabled — same rule the streaming path enforces implicitly
+  // (STTMuteFilter mutes the mic while the bot talks; see pipeline/factory.py).
+  const botBusy =
+    speakerState === "agent_thinking" || speakerState === "agent_speaking";
+  const recordDisabled = !recording && (botBusy || !!sending);
   return (
     <>
       {/* Header */}
@@ -749,6 +839,46 @@ function LivePhase({
           {STATE_LABEL[speakerState]}
         </p>
       </div>
+
+      {/* TAND-003 Practice mode: tap-record / tap-stop, auto-sends on stop —
+          same interaction language as SprechenTrainer/SzenarioTrainer's own
+          record controls. Hidden entirely in Natural mode. */}
+      {practiceMode && (
+        <div
+          className="rise-in flex flex-col items-center gap-2 pb-2"
+          style={{ animationDelay: "120ms" }}
+        >
+          <button
+            type="button"
+            onClick={recording ? onStopRecording : onStartRecording}
+            disabled={recordDisabled}
+            className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
+              recording
+                ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
+                : "border-flag-red-deep bg-flag-red text-white"
+            }`}
+            style={
+              { ["--shadow-color"]: "var(--color-flag-red-deep)" } as React.CSSProperties
+            }
+          >
+            {recording ? `Stop · ${elapsed}s` : sending ? "Sending…" : "Record"}
+          </button>
+          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+            {recording
+              ? "tap stop to send"
+              : botBusy
+                ? "wait for Lena to finish"
+                : sending
+                  ? "sending your turn…"
+                  : "tap record, then speak"}
+          </p>
+          {recordError && (
+            <p className="max-w-[320px] text-center font-body text-[13px] font-semibold text-flag-red-deep">
+              {recordError}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Transcript — caps at ~35vh so the orb stays the hero */}
       <section

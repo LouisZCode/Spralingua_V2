@@ -15,6 +15,24 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
 
+// TAND-003: Natural (streaming VAD, mic always hot) vs Practice (tap record
+// -> speak at your own pace -> tap stop -> auto-send) input mode, persisted
+// like Szenario's B1/B2 tier toggle (Szenario.tsx). Default is Natural — the
+// existing behavior stays byte-identical when selected.
+const MODE_STORAGE_KEY = "tandem-input-mode-v1";
+
+type InputMode = "natural" | "practice";
+
+function readMode(): InputMode {
+  try {
+    return localStorage.getItem(MODE_STORAGE_KEY) === "practice"
+      ? "practice"
+      : "natural";
+  } catch {
+    return "natural";
+  }
+}
+
 // Draw 3 distinct topics from the pool. Only ever called from the mount
 // effect below and the shuffle click handler — never during render — so the
 // pick can't disagree with the server-rendered HTML (no hydration mismatch;
@@ -32,11 +50,24 @@ function pickThree(pool: string[]): string[] {
 export default function TopicScreen({
   onStart,
 }: {
-  onStart: (topic: string) => void;
+  onStart: (topic: string, mode: InputMode) => void;
 }) {
   const [topics, setTopics] = useState<string[]>([]);
   const [recommended, setRecommended] = useState<string[]>([]);
   const [custom, setCustom] = useState<string>("");
+
+  // TAND-003: default to "natural" and hydrate from localStorage in an
+  // effect — SSR-safe, same pattern Szenario.tsx uses for its level toggle
+  // (reading storage during render would mismatch the server-rendered HTML).
+  const [mode, setMode] = useState<InputMode>("natural");
+
+  useEffect(() => {
+    if (readMode() === "practice") {
+      // SSR-safe hydration from localStorage, same idiom as Szenario.tsx's level toggle.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setMode("practice");
+    }
+  }, []);
 
   // Load the topic pool once; seed today's 3 recommendations from it. A
   // fetch failure leaves both lists empty — the free-text field still works,
@@ -110,6 +141,42 @@ export default function TopicScreen({
             Pick a topic to break the ice — or bring your own. Lena chats only in
             German and remembers your past conversations.
           </p>
+
+          {/* TAND-003: Natural (mic always hot) vs Practice (tap record, tap
+              stop, auto-send) input mode — same two-button pill language as
+              Szenario's B1/B2 toggle. */}
+          <div className="mt-5 flex items-center gap-3">
+            <span className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+              Input
+            </span>
+            <div className="inline-flex overflow-hidden rounded-full border-[3px] border-ink">
+              {(
+                [
+                  { key: "natural" as const, label: "Natural" },
+                  { key: "practice" as const, label: "Practice" },
+                ]
+              ).map(({ key, label }) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    if (key === mode) return;
+                    setMode(key);
+                    try {
+                      localStorage.setItem(MODE_STORAGE_KEY, key);
+                    } catch {}
+                  }}
+                  className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
+                    key === mode
+                      ? "bg-ink text-white"
+                      : "bg-white text-ink hover:text-flag-red"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Today's 3 recommended topics + shuffle */}
@@ -137,7 +204,7 @@ export default function TopicScreen({
                 <button
                   key={t}
                   type="button"
-                  onClick={() => onStart(t)}
+                  onClick={() => onStart(t, mode)}
                   className="rounded-2xl border-[3px] border-ink bg-flag-gold-soft px-5 py-5 text-left font-display text-[17px] font-black leading-tight text-ink transition hover:bg-white hover:text-flag-red"
                   style={inkShadow}
                 >
@@ -171,7 +238,7 @@ export default function TopicScreen({
         <div className="rise-in mt-9" style={{ animationDelay: "260ms" }}>
           <button
             type="button"
-            onClick={() => onStart(effectiveTopic)}
+            onClick={() => onStart(effectiveTopic, mode)}
             disabled={!effectiveTopic}
             className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
             style={inkShadow}
