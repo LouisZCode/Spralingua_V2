@@ -5,7 +5,11 @@
 // spans, pointer events, and a module-level session cache. Renders pixel-
 // identical to plain text at rest (no permanent underline/color change);
 // the only always-on style is `cursor-help`, which is visually inert until
-// the pointer is actually over the word.
+// the pointer is actually over the word. The popover itself portals to
+// `document.body` so its `position: fixed` always anchors to the viewport,
+// even when a host ancestor (e.g. a `rise-in` animated container, which
+// leaves behind a permanent `transform` via `animation-fill-mode: both`)
+// would otherwise become its containing block.
 import {
   useCallback,
   useEffect,
@@ -15,6 +19,7 @@ import {
   useState,
   type PointerEvent as ReactPointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import type { GlossInfo } from "../satzschmiede/api";
 
 // SSR renders "use client" components too; useLayoutEffect warns when it
@@ -349,79 +354,87 @@ function GlossableInner({ text, onGloss, onAdd, className, exclude }: GlossableP
         )
       )}
 
-      {openIndex !== null && (
-        <span
-          ref={popoverRef}
-          onPointerEnter={handlePopoverPointerEnter}
-          onPointerLeave={handlePopoverPointerLeave}
-          style={{
-            position: "fixed",
-            top: coords ? coords.top : -9999,
-            left: coords ? coords.left : -9999,
-            visibility: coords ? "visible" : "hidden",
-          }}
-          className="z-50 block w-[240px] max-w-[260px] rounded-[14px] border-[3px] border-ink bg-white px-3.5 py-3 text-left font-body normal-case not-italic tracking-normal text-ink shadow-[4px_4px_0_var(--color-ink)]"
-        >
-          {glossLoading ? (
-            <span className="block text-[12px] text-ink-muted">…</span>
-          ) : glossData ? (
-            <>
-              <span className="block font-display text-[14px] font-black leading-snug text-ink">
-                {glossData.article ? `${glossData.article} ` : ""}
-                {glossData.lemma}
-              </span>
-              <span className="mt-1 block text-[12px] leading-snug text-ink-soft">
-                {glossData.gloss}
-              </span>
-              {glossData.example && (
-                <span className="mt-1 block italic leading-snug text-[12px] text-ink-muted">
-                  {glossData.example}
+      {openIndex !== null &&
+        // Portaled to document.body (see top-of-file comment) so `position:
+        // fixed` below anchors to the viewport regardless of host ancestors.
+        // No `mounted` guard needed for SSR: this branch only renders once
+        // `openIndex !== null`, and `openIndex` starts at `null`, so
+        // createPortal can never execute during server render or hydration's
+        // first pass.
+        createPortal(
+          <span
+            ref={popoverRef}
+            onPointerEnter={handlePopoverPointerEnter}
+            onPointerLeave={handlePopoverPointerLeave}
+            style={{
+              position: "fixed",
+              top: coords ? coords.top : -9999,
+              left: coords ? coords.left : -9999,
+              visibility: coords ? "visible" : "hidden",
+            }}
+            className="z-50 block w-[240px] max-w-[260px] rounded-[14px] border-[3px] border-ink bg-white px-3.5 py-3 text-left font-body normal-case not-italic tracking-normal text-ink shadow-[4px_4px_0_var(--color-ink)]"
+          >
+            {glossLoading ? (
+              <span className="block text-[12px] text-ink-muted">…</span>
+            ) : glossData ? (
+              <>
+                <span className="block font-display text-[14px] font-black leading-snug text-ink">
+                  {glossData.article ? `${glossData.article} ` : ""}
+                  {glossData.lemma}
                 </span>
-              )}
-              {onAdd && (
-                <span className="mt-2 block border-t-2 border-ink/10 pt-2">
-                  {glossData.inDeck ? (
-                    <span className="block text-[11px] font-semibold text-ink-muted">
-                      In deinem Deck ✓
-                    </span>
-                  ) : addState === "done" ? (
-                    <span className="block text-[11px] font-semibold text-success">
-                      Hinzugefügt ✓
-                    </span>
-                  ) : glossData.glossAddsRemaining === 0 ? (
-                    // SATZ-013: cap hit — the button never renders, so there
-                    // is no way to fire an add this backend would reject.
-                    <span className="block text-[11px] font-semibold text-ink-muted">
-                      Tageslimit erreicht
-                    </span>
-                  ) : (
-                    <>
-                      <button
-                        type="button"
-                        onClick={handleAdd}
-                        disabled={addState === "pending"}
-                        className="inline-flex items-center rounded-full border-2 border-flag-red-deep bg-flag-red px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-white disabled:opacity-50"
-                      >
-                        {addState === "pending" ? "…" : "＋ Zu meinen Wörtern"}
-                      </button>
-                      {typeof glossData.glossAddsRemaining === "number" && (
-                        <span className="mt-1 block text-[10px] font-semibold text-ink-faint">
-                          {`noch ${glossData.glossAddsRemaining} heute`}
-                        </span>
-                      )}
-                    </>
-                  )}
-                  {addError && (
-                    <span className="mt-1 block text-[11px] font-semibold text-flag-red-deep">
-                      Konnte nicht hinzufügen
-                    </span>
-                  )}
+                <span className="mt-1 block text-[12px] leading-snug text-ink-soft">
+                  {glossData.gloss}
                 </span>
-              )}
-            </>
-          ) : null}
-        </span>
-      )}
+                {glossData.example && (
+                  <span className="mt-1 block italic leading-snug text-[12px] text-ink-muted">
+                    {glossData.example}
+                  </span>
+                )}
+                {onAdd && (
+                  <span className="mt-2 block border-t-2 border-ink/10 pt-2">
+                    {glossData.inDeck ? (
+                      <span className="block text-[11px] font-semibold text-ink-muted">
+                        In deinem Deck ✓
+                      </span>
+                    ) : addState === "done" ? (
+                      <span className="block text-[11px] font-semibold text-success">
+                        Hinzugefügt ✓
+                      </span>
+                    ) : glossData.glossAddsRemaining === 0 ? (
+                      // SATZ-013: cap hit — the button never renders, so there
+                      // is no way to fire an add this backend would reject.
+                      <span className="block text-[11px] font-semibold text-ink-muted">
+                        Tageslimit erreicht
+                      </span>
+                    ) : (
+                      <>
+                        <button
+                          type="button"
+                          onClick={handleAdd}
+                          disabled={addState === "pending"}
+                          className="inline-flex items-center rounded-full border-2 border-flag-red-deep bg-flag-red px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-white disabled:opacity-50"
+                        >
+                          {addState === "pending" ? "…" : "＋ Zu meinen Wörtern"}
+                        </button>
+                        {typeof glossData.glossAddsRemaining === "number" && (
+                          <span className="mt-1 block text-[10px] font-semibold text-ink-faint">
+                            {`noch ${glossData.glossAddsRemaining} heute`}
+                          </span>
+                        )}
+                      </>
+                    )}
+                    {addError && (
+                      <span className="mt-1 block text-[11px] font-semibold text-flag-red-deep">
+                        Konnte nicht hinzufügen
+                      </span>
+                    )}
+                  </span>
+                )}
+              </>
+            ) : null}
+          </span>,
+          document.body
+        )}
     </span>
   );
 }
