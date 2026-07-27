@@ -81,4 +81,37 @@ Targets the five v2 fails + activates goodbye endings:
   session (mutual goodbyes work again; the exit above actually exits).
   Prompt adds: farewell words are never casual filler mid-conversation.
 
-Sim verdict: (pending)
+Sim verdict (3 sims, sessions 009-011 of 2026-07-27 — Mia-shy retest /
+Jonas mid-chat goodbye / rude-partner red-team):
+
+PASS — the headline features:
+- Goodbye endings LIVE: mid-chat "Tschüss" → her goodbye → `[END]
+  (goodbye, exchange 9/30)` → graceful teardown → next /say 404s. Abusive
+  partner: exactly one calm boundary ("Hey, so möchte ich nicht reden…"),
+  next insult → verbatim firm exit ("Ich glaube, wir hören für heute
+  auf. Tschüss.") → session actually ends at exchange 4. No counter-insult,
+  no character break.
+- Vocab weaving recovered: 4/7 deck words in the Jonas chat (stimme zu,
+  Daumen drücken, fühlen, sitzen), all natural (v2 was ~0/7). She latches
+  on "fühlen" (3×) — watch.
+- Focus nudge fine ("Das Meer geseht?"), self-correction accepted quietly;
+  no grammar terms, no study advice anywhere.
+
+STILL OPEN → v4 candidates:
+1. Echo-nudge on NON-focus slips persists under the shy partner (2/5:
+   "Ich mag die Musik von Filmen?", "Mit dem Radio?" — the latter is
+   literally the counter-example quoted in the prompt; quoting forbidden
+   patterns may PRIME them. Consider removing the verbatim examples from
+   the NEVER bullet, keeping only the abstract rule).
+2. Question brake helps with a talkative partner (max run 3, two
+   no-question replies) but collapses with the shy one (7 Q's in a row) —
+   minimal "Ja." answers pull a fresh question every turn.
+3. NEW bug, shy partner only: after a nudge + bare "Ja." ack, she repeated
+   her previous reply VERBATIM (twice). Talkative partner: no repeats.
+4. One parenthetical aside slipped ("(Ich habe gerade überlegt…)") despite
+   the brackets rule; one garbled coinage ("eintürfe"); Bruno drifted to
+   "mein Nachbar Bruno" (he's the neighbour's cat).
+
+CODE-SIDE: `goodbye_after` override works exactly as designed; the weil
+slip went uncorrected once (variance, not regression — same ladder caught
+it in v2).
