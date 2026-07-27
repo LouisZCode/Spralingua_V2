@@ -223,6 +223,11 @@ def cmd_say(args: argparse.Namespace) -> None:
             state["conversation"] += [("STUDENT", args.text), ("LENA", reply)]
             _save_state(state)
             print(reply)
+            # Graceful-end marker: the wrapper logs [END] when goodbye/cap
+            # detection fires; the pipeline closes right after this reply.
+            end = re.search(r"\[END\] Pending pipeline close \(([^)]+)\)", chunk)
+            if end:
+                print(f"SESSION_ENDING ({end.group(1)})")
             return
         time.sleep(0.5)
     sys.exit("timed out waiting for Lena's reply (120s)")
