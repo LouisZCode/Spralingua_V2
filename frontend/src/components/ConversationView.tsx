@@ -390,6 +390,7 @@ export default function ConversationView({
             speakerState={speakerState}
             transcriptRef={transcriptRef}
             onFinish={() => setShowFinishConfirm(true)}
+            prominentFinish={params.lesson === "tandem"}
           />
         )}
 
@@ -633,12 +634,17 @@ function LivePhase({
   speakerState,
   transcriptRef,
   onFinish,
+  prominentFinish,
 }: {
   title: string;
   messages: ChatMessage[];
   speakerState: SpeakerState;
   transcriptRef: React.RefObject<HTMLElement | null>;
   onFinish: () => void;
+  // TAND-004: tandem sessions end by user choice — the exchange cap is a
+  // rarely-hit backstop — so tandem gets an unmissable primary button here
+  // instead of the small "✕ Finish" other lessons keep.
+  prominentFinish?: boolean;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   return (
@@ -653,18 +659,33 @@ function LivePhase({
             {title}
           </h1>
         </div>
-        <button
-          onClick={onFinish}
-          aria-label="Finish lesson"
-          className="btn-3d shrink-0 rounded-2xl border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink hover:bg-flag-red hover:text-white hover:border-flag-red-deep transition-colors"
-          style={
-            {
-              ["--shadow-color"]: "var(--color-ink)",
-            } as React.CSSProperties
-          }
-        >
-          ✕ Finish
-        </button>
+        {prominentFinish ? (
+          <button
+            onClick={onFinish}
+            aria-label="End conversation"
+            className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-ink px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-flag-red hover:border-flag-red-deep"
+            style={
+              {
+                ["--shadow-color"]: "var(--color-ink)",
+              } as React.CSSProperties
+            }
+          >
+            End conversation
+          </button>
+        ) : (
+          <button
+            onClick={onFinish}
+            aria-label="Finish lesson"
+            className="btn-3d shrink-0 rounded-2xl border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink hover:bg-flag-red hover:text-white hover:border-flag-red-deep transition-colors"
+            style={
+              {
+                ["--shadow-color"]: "var(--color-ink)",
+              } as React.CSSProperties
+            }
+          >
+            ✕ Finish
+          </button>
+        )}
       </header>
 
       {/* Speaker orb hero — takes all remaining vertical space and centers */}

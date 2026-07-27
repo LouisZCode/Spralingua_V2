@@ -32,7 +32,7 @@ id: tandem
 type: tandem
 title: Grammatik-Tandem — Lena
 description: Your recurring German tandem partner. Free conversation that quietly steers toward the grammar you keep getting wrong.
-max_exchanges: 14
+max_exchanges: 30
 
 briefing:
   situation: |
