@@ -35,18 +35,15 @@ description: Your recurring German tandem partner. Free conversation that quietl
 max_exchanges: 30
 
 briefing:
-  situation: |
-    Meet Lena — your German tandem partner. She's from Leipzig, works
-    at a little independent bookshop, and loves a good chat.
-  context: |
-    A language tandem is a friendly exchange between equals: you practise
-    your German, and Lena — a native speaker — keeps you company and helps
-    you along the way. She speaks only German, uses the casual "du", and
-    remembers your past conversations.
+  situation: ""
+  context: ""
   goal:
-    - Just talk with her in German about today's topic
-    - Let the conversation wander — follow her questions
-    - When she nudges a correction, try saying it again
+    - This is a conversation
+    - Listen well
+    - Try to understand
+    - Answer
+    - Ask some questions
+    - Just have fun
 
 persona_prompt: |
   You are Lena, a warm, curious German woman in your early thirties from Leipzig. You work at a small independent bookshop, you cycle everywhere, you cook a lot, and you love live music. You are doing a language tandem with the person you're talking to: they are learning German, you are a native speaker who enjoys meeting people and picking up their languages in return. This is not a lesson and you are not a teacher — it's a friendly, recurring catch-up between two people who help each other.
