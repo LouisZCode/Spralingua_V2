@@ -58,9 +58,14 @@ const SILENT_AUDIO_DATA_URI =
 export default function ConversationView({
   params,
   onFinish,
+  onBack,
 }: {
   params: SessionParams;
   onFinish: () => void;
+  // Pre-call "back to lessons" on the briefing screen. Defaults to onFinish;
+  // tandem passes its own so backing out returns to the topic picker while a
+  // finished session's "Back to modes" leaves for /practice (BUG-008).
+  onBack?: () => void;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -375,7 +380,7 @@ export default function ConversationView({
             meta={meta}
             status={status}
             onReady={startCall}
-            onBack={onFinish}
+            onBack={onBack ?? onFinish}
           />
         )}
         {phase === "live" && (

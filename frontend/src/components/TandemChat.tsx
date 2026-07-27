@@ -33,7 +33,7 @@ export default function TandemChat() {
   }
 
   // Pick a topic first; then drop into the shared conversation view with
-  // lesson=tandem. Finishing returns to the topic picker for a fresh session.
+  // lesson=tandem.
   if (topic === null) {
     return <TopicScreen onStart={setTopic} />;
   }
@@ -41,7 +41,11 @@ export default function TandemChat() {
   return (
     <ConversationView
       params={{ lesson: "tandem", voice: TANDEM_VOICE, topic }}
-      onFinish={() => setTopic(null)}
+      // Debrief modal's "Back to modes" button promises /practice (BUG-008) —
+      // leave /tandem, don't just reset topic state. Backing out of the
+      // briefing before the call starts still returns to the topic picker.
+      onFinish={() => router.push("/practice")}
+      onBack={() => setTopic(null)}
     />
   );
 }
