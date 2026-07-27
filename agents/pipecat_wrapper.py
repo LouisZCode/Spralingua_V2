@@ -210,8 +210,15 @@ class ClientWrapper:
                     if hasattr(token, "content") and token.content:
                         if ttft_ns is None:
                             ttft_ns = time.time_ns()
-                        full_response.append(token.content)
-                        yield token.content
+                        # Strip markdown asterisks here, once, at the single point
+                        # text leaves the LLM stream — every downstream consumer
+                        # (TTS via yield, goodbye detection via full_response,
+                        # the chat bubble stash, the transcript) reads clean text.
+                        # The LLM occasionally emits `**word**`; asterisks have no
+                        # legitimate use in spoken output (TAND-002).
+                        content = token.content.replace("*", "")
+                        full_response.append(content)
+                        yield content
 
                         # End trigger: count cap reached, OR a goodbye phrase appears
                         # once armed (final exchange — see _goodbye_after). Detected
