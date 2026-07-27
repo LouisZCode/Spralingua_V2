@@ -250,7 +250,8 @@ export default function SprechenTrainer({
   const slipView = verdict
     ? segmentTranscript(
         verdict.transcript,
-        verdict.slips.map((s) => s.quote)
+        verdict.slips.map((s) => s.quote),
+        verdict.hitQuotes ?? []
       )
     : null;
   const tint = !solved
@@ -353,21 +354,33 @@ export default function SprechenTrainer({
                 What we heard
               </p>
               <p className="mt-1 font-body text-[15px] leading-relaxed text-ink">
-                {(slipView?.segments ?? []).map((seg, i) =>
-                  seg.slip === null ? (
-                    <span key={i}>{seg.text}</span>
-                  ) : (
+                {(slipView?.segments ?? []).map((seg, i) => {
+                  if (seg.kind === "plain") return <span key={i}>{seg.text}</span>;
+                  if (seg.kind === "hit") {
+                    return (
+                      <span
+                        key={i}
+                        className="rounded-[6px] bg-success-soft px-1 py-0.5 box-decoration-clone"
+                      >
+                        {seg.text}
+                        <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-success font-body text-[9px] font-black text-white">
+                          ✓
+                        </sup>
+                      </span>
+                    );
+                  }
+                  return (
                     <span
                       key={i}
                       className="rounded-[6px] bg-flag-red-soft px-1 py-0.5 box-decoration-clone"
                     >
                       {seg.text}
                       <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-flag-red font-body text-[9px] font-black text-white">
-                        {seg.slip + 1}
+                        {(seg.index ?? 0) + 1}
                       </sup>
                     </span>
-                  )
-                )}
+                  );
+                })}
               </p>
             </div>
 

@@ -4,7 +4,10 @@
 
 export type TranscriptSegment = {
   text: string;
-  slip: number | null; // index into verdict.slips; null = plain text
+  kind: "plain" | "slip" | "hit";
+  // index into verdict.slips (kind="slip") or verdict.hitQuotes (kind="hit");
+  // null for plain text.
+  index: number | null;
 };
 
 export type DiffToken = {
@@ -32,22 +35,32 @@ function tokenize(text: string): Token[] {
   return out;
 }
 
-// Find each quote as a contiguous word run in the transcript and cut the
-// transcript into plain/highlighted segments. A quote the judge paraphrased
-// (no word-run match) simply gets `matched[i] === false` — the card then
-// shows the quote itself instead of an anchor.
+// Find each quote (slips, then hits) as a contiguous word run in the
+// transcript and cut the transcript into plain/slip/hit segments. A quote
+// the judge paraphrased (no word-run match) simply gets `matched[i] ===
+// false` — the card then shows the quote itself instead of an anchor
+// (slips only — hits have no such fallback card, so an unmatched hit is
+// silently dropped).
+//
+// Slips claim their token spans before hits are searched, so a hit quote
+// that overlaps an already-claimed (slip) span can never match there — the
+// slip wins the overlap, never the other way round.
 export function segmentTranscript(
   transcript: string,
-  quotes: string[]
+  slipQuotes: string[],
+  hitQuotes: string[] = []
 ): { segments: TranscriptSegment[]; matched: boolean[] } {
   const tokens = tokenize(transcript);
   const claimed = new Array<boolean>(tokens.length).fill(false);
-  const ranges: { start: number; end: number; slip: number }[] = [];
-  const matched = quotes.map(() => false);
+  const ranges: { start: number; end: number; kind: "slip" | "hit"; index: number }[] = [];
+  const matched = slipQuotes.map(() => false);
 
-  quotes.forEach((quote, qi) => {
+  // Locates `quote` as a contiguous run of still-unclaimed tokens, claims
+  // those tokens, and records the range under `kind`/`index`. Returns
+  // whether a match was found.
+  function place(quote: string, kind: "slip" | "hit", index: number): boolean {
     const qWords = tokenize(quote).map((t) => t.norm);
-    if (qWords.length === 0) return;
+    if (qWords.length === 0) return false;
     for (let i = 0; i + qWords.length <= tokens.length; i++) {
       let ok = true;
       for (let j = 0; j < qWords.length; j++) {
@@ -61,12 +74,20 @@ export function segmentTranscript(
         ranges.push({
           start: tokens[i].start,
           end: tokens[i + qWords.length - 1].end,
-          slip: qi,
+          kind,
+          index,
         });
-        matched[qi] = true;
-        break;
+        return true;
       }
     }
+    return false;
+  }
+
+  slipQuotes.forEach((quote, qi) => {
+    matched[qi] = place(quote, "slip", qi);
+  });
+  hitQuotes.forEach((quote, qi) => {
+    place(quote, "hit", qi);
   });
 
   ranges.sort((a, b) => a.start - b.start);
@@ -74,12 +95,12 @@ export function segmentTranscript(
   let pos = 0;
   for (const r of ranges) {
     if (r.start > pos)
-      segments.push({ text: transcript.slice(pos, r.start), slip: null });
-    segments.push({ text: transcript.slice(r.start, r.end), slip: r.slip });
+      segments.push({ text: transcript.slice(pos, r.start), kind: "plain", index: null });
+    segments.push({ text: transcript.slice(r.start, r.end), kind: r.kind, index: r.index });
     pos = r.end;
   }
   if (pos < transcript.length)
-    segments.push({ text: transcript.slice(pos), slip: null });
+    segments.push({ text: transcript.slice(pos), kind: "plain", index: null });
   return { segments, matched };
 }
 

@@ -54,6 +54,16 @@ class SpokenVerdict(BaseModel):
     hits: int = Field(
         description="How many times the TARGET structure was produced correctly"
     )
+    hit_quotes: list[str] = Field(
+        default_factory=list,
+        description=(
+            "One entry per counted hit: the learner's own words, VERBATIM "
+            "from the transcript, where the target structure fired "
+            "correctly (same verbatim rule as slips — the UI anchors this "
+            "exact span in the transcript to highlight it). Exactly `hits` "
+            "entries; must never overlap any slip quote"
+        ),
+    )
     slips: list[Slip] = Field(
         default_factory=list,
         description=(
@@ -83,6 +93,7 @@ You judge one SPOKEN attempt in a German speaking drill. The learner was given a
 - `constraint_met` — did the learner ATTEMPT the task in the required quantity? Count attempts, not quality: an element with broken word order still counts toward the constraint (its break is recorded as a slip instead). constraint_met=false ONLY when the elements the forces section names are missing or too few (said "weil" once when two were asked, skipped a required verb). Count ONLY the named elements — clauses, conjunctions, openers, verbs. NEVER count "sentences": speech recognition strips the boundaries, so two spoken sentences often arrive joined as one.
 - `constraint_note` — when constraint_met=false: one short English line naming what's MISSING (never a grammar comment). null when met.
 - `hits` — how many of the attempted elements produced the TARGET structure correctly. When the forces section names SEVERAL checks for one element (e.g. clause-internal verb position AND verb mood/form AND the word order of the following main clause), that element counts as a hit only when EVERY named check passes.
+- `hit_quotes` — one entry per counted hit, in the order they occurred: the learner's own words, copied VERBATIM from the transcript — never paraphrase, trim, or fix them; the UI locates this exact span in the transcript to highlight it. Produce EXACTLY `hits` entries — no more, no fewer — and never quote a span that overlaps a `slips` quote (a span is either a hit or a slip, never both).
 - `slips` — every ATTEMPTED element where the target structure broke: `quote` (the learner's own words, copied VERBATIM from the transcript — never paraphrase, trim, or fix them; the UI locates this exact span in the transcript to highlight it), `corrected` (the minimal repair, in German, keeping their words), `note` (ONE English line, AT MOST 10 words, naming the broken rule — the correction sits next to it, so name the WHY, never restate the fix). One element can therefore yield several slips when several named checks break — record each separately, and each note must name WHICH check broke (a correct word order with a wrong verb form is a form slip, not an order slip, and vice versa).
 - An element that simply doesn't attempt the target (a subject-first sentence when the task asks for fronting, a sentence with no weil) is NOT a slip — it is grammatical German that dodged the task, and it counts only against the constraint.
 - Judge ONLY the target structure. Wrong articles, adjective endings, vocabulary choices, or other unrelated grammar are NOT slips here and must be ignored — other drills own those. A sentence still counts as a hit when its only errors are unrelated to the target structure.

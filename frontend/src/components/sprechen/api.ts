@@ -28,6 +28,10 @@ export type SprechenVerdict = {
   constraintMet: boolean;
   constraintNote: string | null;
   hits: number; // correct productions of the target structure
+  // SPRECH-001: verbatim spans where the structure fired correctly, same
+  // anchoring contract as slips. Optional — absent on an older backend
+  // response, callers should default to [].
+  hitQuotes?: string[];
   slips: Slip[];
 };
 

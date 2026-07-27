@@ -260,6 +260,9 @@ async def submit_attempt(
             "constraintMet": verdict.constraint_met,
             "constraintNote": verdict.constraint_note,
             "hits": verdict.hits,
+            # Display-only, symmetric to slips (SPRECH-001) — defensive
+            # getattr/or-empty so a judge response missing the field can't 500.
+            "hitQuotes": getattr(verdict, "hit_quotes", None) or [],
             "slips": [
                 {"quote": s.quote, "corrected": s.corrected, "note": s.note}
                 for s in verdict.slips
