@@ -87,6 +87,8 @@ export default function GenusTrainer({
   onNewRound,
   flow,
   onFlowDone,
+  allowGiveUp,
+  onGiveUp,
 }: {
   round: GenusItem[];
   // The intro cheat sheet (GET /genus/rules) — nullable so a slow/failed
@@ -114,6 +116,11 @@ export default function GenusTrainer({
   // never called in flow but stays required for prop parity.
   flow?: boolean;
   onFlowDone?: (correct: boolean) => void;
+  // FLOW-002: the deliberate "give up" escape — Flow-only (default false),
+  // so standalone practice stays pixel-identical. Only the drag beat (phase
+  // "article") gets one; the typed production stays standalone-only.
+  allowGiveUp?: boolean;
+  onGiveUp?: (itemId: string) => Promise<ArticleVerdict>;
 }) {
   const [phase, setPhase] = useState<Phase>(flow ? "drill" : "intro");
   // Mid-drill peek at the ending cheat sheet — beginners forget the endings
@@ -236,6 +243,30 @@ export default function GenusTrainer({
   // never fires a stale closure.
   const submitDropRef = useRef(submitDrop);
   submitDropRef.current = submitDrop;
+
+  // FLOW-002: the deliberate give-up — grades a real miss server-side and
+  // reveals the drop through the same anchor-card path a correct drop uses
+  // (firstSlip marks the item as slipped before the reveal, so `advance`'s
+  // "clean" check below still scores it as a miss).
+  async function giveUp() {
+    if (busy || drop || !onGiveUp) return;
+    setBusy(true);
+    setFailed(null);
+    try {
+      const res = await onGiveUp(item.id);
+      setTrapNote(null);
+      firstSlip();
+      setDrop(res);
+    } catch (err) {
+      setFailed(
+        err instanceof Error && err.message && !err.message.includes("failed (")
+          ? err.message
+          : "Couldn't check that — try again in a moment."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
 
   function beginDrag(a: Article, e: React.PointerEvent) {
     if (busy || drop || phase !== "drill") return;
@@ -519,11 +550,32 @@ export default function GenusTrainer({
             {failed}
           </p>
         )}
+        {/* FLOW-002: deliberately unstyled/small — never a rival to the drag. */}
+        {!drop && allowGiveUp && onGiveUp && (
+          <p className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={giveUp}
+              disabled={busy}
+              className="font-body text-[11px] text-ink-muted underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
+            >
+              Give up
+            </button>
+          </p>
+        )}
 
         {/* Beat 2 — anchor card + production, only after the drop landed.
             Flow ends the item at the drop: anchor + Next, no typing. */}
         {drop && (
           <div className="mt-5">
+            {/* FLOW-002: the only visual cue that this reveal was a
+                concession, not a correct guess — genus has no separate
+                "wrong" reveal card to fall back on. */}
+            {drop.gaveUp && (
+              <p className="mb-2 text-center font-body text-[11px] font-black uppercase tracking-[0.2em] text-flag-red-deep">
+                You gave up
+              </p>
+            )}
             <AnchorCard drop={drop} />
 
             {flow ? (

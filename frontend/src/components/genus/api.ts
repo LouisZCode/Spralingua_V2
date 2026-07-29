@@ -29,6 +29,10 @@ export type ArticleVerdict = {
   trap?: boolean; // correct drop on a trap word → note carries the why
   trapped?: boolean; // wrong drop that fell FOR the trap ("Falle!")
   note?: string | null;
+  // FLOW-002: present and true only on a give-up reveal — genus has no
+  // separate "wrong" reveal card to reuse, so this is the only cue that a
+  // correct-shaped reveal was actually a concession, not a right guess.
+  gaveUp?: boolean;
 };
 
 // Verdict for phase="phrase" (typed production). Recognized phrase shapes
@@ -119,6 +123,27 @@ export async function submitArticle(
       item_id: itemId,
       phase: "article",
       answer: article,
+      session_id: sessionId,
+    }),
+  });
+}
+
+// FLOW-002: the deliberate "give up" escape (Flow mode only, the drag beat
+// Flow deals) — same endpoint/phase, `give_up: true` skips the drag check
+// and grades a real, distinguishable miss while still revealing the article.
+export async function giveUpArticle(
+  token: string,
+  itemId: string,
+  sessionId: string
+): Promise<ArticleVerdict> {
+  return request("/genus/attempts", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      item_id: itemId,
+      phase: "article",
+      answer: "",
+      give_up: true,
       session_id: sessionId,
     }),
   });

@@ -153,6 +153,9 @@ class AttemptIn(BaseModel):
     # OBS-007: frontend-minted practice-sitting id — one Langfuse Session per
     # trainer visit, same contract as /satz/attempts. Optional so curl works.
     session_id: str | None = Field(None, max_length=64)
+    # FLOW-002: the deliberate "give up" escape (Flow mode only) — skips
+    # validation/judging below and grades as a real, distinguishable miss.
+    give_up: bool = False
 
 
 @router.post("/attempts")
@@ -176,12 +179,15 @@ async def submit_attempt(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
     answer = " ".join(body.answer.split())
-    if not answer:
-        raise HTTPException(status_code=422, detail="Type your answer first.")
-    if len(answer) > _MAX_ANSWER_CHARS:
-        raise HTTPException(
-            status_code=422, detail="Keep it to the phrase — that looks like a paragraph."
-        )
+    # give_up skips validation entirely — there's nothing to type, the
+    # learner is conceding the item.
+    if not body.give_up:
+        if not answer:
+            raise HTTPException(status_code=422, detail="Type your answer first.")
+        if len(answer) > _MAX_ANSWER_CHARS:
+            raise HTTPException(
+                status_code=422, detail="Keep it to the phrase — that looks like a paragraph."
+            )
 
     # OBS-007: one Langfuse trace per judged attempt, grouped into the
     # practice sitting. Deterministic greens trace too (no `llm` child) —
@@ -193,7 +199,19 @@ async def submit_attempt(
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
         attempt_span.set_attribute("langfuse.trace.input", answer)
 
-        if _matches(answer, item["answer"], item["frame"]):
+        if body.give_up:
+            # FLOW-002 escape hatch: skip the judge entirely, grade as a
+            # miss, and reveal the gold phrase through the exact same
+            # response shape a judged miss returns — the frontend needs no
+            # new branch to show it.
+            attempt_span.set_attribute("gave_up", True)
+            correct, case_ok, carrier_ok, note = (
+                False,
+                False,
+                False,
+                "Gave up — here's the phrase to learn.",
+            )
+        elif _matches(answer, item["answer"], item["frame"]):
             correct, case_ok, carrier_ok, note = True, True, True, None
             # TASK 2: a deterministic green never calls the LLM judge — flag
             # that explicitly so Langfuse can tell "judged correct" apart
@@ -245,7 +263,14 @@ async def submit_attempt(
                     db,
                     user_id=user_id,
                     pattern_id=item["pattern_id"],
-                    sentence=item["frame"].replace("___", answer),
+                    # A give-up never typed a phrase — leave the gap
+                    # unfilled rather than substitute an empty string; the
+                    # literal "___" is the give-up sentinel in the ledger.
+                    sentence=(
+                        item["frame"]
+                        if body.give_up
+                        else item["frame"].replace("___", answer)
+                    ),
                     corrected=item["frame"].replace("___", item["answer"]),
                     note=note,
                     source="bauteil",
@@ -264,7 +289,9 @@ async def submit_attempt(
                 db,
                 user_id=user_id,
                 exercise="bauteil",
-                item_ref=item["id"],
+                # ":giveup" suffix marks a concession in DATA-004 without a
+                # new column — same convention genus uses for its beats.
+                item_ref=item["id"] + (":giveup" if body.give_up else ""),
                 pattern_id=item["pattern_id"],
                 correct=correct,
                 modality="written",

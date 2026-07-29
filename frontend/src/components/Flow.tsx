@@ -10,6 +10,7 @@ import BauteilTrainer from "./bauteil/BauteilTrainer";
 import {
   fetchRound as fetchBauteilRound,
   submitAttempt as submitBauteilAttempt,
+  giveUp as giveUpBauteil,
   type RoundItem as BauteilItem,
   type BauteilVerdict,
 } from "./bauteil/api";
@@ -18,6 +19,7 @@ import VerbindungenTrainer from "./verbindungen/VerbindungenTrainer";
 import {
   fetchRound as fetchVerbindungenRound,
   submitAttempt as submitVerbindungenAttempt,
+  giveUp as giveUpVerbindungen,
   type ChunkItem,
   type ChunkVerdict,
 } from "./verbindungen/api";
@@ -26,6 +28,7 @@ import ZeitfaerbungTrainer from "./zeitfaerbung/ZeitfaerbungTrainer";
 import {
   fetchRound as fetchZeitfaerbungRound,
   submitAttempt as submitZeitfaerbungAttempt,
+  giveUp as giveUpZeitfaerbung,
   type ZeitItem,
   type ZeitVerdict,
 } from "./zeitfaerbung/api";
@@ -36,6 +39,7 @@ import {
   fetchMeta as fetchGenusMeta,
   submitArticle as submitGenusArticle,
   submitPhrase as submitGenusPhrase,
+  giveUpArticle as giveUpGenusArticle,
   type Article as GenusArticle,
   type ArticleVerdict as GenusArticleVerdict,
   type GenusItem,
@@ -46,6 +50,7 @@ import SprechenTrainer from "./sprechen/SprechenTrainer";
 import {
   fetchRound as fetchSprechenRound,
   submitAttempt as submitSprechenAttempt,
+  giveUp as giveUpSprechen,
   type SpokenTask,
   type SprechenVerdict,
 } from "./sprechen/api";
@@ -442,11 +447,40 @@ export default function Flow() {
     [token, signOut, sid]
   );
 
+  // FLOW-002: the deliberate "give up" escape — same auth-guarded shape as
+  // the attempt handlers above, one per item drill (satz/verbformen keep
+  // their existing onReveal instead; genus wires only its drag beat).
+  const handleBauteilGiveUp = useCallback(
+    async (itemId: string): Promise<BauteilVerdict> => {
+      if (!token) throw new UnauthorizedError("/bauteil/attempts");
+      try {
+        return await giveUpBauteil(token, itemId, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
   const handleVerbindungenAttempt = useCallback(
     async (itemId: string, answer: string): Promise<ChunkVerdict> => {
       if (!token) throw new UnauthorizedError("/verbindungen/attempts");
       try {
         return await submitVerbindungenAttempt(token, itemId, answer, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleVerbindungenGiveUp = useCallback(
+    async (itemId: string): Promise<ChunkVerdict> => {
+      if (!token) throw new UnauthorizedError("/verbindungen/attempts");
+      try {
+        return await giveUpVerbindungen(token, itemId, sid());
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
@@ -468,11 +502,37 @@ export default function Flow() {
     [token, signOut, sid]
   );
 
+  const handleZeitfaerbungGiveUp = useCallback(
+    async (itemId: string): Promise<ZeitVerdict> => {
+      if (!token) throw new UnauthorizedError("/zeitfaerbung/attempts");
+      try {
+        return await giveUpZeitfaerbung(token, itemId, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
   const handleSprechenAttempt = useCallback(
     async (taskId: string, audio: Blob): Promise<SprechenVerdict> => {
       if (!token) throw new UnauthorizedError("/sprechen/attempts");
       try {
         return await submitSprechenAttempt(token, taskId, audio, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleSprechenGiveUp = useCallback(
+    async (taskId: string): Promise<SprechenVerdict> => {
+      if (!token) throw new UnauthorizedError("/sprechen/give-up");
+      try {
+        return await giveUpSprechen(token, taskId, sid());
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
@@ -489,6 +549,19 @@ export default function Flow() {
       if (!token) throw new UnauthorizedError("/genus/attempts");
       try {
         return await submitGenusArticle(token, itemId, article, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleGenusGiveUp = useCallback(
+    async (itemId: string): Promise<GenusArticleVerdict> => {
+      if (!token) throw new UnauthorizedError("/genus/attempts");
+      try {
+        return await giveUpGenusArticle(token, itemId, sid());
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
@@ -795,6 +868,8 @@ export default function Flow() {
                     onNewRound={noopNewRound}
                     flow
                     onFlowDone={(correct) => handleItemDone("bauteil", correct)}
+                    allowGiveUp
+                    onGiveUp={handleBauteilGiveUp}
                   />
                 )}
                 {deal.kind === "verbindungen" && (
@@ -809,6 +884,8 @@ export default function Flow() {
                     onFlowDone={(correct) =>
                       handleItemDone("verbindungen", correct)
                     }
+                    allowGiveUp
+                    onGiveUp={handleVerbindungenGiveUp}
                   />
                 )}
                 {deal.kind === "zeitfaerbung" && (
@@ -821,6 +898,8 @@ export default function Flow() {
                     onFlowDone={(correct) =>
                       handleItemDone("zeitfaerbung", correct)
                     }
+                    allowGiveUp
+                    onGiveUp={handleZeitfaerbungGiveUp}
                   />
                 )}
                 {deal.kind === "sprechen" && (
@@ -833,6 +912,8 @@ export default function Flow() {
                     onAdd={handleAddWord}
                     flow
                     onFlowDone={(correct) => handleItemDone("sprechen", correct)}
+                    allowGiveUp
+                    onGiveUp={handleSprechenGiveUp}
                   />
                 )}
                 {deal.kind === "genus" && (
@@ -844,6 +925,8 @@ export default function Flow() {
                     onNewRound={noopNewRound}
                     flow
                     onFlowDone={(correct) => handleItemDone("genus", correct)}
+                    allowGiveUp
+                    onGiveUp={handleGenusGiveUp}
                   />
                 )}
                 {deal.kind === "satz" && (

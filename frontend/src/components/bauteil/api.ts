@@ -66,3 +66,22 @@ export async function submitAttempt(
     body: JSON.stringify({ item_id: itemId, answer, session_id: sessionId }),
   });
 }
+
+// FLOW-002: the deliberate "give up" escape (Flow mode only) — same endpoint,
+// `give_up: true` skips judging and grades a real, distinguishable miss.
+export async function giveUp(
+  token: string,
+  itemId: string,
+  sessionId: string
+): Promise<BauteilVerdict> {
+  return request("/bauteil/attempts", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      item_id: itemId,
+      answer: "",
+      give_up: true,
+      session_id: sessionId,
+    }),
+  });
+}

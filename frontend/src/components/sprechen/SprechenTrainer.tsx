@@ -33,6 +33,8 @@ export default function SprechenTrainer({
   onNudge,
   flow,
   onFlowDone,
+  allowGiveUp,
+  onGiveUp,
 }: {
   round: SpokenTask[];
   // Judge one recorded clip (POST /sprechen/attempts via the parent, which
@@ -56,6 +58,11 @@ export default function SprechenTrainer({
   // Sprechen already starts at "drill" (no intro), so no phase-init change.
   flow?: boolean;
   onFlowDone?: (correct: boolean) => void;
+  // FLOW-002: the deliberate "give up" escape — Flow-only (default false),
+  // so standalone practice stays pixel-identical. No audio involved, so
+  // this is a separate call from `onAttempt`, not a flag on it.
+  allowGiveUp?: boolean;
+  onGiveUp?: (taskId: string) => Promise<SprechenVerdict>;
 }) {
   const [phase, setPhase] = useState<Phase>("drill");
   const [index, setIndex] = useState(0);
@@ -155,6 +162,32 @@ export default function SprechenTrainer({
     setChecking(true);
     try {
       const res = await onAttempt(task.id, audio);
+      setVerdict(res);
+      setResults((r) => {
+        const next = [...r];
+        next[index] = res;
+        return next;
+      });
+    } catch (err) {
+      setFailed(
+        err instanceof Error && err.message && !err.message.includes("failed (")
+          ? err.message
+          : "Couldn't check that — try again in a moment."
+      );
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  // FLOW-002: the deliberate give-up — no mic involved, so this hits its own
+  // endpoint instead of `submit`, but lands in the same `verdict`/`results`
+  // state a real (failed) attempt would, so `next()` below needs no change.
+  async function giveUp() {
+    if (checking || recording || !onGiveUp) return;
+    setChecking(true);
+    setFailed(null);
+    try {
+      const res = await onGiveUp(task.id);
       setVerdict(res);
       setResults((r) => {
         const next = [...r];
@@ -339,6 +372,17 @@ export default function SprechenTrainer({
                     ? "speak, then tap stop — ✕ discards"
                     : "take a breath, plan your sentences, tap record"}
                 </p>
+                {/* FLOW-002: deliberately unstyled/small — never a rival to Record. */}
+                {allowGiveUp && onGiveUp && (
+                  <button
+                    type="button"
+                    onClick={giveUp}
+                    disabled={recording}
+                    className="font-body text-[11px] text-ink-muted underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    Give up
+                  </button>
+                )}
               </>
             )}
             {failed && (
@@ -346,6 +390,25 @@ export default function SprechenTrainer({
                 {failed}
               </p>
             )}
+          </div>
+        ) : verdict.gaveUp ? (
+          // FLOW-002: a modest feedback state — there was no recording to
+          // transcribe and no judge call, so the full transcript/slips UI
+          // below (built for a real attempt) would just show empty/blank.
+          <div className="mt-6 text-center">
+            <p className="font-body text-[14px] font-semibold text-flag-red-deep">
+              {verdict.constraintNote}
+            </p>
+            <div className="mt-6 flex items-center justify-center">
+              <button
+                type="button"
+                onClick={next}
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                style={inkShadow}
+              >
+                {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
+              </button>
+            </div>
           </div>
         ) : (
           <div className="mt-6">

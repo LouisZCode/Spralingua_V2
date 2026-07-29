@@ -33,6 +33,10 @@ export type SprechenVerdict = {
   // response, callers should default to [].
   hitQuotes?: string[];
   slips: Slip[];
+  // FLOW-002: present and true only on a /sprechen/give-up response — the
+  // trainer uses it to show a modest "gave up" state instead of the (empty,
+  // unjudged) transcript UI a real attempt would render.
+  gaveUp?: boolean;
 };
 
 async function request<T>(
@@ -107,4 +111,19 @@ export async function submitAttempt(
   form.append("audio", audio, "attempt");
   form.append("session_id", sessionId);
   return request("/sprechen/attempts", token, { method: "POST", body: form });
+}
+
+// FLOW-002: the deliberate "give up" escape (Flow mode only). /attempts
+// takes a multipart audio upload, so a flag doesn't fit here — this hits a
+// tiny sibling JSON route instead, with no recording involved.
+export async function giveUp(
+  token: string,
+  taskId: string,
+  sessionId: string
+): Promise<SprechenVerdict> {
+  return request("/sprechen/give-up", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ task_id: taskId, session_id: sessionId }),
+  });
 }

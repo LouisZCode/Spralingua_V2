@@ -479,6 +479,10 @@ class AttemptIn(BaseModel):
     answer: str
     # OBS-007 practice-sitting id — same contract as the sibling drills.
     session_id: str | None = Field(None, max_length=64)
+    # FLOW-002: the deliberate "give up" escape (Flow mode only, phase
+    # "article" — that's the only beat Flow deals). Skips validation and
+    # grades as a real, distinguishable miss.
+    give_up: bool = False
 
 
 async def _resolve_item(
@@ -525,13 +529,16 @@ async def submit_attempt(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
     answer = " ".join(body.answer.split())
-    if not answer:
-        raise HTTPException(status_code=422, detail="Type your answer first.")
-    if len(answer) > _MAX_ANSWER_CHARS:
-        raise HTTPException(
-            status_code=422,
-            detail="Keep it under 140 characters — one sentence is plenty.",
-        )
+    # give_up skips validation entirely — there's no drag/answer to check,
+    # the learner is conceding the item.
+    if not body.give_up:
+        if not answer:
+            raise HTTPException(status_code=422, detail="Type your answer first.")
+        if len(answer) > _MAX_ANSWER_CHARS:
+            raise HTTPException(
+                status_code=422,
+                detail="Keep it under 140 characters — one sentence is plenty.",
+            )
 
     rule = load_rules().get(item["rule"]) if item.get("rule") else None
 
@@ -544,14 +551,24 @@ async def submit_attempt(
         attempt_span.set_attribute("langfuse.trace.input", answer)
 
         if body.phase == "article":
-            choice = answer.lower()
-            if choice not in ARTICLES:
-                raise HTTPException(status_code=422, detail="Drop der, die, or das.")
-            correct = choice == item["article"]
-            if not correct:
-                # No reveal on a wrong drop — the learner retries. But when a
-                # trap word just caught them with its fake ending, say so:
-                # noticing the lie is the teachable moment.
+            if body.give_up:
+                # FLOW-002 escape hatch: no drag was made — reveal the drop
+                # through the exact same reveal fields a CORRECT drop gets
+                # below, just with correct forced False so scoring/tally
+                # treat it as a miss. The frontend renders it via the
+                # existing anchor-card path, no new branch needed there.
+                attempt_span.set_attribute("gave_up", True)
+                correct = False
+            else:
+                choice = answer.lower()
+                if choice not in ARTICLES:
+                    raise HTTPException(status_code=422, detail="Drop der, die, or das.")
+                correct = choice == item["article"]
+
+            if not correct and not body.give_up:
+                # No reveal on a genuine wrong drop — the learner retries.
+                # But when a trap word just caught them with its fake
+                # ending, say so: noticing the lie is the teachable moment.
                 trapped = (
                     bool(item.get("trap"))
                     and rule is not None
@@ -565,18 +582,22 @@ async def submit_attempt(
             elif item.get("trap"):
                 why = item.get("why") or _generic_trap_why(item, rule)
                 payload = {
-                    "correct": True,
+                    "correct": correct,
                     "article": item["article"],
                     "segment": None,
                     "anchor": None,
                     "reliability": None,
                     "trap": True,
                     "note": why,
+                    # Absent (falsy) on a real correct drop; True only on a
+                    # give-up — the frontend's only cue that this reveal is a
+                    # concession, since genus has no "wrong" reveal to reuse.
+                    "gaveUp": body.give_up,
                 }
             elif rule is not None:
                 surface = _match_surface(item["noun"], rule, require_stem=False)
                 payload = {
-                    "correct": True,
+                    "correct": correct,
                     "article": item["article"],
                     "segment": (
                         {"kind": rule["kind"], "text": surface} if surface else None
@@ -585,10 +606,11 @@ async def submit_attempt(
                     "reliability": rule["reliability"],
                     "trap": False,
                     "note": None,
+                    "gaveUp": body.give_up,
                 }
             else:
                 payload = {
-                    "correct": True,
+                    "correct": correct,
                     "article": item["article"],
                     "segment": None,
                     "anchor": None,
@@ -596,6 +618,7 @@ async def submit_attempt(
                     "trap": False,
                     # The anchor card's header already says "Kein Muster".
                     "note": f"Just remember: {item['article']} {item['noun']}.",
+                    "gaveUp": body.give_up,
                 }
         else:  # phase == "phrase"
             payload = _grade_phrase(item, answer)
@@ -638,7 +661,13 @@ async def submit_attempt(
                 db,
                 user_id=user_id,
                 exercise="genus",
-                item_ref=f"{item['id']}:{body.phase}",
+                # ":giveup" suffix marks a concession in DATA-004 without a
+                # new column — extends the existing phase-suffix convention.
+                item_ref=(
+                    f"{item['id']}:{body.phase}:giveup"
+                    if body.give_up
+                    else f"{item['id']}:{body.phase}"
+                ),
                 pattern_id=None,
                 correct=payload["correct"],
                 modality="written",

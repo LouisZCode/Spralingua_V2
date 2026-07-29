@@ -270,6 +270,88 @@ async def submit_attempt(
         }
 
 
+class GiveUpIn(BaseModel):
+    task_id: str
+    # OBS-007 practice-sitting id — same contract as the sibling drills.
+    session_id: str | None = Field(None, max_length=64)
+
+
+@router.post("/give-up")
+async def give_up_attempt(
+    body: GiveUpIn,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """FLOW-002 escape hatch: record a deliberate concession as a failed
+    attempt WITHOUT audio. Unlike the other four item drills this can't just
+    add a `give_up` flag to /attempts — that endpoint's body IS the audio
+    upload — so it's a tiny sibling route instead. There's also no
+    transcription/judge call to skip (nothing was recorded) and, since
+    sprechen is open-ended, no single correct answer to reveal — this only
+    logs the miss and hands back a modest verdict shape the frontend renders
+    as-is."""
+    task = load_tasks().get(body.task_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Unknown task.")
+
+    with tracer.start_as_current_span("sprechen-attempt") as attempt_span:
+        attempt_span.set_attribute("user.id", user_id)
+        attempt_span.set_attribute("task_id", task["id"])
+        attempt_span.set_attribute("gave_up", True)
+        if body.session_id:
+            attempt_span.set_attribute("langfuse.session.id", body.session_id)
+        attempt_span.set_attribute("langfuse.trace.output", "gave_up=True")
+
+        # Feed the ledger (design rule 4) — non-fatal, same contract as a
+        # real slip. There's no transcript to quote, so `sentence` carries a
+        # sentinel instead — the give-up marker itself — and `corrected` is
+        # left null rather than fabricating a "correct" spoken answer.
+        try:
+            await record_grammar_error(
+                db,
+                user_id=user_id,
+                pattern_id=task["pattern_id"],
+                sentence="(gave up)",
+                corrected=None,
+                note="Gave up — no recording submitted.",
+                source="sprechen",
+                session_id=body.session_id,
+            )
+        except Exception:
+            logger.exception(
+                "Sprechen ledger write failed (pattern {})", task["pattern_id"]
+            )
+
+        # Append to the cross-drill attempt log (DATA-004) — its own commit,
+        # non-fatal like the ledger write above. ":giveup" suffix marks the
+        # concession without a new column, same convention as the other
+        # four drills.
+        try:
+            await record_drill_attempt(
+                db,
+                user_id=user_id,
+                exercise="sprechen",
+                item_ref=f"{task['id']}:giveup",
+                pattern_id=task["pattern_id"],
+                correct=False,
+                modality="spoken",
+                session_id=body.session_id,
+            )
+        except Exception:
+            logger.exception("Drill-attempt log write failed (task {})", task["id"])
+
+        return {
+            "transcript": "",
+            "passed": False,
+            "constraintMet": False,
+            "constraintNote": "You gave up — no recording was judged.",
+            "hits": 0,
+            "hitQuotes": [],
+            "slips": [],
+            "gaveUp": True,
+        }
+
+
 class NudgeIn(BaseModel):
     task_id: str
     # OBS-007 practice-sitting id — groups the nudge trace with the attempts.

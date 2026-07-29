@@ -47,6 +47,8 @@ export default function BauteilTrainer({
   onNewRound,
   flow,
   onFlowDone,
+  allowGiveUp,
+  onGiveUp,
 }: {
   round: RoundItem[];
   // Judge one typed phrase (POST /bauteil/attempts via the parent, which owns
@@ -60,6 +62,10 @@ export default function BauteilTrainer({
   // ever reaching its own "done" phase.
   flow?: boolean;
   onFlowDone?: (correct: boolean) => void;
+  // FLOW-002: the deliberate "give up" escape — Flow-only (default false),
+  // so standalone practice stays pixel-identical.
+  allowGiveUp?: boolean;
+  onGiveUp?: (itemId: string) => Promise<BauteilVerdict>;
 }) {
   const [phase, setPhase] = useState<Phase>(flow ? "drill" : "intro");
   const [queue, setQueue] = useState<QueueItem[]>(round);
@@ -133,6 +139,30 @@ export default function BauteilTrainer({
         // stays exactly the one dealt item.
         if (!flow) setQueue((q) => [...q, { ...item, retry: true }]);
       }
+    } catch (err) {
+      setFailed(
+        err instanceof Error && err.message && !err.message.includes("failed (")
+          ? err.message
+          : "Couldn't check that — try again in a moment."
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // FLOW-002: the deliberate give-up — grades a real miss server-side and
+  // reveals the answer through the same verdict card a wrong `check()`
+  // shows. `value` is overwritten so "You typed:" reads honestly instead of
+  // echoing whatever partial text was sitting in the box.
+  async function giveUp() {
+    if (busy || !onGiveUp) return;
+    setBusy(true);
+    setFailed(null);
+    try {
+      const res = await onGiveUp(item.id);
+      setValue("(gave up)");
+      setVerdict(res);
+      if (!item.retry) setMissed((m) => [...m, { item, expected: res.expected }]);
     } catch (err) {
       setFailed(
         err instanceof Error && err.message && !err.message.includes("failed (")
@@ -322,6 +352,19 @@ export default function BauteilTrainer({
             {failed && (
               <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
                 {failed}
+              </p>
+            )}
+            {/* FLOW-002: deliberately unstyled/small — never a rival to Check. */}
+            {allowGiveUp && onGiveUp && (
+              <p className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={giveUp}
+                  disabled={busy}
+                  className="font-body text-[11px] text-ink-muted underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
+                >
+                  Give up
+                </button>
               </p>
             )}
           </form>
