@@ -161,13 +161,20 @@ export async function submitAttempt(
   audio: Blob,
   // OBS-007: the practice-sitting id (minted by VocabTrainer on the first
   // attempt) — the backend files the attempt's Langfuse trace under it.
-  sessionId: string
+  sessionId: string,
+  // SATZ-015: an immediate re-attempt of a card that just passed green with
+  // a grammar correction. Judged identically (same STT + examiner), but the
+  // backend skips every schedule/ledger/attempt-log write for it — the
+  // original graded pass already stands. Omitted (default false/absent) on
+  // every ordinary attempt.
+  rehearsal?: boolean
 ): Promise<AttemptResult> {
   // No Content-Type header: the browser sets the multipart boundary itself.
   const form = new FormData();
   form.append("card_id", cardId);
   form.append("audio", audio, "attempt");
   form.append("session_id", sessionId);
+  if (rehearsal) form.append("rehearsal", "true");
   return request("/satz/attempts", token, { method: "POST", body: form });
 }
 

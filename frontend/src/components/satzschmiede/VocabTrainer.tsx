@@ -2,10 +2,17 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { WordRejectedError, type AttemptResult, type GlossInfo } from "./api";
+import {
+  submitAttempt,
+  UnauthorizedError,
+  WordRejectedError,
+  type AttemptResult,
+  type GlossInfo,
+} from "./api";
 import type { DeckCard } from "./deck";
 import { diffTokens, MarkedText } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
+import { useAuth } from "../auth/AuthContext";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -268,6 +275,20 @@ export default function VocabTrainer({
   // reveals both count (both are server-side lapses); inaudible-audio
   // rejections don't (no verdict, no lapse).
   const missesRef = useRef<Map<string, number>>(new Map());
+  // SATZ-015: the card id currently armed for a rehearsal re-attempt — set
+  // by the retry button on a green-with-grammar-note verdict, kept armed
+  // across a failed rehearsal's own "Try again", cleared by any real advance
+  // (resetScratch). While armed, `check()` sends this card's next submission
+  // with rehearsal:true so the ORIGINAL graded pass stands: no second
+  // schedule/ledger write, and handleNext treats the outcome as passed
+  // either way. Gated to real Satzschmiede cards (sessionPrefix "satz") —
+  // Verbformen's cards ride a different backend route/schedule entirely.
+  const rehearsalRef = useRef<string | null>(null);
+  // SATZ-015: direct auth access so a rehearsal attempt can call the
+  // Satzschmiede API itself — bypassing the parent's `onAttempt` (which
+  // some hosts, e.g. Verbformen, wire to a different exercise's endpoint)
+  // without adding a new prop to this component.
+  const { token: authToken, signOut: authSignOut } = useAuth();
 
   const total = deck.length;
   const byId = new Map(deck.map((c) => [c.id, c] as const));
@@ -437,11 +458,24 @@ export default function VocabTrainer({
       sessionId ??
       (practiceSessionRef.current ??=
         sessionPrefix + "-" + crypto.randomUUID().replace(/-/g, ""));
+    // SATZ-015: this card is mid-rehearsal iff the armed ref still points at
+    // it — sessionPrefix-gated so only genuine Satzschmiede cards ever take
+    // the direct-submit bypass below.
+    const isRehearsal =
+      sessionPrefix === "satz" && rehearsalRef.current === card.id;
     setChecking(true);
     try {
-      const res = await onAttempt(card.id, audio, activeSessionId);
+      let res: AttemptResult;
+      if (isRehearsal) {
+        if (!authToken) throw new UnauthorizedError("/satz/attempts");
+        res = await submitAttempt(authToken, card.id, audio, activeSessionId, true);
+      } else {
+        res = await onAttempt(card.id, audio, activeSessionId);
+      }
       setResult(res);
-      if (!browsing && res.wordOk !== true) {
+      // A rehearsal's own miss never counts toward the SATZ-011 lapse cap —
+      // the original graded attempt already stands; this is bonus practice.
+      if (!browsing && !isRehearsal && res.wordOk !== true) {
         missesRef.current.set(
           card.id,
           (missesRef.current.get(card.id) ?? 0) + 1
@@ -449,6 +483,12 @@ export default function VocabTrainer({
       }
       setFlipped(true);
     } catch (err) {
+      // The non-rehearsal path's UnauthorizedError is already signed out by
+      // the parent's onAttempt; the rehearsal bypass bypasses that too, so
+      // handle it here instead.
+      if (isRehearsal && err instanceof UnauthorizedError) {
+        authSignOut();
+      }
       if (err instanceof WordRejectedError) {
         // Learner-facing sentence from the backend ("We couldn't hear
         // anything…") — show it verbatim.
@@ -502,7 +542,11 @@ export default function VocabTrainer({
     }
   }
 
-  // Reset the per-card scratch state on every move.
+  // Reset the per-card scratch state on every move. SATZ-015: this also
+  // clears the rehearsal arming — a real advance (a different card, or this
+  // one recycling around) must never inherit a stale rehearsal flag. The
+  // one path that needs it to survive (tryAgain, on a failed rehearsal)
+  // re-arms it explicitly right after calling this.
   function resetScratch() {
     setRevealed(false);
     setFlipped(false);
@@ -510,6 +554,7 @@ export default function VocabTrainer({
     setExplanation(null);
     setFlagState("idle");
     setAttemptError(null);
+    rehearsalRef.current = null;
   }
 
   // Browse: step through the whole pool, wrapping so it never dead-ends.
@@ -541,7 +586,12 @@ export default function VocabTrainer({
       return;
     }
     if (!card) return;
-    const passed = !revealed && result?.wordOk === true;
+    // SATZ-015: any rehearsal attempt (green OR a failed retry the learner
+    // didn't chase further) completes the card — the original graded pass
+    // already stands, so this extra rep can never hold the round hostage
+    // or read as a fresh fail.
+    const passed =
+      rehearsalRef.current === card.id || (!revealed && result?.wordOk === true);
     // FLOW-001: the dealt deck is exactly one card — there's nothing to
     // recycle a miss into or pop a green out of. Hand the verdict straight
     // to the parent, which deals the next item (a fresh mount, via `key`).
@@ -571,8 +621,27 @@ export default function VocabTrainer({
   // Clearing the scratch un-flips the card; the card stays at the queue
   // head, ready for another tap of the Record button.
   function tryAgain() {
-    if (busy) return;
+    if (busy || !card) return;
+    // SATZ-015: a failed rehearsal keeps rehearsing — resetScratch clears
+    // the arming like any other reset, so re-arm it right after when this
+    // retry is itself mid-rehearsal (the original pass still stands either
+    // way; only a genuinely new attempt should ever touch the schedule).
+    const wasRehearsal = rehearsalRef.current === card.id;
     resetScratch();
+    if (wasRehearsal) rehearsalRef.current = card.id;
+  }
+
+  // SATZ-015: word right, sentence grammar corrected — arm one immediate
+  // retry of this SAME card so the learner re-produces the fixed sentence
+  // while it's fresh. The card's schedule already climbed from the graded
+  // pass that just happened; this (and any same-card retries after a failed
+  // one) rides with rehearsal:true so that pass is the only write that ever
+  // lands.
+  function startRehearsal() {
+    if (busy || !card) return;
+    const cardId = card.id;
+    resetScratch();
+    rehearsalRef.current = cardId;
   }
 
   // SATZ-010: one tap decides. Correct unlocks the mic; wrong is a full fail —
@@ -994,6 +1063,23 @@ export default function VocabTrainer({
                   onClick={tryAgain}
                   className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
                   style={redShadow}
+                >
+                  {"↻"} Try again
+                </button>
+              )}
+              {/* SATZ-015: word right, grammar corrected — a secondary (gold,
+                  not fail-red) retry so the fix gets re-produced right away.
+                  Next stays the visually primary action. sessionPrefix-gated:
+                  Verbformen hosts this component too but has no rehearsal
+                  flag on its route — an un-gated retry there would record a
+                  second graded attempt (the double-write this feature exists
+                  to avoid). */}
+              {!browsing && sessionPrefix === "satz" && verdict === "correct" && grammarNote && (
+                <button
+                  type="button"
+                  onClick={startRehearsal}
+                  className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-gold-deep bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  style={goldShadow}
                 >
                   {"↻"} Try again
                 </button>

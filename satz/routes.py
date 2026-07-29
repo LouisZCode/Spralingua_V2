@@ -593,6 +593,13 @@ async def submit_attempt(
     # the conversation's connect→disconnect session id). Optional so older
     # clients and curl keep working.
     session_id: str | None = Form(None, max_length=64),
+    # SATZ-015: an immediate re-attempt of a card that just passed green with
+    # a grammar correction — habit formation while the fix is fresh. Judged
+    # exactly like any other attempt, but must NEVER move the schedule: the
+    # original graded pass already claimed the interval climb / new-card slot
+    # / ledger entry, and a second write here would double-advance or (on a
+    # failed retry) wrongly punish the ladder for extra practice.
+    rehearsal: bool = Form(False),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -608,6 +615,14 @@ async def submit_attempt(
     the schedule commit and non-fatally, so the ledger can never break a
     practice attempt. The response payload is unchanged: feedback separation
     means Satzschmiede never surfaces the ledger.
+
+    SATZ-015: ``rehearsal=True`` runs the identical STT + examiner judge and
+    returns the identical payload shape, but skips every schedule/ledger/
+    attempt-log write — the card's row must be byte-identical before and
+    after. ``DrillAttempt`` has no free-form field that could mark a row as
+    a rehearsal without a migration or ambiguity in per-card stats, so the
+    row is skipped entirely rather than logged oddly; the fact still rides
+    on this request's span as the ``rehearsal`` attribute either way.
     """
     row = (
         await db.execute(
@@ -662,6 +677,9 @@ async def submit_attempt(
         attempt_span.set_attribute("card_id", card_id)
         if session_id:
             attempt_span.set_attribute("langfuse.session.id", session_id)
+        # SATZ-015: the rehearsal fact always rides on the span, whether or
+        # not a DrillAttempt row gets written below.
+        attempt_span.set_attribute("rehearsal", bool(rehearsal))
 
         t0 = time.perf_counter()
         try:
@@ -711,29 +729,44 @@ async def submit_attempt(
         if judgement.pattern_id:
             attempt_span.set_attribute("verdict.pattern_id", judgement.pattern_id)
 
-        # SATZ dosing P1: the card's first graded attempt claims its
-        # new-card slot for today (idempotent past the first attempt).
-        if user_card.started_at is None:
-            user_card.started_at = datetime.now()
+        if rehearsal:
+            # SATZ-015: judge normally, touch nothing. The original graded
+            # attempt already claimed the new-card slot and moved the
+            # schedule — report that already-committed state back unchanged
+            # rather than a fresh (and unwritten) computation.
+            due_in_days = user_card.interval_days or 0
+        else:
+            # SATZ dosing P1: the card's first graded attempt claims its
+            # new-card slot for today (idempotent past the first attempt).
+            if user_card.started_at is None:
+                user_card.started_at = datetime.now()
 
-        # Record the outcome. A miss lands on (lapse_interval, now) — still
-        # due, retryable this session; a hit climbs the interval ladder.
-        interval, due_at = schedule(
-            judgement.word_ok, user_card.interval_days, datetime.now()
-        )
-        user_card.interval_days = interval
-        user_card.due_at = due_at
-        user_card.reps += 1
-        user_card.last_score = 1 if judgement.word_ok else 0
-        try:
-            await db.commit()
-        except Exception:
-            logger.exception("Satz schedule commit failed (card {})", card_id)
-            await db.rollback()
+            # Record the outcome. A miss lands on (lapse_interval, now) —
+            # still due, retryable this session; a hit climbs the ladder.
+            interval, due_at = schedule(
+                judgement.word_ok, user_card.interval_days, datetime.now()
+            )
+            user_card.interval_days = interval
+            user_card.due_at = due_at
+            user_card.reps += 1
+            user_card.last_score = 1 if judgement.word_ok else 0
+            try:
+                await db.commit()
+            except Exception:
+                logger.exception("Satz schedule commit failed (card {})", card_id)
+                await db.rollback()
+            # A miss stores a punished (partially reset) interval, not zero —
+            # but the card IS due now. The client's "Back in N days" vs "due
+            # again now" copy keys off this field, so report 0 on any miss
+            # regardless of what got stored on interval_days.
+            due_in_days = interval if judgement.word_ok else 0
 
         # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
-        # after the schedule is safe; a ledger failure only logs.
-        if judgement.pattern_id:
+        # after the schedule is safe; a ledger failure only logs. Skipped on
+        # a rehearsal (SATZ-015): the original graded attempt already
+        # harvested whatever pattern applied — a rehearsal must not
+        # double-write it.
+        if judgement.pattern_id and not rehearsal:
             try:
                 await record_grammar_error(
                     db,
@@ -751,20 +784,23 @@ async def submit_attempt(
 
         # Append to the cross-drill attempt log (DATA-004) — its own commit,
         # non-fatal like the ledger write above; an attempt-log outage must
-        # never break the practice attempt it rides on.
-        try:
-            await record_drill_attempt(
-                db,
-                user_id=user_id,
-                exercise="satz",
-                item_ref=card_id,
-                pattern_id=judgement.pattern_id,
-                correct=judgement.word_ok and judgement.grammar_ok,
-                modality="spoken",
-                session_id=session_id,
-            )
-        except Exception:
-            logger.exception("Drill-attempt log write failed (card {})", card_id)
+        # never break the practice attempt it rides on. Skipped on a
+        # rehearsal (SATZ-015) — see the route docstring for why the row is
+        # dropped rather than marked.
+        if not rehearsal:
+            try:
+                await record_drill_attempt(
+                    db,
+                    user_id=user_id,
+                    exercise="satz",
+                    item_ref=card_id,
+                    pattern_id=judgement.pattern_id,
+                    correct=judgement.word_ok and judgement.grammar_ok,
+                    modality="spoken",
+                    session_id=session_id,
+                )
+            except Exception:
+                logger.exception("Drill-attempt log write failed (card {})", card_id)
 
         # camelCase like every other satz payload (poolSize, cardCount, …).
         return {
@@ -773,11 +809,7 @@ async def submit_attempt(
             "grammarOk": judgement.grammar_ok,
             "error": judgement.error,
             "corrected": judgement.corrected,
-            # A miss stores a punished (partially reset) interval, not zero —
-            # but the card IS due now. The client's "Back in N days" vs "due
-            # again now" copy keys off this field, so report 0 on any miss
-            # regardless of what got stored on interval_days.
-            "dueInDays": interval if judgement.word_ok else 0,
+            "dueInDays": due_in_days,
             # SATZ-008: the OTel trace id of THIS judgement, so the client
             # can file a disagree-flag score onto the exact trace.
             "traceId": format(attempt_span.get_span_context().trace_id, "032x"),
