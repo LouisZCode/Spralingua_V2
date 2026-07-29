@@ -114,6 +114,15 @@ export default function PracticeMenu() {
           style={{ animationDelay: "160ms" }}
         >
           <ModeCard
+            href="/genus"
+            accent="gold"
+            icon="circles"
+            kicker="der · die · das"
+            title="Artikel-Anker"
+            body="Drag the color onto the ending — most endings give the gender away. Then prove it: eine neue Wohnung."
+            cta="Drag the article"
+          />
+          <ModeCard
             href="/learn"
             accent="red"
             icon="mic"
@@ -173,15 +182,6 @@ export default function PracticeMenu() {
             title="Zeitfärbung"
             body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
             cta="Pick the verb"
-          />
-          <ModeCard
-            href="/genus"
-            accent="gold"
-            icon="circles"
-            kicker="der · die · das"
-            title="Artikel-Anker"
-            body="Drag the color onto the ending — most endings give the gender away. Then prove it: eine neue Wohnung."
-            cta="Drag the article"
           />
         </div>
 
