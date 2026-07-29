@@ -48,30 +48,32 @@ export default function VocabNudgePill({
 
   return (
     <div className="mt-3 text-center">
-      <button
-        type="button"
-        onClick={() => setShow((v) => !v)}
-        aria-expanded={show}
-        className="inline-flex items-center gap-1.5 rounded-full border-2 border-flag-gold-deep bg-flag-gold-soft px-3.5 py-1.5 font-body text-[12px] font-bold text-flag-gold-deep transition-colors hover:bg-flag-gold/30"
-      >
-        💡 {words.length}{" "}
-        {words.length === 1 ? "word" : "words"} from your
-        vocabulary would fit here
-      </button>
+      <div className="inline-flex items-center gap-1.5">
+        <span aria-hidden="true" className={show ? "" : "bulb-wiggle"}>
+          💡
+        </span>
+        <button
+          type="button"
+          onClick={() => setShow((v) => !v)}
+          aria-expanded={show}
+          className="rounded-full border-2 border-flag-gold-deep bg-flag-gold-soft px-3.5 py-1.5 font-body text-[12px] font-bold text-ink transition-colors hover:bg-flag-gold/30"
+        >
+          {words.length} {words.length === 1 ? "word" : "words"} from your
+          vocabulary would fit here
+        </button>
+      </div>
       {show && (
         <div className="mx-auto mt-3 max-w-[420px] rounded-[20px] border-[3px] border-flag-gold-deep bg-flag-gold-soft p-4 text-left">
           <p className="font-body text-[11px] font-black uppercase tracking-[0.2em] text-flag-gold-deep">
             Aus deinem Wortschatz
           </p>
-          <ul className="mt-2 space-y-1.5">
+          <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1.5">
             {words.map((w) => (
               <li
                 key={w.word}
-                className="font-body text-[13px] leading-snug text-ink"
+                className="font-body text-[13px] font-bold leading-snug text-ink"
               >
-                <span className="font-bold">{w.word}</span>
-                <span className="mx-1.5 text-ink-muted">—</span>
-                <span className="italic text-ink-soft">{w.hint}</span>
+                {w.word}
               </li>
             ))}
           </ul>

@@ -321,3 +321,22 @@ body {
 .flip-back {
   transform: rotateY(180deg);
 }
+
+/* ─── VocabNudge: bulb attention wiggle (rest 75% of a 2s cycle) ──── */
+
+@keyframes bulb-wiggle {
+  0%, 100% { transform: rotate(0deg) translateX(0); }
+  5% { transform: rotate(-9deg) translateX(-1px); }
+  10% { transform: rotate(8deg) translateX(1px); }
+  15% { transform: rotate(-6deg) translateX(-1px); }
+  20% { transform: rotate(4deg) translateX(0); }
+  25%, 75% { transform: rotate(0deg) translateX(0); }
+}
+.bulb-wiggle {
+  animation: bulb-wiggle 2s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .bulb-wiggle {
+    animation: none;
+  }
+}
