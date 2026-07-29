@@ -107,6 +107,14 @@ export default function ConversationView({
   const botStartedTimeRef = useRef<number | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const REVEAL_SAFETY_MS = 300;
+  // BUG-009: Railway's edge proxy silently idle-kills a WebSocket after ~5min
+  // of no traffic, and the browser never receives a close frame (half-open
+  // socket) — onDisconnected simply never fires, so the UI is stuck on
+  // LISTENING. The backend counters this with a ~25s RTVI heartbeat
+  // (pipeline/factory.py::_rtvi_heartbeat); this ref tracks the last time ANY
+  // real traffic arrived (heartbeat OR an actual turn), so the liveness
+  // watchdog below can tell a merely-quiet conversation from a dead socket.
+  const lastActivityRef = useRef<number>(Date.now());
 
   // Fetch briefing copy when the view mounts.
   useEffect(() => {
@@ -217,6 +225,32 @@ export default function ConversationView({
     setShowSummary(true);
   };
 
+  // BUG-009 liveness watchdog: the client-side counterpart to the ~25s server
+  // heartbeat (pipeline/factory.py::_rtvi_heartbeat). Railway's edge proxy can
+  // idle-kill the WS without ever delivering a close frame to the browser
+  // (half-open socket) — onDisconnected simply never fires, so the UI is
+  // stuck showing LISTENING. Checked every 15s; three missed ~25s heartbeats
+  // (>80s of total silence) declares the session dead and routes through the
+  // SAME finish path a real disconnect uses. `finishedRef` — flipped by
+  // handleFinish itself — is already this component's single "have we wound
+  // down yet" guard, so it doubles as the double-fire guard here too. Only
+  // armed during the live phase; the interval is torn down on phase change
+  // and on unmount.
+  useEffect(() => {
+    if (phase !== "live") return;
+    const LIVENESS_CHECK_MS = 15_000;
+    const LIVENESS_TIMEOUT_MS = 80_000; // 3 missed ~25s heartbeats
+    const id = setInterval(() => {
+      if (finishedRef.current) return;
+      if (Date.now() - lastActivityRef.current > LIVENESS_TIMEOUT_MS) {
+        void clientRef.current?.disconnect(); // safe no-op if already dead
+        handleFinish();
+      }
+    }, LIVENESS_CHECK_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   const startCall = async () => {
     if (!token || !user) return;
     // MOBILE-001 P2: prime audio playback INSIDE this click handler (a real
@@ -233,6 +267,10 @@ export default function ConversationView({
       });
     }
     setPhase("live");
+    // BUG-009: reset the liveness clock here, not just at mount — a learner
+    // who sits on the briefing screen past the 80s threshold would otherwise
+    // have the watchdog fire the instant the live phase's interval starts.
+    lastActivityRef.current = Date.now();
     setStatus("Connecting...");
     try {
       const transport = new WebSocketTransport({
@@ -280,6 +318,7 @@ export default function ConversationView({
             }
           },
           onUserTranscript: (data: { final?: boolean; text?: string }) => {
+            lastActivityRef.current = Date.now(); // BUG-009 liveness signal
             if (data.final && data.text) {
               const text = data.text;
               setMessages((prev) => [...prev, { speaker: "you", text }]);
@@ -288,6 +327,7 @@ export default function ConversationView({
             }
           },
           onBotOutput: (data: { text?: string; audio_duration_ms?: number }) => {
+            lastActivityRef.current = Date.now(); // BUG-009 liveness signal
             if (!data.text) return;
             pendingBotTextRef.current = data.text;
             const startedAt = botStartedTimeRef.current;
@@ -315,6 +355,10 @@ export default function ConversationView({
             }
           },
           onServerMessage: (data: unknown) => {
+            // BUG-009: every server message — including the heartbeat below —
+            // is proof the socket is still alive end-to-end, so this is the
+            // primary liveness signal (session_started only fires once).
+            lastActivityRef.current = Date.now();
             if (
               data &&
               typeof data === "object" &&
@@ -403,6 +447,18 @@ export default function ConversationView({
           body: form,
         });
         if (!r.ok) {
+          if (r.status === 404) {
+            // BUG-009: Practice mode has no onDisconnected of its own to catch
+            // this — the mic is off, so nothing streams up the WS between
+            // takes, and a Railway edge idle-kill can silently tear the
+            // pipeline down (debrief already ran) between one recording and
+            // the next. The backend's "No active session" 404 IS that
+            // disconnect signal here; recover the same way the liveness
+            // watchdog does instead of dead-ending on an inline error.
+            void clientRef.current?.disconnect(); // safe no-op if already dead
+            handleFinish();
+            return;
+          }
           const detail = (await r.json().catch(() => null))?.detail;
           setPracticeError(
             typeof detail === "string" ? detail : "Couldn't send that — try again."
@@ -420,6 +476,7 @@ export default function ConversationView({
         setPracticeSending(false);
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [token, user]
   );
 

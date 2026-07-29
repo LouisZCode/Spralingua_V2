@@ -105,6 +105,45 @@ class _NoOpTurnTraceObserver:
         pass
 
 
+# BUG-009: Railway's edge proxy silently idle-kills a WebSocket after ~5min of
+# no traffic. Pipecat's own transport-level pings are WS-protocol frames the
+# edge terminates before they reach the browser, so they don't reset anything;
+# a tandem session with a quiet stretch (learner reading, thinking) gets torn
+# down server-side while the browser never sees a close frame (half-open
+# socket — UI stays on LISTENING forever). A tiny recurring RTVI server
+# message is a REAL application-data frame end-to-end, which is what actually
+# resets a proxy's idle timer in both directions. 25s comfortably beats any
+# ~5min ceiling even with jitter.
+RTVI_HEARTBEAT_INTERVAL_S = 25
+
+
+async def _rtvi_heartbeat(rtvi_processor: RTVIProcessor, wrapper: ClientWrapper, user_id: str):
+    """Per-connection keepalive (BUG-009). Reuses `rtvi_processor.send_server_message` —
+    the exact call already proven a few lines below by the `session_started`
+    push — which queues an `OutputTransportMessageUrgentFrame` from the RTVI
+    processor's own position in the pipeline straight to `transport.output()`,
+    so no new pipecat mechanism is needed. Gated on `wrapper._end_pending`
+    (flipped as soon as the agent DECIDES to end, well before the EndFrame is
+    actually queued — see agents/pipecat_wrapper.py) so the loop stops itself
+    ahead of the graceful shutdown instead of racing it; the send is also
+    wrapped so a transport hiccup can never crash or block the pipeline or
+    teardown. Cancelled unconditionally in run_pipeline's `finally`, same
+    lifecycle as `_session_watchdog` above — per-client, no module globals."""
+    try:
+        while True:
+            await asyncio.sleep(RTVI_HEARTBEAT_INTERVAL_S)
+            if wrapper._end_pending:
+                return  # graceful EndFrame is already in flight — don't race it
+            try:
+                await rtvi_processor.send_server_message({"type": "heartbeat"})
+            except Exception as e:  # noqa: BLE001 — must never crash the pipeline
+                logger.warning(
+                    f"RTVI heartbeat send failed (non-fatal): {type(e).__name__}: {e} user_id={user_id}"
+                )
+    except asyncio.CancelledError:
+        return
+
+
 async def _session_watchdog(task: PipelineTask, timeout_s: float, user_id: str):
     """Wall-clock cap on a single session (SEC-001; armed only when a timeout is
     passed, i.e. the public demo route). Sleeps `timeout_s`, then ends the
@@ -463,6 +502,14 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             else None
         )
 
+        # BUG-009 keepalive. Started here — right after the pipeline task
+        # exists — for every connection (not gated on lesson type or a demo
+        # timeout like the watchdog above): any idle stretch on any lesson can
+        # hit Railway's edge idle timeout. Cancelled in `finally` below.
+        heartbeat_task = asyncio.create_task(
+            _rtvi_heartbeat(rtvi_processor, wrapper, user_id)
+        )
+
         print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
 
         # Hoisted out of the inner try-blocks so the DB finalize step below
@@ -488,6 +535,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         finally:
             if watchdog is not None:
                 watchdog.cancel()
+            heartbeat_task.cancel()  # BUG-009 — per-client, never outlives this connection
             # Identity-guarded: if the same user opened a second tab, its
             # connect overwrote our entry — popping blindly here would break
             # /say for that still-live session (BUG-004).
