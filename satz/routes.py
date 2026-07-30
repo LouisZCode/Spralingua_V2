@@ -796,6 +796,7 @@ async def submit_attempt(
                     item_ref=card_id,
                     pattern_id=judgement.pattern_id,
                     correct=judgement.word_ok and judgement.grammar_ok,
+                    word_ok=judgement.word_ok,
                     modality="spoken",
                     session_id=session_id,
                 )
@@ -824,7 +825,10 @@ NEW_PER_DAY = 5
 
 # SATZ dosing P3: the desirable-difficulty guard. Retrieval practice pays off
 # most above ~75-80% success (Rowland 2014) — below that, stop adding new
-# load until the existing reviews recover.
+# load until the existing reviews recover. Success here means WORD recall
+# (word_ok), the same signal the scheduler moves cards on — grammar slips
+# elsewhere in the sentence are this exercise's extra feedback, not a miss
+# of the practiced item, and must not freeze intake.
 THROTTLE_WINDOW = 20  # most recent graded satz attempts considered
 THROTTLE_MIN = 10  # need at least this many before the throttle can fire
 THROTTLE_FLOOR = 0.8
@@ -883,12 +887,14 @@ async def get_deck(
         .where(UserCard.user_id == user_id, UserCard.started_at >= today_midnight)
     )
 
-    # Last THROTTLE_WINDOW graded satz attempts in the last 7 days. `correct`
-    # here is satz's own field — word AND grammar both ok — the stricter read
-    # of accuracy than word_ok alone, so the throttle triggers on real trouble.
+    # Last THROTTLE_WINDOW graded satz attempts in the last 7 days, judged on
+    # word recall (word_ok) — the metric the scheduler itself uses. COALESCE
+    # falls back to the strict `correct` flag for rows written before the
+    # word_ok column existed, so the window stays meaningful while it rolls
+    # over onto post-migration data.
     recent_correct = (
         await db.execute(
-            select(DrillAttempt.correct)
+            select(func.coalesce(DrillAttempt.word_ok, DrillAttempt.correct))
             .where(
                 DrillAttempt.user_id == user_id,
                 DrillAttempt.exercise == "satz",

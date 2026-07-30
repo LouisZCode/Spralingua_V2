@@ -233,6 +233,7 @@ async def record_drill_attempt(
     item_ref: str | None = None,
     pattern_id: str | None = None,
     correct: bool | None = None,
+    word_ok: bool | None = None,
     modality: str,
     session_id: str | None = None,
 ) -> None:
@@ -257,6 +258,7 @@ async def record_drill_attempt(
                 item_ref=item_ref,
                 pattern_id=pattern_id,
                 correct=correct,
+                word_ok=word_ok,
                 modality=modality,
                 session_id=session_id,
             )

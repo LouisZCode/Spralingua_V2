@@ -363,6 +363,11 @@ class DrillAttempt(Base):
     # its rows always record NULL here (they still count toward attempt
     # totals, just not toward accuracy).
     correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Item-recall verdict alone (satz: the target word was produced, grammar
+    # aside). Only satz writes it — the new-word throttle gates intake on
+    # this, matching the scheduler, while ``correct`` stays the strict
+    # word-AND-grammar read for accuracy stats. NULL everywhere else.
+    word_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # "written" | "spoken"
     modality: Mapped[str] = mapped_column(Text, nullable=False)
     # The client-minted practice-sitting id (OBS-007), e.g. "satz-…".
