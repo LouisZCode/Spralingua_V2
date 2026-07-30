@@ -239,6 +239,16 @@ class UserCard(Base):
     # only signal POST /satz/cards needs to count "gloss adds today" against
     # the hard cap of 3/day without touching the uncapped manual/pack paths.
     source: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Leech benching (SATZ P2): lifetime word-miss/reveal/gender-miss count —
+    # every call site that already quarters interval_days also bumps this.
+    # Crossing LEECH_CAP (satz/routes.py) auto-benches the card.
+    lapses: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    # Set = the card is on the "Schwere Wörter" shelf, out of rotation until
+    # the learner consciously re-enters it (POST /deck/{card_id}/unbench).
+    # NULL = normal rotation.
+    benched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
 
     # The deck query: "this user's cards that are due".
     __table_args__ = (Index("ix_user_cards_user_due", "user_id", "due_at"),)

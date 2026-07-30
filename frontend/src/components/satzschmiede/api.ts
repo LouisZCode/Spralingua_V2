@@ -258,6 +258,17 @@ export async function removeCard(
   });
 }
 
+// SATZ P2: pull a benched card off the "Schwere Wörter" shelf and back into
+// rotation — the learner's own conscious re-entry, at the ladder bottom.
+export async function unbenchCard(
+  token: string,
+  cardId: string
+): Promise<{ ok: boolean }> {
+  return request(`/satz/deck/${encodeURIComponent(cardId)}/unbench`, token, {
+    method: "POST",
+  });
+}
+
 // UI-007: hover/tap word-gloss popover — one German word, a short English
 // meaning, an example sentence, and whether it's already in the deck.
 export type GlossInfo = {

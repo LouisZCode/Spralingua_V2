@@ -71,9 +71,17 @@ def _card_payload(c: VocabCard) -> dict:
 def _srs_payload(uc: UserCard, now: datetime) -> dict:
     """Per-user schedule state riding on each deck card (frontend ``CardSrs``).
     ``status`` is computed server-side so the client never compares clocks:
-    "new" = never practiced, "due" = practice today, "later" = scheduled ahead.
+    "new" = never practiced, "due" = practice today, "later" = scheduled ahead,
+    "benched" = leeched out of rotation (SATZ P2) — wins over every other
+    status regardless of what due_at/interval_days say, since a benched card
+    still carries its pre-bench schedule fields as-is for when it's revived.
+    Dealing (the standalone practice queue's buildQueue AND the Flow mixed-
+    practice cycle) both key off `status` alone, so a card leaving rotation
+    here needs no client-side filter changes — see satz P2 notes.
     """
-    if uc.due_at is None:
+    if uc.benched_at is not None:
+        status = "benched"
+    elif uc.due_at is None:
         status = "new"
     elif uc.due_at <= now:
         status = "due"
@@ -84,6 +92,8 @@ def _srs_payload(uc: UserCard, now: datetime) -> dict:
         "dueAt": uc.due_at.isoformat() if uc.due_at else None,
         "intervalDays": uc.interval_days,
         "reps": uc.reps,
+        # SATZ P2: shown on the "Schwere Wörter" shelf ("6× daneben").
+        "lapses": uc.lapses,
     }
 
 
@@ -750,6 +760,10 @@ async def submit_attempt(
             user_card.due_at = due_at
             user_card.reps += 1
             user_card.last_score = 1 if judgement.word_ok else 0
+            # Leech benching (SATZ P2): a graded word-miss is a lapse — same
+            # signal that already quartered interval_days above.
+            if not judgement.word_ok:
+                _record_lapse(user_card, due_at)
             try:
                 await db.commit()
             except Exception:
@@ -822,6 +836,29 @@ async def submit_attempt(
 # documented rule of thumb is ~20 new/day settling into ~200 reviews/day;
 # this caps at a fifth of that.
 NEW_PER_DAY = 5
+
+# Leech benching (SATZ P2): lifetime lapses (graded word-miss, reveal, or
+# gender-miss) before a card auto-benches out of rotation. Anki's own leech
+# threshold is 8 lapses on a mature deck; ours is stricter because the ladder
+# here is short (tops out at 35 days) and a churning card costs a daily
+# review slot indefinitely rather than fading into a long mature interval.
+LEECH_CAP = 6
+
+
+def _record_lapse(user_card: UserCard, now: datetime) -> None:
+    """Bump the lifetime lapse counter and auto-bench past LEECH_CAP.
+
+    Called from every place that already punishes the schedule for this
+    card (a graded word-miss, a reveal, a gender-miss) — same call sites,
+    one extra counter. Benching only ever happens once: ``benched_at is
+    None`` guards against a card that's already on the shelf getting its
+    bench timestamp bumped by further lapses (there aren't any — a benched
+    card is out of rotation — but the guard keeps this idempotent either way).
+    """
+    user_card.lapses += 1
+    if user_card.lapses >= LEECH_CAP and user_card.benched_at is None:
+        user_card.benched_at = now
+
 
 # SATZ dosing P3: the desirable-difficulty guard. Retrieval practice pays off
 # most above ~75-80% success (Rowland 2014) — below that, stop adding new
@@ -932,6 +969,7 @@ async def reveal_card(
     can't silently keep a long interval alive, while the next green climbs
     back from that quarter rather than restarting the whole ladder.
     ``reps``/``last_score`` stay untouched: a reveal isn't a graded attempt.
+    Counts toward leech benching (SATZ P2) same as a graded miss.
     """
     user_card = await db.scalar(
         select(UserCard).where(
@@ -944,8 +982,10 @@ async def reveal_card(
     # would bypass the daily allowance into review load.
     if user_card.started_at is None:
         user_card.started_at = datetime.now()
+    now = datetime.now()
     user_card.interval_days = lapse_interval(user_card.interval_days)
-    user_card.due_at = datetime.now()
+    user_card.due_at = now
+    _record_lapse(user_card, now)
     await db.commit()
     return {"dueInDays": 0}
 
@@ -962,6 +1002,7 @@ async def gender_miss_card(
     the card drops to "due now" at a quarter of its old interval, and
     ``reps``/``last_score`` stay untouched. A separate endpoint (rather than
     reusing /reveal) so the two lapse causes stay distinguishable in logs.
+    Counts toward leech benching (SATZ P2) same as a graded miss.
     """
     user_card = await db.scalar(
         select(UserCard).where(
@@ -972,10 +1013,44 @@ async def gender_miss_card(
         raise HTTPException(status_code=404, detail="That card isn't in your pool.")
     if user_card.started_at is None:
         user_card.started_at = datetime.now()
+    now = datetime.now()
     user_card.interval_days = lapse_interval(user_card.interval_days)
-    user_card.due_at = datetime.now()
+    user_card.due_at = now
+    _record_lapse(user_card, now)
     await db.commit()
     return {"dueInDays": 0}
+
+
+@router.post("/deck/{card_id}/unbench")
+async def unbench_card(
+    card_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Leech benching (SATZ P2) is reversible, but only by the learner's own
+    choice — this is the "Wieder üben" button on the Schwere Wörter shelf.
+
+    Clears the bench and drops the card back to the ladder bottom (due now,
+    interval 0, lapses reset) rather than restoring wherever it left off:
+    the whole point of benching was that the old interval/lapse history
+    wasn't working, so a conscious re-entry starts clean and the next green
+    climbs to 1 day via ``next_interval(0)``, same as any new card.
+    """
+    user_card = await db.scalar(
+        select(UserCard).where(
+            UserCard.user_id == user_id, UserCard.card_id == card_id
+        )
+    )
+    if user_card is None:
+        raise HTTPException(status_code=404, detail="Card not found")
+    if user_card.benched_at is None:
+        raise HTTPException(status_code=409, detail="Card is not benched")
+    user_card.benched_at = None
+    user_card.lapses = 0
+    user_card.interval_days = 0
+    user_card.due_at = datetime.now()
+    await db.commit()
+    return {"ok": True}
 
 
 class ExplainIn(BaseModel):
