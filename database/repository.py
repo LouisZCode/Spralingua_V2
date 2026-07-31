@@ -415,6 +415,82 @@ async def load_tandem_notes(
     return notes
 
 
+async def count_active_days(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    drill_start: datetime,
+    session_start: datetime,
+) -> int:
+    """Distinct UTC days with ANY practice since the period start — drill
+    attempts or conversation sessions (REC-001's ≥3-active-days gate).
+
+    Two starts because the columns disagree on tz-awareness:
+    ``drill_attempts.created_at`` is TIMESTAMPTZ (compare aware),
+    ``activity_session.started_at`` is naive-UTC TIMESTAMP (compare naive).
+    """
+    drill_days = (
+        await db.execute(
+            select(func.date(DrillAttempt.created_at))
+            .where(
+                DrillAttempt.user_id == user_id,
+                DrillAttempt.created_at >= drill_start,
+            )
+            .distinct()
+        )
+    ).scalars().all()
+    session_days = (
+        await db.execute(
+            select(func.date(ActivitySession.started_at))
+            .where(
+                ActivitySession.user_id == user_id,
+                ActivitySession.started_at >= session_start,
+            )
+            .distinct()
+        )
+    ).scalars().all()
+    return len(set(drill_days) | set(session_days))
+
+
+async def satz_word_recall(
+    db: AsyncSession, *, user_id: str, start: datetime
+) -> tuple[int, float]:
+    """(graded attempts, word-recall rate) over satz attempts since ``start``
+    — the same COALESCE(word_ok, correct) metric the dosing throttle uses,
+    so REC-001 and the throttle never disagree about what "weak recall" is.
+    Rate is 0.0 when there are no attempts; gate on the count."""
+    rows = (
+        await db.execute(
+            select(func.coalesce(DrillAttempt.word_ok, DrillAttempt.correct)).where(
+                DrillAttempt.user_id == user_id,
+                DrillAttempt.exercise == "satz",
+                DrillAttempt.correct.is_not(None),
+                DrillAttempt.created_at >= start,
+            )
+        )
+    ).scalars().all()
+    if not rows:
+        return 0, 0.0
+    return len(rows), sum(1 for r in rows if r) / len(rows)
+
+
+async def count_sessions_since(
+    db: AsyncSession, *, user_id: str, lesson_id: str, start: datetime
+) -> int:
+    """Conversation sessions of one lesson since ``start`` (naive-UTC)."""
+    return (
+        await db.scalar(
+            select(func.count())
+            .select_from(ActivitySession)
+            .where(
+                ActivitySession.user_id == user_id,
+                ActivitySession.lesson_id == lesson_id,
+                ActivitySession.started_at >= start,
+            )
+        )
+    ) or 0
+
+
 def _as_utc_iso(dt: datetime) -> str:
     # activity_session timestamps are stored naive-UTC (TIMESTAMP without
     # timezone); stamp the offset so the frontend's Date parsing can't

@@ -130,6 +130,31 @@ export type RecentSession = {
   debrief: SessionDebrief | null; // tandem only
 };
 
+// ── REC-001: today's recommended pillar for the practice menu ─────────────
+// null = no clear signal (or not enough active days this week) → no banner.
+
+export type Recommendation = {
+  pillar: "satz" | "flow" | "tandem";
+  reason: string;
+  patternLabel?: string;
+};
+
+export async function fetchRecommendation(
+  token: string,
+): Promise<Recommendation | null> {
+  const res = await fetch(`${HTTP_BASE}/me/recommendation`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    throw new UnauthorizedError("/me/recommendation");
+  }
+  if (!res.ok) {
+    throw new Error(`/me/recommendation failed (${res.status})`);
+  }
+  const body = (await res.json()) as { recommendation: Recommendation | null };
+  return body.recommendation;
+}
+
 export async function fetchSessions(token: string): Promise<RecentSession[]> {
   const res = await fetch(`${HTTP_BASE}/me/sessions`, {
     headers: { Authorization: `Bearer ${token}` },

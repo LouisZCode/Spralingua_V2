@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import { fetchRecommendation, type Recommendation } from "./development/api";
 
 // Post-login hub. After the Google sign-in flow (StartCta) the user lands here
 // instead of dropping straight into a lesson, and picks which practice mode to
@@ -15,9 +16,35 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
 
+// REC-001: where each recommended pillar sends the learner.
+const REC_TARGETS: Record<
+  Recommendation["pillar"],
+  { href: string; cta: string }
+> = {
+  satz: { href: "/satzschmiede", cta: "Practice words" },
+  flow: { href: "/flow", cta: "Enter the Flow" },
+  tandem: { href: "/tandem", cta: "Talk to Lena" },
+};
+
 export default function PracticeMenu() {
   const { token, user, ready } = useAuth();
   const router = useRouter();
+
+  // REC-001: today's data-driven pick, shown as a banner above the modes.
+  // Non-fatal — any load failure just means no banner; the menu is the core.
+  const [rec, setRec] = useState<Recommendation | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchRecommendation(token)
+      .then((r) => {
+        if (!cancelled) setRec(r);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   // Same guard the /learn route uses: once localStorage hydration settles, a
   // missing token bounces to the public landing page, where sign-in lives.
@@ -74,6 +101,40 @@ export default function PracticeMenu() {
             Pick a mode to get started. You can switch any time.
           </p>
         </div>
+
+        {/* REC-001: after ~3 active days this week, the data may pick one
+            pillar to push today. Absent = no clear signal, and that's fine. */}
+        {rec && (
+          <div
+            className="rise-in mt-8 flex flex-col gap-4 rounded-[28px] border-[3px] border-flag-gold-deep bg-flag-gold-soft p-6 sm:flex-row sm:items-center sm:justify-between"
+            style={{ animationDelay: "80ms" }}
+          >
+            <div className="flex items-center gap-4">
+              <Image
+                src="/mascot/raven.png"
+                alt=""
+                width={44}
+                height={44}
+                className="h-11 w-11 shrink-0 select-none"
+              />
+              <div>
+                <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink">
+                  Today&apos;s recommendation
+                </p>
+                <p className="mt-1 max-w-xl font-body text-[15px] leading-snug text-ink-soft">
+                  {rec.reason}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={REC_TARGETS[rec.pillar].href}
+              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+              style={inkShadow}
+            >
+              {REC_TARGETS[rec.pillar].cta} →
+            </Link>
+          </div>
+        )}
 
         <div
           className="rise-in mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
