@@ -16,7 +16,7 @@ from sqlalchemy import text
 from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
-from agents.load_prompts import load_prompts, load_tandem_topics
+from agents.load_prompts import load_prompts, load_tandem_topics, tandem_lesson_ids
 from auth import AuthError, decode_session_jwt, get_current_user_id, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from genus import (
@@ -61,9 +61,9 @@ from security import (
 # tandem's own runtime language (pipeline/factory.py::lesson_language), so no
 # new param/plumbing was added. Fail loud at import time if that ever drifts
 # (e.g. tandem joining ENGLISH_LESSONS) instead of silently mis-transcribing.
-assert lesson_language("tandem") == "de", (
-    "tandem's runtime language changed — satz.examiner.transcribe_attempt is "
-    "hardcoded to German and no longer matches; update /tandem/say-audio"
+assert all(lesson_language(lid) == "de" for lid in tandem_lesson_ids()), (
+    "a tandem lesson's runtime language changed — satz.examiner.transcribe_attempt "
+    "is hardcoded to German and no longer matches; update /tandem/say-audio"
 )
 
 # The session JWT rides as ``?token=`` on the WS handshake URL (see
@@ -279,19 +279,24 @@ async def get_session(session_id: str, request: Request):
         "passed": row.passed,
         "goal_eval": row.goal_eval,
         "pron_eval": row.pron_eval,
-        # error_eval is surfaced ONLY for tandem (the debrief the TandemDebriefModal
-        # renders). Drill sessions also store an error_eval (the silent grammar
-        # harvest), but feedback separation is the point — never hand it back to a
-        # drill client, which would let it leak into the drill summary modal.
-        "error_eval": row.error_eval if row.lesson_id == "tandem" else None,
+        # error_eval is surfaced ONLY for tandem lessons (the debrief the
+        # TandemDebriefModal renders — any partner). Drill sessions also store an
+        # error_eval (the silent grammar harvest), but feedback separation is the
+        # point — never hand it back to a drill client, which would let it leak
+        # into the drill summary modal.
+        "error_eval": row.error_eval if row.lesson_id in tandem_lesson_ids() else None,
     }
 
 
 @app.get("/tandem/topics")
-def tandem_topics():
+def tandem_topics(lesson: str = "tandem"):
     """Conversation-topic suggestions for the Grammatik-Tandem topic screen
-    (TANDEM-001). Public, non-sensitive content — same as ``/lessons/{id}``."""
-    return {"topics": load_tandem_topics()}
+    (TANDEM-001). Each partner has their own pool (TAND-008) — ``lesson``
+    picks it, defaulting to Lena's. Public, non-sensitive content — same as
+    ``/lessons/{id}``."""
+    if lesson not in tandem_lesson_ids():
+        raise HTTPException(status_code=404, detail="unknown tandem lesson")
+    return {"topics": load_tandem_topics(lesson)}
 
 
 @app.websocket("/ws/{user_id}")

@@ -23,7 +23,7 @@ const REC_TARGETS: Record<
 > = {
   satz: { href: "/satzschmiede", cta: "Practice words" },
   flow: { href: "/flow", cta: "Enter the Flow" },
-  tandem: { href: "/tandem", cta: "Talk to Lena" },
+  tandem: { href: "/tandem", cta: "Open Tandem" },
 };
 
 export default function PracticeMenu() {
@@ -164,8 +164,8 @@ export default function PracticeMenu() {
             icon="chat"
             kicker="Grammatik-Tandem"
             title="Tandem Partner"
-            body="Daily German chat with Lena, your language-exchange partner. She remembers your last talks and gently fixes the grammar you keep missing."
-            cta="Meet Lena"
+            body="Daily German chat with Lena or Paul — everyday German or office German. Each remembers your talks and gently fixes the grammar you keep missing."
+            cta="Meet your partners"
           />
         </div>
 

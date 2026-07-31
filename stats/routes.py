@@ -22,6 +22,7 @@ from datetime import datetime, time, timedelta, timezone
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agents.load_prompts import tandem_lesson_ids
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
@@ -168,9 +169,10 @@ async def get_my_recommendation(
             "activeDays": active_days,
         }
 
-    # 3) Drilling all week without one real conversation → Tandem.
+    # 3) Drilling all week without one real conversation → Tandem. A chat
+    # with ANY partner counts (TAND-008: Lena or Paul).
     tandem_sessions = await count_sessions_since(
-        db, user_id=user_id, lesson_id="tandem", start=week_start_naive
+        db, user_id=user_id, lesson_ids=sorted(tandem_lesson_ids()), start=week_start_naive
     )
     if tandem_sessions == 0:
         return {
@@ -178,7 +180,7 @@ async def get_my_recommendation(
                 "pillar": "tandem",
                 "reason": (
                     "You've been practicing all week but haven't had a real "
-                    "conversation yet — talk to Lena today."
+                    "conversation yet — your tandem partners are waiting."
                 ),
             },
             "activeDays": active_days,

@@ -329,6 +329,7 @@ function ErrorRow({ error }: { error: TopError }) {
 
 const LESSON_LABELS: Record<string, string> = {
   tandem: "Tandem · Lena",
+  tandem_paul: "Tandem · Paul",
   lesson_zero: "Free conversation",
 };
 

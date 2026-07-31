@@ -13,7 +13,6 @@ from loguru import logger
 
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _FALLBACK = "lesson_zero"
-_TOPICS_PATH = _PROMPTS_DIR / "tandem_topics.yaml"
 
 
 def load_prompts(lesson_id: str) -> dict:
@@ -42,17 +41,34 @@ def list_lesson_ids() -> list[str]:
 
 
 @lru_cache(maxsize=1)
-def load_tandem_topics() -> list[str]:
-    """Load the Grammatik-Tandem topic suggestions (TANDEM-001).
+def tandem_lesson_ids() -> frozenset[str]:
+    """Ids of every ``type: tandem`` lesson (TAND-008: Lena + Paul, and any
+    future partner). The single source for call sites that used to hardcode
+    ``"tandem"`` — debrief surfacing in ``main.py``, the REC-001 tandem count
+    in ``stats/routes.py``, the topics endpoint below."""
+    return frozenset(
+        lid for lid in list_lesson_ids() if load_prompts(lid).get("type") == "tandem"
+    )
 
-    Not a lesson — a flat list of conversation themes served to the tandem
-    topic screen (`GET /tandem/topics`) and never routed through the lesson
-    loader. Fail-loud like the satz content sync: a malformed list is a content
-    bug, not a silent empty screen. Cached once per process.
+
+@lru_cache(maxsize=8)
+def load_tandem_topics(lesson_id: str = "tandem") -> list[str]:
+    """Load a tandem partner's topic suggestions (TANDEM-001 / TAND-008).
+
+    Each partner has their own pool at ``{lesson_id}_topics.yaml`` (Lena's
+    everyday themes in ``tandem_topics.yaml``, Paul's professional pool in
+    ``tandem_paul_topics.yaml``). Not lessons — flat theme lists served to the
+    topic screen (`GET /tandem/topics?lesson=…`) and never routed through the
+    lesson loader. Only real tandem lesson ids are accepted (the endpoint takes
+    the id from the query string). Fail-loud like the satz content sync: a
+    malformed list is a content bug, not a silent empty screen.
     """
-    with open(_TOPICS_PATH, "r", encoding="utf-8") as f:
+    if lesson_id not in tandem_lesson_ids():
+        raise ValueError(f"not a tandem lesson: {lesson_id!r}")
+    path = _PROMPTS_DIR / f"{lesson_id}_topics.yaml"
+    with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     topics = (data or {}).get("topics")
     if not topics:
-        raise ValueError(f"{_TOPICS_PATH}: no 'topics' list")
+        raise ValueError(f"{path}: no 'topics' list")
     return topics

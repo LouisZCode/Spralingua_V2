@@ -108,7 +108,7 @@ def cmd_start(args: argparse.Namespace) -> None:
 
     token = issue_session_jwt(args.user)
     qs = urllib.parse.urlencode(
-        {"lesson": "tandem", "topic": args.topic, "voice": args.voice, "token": token}
+        {"lesson": args.lesson, "topic": args.topic, "voice": args.voice, "token": token}
     )
     url = f"{WS_BASE}/ws/{args.user}?{qs}"
 
@@ -147,8 +147,8 @@ def cmd_start(args: argparse.Namespace) -> None:
             "conversation": [],
         }
     )
-    print(f"session started (topic: {args.topic!r}, user: {args.user})")
-    print('you speak first — send a greeting with: say "Hallo Lena!"')
+    print(f"session started (lesson: {args.lesson!r}, topic: {args.topic!r}, user: {args.user})")
+    print('you speak first — send a greeting with: say "Hallo!"')
 
 
 def _read_new(state: dict) -> str:
@@ -212,7 +212,7 @@ def cmd_say(args: argparse.Namespace) -> None:
                 reply = " ".join(parts).strip() if parts else None
             if reply:
                 state["offset"] += len(chunk.encode())
-                state["conversation"] += [("STUDENT", args.text), ("LENA", reply)]
+                state["conversation"] += [("STUDENT", args.text), ("PARTNER", reply)]
                 _save_state(state)
                 print(reply)
             print("SESSION_ENDED (connection closed)")
@@ -220,7 +220,7 @@ def cmd_say(args: argparse.Namespace) -> None:
         if reply is not None:
             done_at = chunk.index(_BOT_DONE) + len(_BOT_DONE)
             state["offset"] += len(chunk[:done_at].encode())
-            state["conversation"] += [("STUDENT", args.text), ("LENA", reply)]
+            state["conversation"] += [("STUDENT", args.text), ("PARTNER", reply)]
             _save_state(state)
             print(reply)
             # Graceful-end marker: the wrapper logs [END] when goodbye/cap
@@ -255,6 +255,8 @@ def main() -> None:
     s.add_argument("--topic", required=True)
     s.add_argument("--user", default="0001")
     s.add_argument("--voice", default="German_Female")
+    # TAND-008: pick the partner — "tandem" (Lena) or "tandem_paul" (Paul).
+    s.add_argument("--lesson", default="tandem")
     s.add_argument("--backend-log", default=None)
     s.set_defaults(fn=cmd_start)
 

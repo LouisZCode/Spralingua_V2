@@ -11,6 +11,7 @@ expressed via the Postgres ``ON CONFLICT DO NOTHING`` dialect helper so the
 operation is idempotent across reconnects without a SELECT-then-INSERT race.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -385,12 +386,14 @@ async def load_grammar_focus(
 
 
 async def load_tandem_notes(
-    db: AsyncSession, *, user_id: str, limit: int = 5
+    db: AsyncSession, *, user_id: str, lesson_id: str = "tandem", limit: int = 5
 ) -> list[str]:
     """Recent tandem session notes for the long-term memory layer (TANDEM-001).
 
     Reads the ``session_note`` string the Phase-4 debrief writes into
     ``activity_session.error_eval`` on past tandem sessions, most recent first.
+    Filtered by ``lesson_id`` (TAND-008): each partner remembers only their OWN
+    sessions — Paul never knows what the learner told Lena, and vice versa.
     Returns ``[]`` until the debrief starts producing notes — Phase 3 wires the
     reader, Phase 4 fills it. Same read-only, caller-wrapped contract as
     ``load_grammar_focus``.
@@ -400,7 +403,7 @@ async def load_tandem_notes(
             select(ActivitySession.error_eval)
             .where(
                 ActivitySession.user_id == user_id,
-                ActivitySession.lesson_id == "tandem",
+                ActivitySession.lesson_id == lesson_id,
                 ActivitySession.error_eval.isnot(None),
             )
             .order_by(ActivitySession.started_at.desc())
@@ -475,16 +478,20 @@ async def satz_word_recall(
 
 
 async def count_sessions_since(
-    db: AsyncSession, *, user_id: str, lesson_id: str, start: datetime
+    db: AsyncSession, *, user_id: str, lesson_ids: Sequence[str], start: datetime
 ) -> int:
-    """Conversation sessions of one lesson since ``start`` (naive-UTC)."""
+    """Conversation sessions of the given lessons since ``start`` (naive-UTC).
+
+    Takes a collection (TAND-008): REC-001's "had a real conversation this
+    week?" check counts a chat with ANY tandem partner.
+    """
     return (
         await db.scalar(
             select(func.count())
             .select_from(ActivitySession)
             .where(
                 ActivitySession.user_id == user_id,
-                ActivitySession.lesson_id == lesson_id,
+                ActivitySession.lesson_id.in_(list(lesson_ids)),
                 ActivitySession.started_at >= start,
             )
         )

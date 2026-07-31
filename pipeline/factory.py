@@ -241,7 +241,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             try:
                 async with get_sessionmaker()() as db:
                     grammar_focus = await load_grammar_focus(db, user_id=db_user_id)
-                    session_notes = await load_tandem_notes(db, user_id=db_user_id)
+                    # TAND-008: memory is per partner — Paul's notes never
+                    # reach Lena's prompt and vice versa.
+                    session_notes = await load_tandem_notes(
+                        db, user_id=db_user_id, lesson_id=lesson_id
+                    )
                     # TAND-002: 7, not the default 10 — fewer words lowers the
                     # cramming pressure on Lena's short replies (vocab dose).
                     vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=7)
@@ -668,6 +672,9 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 focus=focus,
                                 topic=topic,
                                 session_id=session_id,
+                                # TAND-008: the judge reads Bot: lines as this
+                                # partner. Lena's YAML predates the field.
+                                partner=lesson_snapshot.get("partner_name", "Lena"),
                             )
                             retired_ids: set[str] = set()
                             async with get_sessionmaker()() as db:

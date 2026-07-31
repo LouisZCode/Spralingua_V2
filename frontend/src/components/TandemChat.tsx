@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConversationView from "./ConversationView";
+import PartnerScreen from "./PartnerScreen";
 import TopicScreen from "./TopicScreen";
 import { useAuth } from "./auth/AuthContext";
 import {
@@ -11,17 +12,18 @@ import {
   UnauthorizedError,
   type GlossInfo,
 } from "./satzschmiede/api";
+import { PARTNERS, type PartnerId } from "./shared/tandem";
 
-// Grammatik-Tandem orchestrator (TANDEM-001) — the /tandem counterpart to
-// VoiceChat. Same auth guard, but instead of the lesson/voice SetupView it
-// shows a topic picker, then hands a fixed tandem session to the shared
-// ConversationView. Lena is one continuous character (D2), so there is no
-// voice picker — the persona owns its voice.
-const TANDEM_VOICE = "German_Female";
+// Grammatik-Tandem orchestrator (TANDEM-001 / TAND-008) — the /tandem
+// counterpart to VoiceChat. Same auth guard, but instead of the lesson/voice
+// SetupView it runs partner picker → topic picker → the shared
+// ConversationView. Each partner is one continuous character (D2), so there
+// is no voice picker — the persona owns its voice (shared/tandem.ts).
 
 export default function TandemChat() {
   const { token, ready, signOut } = useAuth();
   const router = useRouter();
+  const [partnerId, setPartnerId] = useState<PartnerId | null>(null);
   const [topic, setTopic] = useState<string | null>(null);
   // TAND-003: Natural (streaming VAD) vs Practice (tap-record) input mode,
   // picked on TopicScreen alongside the topic itself.
@@ -85,22 +87,29 @@ export default function TandemChat() {
     return null;
   }
 
-  // Pick a topic (+ input mode) first; then drop into the shared
-  // conversation view with lesson=tandem.
+  // TAND-008: pick a partner first, then a topic (+ input mode), then drop
+  // into the shared conversation view with that partner's lesson + voice.
+  if (partnerId === null) {
+    return <PartnerScreen onPick={setPartnerId} />;
+  }
+  const partner = PARTNERS[partnerId];
+
   if (topic === null) {
     return (
       <TopicScreen
+        partner={partner}
         onStart={(t, mode) => {
           setPracticeMode(mode === "practice");
           setTopic(t);
         }}
+        onSwitchPartner={() => setPartnerId(null)}
       />
     );
   }
 
   return (
     <ConversationView
-      params={{ lesson: "tandem", voice: TANDEM_VOICE, topic }}
+      params={{ lesson: partner.lessonId, voice: partner.voice, topic }}
       practiceMode={practiceMode}
       // Debrief modal's "Back to modes" button promises /practice (BUG-008) —
       // leave /tandem, don't just reset topic state. Backing out of the

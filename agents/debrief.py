@@ -90,7 +90,7 @@ class TandemDebrief(BaseModel):
 
 
 PROMPT = """# Role
-You are the private post-session debrief for a German language-tandem partner named Lena. The learner just had a free German conversation with her. You do three things here, all for internal use — you are NOT talking to the learner:
+You are the private post-session debrief for a German language-tandem partner named {partner}. The learner just had a free German conversation with them. You do three things here, all for internal use — you are NOT talking to the learner:
 
 1. Judge how the session's TARGET grammar patterns went.
 2. Harvest any OTHER grammar errors into the fixed taxonomy.
@@ -98,13 +98,13 @@ You are the private post-session debrief for a German language-tandem partner na
 
 # What you get
 - topic: what the learner chose to talk about.
-- targets: the grammar patterns Lena was quietly steering toward this session, one per line as `id — label: description`. May be empty (a fresh ledger).
+- targets: the grammar patterns {partner} was quietly steering toward this session, one per line as `id — label: description`. May be empty (a fresh ledger).
 - taxonomy: the full catalog of German grammar-error patterns, one per line as `id — label ("wrong" → "right")`, for classifying NON-target errors.
-- transcript: the conversation. `User:` lines are the LEARNER; `Bot:` lines are Lena, a native speaker — never classify Lena's German.
+- transcript: the conversation. `User:` lines are the LEARNER; `Bot:` lines are {partner}, a native speaker — never classify {partner}'s German.
 
 # 1. Target patterns
 For EACH target, in the same order, decide:
-- elicited: did this structure actually come up in the LEARNER's own German this session? Judge the learner's production, not whether Lena used it.
+- elicited: did this structure actually come up in the LEARNER's own German this session? Judge the learner's production, not whether {partner} used it.
 - produced_correctly: did the learner use it correctly and on their own at least once? One clean spontaneous correct use is enough, even if they also slipped once elsewhere. False if it never came up, or every attempt was wrong.
 - evidence: the learner's German sentence that shows it — the correct one if produced_correctly, otherwise the clearest slip. "none" if it never came up.
 - corrected: ONLY if they got it wrong — the minimal German repair of the evidence sentence. Empty string otherwise.
@@ -118,7 +118,7 @@ Separately, find grammar mistakes the learner made in German that are NOT one of
 - Skip purely lexical slips (a misremembered noun gender, a wrong word choice), turns that are not German, and anything that matches no catalog pattern.
 
 # 3. Session note
-Write 2–3 short English lines Lena would want to remember for next time: today's topic and any personal facts the learner shared (job, family, plans, preferences, opinions). Warm and factual, present tense. Empty string if they shared nothing notable.
+Write 2–3 short English lines {partner} would want to remember for next time: today's topic and any personal facts the learner shared (job, family, plans, preferences, opinions). Warm and factual, present tense. Empty string if they shared nothing notable.
 
 # Output
 Respond with ONLY valid JSON, no surrounding text, no code fences, no comments:
@@ -206,7 +206,12 @@ def _render_targets(focus: list[dict]) -> str:
 
 
 async def debrief(
-    *, transcript: str, focus: list[dict], topic: str = "", session_id: str | None = None
+    *,
+    transcript: str,
+    focus: list[dict],
+    topic: str = "",
+    session_id: str | None = None,
+    partner: str = "Lena",
 ) -> TandemDebrief:
     """Judge the tandem session: target-pattern outcomes + new errors + memory note.
 
@@ -222,6 +227,7 @@ async def debrief(
     target_ids = {p["pattern_id"] for p in focus}
     rendered = (
         PROMPT
+        .replace("{partner}", partner)
         .replace("{topic}", topic or "(they chose freely)")
         .replace("{targets}", _render_targets(focus))
         .replace("{taxonomy}", taxonomy_brief())

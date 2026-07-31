@@ -1,0 +1,47 @@
+# Grammatik-Tandem topics — Paul's professional pool (TAND-008)
+#
+# Same contract as tandem_topics.yaml (Lena's everyday pool): content-as-data,
+# NOT a lesson (no `type` key, so the lesson loader skips it), served by
+# `GET /tandem/topics?lesson=tandem_paul`, 3 random picks shown as suggestion
+# cards with a shuffle, free-text always available. English stage directions
+# so the same string reads naturally as a user-facing choice AND injected into
+# the persona prompt's short-term layer. The conversation itself is German.
+#
+# Deliberately work-world themes — Paul's whole reason to exist is exposing
+# the learner to office German (Business-Deutsch), so the topic pool keeps
+# the conversation in that register. Growing this list is a data edit.
+
+topics:
+  - Your current project at work
+  - A meeting that went on too long
+  - Deadlines and how you handle them
+  - Your morning routine before work
+  - Your commute
+  - Home office vs. the office
+  - A colleague you enjoy working with
+  - Office coffee and lunch breaks
+  - Your first week at a new job
+  - A job interview you remember
+  - Presenting in front of people
+  - Writing emails in German
+  - Small talk in the office kitchen
+  - A business trip
+  - Your dream job
+  - Changing careers
+  - Asking for a raise
+  - Feierabend — switching off after work
+  - Work-life balance
+  - A typical Monday
+  - How you plan your week
+  - Tools and apps you use at work
+  - A project that went wrong
+  - Teamwork and dividing up tasks
+  - Bosses and leadership styles
+  - Learning new skills for the job
+  - Trade fairs and conferences
+  - The company Christmas party
+  - Planning vacation around work
+  - Stress and staying calm at work
+  - How your industry is changing
+  - Working with clients
+  - Getting and giving feedback at work

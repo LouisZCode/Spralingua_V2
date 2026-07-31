@@ -15,6 +15,7 @@ import { useAuth } from "./auth/AuthContext";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import Glossable from "./shared/Glossable";
 import { useRecorder } from "./shared/recorder";
+import { TANDEM_LESSONS, partnerByLesson } from "./shared/tandem";
 import type { GlossInfo } from "./satzschmiede/api";
 
 // Briefing field values are either a single prose string OR a list of
@@ -520,7 +521,7 @@ export default function ConversationView({
             speakerState={speakerState}
             transcriptRef={transcriptRef}
             onFinish={() => setShowFinishConfirm(true)}
-            prominentFinish={params.lesson === "tandem"}
+            prominentFinish={TANDEM_LESSONS.has(params.lesson)}
             onGloss={onGloss}
             onAdd={onAdd}
             practiceMode={practiceMode}
@@ -587,9 +588,10 @@ export default function ConversationView({
       )}
 
       {showSummary &&
-        (params.lesson === "tandem" ? (
+        (TANDEM_LESSONS.has(params.lesson) ? (
           <TandemDebriefModal
             lessonTitle={meta?.title ?? ""}
+            partnerName={partnerByLesson(params.lesson)?.name ?? "Lena"}
             completion={meta?.completion ?? null}
             endedBy={endedBy}
             sessionId={sessionId}
@@ -949,7 +951,7 @@ function LivePhase({
             {recording
               ? "speak, then tap stop — ✕ discards"
               : botBusy
-                ? "wait for Lena to finish"
+                ? "wait for your partner to finish"
                 : sending
                   ? "sending your turn…"
                   : "tap record, then speak"}

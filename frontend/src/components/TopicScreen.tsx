@@ -4,13 +4,15 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { HTTP_BASE } from "@/lib/api";
+import type { TandemPartner } from "./shared/tandem";
 
 // The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP;
-// TAND-005 grew the topic pool and reworked the suggestions below). The
-// learner picks what to talk about with Lena: one of 3 randomly recommended
-// topics (tap a card to select it, or shuffle for a fresh 3), or their own
-// free-text theme — either way, the Start button is what actually begins
-// the chat. The chosen string becomes the `topic` param handed to
+// TAND-005 grew the topic pool and reworked the suggestions below; TAND-008
+// parameterized it by partner). The learner picks what to talk about with
+// their chosen partner: one of 3 randomly recommended topics from that
+// partner's own pool (tap a card to select it, or shuffle for a fresh 3), or
+// their own free-text theme — either way, the Start button is what actually
+// begins the chat. The chosen string becomes the `topic` param handed to
 // ConversationView.
 const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
@@ -49,9 +51,13 @@ function pickThree(pool: string[]): string[] {
 }
 
 export default function TopicScreen({
+  partner,
   onStart,
+  onSwitchPartner,
 }: {
+  partner: TandemPartner;
   onStart: (topic: string, mode: InputMode) => void;
+  onSwitchPartner: () => void;
 }) {
   const [topics, setTopics] = useState<string[]>([]);
   const [recommended, setRecommended] = useState<string[]>([]);
@@ -76,7 +82,7 @@ export default function TopicScreen({
   // so the screen is never a dead end.
   useEffect(() => {
     let alive = true;
-    fetch(`${HTTP_BASE}/tandem/topics`)
+    fetch(`${HTTP_BASE}/tandem/topics?lesson=${encodeURIComponent(partner.lessonId)}`)
       .then((r) => r.json())
       .then((data: { topics?: string[] }) => {
         if (!alive) return;
@@ -90,7 +96,7 @@ export default function TopicScreen({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [partner.lessonId]);
 
   // What the Start button sends: a selected recommendation card takes
   // precedence, falling back to the free-text field. In practice this is
@@ -140,15 +146,24 @@ export default function TopicScreen({
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-14">
         <div className="rise-in">
-          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-            Grammatik-Tandem
-          </p>
+          <div className="flex items-center gap-3">
+            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+              Grammatik-Tandem
+            </p>
+            <button
+              type="button"
+              onClick={onSwitchPartner}
+              className="font-body text-[12px] font-bold text-ink-soft hover:text-ink"
+            >
+              ← Change partner
+            </button>
+          </div>
           <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">
-            What should you and Lena talk about?
+            What should you and {partner.name} talk about?
           </h1>
           <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
-            Pick a topic to break the ice — or bring your own. Lena chats only in
-            German and remembers your past conversations.
+            Pick a topic to break the ice — or bring your own. {partner.name}{" "}
+            chats only in German and remembers your past conversations.
           </p>
 
           {/* TAND-003: Natural (mic always hot) vs Practice (tap record, tap
@@ -265,7 +280,7 @@ export default function TopicScreen({
             className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
             style={inkShadow}
           >
-            Start chatting with Lena
+            Start chatting with {partner.name}
             <svg
               viewBox="0 0 24 24"
               fill="none"

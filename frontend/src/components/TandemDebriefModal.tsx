@@ -60,11 +60,14 @@ const SLOW_LOADING_MS = 20000;
 
 const DEFAULT_TITLE = "Nice chat";
 const DEFAULT_STATUS: CompletionStatus = "success";
-const DEFAULT_MESSAGE_BY_AGENT = "That was a good one — Lena enjoyed catching up. Bis bald!";
-const DEFAULT_MESSAGE_BY_USER =
-  "You wrapped up early. Lena will be here whenever you want to pick it back up.";
-const MESSAGE_CRASH =
-  "The connection dropped mid-chat. Don't worry — your conversation was saved, and Lena will be here to pick it back up.";
+// TAND-008: fallback copy is partner-parameterized — the YAML `completion:`
+// block usually supplies the real messages, these only cover its absence.
+const defaultMessageByAgent = (name: string) =>
+  `That was a good one — ${name} enjoyed catching up. Bis bald!`;
+const defaultMessageByUser = (name: string) =>
+  `You wrapped up early. ${name} will be here whenever you want to pick it back up.`;
+const messageCrash = (name: string) =>
+  `The connection dropped mid-chat. Don't worry — your conversation was saved, and ${name} will be here to pick it back up.`;
 
 const STATUS_STYLES: Record<CompletionStatus, { dot: string; text: string }> = {
   success: { dot: "bg-success", text: "text-success" },
@@ -74,12 +77,15 @@ const STATUS_STYLES: Record<CompletionStatus, { dot: string; text: string }> = {
 
 export default function TandemDebriefModal({
   lessonTitle,
+  partnerName = "Lena",
   completion,
   endedBy,
   sessionId,
   onClose,
 }: {
   lessonTitle: string;
+  // TAND-008: which partner's chat this modal wraps (display copy only).
+  partnerName?: string;
   completion: CompletionData | null;
   endedBy: "user" | "agent";
   sessionId: string | null;
@@ -153,10 +159,10 @@ export default function TandemDebriefModal({
   const effectiveEndedBy = sessionData?.ended_by ?? endedBy;
   const message =
     effectiveEndedBy === "crash"
-      ? MESSAGE_CRASH
+      ? messageCrash(partnerName)
       : effectiveEndedBy === "user"
-        ? (completion?.message_by_user ?? DEFAULT_MESSAGE_BY_USER)
-        : (completion?.message_by_agent ?? DEFAULT_MESSAGE_BY_AGENT);
+        ? (completion?.message_by_user ?? defaultMessageByUser(partnerName))
+        : (completion?.message_by_agent ?? defaultMessageByAgent(partnerName));
   const styles = STATUS_STYLES[status];
 
   return (
@@ -189,6 +195,7 @@ export default function TandemDebriefModal({
               status={evalStatus}
               data={sessionData}
               slowLoading={slowLoading}
+              partnerName={partnerName}
             />
           </div>
 
@@ -213,10 +220,12 @@ function DebriefSection({
   status,
   data,
   slowLoading,
+  partnerName,
 }: {
   status: EvalStatus;
   data: SessionData | null;
   slowLoading: boolean;
+  partnerName: string;
 }) {
   if (status === "loading") {
     return (
@@ -225,7 +234,7 @@ function DebriefSection({
           <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-ink" />
           {slowLoading
             ? "Still looking — this can take a minute…"
-            : "Lena is looking over your chat…"}
+            : `${partnerName} is looking over your chat…`}
         </div>
       </div>
     );
@@ -247,7 +256,7 @@ function DebriefSection({
   if (!debrief) {
     return (
       <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4 font-body text-[14px] text-ink-soft">
-        Lena enjoyed the conversation — no notes this time.
+        {partnerName} enjoyed the conversation — no notes this time.
       </div>
     );
   }
@@ -272,14 +281,22 @@ function DebriefSection({
 
   return (
     <div className="space-y-4">
-      {retired.length > 0 && <RetiredBanner patterns={retired} />}
+      {retired.length > 0 && (
+        <RetiredBanner patterns={retired} partnerName={partnerName} />
+      )}
       {practiced.length > 0 && <PracticedBlock patterns={practiced} />}
       {newErrors.length > 0 && <NewErrorsBlock errors={newErrors} />}
     </div>
   );
 }
 
-function RetiredBanner({ patterns }: { patterns: DebriefPattern[] }) {
+function RetiredBanner({
+  patterns,
+  partnerName,
+}: {
+  patterns: DebriefPattern[];
+  partnerName: string;
+}) {
   return (
     <div className="rounded-[22px] border-[3px] border-success bg-success-soft/50 px-5 py-5">
       <div className="flex items-center gap-2.5">
@@ -292,7 +309,7 @@ function RetiredBanner({ patterns }: { patterns: DebriefPattern[] }) {
       </div>
       <p className="mt-2 font-body text-[15px] leading-snug text-ink">
         You used {patterns.length === 1 ? "this" : "these"} correctly on your own,
-        twice running — Lena won&apos;t need to nudge it anymore:
+        twice running — {partnerName} won&apos;t need to nudge it anymore:
       </p>
       <ul className="mt-3 flex flex-wrap gap-2">
         {patterns.map((p) => (
