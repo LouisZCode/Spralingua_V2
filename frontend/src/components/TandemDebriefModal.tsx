@@ -320,7 +320,7 @@ function PracticedBlock({ patterns }: { patterns: DebriefPattern[] }) {
 
       <ul className="mt-4 space-y-4">
         {patterns.map((p) => {
-          const d = p.corrected ? diffTokens(p.evidence, p.corrected) : null;
+          const d = p.corrected ? diffTokens(p.evidence, p.corrected, { caseInsensitive: true }) : null;
           return (
             <li
               key={p.pattern_id}
@@ -387,7 +387,7 @@ function NewErrorsBlock({ errors }: { errors: DebriefNewError[] }) {
 
       <ul className="mt-4 space-y-4">
         {errors.map((e, i) => {
-          const d = e.corrected ? diffTokens(e.sentence, e.corrected) : null;
+          const d = e.corrected ? diffTokens(e.sentence, e.corrected, { caseInsensitive: true }) : null;
           return (
             <li
               key={`${e.pattern_id}-${i}`}

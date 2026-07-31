@@ -297,7 +297,7 @@ function ErrorRow({ error }: { error: TopError }) {
       {error.example &&
         (() => {
           const ex = error.example;
-          const d = diffTokens(ex.sentence, ex.corrected);
+          const d = diffTokens(ex.sentence, ex.corrected, { caseInsensitive: true });
           return (
             <div className="mt-1.5">
               <p className="font-body text-[13px] text-ink-soft">
@@ -423,7 +423,7 @@ function SessionRow({
           {practiced.map((p) => {
             const d =
               !p.produced_correctly && p.corrected
-                ? diffTokens(p.evidence, p.corrected)
+                ? diffTokens(p.evidence, p.corrected, { caseInsensitive: true })
                 : null;
             return (
               <div key={p.pattern_id} className="font-body text-[13px] leading-snug">
@@ -453,7 +453,7 @@ function SessionRow({
           })}
 
           {newErrors.map((e, i) => {
-            const d = e.corrected ? diffTokens(e.sentence, e.corrected) : null;
+            const d = e.corrected ? diffTokens(e.sentence, e.corrected, { caseInsensitive: true }) : null;
             return (
               <div key={`${e.pattern_id}-${i}`} className="font-body text-[13px] leading-snug">
                 <p className="font-semibold text-ink">{e.label}</p>

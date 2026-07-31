@@ -5,9 +5,13 @@ import type { ReactNode } from "react";
 // ─── UI-008: one feedback skeleton for every drill ──────────────────────────
 // Word-level diff between attempt and correction so the error (red, in the
 // attempt) and the fix (green, in the correction) register at a glance.
-// Tokens compare case-sensitively — capitalization errors are real errors in
-// German — after stripping surrounding punctuation, so a trailing period
-// never lights up a word. Never strikethrough: red alone marks the error.
+// Tokens compare case-sensitively by default — capitalization errors are real
+// errors in German the learner TYPED — after stripping surrounding
+// punctuation, so a trailing period never lights up a word. SPOKEN surfaces
+// (VocabTrainer, tandem debrief, Development slips) pass `caseInsensitive`:
+// there the "attempt" is an STT transcript whose casing is an ASR artifact,
+// and a judge that lowercases its correction must not turn every capitalized
+// noun red (SATZ-016). Never strikethrough: red alone marks the error.
 
 export type MarkedToken = { text: string; changed: boolean };
 
@@ -17,11 +21,15 @@ const strip = (t: string) =>
 export function diffTokens(
   attempt: string,
   corrected: string,
+  opts?: { caseInsensitive?: boolean },
 ): { attempt: MarkedToken[]; corrected: MarkedToken[] } {
+  const norm = opts?.caseInsensitive
+    ? (t: string) => strip(t).toLowerCase()
+    : strip;
   const a = attempt.split(/\s+/).filter(Boolean);
   const b = corrected.split(/\s+/).filter(Boolean);
-  const an = a.map(strip);
-  const bn = b.map(strip);
+  const an = a.map(norm);
+  const bn = b.map(norm);
   const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
     new Array<number>(b.length + 1).fill(0),
   );

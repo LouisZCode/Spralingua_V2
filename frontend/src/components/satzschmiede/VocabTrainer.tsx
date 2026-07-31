@@ -806,10 +806,12 @@ export default function VocabTrainer({
 
   // UI-008: light the changed tokens — red in the attempt, green in the fix —
   // so an ending-level correction ("die schlechte Dinge" → "die schlechten
-  // Dinge") registers without rereading.
+  // Dinge") registers without rereading. caseInsensitive (SATZ-016): the
+  // attempt is spoken — a case-only difference is an STT/judge artifact,
+  // never the learner's error.
   const fixDiff =
     result?.corrected != null
-      ? diffTokens(result.transcript, result.corrected)
+      ? diffTokens(result.transcript, result.corrected, { caseInsensitive: true })
       : null;
 
   // UI-009: the word this card tests must never itself be glossable — strip
