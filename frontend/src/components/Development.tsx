@@ -297,6 +297,15 @@ function ErrorRow({ error }: { error: TopError }) {
       {error.example &&
         (() => {
           const ex = error.example;
+          // A slip can arrive without a stored correction — show the
+          // sentence plain instead of crashing the page on a null diff.
+          if (!ex.corrected) {
+            return (
+              <p className="mt-1.5 font-body text-[13px] text-ink-soft">
+                {ex.sentence}
+              </p>
+            );
+          }
           const d = diffTokens(ex.sentence, ex.corrected, { caseInsensitive: true });
           return (
             <div className="mt-1.5">

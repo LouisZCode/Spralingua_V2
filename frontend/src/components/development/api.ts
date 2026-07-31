@@ -26,7 +26,10 @@ export type ExerciseStat = {
 
 export type ErrorExample = {
   sentence: string;
-  corrected: string;
+  // The ledger ring buffer can hold a slip whose correction was never
+  // stored — render the sentence plain in that case (a null here crashed
+  // the whole page pre-2026-07-31).
+  corrected: string | null;
 } | null;
 
 export type TopError = {
