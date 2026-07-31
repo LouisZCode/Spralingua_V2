@@ -140,6 +140,52 @@ function kickerFor(deal: Deal): string {
   return KICKER[deal.kind];
 }
 
+// FLOW-004: the transition beat between deals — names the next exercise so
+// the switch registers, and the mascot reacts to how the last item went.
+// Seed of the bigger "raven journeys through your day's flow" direction;
+// deliberately animation-only for now (no sound until the beat proves out).
+type BeatMood = "happy" | "sad" | "neutral";
+const BEAT_MS = 1200;
+
+const BEAT_CAPTION: Record<BeatMood, string> = {
+  happy: "Weiter so!",
+  sad: "Gleich klappt's.",
+  neutral: "Los geht's!",
+};
+
+function TransitionBeat({
+  mood,
+  title,
+  first,
+}: {
+  mood: BeatMood;
+  title: string;
+  first: boolean;
+}) {
+  return (
+    <div className="rise-in flex min-h-[300px] flex-col items-center justify-center gap-1.5">
+      <Image
+        src="/mascot/raven.png"
+        alt=""
+        width={88}
+        height={88}
+        className={`h-20 w-20 select-none ${
+          mood === "happy" ? "mascot-hop" : mood === "sad" ? "mascot-droop" : ""
+        }`}
+      />
+      <p className="font-body text-[13px] font-semibold text-ink-soft">
+        {BEAT_CAPTION[mood]}
+      </p>
+      <p className="mt-3 font-body text-[11px] font-black uppercase tracking-[0.24em] text-ink-muted">
+        {first ? "Erste Übung" : "Nächste Übung"}
+      </p>
+      <p className="font-display text-[26px] font-black tracking-tight text-ink">
+        {title}
+      </p>
+    </div>
+  );
+}
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -385,6 +431,16 @@ export default function Flow() {
 
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
   const [deal, setDeal] = useState<Deal | null>(null);
+  // FLOW-004: while the beat shows, `deal` is null and the freshly-computed
+  // next deal parks in pendingDealRef — a trainer must never mount (and e.g.
+  // arm its mic) underneath the interstitial.
+  const [beat, setBeat] = useState<{
+    mood: BeatMood;
+    kind: SourceKind;
+    first: boolean;
+  } | null>(null);
+  const pendingDealRef = useRef<Deal | null>(null);
+  const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [finished, setFinished] = useState(false);
   const [totals, setTotals] = useState({ total: 0, correct: 0 });
   const [perExercise, setPerExercise] =
@@ -417,7 +473,7 @@ export default function Flow() {
   }, [ready, token, router]);
 
   const dealNext = useCallback(
-    (prevKind: SourceKind | null) => {
+    (prevKind: SourceKind | null, mood: BeatMood = "neutral") => {
       const bag = bagRef.current;
       const kind = pickSource(bag, prevKind);
       if (!kind) {
@@ -443,10 +499,26 @@ export default function Flow() {
       // attempt handler below has no other way to know which order this
       // card was dealt from.
       satzRehearsalRef.current = next.kind === "satz" && next.rehearsal;
-      setDeal(next);
+      // FLOW-004: park the deal behind a short transition beat that names
+      // the next exercise and lets the mascot react to the last one.
+      pendingDealRef.current = next;
+      setDeal(null);
+      setBeat({ mood, kind: next.kind, first: prevKind === null });
+      if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
+      beatTimerRef.current = setTimeout(() => {
+        setBeat(null);
+        setDeal(pendingDealRef.current);
+      }, BEAT_MS);
     },
     [token]
   );
+
+  // FLOW-004: never let the beat timer fire into an unmounted component.
+  useEffect(() => {
+    return () => {
+      if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
+    };
+  }, []);
 
   // Initial load: every source fetches independently. A source that fails
   // or comes back empty just drops out of the rotation (console-silent); an
@@ -523,7 +595,8 @@ export default function Flow() {
         ...p,
         [kind]: { done: p[kind].done + 1, correct: p[kind].correct + (correct ? 1 : 0) },
       }));
-      dealNext(kind);
+      // FLOW-004: the outcome shapes the transition beat's mascot mood.
+      dealNext(kind, correct ? "happy" : "sad");
     },
     [dealNext]
   );
@@ -972,6 +1045,14 @@ export default function Flow() {
                 Finish
               </button>
             </div>
+
+            {beat !== null && (
+              <TransitionBeat
+                mood={beat.mood}
+                title={KICKER[beat.kind]}
+                first={beat.first}
+              />
+            )}
 
             {deal !== null && (
               <>

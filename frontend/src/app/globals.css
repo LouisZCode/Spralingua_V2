@@ -111,6 +111,40 @@ body {
   animation: rise-in 520ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* FLOW-004: the Flow transition beat — the mascot reacts to the last deal.
+   Happy = a double hop; sad = a slow droop with slightly washed color. */
+@keyframes mascot-hop {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-16px) rotate(-5deg);
+  }
+  55% {
+    transform: translateY(0) rotate(0deg);
+  }
+  75% {
+    transform: translateY(-7px) rotate(3deg);
+  }
+}
+.mascot-hop {
+  animation: mascot-hop 750ms cubic-bezier(0.3, 0.7, 0.3, 1) both;
+}
+
+@keyframes mascot-droop {
+  from {
+    transform: translateY(-4px) rotate(0deg);
+  }
+  to {
+    transform: translateY(6px) rotate(9deg);
+  }
+}
+.mascot-droop {
+  animation: mascot-droop 650ms ease-out both;
+  filter: saturate(0.7) opacity(0.85);
+}
+
 /* Path connector dotted line */
 .dot-connector {
   background-image: radial-gradient(
