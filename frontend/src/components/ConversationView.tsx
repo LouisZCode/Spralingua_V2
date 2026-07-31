@@ -211,13 +211,14 @@ export default function ConversationView({
       audioRef.current.srcObject = null;
     }
     const reason: "user" | "agent" = endReasonRef.current ?? "agent";
-    const isTandem = params.lesson === "tandem";
     setShowFinishConfirm(false);
-    // User-initiated finish → normally no results; go straight back to the list.
-    // The summary (with eval results) is only for lessons the agent completes.
-    // Tandem is the exception: its debrief is shown for EVERY end reason, so a
-    // user-ended tandem still opens the summary (TANDEM-001 Phase 4).
-    if (reason === "user" && !isTandem) {
+    // User-initiated finish → straight back to the list, tandem included
+    // (BUG-010, supersedes the TANDEM-001 Phase 4 always-show rule): the
+    // debrief still runs server-side once the socket closes and becomes
+    // readable in the Development page's recent-sessions block. The in-place
+    // summary/debrief modal is reserved for agent-completed sessions, where
+    // the learner is naturally at a stopping point.
+    if (reason === "user") {
       onFinish();
       return;
     }
@@ -391,13 +392,17 @@ export default function ConversationView({
     }
   };
 
-  const confirmFinish = async () => {
+  const confirmFinish = () => {
     setShowFinishConfirm(false);
     endReasonRef.current = "user";
-    if (clientRef.current) {
-      await clientRef.current.disconnect();
-      clientRef.current = null;
-    }
+    // BUG-010: never await disconnect() here. On a half-open socket the
+    // promise can stall indefinitely — and the liveness watchdog can't help,
+    // because the server keeps heartbeating over the still-open WS — leaving
+    // the learner stuck on a dead live page (2026-07-31 prod repro). Fire it
+    // and advance; the transport close proceeds in the background.
+    const client = clientRef.current;
+    clientRef.current = null;
+    if (client) void client.disconnect();
     handleFinish();
   };
 

@@ -28,6 +28,7 @@ from database.repository import (
     load_attempt_series,
     load_focus_with_recency,
     load_period_summary,
+    load_recent_sessions,
     load_retired_patterns,
     load_top_errors,
 )
@@ -85,3 +86,16 @@ async def get_my_stats(
         "retired": retired,
         "series": series,
     }
+
+
+@router.get("/me/sessions")
+async def get_my_sessions(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recent finished conversation sessions, newest first (BUG-010 /
+    UI-005 minimal). Tandem rows include the debrief dict — this is the
+    surface where a user-ended tandem's notes become readable, since that
+    flow no longer waits for the in-place modal. Empty list for a new user.
+    """
+    return {"sessions": await load_recent_sessions(db, user_id=user_id, limit=10)}

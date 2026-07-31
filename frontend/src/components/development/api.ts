@@ -90,3 +90,56 @@ export async function fetchStats(token: string): Promise<DevelopmentStats> {
   }
   return res.json() as Promise<DevelopmentStats>;
 }
+
+// ── BUG-010 / UI-005 minimal: recent conversation sessions ────────────────
+// Same wire shapes the tandem debrief stores in activity_session.error_eval
+// (snake_case — stored verbatim, mirrors TandemDebriefModal's interfaces).
+
+export type DebriefPattern = {
+  pattern_id: string;
+  label: string;
+  elicited: boolean;
+  produced_correctly: boolean;
+  evidence: string;
+  corrected: string;
+  note: string;
+  retired: boolean;
+};
+
+export type DebriefNewError = {
+  pattern_id: string;
+  label: string;
+  sentence: string;
+  corrected: string;
+  note: string;
+};
+
+export type SessionDebrief = {
+  // session_note exists on the wire but is Lena's private memory — never
+  // rendered (same rule as TandemDebriefModal).
+  patterns?: DebriefPattern[];
+  new_errors?: DebriefNewError[];
+};
+
+export type RecentSession = {
+  id: string;
+  lessonId: string;
+  startedAt: string; // ISO, UTC offset included
+  endedAt: string;
+  endedBy: "user" | "agent" | "crash" | null;
+  debrief: SessionDebrief | null; // tandem only
+};
+
+export async function fetchSessions(token: string): Promise<RecentSession[]> {
+  const res = await fetch(`${HTTP_BASE}/me/sessions`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (res.status === 401) {
+    throw new UnauthorizedError("/me/sessions");
+  }
+  if (!res.ok) {
+    throw new Error(`/me/sessions failed (${res.status})`);
+  }
+  const body = (await res.json()) as { sessions: RecentSession[] };
+  return body.sessions;
+}

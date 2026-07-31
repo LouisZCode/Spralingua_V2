@@ -11,7 +11,7 @@ expressed via the Postgres ``ON CONFLICT DO NOTHING`` dialect helper so the
 operation is idempotent across reconnects without a SELECT-then-INSERT race.
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from loguru import logger
@@ -413,6 +413,64 @@ async def load_tandem_notes(
         if note:
             notes.append(note)
     return notes
+
+
+def _as_utc_iso(dt: datetime) -> str:
+    # activity_session timestamps are stored naive-UTC (TIMESTAMP without
+    # timezone); stamp the offset so the frontend's Date parsing can't
+    # reinterpret them as local time.
+    return (dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)).isoformat()
+
+
+async def load_recent_sessions(
+    db: AsyncSession, *, user_id: str, limit: int = 10
+) -> list[dict]:
+    """Recent FINISHED conversation sessions for the Development page's
+    history block (BUG-010 / UI-005 minimal).
+
+    Only rows whose finalize ran (``ended_at`` set) — an unfinished row has
+    nothing readable yet. Tandem rows carry the full debrief dict so the
+    learner can read notes they never saw in-session (user-ended tandem
+    skips the modal entirely under BUG-010); other lessons' ``error_eval``
+    holds the silent grammar harvest, which is not display content → null.
+    """
+    rows = (
+        await db.execute(
+            select(
+                ActivitySession.id,
+                ActivitySession.lesson_id,
+                ActivitySession.started_at,
+                ActivitySession.ended_at,
+                ActivitySession.ended_by,
+                ActivitySession.error_eval,
+            )
+            .where(
+                ActivitySession.user_id == user_id,
+                ActivitySession.ended_at.isnot(None),
+            )
+            .order_by(ActivitySession.started_at.desc())
+            .limit(limit)
+        )
+    ).all()
+    sessions: list[dict] = []
+    for row in rows:
+        debrief = (
+            row.error_eval
+            if isinstance(row.error_eval, dict)
+            and row.error_eval.get("kind") == "tandem_debrief"
+            else None
+        )
+        sessions.append(
+            {
+                "id": row.id.hex,
+                "lessonId": row.lesson_id,
+                "startedAt": _as_utc_iso(row.started_at),
+                "endedAt": _as_utc_iso(row.ended_at),
+                "endedBy": row.ended_by,
+                "debrief": debrief,
+            }
+        )
+    return sessions
 
 
 # Cards at or above this interval rung are "mature" — hearing them again in

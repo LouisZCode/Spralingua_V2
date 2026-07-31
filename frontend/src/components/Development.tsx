@@ -7,8 +7,10 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import {
   fetchStats,
+  fetchSessions,
   UnauthorizedError,
   type DevelopmentStats,
+  type RecentSession,
   type TopError,
   type FocusPattern,
   type RetiredPattern,
@@ -30,6 +32,9 @@ export default function Development() {
 
   const [stats, setStats] = useState<DevelopmentStats | null>(null); // null = loading
   const [error, setError] = useState(false);
+  // BUG-010: recent conversation sessions — where a user-ended tandem's
+  // debrief becomes readable. Non-fatal: load failure just hides the block.
+  const [sessions, setSessions] = useState<RecentSession[]>([]);
 
   useEffect(() => {
     if (ready && !token) {
@@ -56,6 +61,24 @@ export default function Development() {
       cancelled = true;
     };
     // signOut is a stable ref — token is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchSessions(token)
+      .then((s) => {
+        if (!cancelled) setSessions(s);
+      })
+      .catch((e) => {
+        if (!cancelled && e instanceof UnauthorizedError) signOut();
+        // Any other failure: keep [] and hide the block — the stats above
+        // are the page's core, session history must not take it down.
+      });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -134,6 +157,8 @@ export default function Development() {
                 <AttemptsChart series={stats.series} />
               </>
             )}
+
+            {sessions.length > 0 && <RecentSessionsCard sessions={sessions} />}
           </div>
         )}
       </main>
@@ -284,6 +309,172 @@ function ErrorRow({ error }: { error: TopError }) {
             </div>
           );
         })()}
+    </li>
+  );
+}
+
+// ─── Recent sessions (BUG-010 / UI-005 minimal): the readable home of the
+// tandem debrief now that a user-ended chat exits straight to the menu.
+// Rows expand in place; session_note stays hidden (Lena's private memory,
+// same rule as TandemDebriefModal). ───────────────────────────────────────
+
+const LESSON_LABELS: Record<string, string> = {
+  tandem: "Tandem · Lena",
+  lesson_zero: "Free conversation",
+};
+
+function sessionDate(iso: string): string {
+  const d = new Date(iso);
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  return `${d.getDate()}.${d.getMonth() + 1}. · ${hh}:${mm}`;
+}
+
+function RecentSessionsCard({ sessions }: { sessions: RecentSession[] }) {
+  const [openId, setOpenId] = useState<string | null>(null);
+  return (
+    <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
+      <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
+        Recent sessions
+      </h2>
+      <p className="mt-1 font-body text-[11px] font-semibold uppercase tracking-[0.22em] text-ink-muted">
+        your conversation notes live here
+      </p>
+      <ul className="mt-4 flex flex-col gap-2.5">
+        {sessions.map((s) => (
+          <SessionRow
+            key={s.id}
+            session={s}
+            open={openId === s.id}
+            onToggle={() => setOpenId(openId === s.id ? null : s.id)}
+          />
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function SessionRow({
+  session,
+  open,
+  onToggle,
+}: {
+  session: RecentSession;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const patterns = session.debrief?.patterns ?? [];
+  const newErrors = session.debrief?.new_errors ?? [];
+  const retired = patterns.filter((p) => p.retired);
+  const practiced = patterns.filter((p) => p.elicited && !p.retired);
+  const hasNotes =
+    retired.length > 0 || practiced.length > 0 || newErrors.length > 0;
+
+  return (
+    <li className="rounded-[16px] border-[3px] border-ink bg-white">
+      <button
+        type="button"
+        onClick={onToggle}
+        disabled={!hasNotes}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="flex min-w-0 items-baseline gap-3">
+          <span className="truncate font-body text-[14px] font-bold text-ink">
+            {LESSON_LABELS[session.lessonId] ?? session.lessonId}
+          </span>
+          <span className="shrink-0 font-body text-[12px] font-semibold text-ink-muted">
+            {sessionDate(session.endedAt)}
+          </span>
+        </span>
+        {hasNotes ? (
+          <span className="flex shrink-0 items-center gap-2">
+            <span className="rounded-full border-2 border-ink bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-ink">
+              {newErrors.length > 0
+                ? `${newErrors.length} to work on`
+                : "notes"}
+            </span>
+            <span aria-hidden className="font-body text-[12px] font-bold text-ink">
+              {open ? "▴" : "▾"}
+            </span>
+          </span>
+        ) : (
+          <span className="shrink-0 font-body text-[12px] text-ink-muted">
+            no notes
+          </span>
+        )}
+      </button>
+
+      {open && hasNotes && (
+        <div className="space-y-3 border-t-2 border-rule px-4 py-3.5">
+          {retired.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {retired.map((p) => (
+                <span
+                  key={p.pattern_id}
+                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-success bg-white px-3 py-1 font-body text-[12px] font-bold text-ink"
+                >
+                  <span className="text-success">✓</span>
+                  {p.label} — mastered
+                </span>
+              ))}
+            </div>
+          )}
+
+          {practiced.map((p) => {
+            const d =
+              !p.produced_correctly && p.corrected
+                ? diffTokens(p.evidence, p.corrected)
+                : null;
+            return (
+              <div key={p.pattern_id} className="font-body text-[13px] leading-snug">
+                <p className="font-semibold text-ink">
+                  <span
+                    aria-hidden
+                    className={p.produced_correctly ? "text-success" : "text-flag-gold-deep"}
+                  >
+                    {p.produced_correctly ? "✓ " : "↻ "}
+                  </span>
+                  {p.label}
+                </p>
+                {p.produced_correctly ? (
+                  <p className="mt-0.5 text-ink-soft">“{p.evidence}”</p>
+                ) : (
+                  d && (
+                    <p className="mt-0.5 text-ink-soft">
+                      “<MarkedText tokens={d.attempt} mark="red" />” →{" "}
+                      <span className="font-semibold text-ink">
+                        “<MarkedText tokens={d.corrected} mark="green" />”
+                      </span>
+                    </p>
+                  )
+                )}
+              </div>
+            );
+          })}
+
+          {newErrors.map((e, i) => {
+            const d = e.corrected ? diffTokens(e.sentence, e.corrected) : null;
+            return (
+              <div key={`${e.pattern_id}-${i}`} className="font-body text-[13px] leading-snug">
+                <p className="font-semibold text-ink">{e.label}</p>
+                {d ? (
+                  <p className="mt-0.5 text-ink-soft">
+                    “<MarkedText tokens={d.attempt} mark="red" />” →{" "}
+                    <span className="font-semibold text-ink">
+                      “<MarkedText tokens={d.corrected} mark="green" />”
+                    </span>
+                  </p>
+                ) : (
+                  <p className="mt-0.5 text-ink-soft">“{e.sentence}”</p>
+                )}
+                {e.note && (
+                  <p className="mt-0.5 text-[12px] italic text-ink-muted">{e.note}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </li>
   );
 }
