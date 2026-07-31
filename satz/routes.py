@@ -33,6 +33,7 @@ from database.repository import record_drill_attempt, record_grammar_error
 from drills import forge_items_for_card
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
+from satz.example_forge import backfill_card_examples, forge_card_examples
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
 from satz.glosser import gloss_word
@@ -63,6 +64,15 @@ def _card_payload(c: VocabCard) -> dict:
         payload["tenseForm"] = c.tense_form
     if c.example:
         payload["example"] = c.example
+    # SATZ-017: the rotation pool — original example first, forged leveled
+    # examples after, deduped. Sent only when there is real variety (>1) so
+    # single-example payloads (incl. Verbformen's own copy, which never sets
+    # this) keep the plain `example` path.
+    if c.examples:
+        pool = [c.example] if c.example else []
+        pool += [e for e in c.examples if isinstance(e, str) and e not in pool]
+        if len(pool) > 1:
+            payload["examples"] = pool
     if c.level:
         payload["level"] = c.level
     return payload
@@ -553,6 +563,12 @@ async def add_word(
             asyncio.create_task(forge_items_for_card(user_id, card.id))
         except Exception:
             logger.exception("Drill-item forge scheduling failed ({})", card.id)
+        # SATZ-017: forge the card's rotating example pool too (card-level,
+        # shared — a no-op if another user's add already forged it).
+        try:
+            asyncio.create_task(forge_card_examples(card.id, user_id))
+        except Exception:
+            logger.exception("Example forge scheduling failed ({})", card.id)
 
     response = {
         "card": payload,
@@ -947,6 +963,14 @@ async def get_deck(
         and (sum(recent_correct) / len(recent_correct)) < THROTTLE_FLOOR
     )
     new_allowance = 0 if new_throttled else max(0, NEW_PER_DAY - started_today)
+
+    # SATZ-017: quietly forge example pools for a couple of this user's cards
+    # that predate the forge — off the critical path, non-fatal, so the whole
+    # catalog fills in over normal usage.
+    try:
+        asyncio.create_task(backfill_card_examples(user_id, limit=2))
+    except Exception:
+        logger.exception("Example backfill scheduling failed ({})", user_id)
 
     return {
         "cards": [

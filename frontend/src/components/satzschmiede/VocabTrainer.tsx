@@ -298,6 +298,35 @@ export default function VocabTrainer({
   const safeIndex = Math.min(index, total - 1);
   const card = browsing ? deck[safeIndex] : byId.get(activeQueue[0]);
 
+  // SATZ-017: rotate the shown example per encounter — a different stored
+  // sentence each time the card comes up. The index advances when the
+  // on-screen card changes (practice deals and browse flips both count) and
+  // stays stable within one encounter, so reveal → attempt → retry all show
+  // the same sentence. Offset by srs.reps so the next SESSION doesn't
+  // restart at the same sentence either. Cards without a forged pool
+  // (Verbformen's payload, un-backfilled cards) fall back to the single
+  // `example` — index math on a 1-item pool is a no-op.
+  const exampleIdxRef = useRef<Map<string, number>>(new Map());
+  const lastCardIdRef = useRef<string | null>(null);
+  if (card && card.id !== lastCardIdRef.current) {
+    lastCardIdRef.current = card.id;
+    const prev = exampleIdxRef.current.get(card.id);
+    exampleIdxRef.current.set(
+      card.id,
+      prev === undefined ? card.srs.reps : prev + 1
+    );
+  }
+  const examplePool = card?.examples?.length
+    ? card.examples
+    : card?.example
+      ? [card.example]
+      : [];
+  const example = card
+    ? examplePool[
+        (exampleIdxRef.current.get(card.id) ?? 0) % Math.max(1, examplePool.length)
+      ]
+    : undefined;
+
   // Card navigation stays locked while a recording or check is in flight, so
   // the verdict that comes back always belongs to the card on screen. The
   // wrong-gender flash locks it too: its queued advance (pickGender's timer)
@@ -930,8 +959,16 @@ export default function VocabTrainer({
               </div>
 
               {/* Zone 2: what you said → the fix (or the example if you
-                  peeked instead of attempting). */}
-              <div className="mt-4 flex-1 border-t-[2px] border-ink/20 pt-3">
+                  peeked instead of attempting). SATZ-017: the example view
+                  centers in the free space so the back reads as a card, not
+                  a top-left text dump; result view stays left-aligned. */}
+              <div
+                className={`mt-4 flex-1 border-t-[2px] border-ink/20 pt-3 ${
+                  result
+                    ? ""
+                    : "flex flex-col items-center justify-center text-center"
+                }`}
+              >
                 <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                   {result ? "Your attempt" : "Natural example"}
                 </p>
@@ -1036,19 +1073,19 @@ export default function VocabTrainer({
                     )}
                   </>
                 ) : (
-                  card.example && (
-                    <p className="mt-1.5 font-body text-[15px] leading-snug text-ink">
+                  example && (
+                    <p className="mt-1.5 max-w-[440px] font-body text-[15px] leading-snug text-ink">
                       {/* UI-009: glossable only when the parent wires it in —
                           the target word itself stays excluded, it's the clue. */}
                       {onGloss ? (
                         <Glossable
-                          text={card.example}
+                          text={example}
                           onGloss={onGloss}
                           onAdd={onAdd}
                           exclude={glossExclude}
                         />
                       ) : (
-                        card.example
+                        example
                       )}
                     </p>
                   )
@@ -1214,7 +1251,7 @@ export default function VocabTrainer({
           </p>
         )}
 
-        {card.example && (
+        {example && (
           <div className="mt-7 text-center">
             {/* Gold — same tone the card back wears when you peek: revealing
                 is the "hint" path, visually priced as such. In practice mode

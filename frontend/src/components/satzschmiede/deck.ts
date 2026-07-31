@@ -14,6 +14,10 @@ export type Card = {
   tense?: "past"; // verb tense siblings: the spoken-past card (absent = present/base)
   tenseForm?: string; // the answer the past card reveals: "ist geflogen", "dachte · hat gedacht"
   example?: string; // optional model sentence, revealable as a hint
+  // SATZ-017: rotation pool (original example first, forged leveled ones
+  // after) — sent only when the backend has >1 for this card. Verbformen's
+  // payload never sends it; the trainer falls back to `example`.
+  examples?: string[];
   level?: string; // CEFR hint (A1–B2)
 };
 

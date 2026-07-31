@@ -149,6 +149,13 @@ class VocabCard(Base):
     # "dachte · hat gedacht", "war") — set exactly when tense is.
     tense_form: Mapped[str | None] = mapped_column(Text, nullable=True)
     example: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # SATZ-017: extra forged examples (list[str], ~3 at ranged difficulty)
+    # so encounters rotate instead of re-reading `example` forever. NULL =
+    # not forged yet (the deck-fetch backfill retries); written once per
+    # card by satz/example_forge.py, shared across users like all card
+    # content. Never assign Python None explicitly — the backfill filter
+    # relies on SQL NULL (the CONT-002 none_as_null gotcha).
+    examples: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     level: Mapped[str | None] = mapped_column(Text, nullable=True)  # CEFR hint
     # "curated" (from YAML, resynced on every boot) | "community" (user-added
     # via the enricher; never touched by the sync).
