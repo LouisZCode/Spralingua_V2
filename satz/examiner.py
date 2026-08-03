@@ -37,8 +37,14 @@ EXAMINER_MODEL = "openai/gpt-oss-120b"
 # sentences are in the target language (the English-by-design conversation
 # lessons don't apply here).
 _DEEPGRAM_MODEL = "nova-3"
+# STT-005: filler_words=true — without it nova-3 strips "um"-like tokens even
+# from FLUENT German ("…folgen, um das Zimmer zu erreichen" came back without
+# the "um" in a controlled A/B, 2026-08-03), and a missing "um" is a grammar
+# error here, not a filler. The docs say the param is English-only; the A/B
+# says it works on language=de. Keep it.
 _DEEPGRAM_URL = (
-    f"https://api.deepgram.com/v1/listen?model={_DEEPGRAM_MODEL}&language=de&smart_format=true"
+    f"https://api.deepgram.com/v1/listen?model={_DEEPGRAM_MODEL}&language=de"
+    "&smart_format=true&filler_words=true"
 )
 
 

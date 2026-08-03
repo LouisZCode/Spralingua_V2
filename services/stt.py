@@ -24,6 +24,11 @@ def stt_deepgram(language: str = "de", keyterms: list[str] | None = None):
             model=DEEPGRAM_MODEL,      # Deepgram model
             smart_format=True,         # Better formatting
             utterance_end_ms=1000,     # Wait 1s after last word for utterance boundary
+            # STT-005: German "um" is a load-bearing conjunction (um…zu), but
+            # nova-3's default filler stripping eats it even in fluent speech
+            # (A/B-verified 2026-08-03 on the prerecorded endpoint). de only —
+            # English lessons keep the cleaner filler-free transcripts.
+            filler_words=(language == "de"),
             # STT-003 P2: keyterm prompting biases nova-3 toward words this
             # lesson is likely to elicit (regional greetings, setting nouns) —
             # words a general model may normalise or mishear. Per-lesson list
