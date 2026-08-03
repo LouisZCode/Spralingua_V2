@@ -421,10 +421,57 @@ function emptyTallies(): Record<SourceKind, Tally> {
   };
 }
 
+// FLOW-005: the pre-start round-length picker — 10 / 20 / ∞ presets or a
+// custom 1–50, persisted across visits. Presets and the custom field are
+// mutually exclusive: a non-empty custom value always wins over whichever
+// preset was last picked (see the `roundChoice` derivation in Flow()), and
+// picking a preset clears the custom field. The two states are never
+// reconciled imperatively — the derivation IS the mutual-exclusion rule.
+type RoundPreset = "10" | "20" | "inf";
+type StoredRoundChoice = RoundPreset | number;
+
+const ROUND_STORAGE_KEY = "flow-rounds-v1";
+
+const ROUND_PRESETS: { key: RoundPreset; label: string }[] = [
+  { key: "10", label: "10" },
+  { key: "20", label: "20" },
+  { key: "inf", label: "∞" },
+];
+
+function clampRounds(n: number): number {
+  return Math.min(50, Math.max(1, Math.trunc(n)));
+}
+
+function loadStoredRoundChoice(): StoredRoundChoice {
+  try {
+    const raw = localStorage.getItem(ROUND_STORAGE_KEY);
+    if (raw === "10" || raw === "20" || raw === "inf") return raw;
+    if (raw) {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return clampRounds(n);
+    }
+  } catch {}
+  return "inf";
+}
+
+function persistRoundChoice(choice: StoredRoundChoice) {
+  try {
+    localStorage.setItem(ROUND_STORAGE_KEY, String(choice));
+  } catch {}
+}
+
+function targetFromChoice(choice: StoredRoundChoice): number | null {
+  if (choice === "inf") return null;
+  if (choice === "10") return 10;
+  if (choice === "20") return 20;
+  return choice;
+}
+
 // FLOW-001: endless mixed-practice mode — one item at a time, drawn randomly
-// across the seven existing exercises, running until the learner hits Finish.
-// This component is the auth-guarded page shell + the dealing/tally state;
-// each existing trainer runs unmodified except for its opt-in `flow` prop.
+// across the seven existing exercises, running until the learner hits Finish
+// or (FLOW-005) a chosen round length is reached. This component is the
+// auth-guarded page shell + the dealing/tally state; each existing trainer
+// runs unmodified except for its opt-in `flow` prop.
 export default function Flow() {
   const { token, ready, signOut } = useAuth();
   const router = useRouter();
@@ -471,6 +518,51 @@ export default function Flow() {
       router.replace("/");
     }
   }, [ready, token, router]);
+
+  // FLOW-005: pre-start round-length picker. `screen` gates the very first
+  // deal — round buffers still prefetch in the background (the initial-load
+  // effect further below is otherwise untouched), but nothing gets dealt
+  // until Start is pressed.
+  const [screen, setScreen] = useState<"picker" | "playing">("picker");
+  const startedDealingRef = useRef(false);
+
+  const [presetChoice, setPresetChoice] = useState<RoundPreset>("inf");
+  const [customText, setCustomText] = useState<string>("");
+
+  // SSR-safe hydration from localStorage, same idiom as TopicScreen's input
+  // mode toggle — reading storage during render would mismatch the
+  // server-rendered HTML.
+  useEffect(() => {
+    const stored = loadStoredRoundChoice();
+    if (typeof stored === "number") {
+      setCustomText(String(stored));
+    } else if (stored !== "inf") {
+      setPresetChoice(stored);
+    }
+  }, []);
+
+  const customNumber = customText === "" ? null : Number(customText);
+  const roundChoice: StoredRoundChoice = customNumber ?? presetChoice;
+  const roundTarget = targetFromChoice(roundChoice);
+
+  const handlePickPreset = useCallback((preset: RoundPreset) => {
+    setPresetChoice(preset);
+    setCustomText("");
+  }, []);
+
+  const handleCustomChange = useCallback((raw: string) => {
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (digits === "") {
+      setCustomText("");
+      return;
+    }
+    setCustomText(String(clampRounds(Number(digits))));
+  }, []);
+
+  const handleStart = useCallback(() => {
+    persistRoundChoice(roundChoice);
+    setScreen("playing");
+  }, [roundChoice]);
 
   const dealNext = useCallback(
     (prevKind: SourceKind | null, mood: BeatMood = "neutral") => {
@@ -519,6 +611,17 @@ export default function Flow() {
       if (beatTimerRef.current) clearTimeout(beatTimerRef.current);
     };
   }, []);
+
+  // FLOW-005: fire the very first deal once both the learner has pressed
+  // Start and the initial fetch has completed — whichever happens second.
+  // Guarded by a ref so it only ever runs once per mount (the initial-load
+  // effect below no longer deals directly).
+  useEffect(() => {
+    if (phase === "ready" && screen === "playing" && !startedDealingRef.current) {
+      startedDealingRef.current = true;
+      dealNext(null);
+    }
+  }, [phase, screen, dealNext]);
 
   // Initial load: every source fetches independently. A source that fails
   // or comes back empty just drops out of the rotation (console-silent); an
@@ -579,8 +682,10 @@ export default function Flow() {
         setPhase("error");
         return;
       }
+      // FLOW-005: don't deal yet — the picker effect above fires the first
+      // deal once the learner presses Start (which may already have
+      // happened, or may happen later; either order works).
       setPhase("ready");
-      dealNext(null);
     });
 
     return () => {
@@ -600,6 +705,16 @@ export default function Flow() {
     },
     [dealNext]
   );
+
+  // FLOW-005: auto-finish once the completed tally hits a finite round's
+  // target — same summary screen the manual Finish button shows. Exact
+  // equality (not >=) so continuing past the target via "Keep going" never
+  // bounces straight back to the summary on the very next item.
+  useEffect(() => {
+    if (roundTarget !== null && totals.total === roundTarget) {
+      setFinished(true);
+    }
+  }, [totals.total, roundTarget]);
 
   // onNewRound is never called in flow mode — the round-trainers only reach
   // their own "done" phase without the flow flag, which we never pass.
@@ -1010,162 +1125,180 @@ export default function Flow() {
       </header>
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
-        <div className="mb-5 text-center">
-          <h1 className="font-display text-[24px] font-black tracking-tight text-ink">
-            Flow
-          </h1>
-          <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
-            alle Übungen · endlos
-          </p>
-        </div>
-
-        {phase === "loading" ? null : phase === "error" ? (
-          <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load — is the backend running?
-          </p>
-        ) : finished ? (
-          <SummaryCard
-            totals={totals}
-            perExercise={perExercise}
-            onKeepGoing={() => setFinished(false)}
+        {screen === "picker" && phase !== "error" ? (
+          <RoundPicker
+            presetChoice={presetChoice}
+            customText={customText}
+            onPickPreset={handlePickPreset}
+            onCustomChange={handleCustomChange}
+            onStart={handleStart}
           />
         ) : (
           <>
-            <div className="mb-4 flex items-center justify-between">
-              <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
-                {totals.total} item{totals.total === 1 ? "" : "s"} ·{" "}
-                {totals.correct} ✓
+            <div className="mb-5 text-center">
+              <h1 className="font-display text-[24px] font-black tracking-tight text-ink">
+                Flow
+              </h1>
+              <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+                alle Übungen
               </p>
-              <button
-                type="button"
-                onClick={() => setFinished(true)}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
-                style={inkShadow}
-              >
-                Finish
-              </button>
             </div>
 
-            {beat !== null && (
-              <TransitionBeat
-                mood={beat.mood}
-                title={KICKER[beat.kind]}
-                first={beat.first}
+            {phase === "loading" ? null : phase === "error" ? (
+              <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
+                Couldn&apos;t load — is the backend running?
+              </p>
+            ) : finished ? (
+              <SummaryCard
+                totals={totals}
+                perExercise={perExercise}
+                onKeepGoing={() => setFinished(false)}
               />
-            )}
-
-            {deal !== null && (
+            ) : (
               <>
-                <p className="mb-3 text-center font-body text-[11px] font-black uppercase tracking-[0.24em] text-flag-red">
-                  {kickerFor(deal)}
-                </p>
+                <div className="mb-4 flex items-center justify-between">
+                  <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+                    {totals.total} item{totals.total === 1 ? "" : "s"} ·{" "}
+                    {totals.correct} ✓
+                    {roundTarget !== null && (
+                      <>
+                        {" "}
+                        · {totals.total} / {roundTarget}
+                      </>
+                    )}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setFinished(true)}
+                    className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+                    style={inkShadow}
+                  >
+                    Finish
+                  </button>
+                </div>
 
-                {deal.kind === "bauteil" && (
-                  <BauteilTrainer
-                    key={deal.key}
-                    round={[deal.item]}
-                    onAttempt={handleBauteilAttempt}
-                    onNewRound={noopNewRound}
-                    flow
-                    onFlowDone={(correct) => handleItemDone("bauteil", correct)}
-                    allowGiveUp
-                    onGiveUp={handleBauteilGiveUp}
+                {beat !== null && (
+                  <TransitionBeat
+                    mood={beat.mood}
+                    title={KICKER[beat.kind]}
+                    first={beat.first}
                   />
                 )}
-                {deal.kind === "verbindungen" && (
-                  <VerbindungenTrainer
-                    key={deal.key}
-                    round={[deal.item]}
-                    onAttempt={handleVerbindungenAttempt}
-                    onNewRound={noopNewRound}
-                    onGloss={handleGloss}
-                    onAdd={handleAddWord}
-                    flow
-                    onFlowDone={(correct) =>
-                      handleItemDone("verbindungen", correct)
-                    }
-                    allowGiveUp
-                    onGiveUp={handleVerbindungenGiveUp}
-                  />
-                )}
-                {deal.kind === "zeitfaerbung" && (
-                  <ZeitfaerbungTrainer
-                    key={deal.key}
-                    round={[deal.item]}
-                    onAttempt={handleZeitfaerbungAttempt}
-                    onNewRound={noopNewRound}
-                    flow
-                    onFlowDone={(correct) =>
-                      handleItemDone("zeitfaerbung", correct)
-                    }
-                    allowGiveUp
-                    onGiveUp={handleZeitfaerbungGiveUp}
-                  />
-                )}
-                {deal.kind === "sprechen" && (
-                  <SprechenTrainer
-                    key={deal.key}
-                    round={[deal.item]}
-                    onAttempt={handleSprechenAttempt}
-                    onNewRound={noopNewRound}
-                    onGloss={handleGloss}
-                    onAdd={handleAddWord}
-                    flow
-                    onFlowDone={(correct) => handleItemDone("sprechen", correct)}
-                    allowGiveUp
-                    onGiveUp={handleSprechenGiveUp}
-                  />
-                )}
-                {deal.kind === "genus" && (
-                  <GenusTrainer
-                    key={deal.key}
-                    round={[deal.item]}
-                    onArticle={handleGenusArticle}
-                    onPhrase={handleGenusPhrase}
-                    onNewRound={noopNewRound}
-                    flow
-                    onFlowDone={(correct) => handleItemDone("genus", correct)}
-                    allowGiveUp
-                    onGiveUp={handleGenusGiveUp}
-                  />
-                )}
-                {deal.kind === "satz" && (
-                  <VocabTrainer
-                    key={deal.key}
-                    deck={[deal.card]}
-                    onRemove={handleSatzRemove}
-                    onAttempt={handleSatzAttempt}
-                    onReveal={handleSatzReveal}
-                    onExplain={handleExplain}
-                    onFlag={handleFlag}
-                    sessionPrefix="satz"
-                    flow
-                    onFlowDone={(correct) => handleItemDone("satz", correct)}
-                    sessionId={sid()}
-                    onGenderMiss={handleSatzGenderMiss}
-                    onGenderCues={handleSatzGenderCues}
-                    onGloss={handleGloss}
-                    onAdd={handleAddWord}
-                  />
-                )}
-                {deal.kind === "verbformen" && (
-                  <VocabTrainer
-                    key={deal.key}
-                    deck={[deal.card]}
-                    onRemove={handleVerbformenRemove}
-                    onAttempt={handleVerbformenAttempt}
-                    onReveal={handleVerbformenReveal}
-                    onExplain={handleExplain}
-                    onFlag={handleFlag}
-                    sessionPrefix="vf"
-                    flow
-                    onFlowDone={(correct) =>
-                      handleItemDone("verbformen", correct)
-                    }
-                    sessionId={sid()}
-                    onGloss={handleGloss}
-                    onAdd={handleAddWord}
-                  />
+
+                {deal !== null && (
+                  <>
+                    <p className="mb-3 text-center font-body text-[11px] font-black uppercase tracking-[0.24em] text-flag-red">
+                      {kickerFor(deal)}
+                    </p>
+
+                    {deal.kind === "bauteil" && (
+                      <BauteilTrainer
+                        key={deal.key}
+                        round={[deal.item]}
+                        onAttempt={handleBauteilAttempt}
+                        onNewRound={noopNewRound}
+                        flow
+                        onFlowDone={(correct) => handleItemDone("bauteil", correct)}
+                        allowGiveUp
+                        onGiveUp={handleBauteilGiveUp}
+                      />
+                    )}
+                    {deal.kind === "verbindungen" && (
+                      <VerbindungenTrainer
+                        key={deal.key}
+                        round={[deal.item]}
+                        onAttempt={handleVerbindungenAttempt}
+                        onNewRound={noopNewRound}
+                        onGloss={handleGloss}
+                        onAdd={handleAddWord}
+                        flow
+                        onFlowDone={(correct) =>
+                          handleItemDone("verbindungen", correct)
+                        }
+                        allowGiveUp
+                        onGiveUp={handleVerbindungenGiveUp}
+                      />
+                    )}
+                    {deal.kind === "zeitfaerbung" && (
+                      <ZeitfaerbungTrainer
+                        key={deal.key}
+                        round={[deal.item]}
+                        onAttempt={handleZeitfaerbungAttempt}
+                        onNewRound={noopNewRound}
+                        flow
+                        onFlowDone={(correct) =>
+                          handleItemDone("zeitfaerbung", correct)
+                        }
+                        allowGiveUp
+                        onGiveUp={handleZeitfaerbungGiveUp}
+                      />
+                    )}
+                    {deal.kind === "sprechen" && (
+                      <SprechenTrainer
+                        key={deal.key}
+                        round={[deal.item]}
+                        onAttempt={handleSprechenAttempt}
+                        onNewRound={noopNewRound}
+                        onGloss={handleGloss}
+                        onAdd={handleAddWord}
+                        flow
+                        onFlowDone={(correct) => handleItemDone("sprechen", correct)}
+                        allowGiveUp
+                        onGiveUp={handleSprechenGiveUp}
+                      />
+                    )}
+                    {deal.kind === "genus" && (
+                      <GenusTrainer
+                        key={deal.key}
+                        round={[deal.item]}
+                        onArticle={handleGenusArticle}
+                        onPhrase={handleGenusPhrase}
+                        onNewRound={noopNewRound}
+                        flow
+                        onFlowDone={(correct) => handleItemDone("genus", correct)}
+                        allowGiveUp
+                        onGiveUp={handleGenusGiveUp}
+                      />
+                    )}
+                    {deal.kind === "satz" && (
+                      <VocabTrainer
+                        key={deal.key}
+                        deck={[deal.card]}
+                        onRemove={handleSatzRemove}
+                        onAttempt={handleSatzAttempt}
+                        onReveal={handleSatzReveal}
+                        onExplain={handleExplain}
+                        onFlag={handleFlag}
+                        sessionPrefix="satz"
+                        flow
+                        onFlowDone={(correct) => handleItemDone("satz", correct)}
+                        sessionId={sid()}
+                        onGenderMiss={handleSatzGenderMiss}
+                        onGenderCues={handleSatzGenderCues}
+                        onGloss={handleGloss}
+                        onAdd={handleAddWord}
+                      />
+                    )}
+                    {deal.kind === "verbformen" && (
+                      <VocabTrainer
+                        key={deal.key}
+                        deck={[deal.card]}
+                        onRemove={handleVerbformenRemove}
+                        onAttempt={handleVerbformenAttempt}
+                        onReveal={handleVerbformenReveal}
+                        onExplain={handleExplain}
+                        onFlag={handleFlag}
+                        sessionPrefix="vf"
+                        flow
+                        onFlowDone={(correct) =>
+                          handleItemDone("verbformen", correct)
+                        }
+                        sessionId={sid()}
+                        onGloss={handleGloss}
+                        onAdd={handleAddWord}
+                      />
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -1232,6 +1365,104 @@ function SummaryCard({
         >
           ← Back to menu
         </Link>
+      </div>
+    </div>
+  );
+}
+
+// ─── Round picker (FLOW-005) ─────────────────────────────────────────────
+// The pre-start screen: same visual language as PartnerScreen/TopicScreen
+// (kicker heading, btn-3d cards, ink borders) — 10 / 20 / ∞ preset cards
+// plus a custom 1–50 field, one primary Start button. Round buffers may
+// already be prefetching in the background while this is up; nothing gets
+// dealt until Start fires.
+function RoundPicker({
+  presetChoice,
+  customText,
+  onPickPreset,
+  onCustomChange,
+  onStart,
+}: {
+  presetChoice: RoundPreset;
+  customText: string;
+  onPickPreset: (preset: RoundPreset) => void;
+  onCustomChange: (raw: string) => void;
+  onStart: () => void;
+}) {
+  const customActive = customText !== "";
+  return (
+    <div className="rise-in">
+      <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
+        Flow
+      </p>
+      <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">
+        How many exercises?
+      </h1>
+      <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
+        Pick a round length, or go endless — you can always stop early with
+        Finish.
+      </p>
+
+      <div className="mt-8 grid gap-4 sm:grid-cols-3">
+        {ROUND_PRESETS.map(({ key, label }) => {
+          const selected = !customActive && presetChoice === key;
+          return (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={selected}
+              onClick={() => onPickPreset(key)}
+              className={`btn-3d rounded-3xl border-[3px] border-ink px-6 py-6 text-center font-display text-[28px] font-black transition ${
+                selected
+                  ? "bg-ink text-white"
+                  : "bg-white text-ink hover:bg-paper-warm"
+              }`}
+              style={inkShadow}
+            >
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mt-7 flex items-center gap-3">
+        <label
+          htmlFor="flow-custom-rounds"
+          className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted"
+        >
+          Or a custom number
+        </label>
+        <input
+          id="flow-custom-rounds"
+          type="text"
+          inputMode="numeric"
+          value={customText}
+          onChange={(e) => onCustomChange(e.target.value)}
+          placeholder="1–50"
+          className="w-24 rounded-2xl border-[3px] border-ink bg-white px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+        />
+      </div>
+
+      <div className="mt-9">
+        <button
+          type="button"
+          onClick={onStart}
+          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white"
+          style={redShadow}
+        >
+          Start
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-4 w-4"
+          >
+            <path d="M5 12h14M13 6l6 6-6 6" />
+          </svg>
+        </button>
       </div>
     </div>
   );
