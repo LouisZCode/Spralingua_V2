@@ -63,9 +63,16 @@ export function diffTokens(
 export function MarkedText({
   tokens,
   mark,
+  renderToken,
 }: {
   tokens: MarkedToken[];
   mark: "red" | "green";
+  // SATZ-018: optional per-token content override — lets a caller (e.g. the
+  // corrected sentence on a Satzschmiede vocab card) wrap each token in
+  // something else (Glossable) while this component still owns the diff
+  // color + spacing, so the two never fight over tokenization. Omitted by
+  // every other caller today — identical rendering to before.
+  renderToken?: (token: MarkedToken, index: number) => ReactNode;
 }) {
   const markClass =
     mark === "red" ? "font-semibold text-flag-red-deep" : "text-success";
@@ -73,7 +80,7 @@ export function MarkedText({
     <>
       {tokens.map((t, i) => (
         <span key={i} className={t.changed ? markClass : undefined}>
-          {t.text}
+          {renderToken ? renderToken(t, i) : t.text}
           {i < tokens.length - 1 ? " " : ""}
         </span>
       ))}

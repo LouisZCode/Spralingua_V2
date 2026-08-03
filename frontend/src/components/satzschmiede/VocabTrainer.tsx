@@ -10,7 +10,7 @@ import {
   type GlossInfo,
 } from "./api";
 import type { DeckCard } from "./deck";
-import { diffTokens, MarkedText } from "../shared/feedback";
+import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
 import { useAuth } from "../auth/AuthContext";
 
@@ -848,6 +848,27 @@ export default function VocabTrainer({
   // type, but a stray "der Kühlschrank" still resolves to "Kühlschrank").
   const glossExclude = card.target.replace(/^(der|die|das)\s+/i, "").trim();
 
+  // SATZ-018: MarkedText's per-token override (see shared/feedback.tsx) for
+  // the corrected sentence — each token keeps its diff coloring (MarkedText
+  // still owns that + the spacing) but the text renders through Glossable
+  // instead of a plain string. The context sent to onGloss is always the
+  // FULL corrected sentence, not the single tapped token — Glossable's own
+  // second argument (built from whatever `text` it was given) is ignored in
+  // favor of `result.corrected`, matching the sentence-context contract the
+  // natural-example surface already uses. `undefined` when the parent
+  // doesn't wire onGloss (Verbformen today), so MarkedText falls back to its
+  // original plain-text rendering — no behavior change there.
+  const renderCorrectionToken = onGloss
+    ? (t: MarkedToken) => (
+        <Glossable
+          text={t.text}
+          onGloss={(word: string) => onGloss(word, result?.corrected ?? "")}
+          onAdd={onAdd}
+          exclude={glossExclude}
+        />
+      )
+    : undefined;
+
   return (
     <div className="mx-auto w-full max-w-xl">
       {/* Progress + navigation. Practice counts down today's queue; browse
@@ -991,7 +1012,11 @@ export default function VocabTrainer({
                       <p className="mt-3.5 font-body text-[17px] font-bold leading-snug text-ink">
                         <span className={`mr-1.5 ${v.tone}`}>→</span>
                         {fixDiff ? (
-                          <MarkedText tokens={fixDiff.corrected} mark="green" />
+                          <MarkedText
+                            tokens={fixDiff.corrected}
+                            mark="green"
+                            renderToken={renderCorrectionToken}
+                          />
                         ) : (
                           result.corrected
                         )}
@@ -1016,7 +1041,11 @@ export default function VocabTrainer({
                           <p className="mt-1.5 font-body text-[17px] font-bold leading-snug text-ink">
                             <span className="mr-1.5 text-ink-muted">→</span>
                             {fixDiff ? (
-                              <MarkedText tokens={fixDiff.corrected} mark="green" />
+                              <MarkedText
+                                tokens={fixDiff.corrected}
+                                mark="green"
+                                renderToken={renderCorrectionToken}
+                              />
                             ) : (
                               result.corrected
                             )}

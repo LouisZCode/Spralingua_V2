@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -8,8 +8,10 @@ import { useAuth } from "./auth/AuthContext";
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import PackModal from "./satzschmiede/PackModal";
 import {
+  addWord,
   explainAttempt,
   fetchDeck,
+  fetchGloss,
   flagVerdict,
   genderMissCard,
   removeCard,
@@ -18,6 +20,7 @@ import {
   unbenchCard,
   UnauthorizedError,
   type AttemptResult,
+  type GlossInfo,
 } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 import { fetchMeta } from "./genus/api";
@@ -140,6 +143,56 @@ export default function Satzschmiede() {
       genderMissCard(token, cardId).catch((e) => {
         if (e instanceof UnauthorizedError) signOut();
       });
+    },
+    [token, signOut]
+  );
+
+  // SATZ-018: word-gloss popover wiring (UI-007/UI-009 machinery) for the
+  // vocab card's example sentence and corrected-sentence fix — same
+  // auth-guarded pattern as Sprechen.tsx/Verbindungen.tsx's handleGloss/
+  // handleAddWord. VocabTrainer mints its own OBS-007 practice-session id
+  // internally and doesn't expose it here, so gloss lookups get their own
+  // separate session id instead (TandemChat.tsx's glossSessionRef
+  // precedent) — it's only a Langfuse grouping label, not the graded
+  // attempt itself, so a second id is harmless.
+  const glossSessionRef = useRef<string | null>(null);
+
+  const handleGloss = useCallback(
+    async (word: string, context: string): Promise<GlossInfo> => {
+      if (!token) throw new UnauthorizedError("/satz/gloss");
+      glossSessionRef.current ??=
+        "satz-gloss-" + crypto.randomUUID().replace(/-/g, "");
+      try {
+        return await fetchGloss(token, word, context, glossSessionRef.current);
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  const handleAddWord = useCallback(
+    async (lemma: string): Promise<{ glossRemaining?: number } | void> => {
+      if (!token) throw new UnauthorizedError("/satz/cards");
+      try {
+        // SATZ-013: this is the gloss popover's one-tap add — mark it so
+        // the backend counts it against the daily gloss-add cap.
+        const res = await addWord(
+          token,
+          lemma,
+          glossSessionRef.current ?? undefined,
+          "gloss"
+        );
+        return { glossRemaining: res.glossRemaining };
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
     },
     [token, signOut]
   );
@@ -341,6 +394,8 @@ export default function Satzschmiede() {
             onDoneChange={setTrainerDone}
             onGenderMiss={handleGenderMiss}
             onGenderCues={handleGenderCues}
+            onGloss={handleGloss}
+            onAdd={handleAddWord}
           />
         )}
 
