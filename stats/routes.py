@@ -34,7 +34,6 @@ from database.repository import (
     load_recent_sessions,
     load_retired_patterns,
     load_top_errors,
-    satz_word_recall,
 )
 
 router = APIRouter(tags=["stats"])
@@ -105,16 +104,19 @@ async def get_my_sessions(
     return {"sessions": await load_recent_sessions(db, user_id=user_id, limit=10)}
 
 
-# ── REC-001: the weekly observe→recommend loop ────────────────────────────
-# Mon–Sun calendar week (UTC, same convention as everything above): the
-# learner's first ~3 active days gather data; from then on the practice menu
-# may show ONE recommended pillar. Rules are deliberately few and ordered by
-# severity — words gate everything, grammar next, free production last.
-# "No clear signal" is a first-class answer: recommendation stays null and
-# the menu shows nothing.
-_REC_ACTIVE_DAYS = 3  # gate: active days this week before recommending
-_REC_SATZ_MIN = 10  # graded satz attempts needed before recall counts
-_REC_SATZ_FLOOR = 0.75  # weekly word-recall below this → vocabulary practice
+# ── REC-001: the rolling observe→recommend loop ───────────────────────────
+# Rolling last-7-days window (UTC, same convention as everything above), not
+# a Mon–Sun calendar week — a calendar week resets on Monday and blanks the
+# banner for days until the 3-active-days gate re-fills. The learner's first
+# ~3 active days in the window gather data; from then on the practice menu
+# may show ONE recommended pillar. Rules are deliberately few: vocabulary
+# recall is deliberately NOT one of them — forgetting words is chronic and
+# expected in vocabulary learning, and Satzschmiede is a core daily exercise
+# rather than a specialized fix, so a recall-based rule would dominate the
+# banner forever. Recommendations point only at the grammar-focused Flow and
+# at Tandem. "No clear signal" is a first-class answer: recommendation stays
+# null and the menu shows nothing.
+_REC_ACTIVE_DAYS = 3  # gate: active days in the window before recommending
 _REC_PATTERN_MIN = 3  # 7-day slips on one grammar pattern → Flow
 
 
@@ -124,9 +126,8 @@ async def get_my_recommendation(
     db: AsyncSession = Depends(get_db),
 ):
     now = datetime.now(timezone.utc)
-    monday = now.date() - timedelta(days=now.weekday())
-    week_start = datetime.combine(monday, time.min, tzinfo=timezone.utc)
-    week_start_naive = datetime.combine(monday, time.min)
+    week_start = now - timedelta(days=7)
+    week_start_naive = week_start.replace(tzinfo=None)
 
     active_days = await count_active_days(
         db,
@@ -137,22 +138,7 @@ async def get_my_recommendation(
     if active_days < _REC_ACTIVE_DAYS:
         return {"recommendation": None, "activeDays": active_days}
 
-    # 1) Weak word recall → Vocabulary Practice. Same metric as the dosing
-    # throttle (COALESCE(word_ok, correct)) so the two never disagree.
-    attempts, recall = await satz_word_recall(db, user_id=user_id, start=week_start)
-    if attempts >= _REC_SATZ_MIN and recall < _REC_SATZ_FLOOR:
-        return {
-            "recommendation": {
-                "pillar": "satz",
-                "reason": (
-                    f"Your word recall is at {round(recall * 100)}% this week — "
-                    "a focused vocabulary round pays off most today."
-                ),
-            },
-            "activeDays": active_days,
-        }
-
-    # 2) A hot grammar pattern → Flow (it chases the pattern across every
+    # 1) A hot grammar pattern → Flow (it chases the pattern across every
     # exercise). Reuses the recency-weighted focus the coach already computes.
     focus = await load_focus_with_recency(db, user_id=user_id, limit=1)
     if focus and focus[0]["count7d"] >= _REC_PATTERN_MIN:
@@ -169,7 +155,7 @@ async def get_my_recommendation(
             "activeDays": active_days,
         }
 
-    # 3) Drilling all week without one real conversation → Tandem. A chat
+    # 2) Drilling all week without one real conversation → Tandem. A chat
     # with ANY partner counts (TAND-008: Lena or Paul).
     tandem_sessions = await count_sessions_since(
         db, user_id=user_id, lesson_ids=sorted(tandem_lesson_ids()), start=week_start_naive
