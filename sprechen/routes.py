@@ -12,6 +12,7 @@ judges constraint + target structure. Ledger + tracing contracts mirror
 
 import random
 import time
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
@@ -24,6 +25,7 @@ from database.connection import get_db
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
+    load_recent_attempt_item_ids,
     record_drill_attempt,
     record_grammar_error,
 )
@@ -42,6 +44,11 @@ ROUND_SIZE = 3
 # Multi-sentence answers, but still under a minute of speech — same ceiling
 # as the Satzschmiede attempt cap (opus/aac stays well under this).
 _MAX_AUDIO_BYTES = 2_500_000
+
+# VARY-002: tasks attempted this recently count as "seen" server-side, so the
+# same prompt doesn't resurface day after day — regardless of what (if
+# anything) the client echoes back as seenTasks.
+_COOLDOWN_HOURS = 48
 
 
 def _pick_round(
@@ -115,7 +122,25 @@ async def get_round(
         logger.exception("Sprechen focus read failed — serving an unweighted round")
         hot = set()
 
+    try:
+        since = datetime.now(timezone.utc) - timedelta(hours=_COOLDOWN_HOURS)
+        recent_refs = await load_recent_attempt_item_ids(
+            db, user_id=user_id, exercise="sprechen", since=since
+        )
+        # /give-up rows store "{task_id}:giveup" (DATA-004 convention); strip
+        # the suffix so a given-up task lands in the same id namespace
+        # _pick_round uses (raw task ids), not a string it'll never match.
+        recent_ids = {ref.removesuffix(":giveup") for ref in recent_refs}
+    except Exception:
+        logger.exception("Sprechen recent-attempt read failed — cooldown skipped this round")
+        recent_ids = set()
+
     seen_task_ids = seenTasks.split(",") if seenTasks else []
+    # 48h cooldown (VARY-002): union server-known recent attempts into the
+    # seen set so a task the user attempted recently doesn't resurface,
+    # regardless of what the client echoes — covers Flow's amnesiac fetches
+    # and every device the user practices from.
+    seen_task_ids = list(set(seen_task_ids) | recent_ids)
     chosen, cycle_reset = _pick_round(tasks, hot, seen_task_ids)
     return {
         "tasks": [

@@ -498,6 +498,34 @@ async def count_sessions_since(
     ) or 0
 
 
+async def load_recent_attempt_item_ids(
+    db: AsyncSession, *, user_id: str, exercise: str, since: datetime
+) -> set[str]:
+    """Distinct ``item_ref`` values this user has attempted in ``exercise``
+    since ``since`` — the raw per-attempt log, not deduped by outcome.
+
+    Built for server-side "seen" cooldowns (VARY-002): a caller unions this
+    into whatever seen-id set it already has (e.g. a client-echoed list) so a
+    recently-attempted item doesn't resurface, independent of what the client
+    remembers. ``since`` must be tz-aware — ``drill_attempts.created_at`` is
+    TIMESTAMPTZ (unlike ``user_errors``/``activity_session``'s naive
+    columns), so a naive cutoff here would raise at query time in asyncpg.
+    """
+    rows = (
+        await db.execute(
+            select(DrillAttempt.item_ref)
+            .where(
+                DrillAttempt.user_id == user_id,
+                DrillAttempt.exercise == exercise,
+                DrillAttempt.item_ref.isnot(None),
+                DrillAttempt.created_at >= since,
+            )
+            .distinct()
+        )
+    ).scalars().all()
+    return set(rows)
+
+
 def _as_utc_iso(dt: datetime) -> str:
     # activity_session timestamps are stored naive-UTC (TIMESTAMP without
     # timezone); stamp the offset so the frontend's Date parsing can't
