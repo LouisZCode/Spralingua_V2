@@ -243,17 +243,50 @@ def _stem(word: str) -> str:
     return word[:-2] if len(word) - 2 >= 3 else word
 
 
+def _vowel_variants(stem: str) -> set[str]:
+    """SATZ-019: German strong verbs raise their stem vowel in the 2nd/3rd
+    person singular present — gelten->gilt, geben->gibt, nehmen->nimmt,
+    sehen->sieht, lesen->liest, helfen->hilft, sprechen->spricht, treffen
+    ->trifft, essen->isst. A stem built straight off the infinitive
+    ("gelt", "geb", "nehm", ...) never prefix-matches the form a learner
+    who got it right actually says, so the guard vetoed a correct answer.
+    Emit the e->i and e->ie variants of the stem's first "e" (plus the
+    eh->i contraction "nehmen" needs, since e->i alone would give "nihm"
+    instead of the actual "nimmt" stem) so those forms count as evidence.
+    Stems are already normalized (casefold, umlauts folded), so only plain
+    "e" ever needs handling here. This only ever ADDS stems to the set the
+    caller already has — the guard stays conservative: over-generating
+    candidates can only turn a false negative into a match, it can't erase
+    the "target clearly absent" signal the guard exists to catch."""
+    variants = set()
+    if "e" in stem:
+        variants.add(stem.replace("e", "i", 1))
+        variants.add(stem.replace("e", "ie", 1))
+    if "eh" in stem:
+        variants.add(stem.replace("eh", "i", 1))
+    # A 2-char variant (e.g. "seh" -> "si") would prefix-match half the
+    # language, so floor at 3 — same minimum the base stem uses.
+    return {v for v in variants if len(v) >= 3 and v != stem}
+
+
 def _candidate_stems(word: str) -> set[str]:
     """One normalized content word -> its stem(s). A separable-prefix verb
     ("einladen") also contributes the stem of the remainder after the
     prefix ("lad"), so a split spoken form ("... lade ... ein") still
-    matches even though the transcript token never contains the full verb."""
-    stems = {_stem(word)}
+    matches even though the transcript token never contains the full verb.
+    Both the base stem and the remainder stem also get their strong-verb
+    e->i(e) vowel variants (SATZ-019) — a separable strong verb ("einladen"
+    isn't one, but e.g. "aufgeben"'s remainder "geb" is) has the same
+    stem-vowel raising in 2nd/3rd person singular."""
+    base_stem = _stem(word)
+    stems = {base_stem} | _vowel_variants(base_stem)
     for prefix in _SEPARABLE_PREFIXES:
         if word.startswith(prefix) and len(word) > len(prefix):
             remainder = word[len(prefix):]
             if len(remainder) > 3:
-                stems.add(_stem(remainder))
+                remainder_stem = _stem(remainder)
+                stems.add(remainder_stem)
+                stems |= _vowel_variants(remainder_stem)
             break  # longest matching prefix only
     return stems
 
