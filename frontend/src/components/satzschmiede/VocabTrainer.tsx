@@ -13,6 +13,7 @@ import type { DeckCard } from "./deck";
 import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
 import { useAuth } from "../auth/AuthContext";
+import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -338,6 +339,10 @@ export default function VocabTrainer({
   // verb-only deck) never gate.
   const needsGate = !browsing && !!card?.article && !!onGenderMiss;
   const genderOk = genderOkFor === card?.id;
+  // UI-012: the exact condition the Record button's own `disabled` already
+  // encodes — reused by the Space/Enter hotkey below so the key can never do
+  // something a click on the button itself wouldn't.
+  const recordDisabled = flipped || checking || (needsGate && !genderOk);
 
   // The word is what the card tests: wordOk alone decides green vs red. A
   // grammar slip elsewhere in the sentence stays green and shows up as a
@@ -419,6 +424,21 @@ export default function VocabTrainer({
   useEffect(() => {
     onDoneChange?.(roundDone);
   }, [roundDone, onDoneChange]);
+
+  // UI-012: Space/Enter mirror the mouse exactly — toggle the Record button
+  // while a card is live, advance via the primary "Next word" once a verdict
+  // is showing. Both startRecording and handleNext already no-op safely with
+  // no card (the done panel) or mid-lapse (wrongPick's queued advance), so no
+  // extra state check is needed beyond what the click handlers use.
+  useSpeakHotkey(() => {
+    if (flipped) {
+      handleNext();
+    } else if (recording) {
+      stopRecording();
+    } else if (!recordDisabled) {
+      void startRecording();
+    }
+  });
 
   async function startRecording() {
     if (busy || flipped || !card) return;
@@ -1238,7 +1258,7 @@ export default function VocabTrainer({
             <button
               type="button"
               onClick={recording ? stopRecording : startRecording}
-              disabled={flipped || checking || (needsGate && !genderOk)}
+              disabled={recordDisabled}
               className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:pointer-events-none disabled:opacity-40 ${
                 recording
                   ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
@@ -1264,13 +1284,22 @@ export default function VocabTrainer({
             )}
           </div>
           {/* Non-breaking space when idle keeps the height stable, so the
-              caption appearing doesn't shove the layout around. */}
+              caption appearing doesn't shove the layout around. UI-012: on
+              desktop that idle slot now carries the Space hint instead —
+              touch devices (no hover) still fall back to the plain nbsp. */}
           <p className="mt-2 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
-            {checking
-              ? "Checking your sentence…"
-              : flipped
-                ? scheduleLine
-                : "\u00A0"}
+            {checking ? (
+              "Checking your sentence…"
+            ) : flipped ? (
+              scheduleLine
+            ) : (
+              <>
+                <span className="[@media(hover:hover)]:hidden">{"\u00A0"}</span>
+                <span className="hidden [@media(hover:hover)]:inline">
+                  Space to {recording ? "stop" : "record"}
+                </span>
+              </>
+            )}
           </p>
         </div>
 

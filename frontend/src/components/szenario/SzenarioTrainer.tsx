@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Scenario, StructureResult } from "./api";
 import Glossable from "../shared/Glossable";
+import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { WordRejectedError, type GlossInfo } from "../satzschmiede/api";
 
 type Phase = "intro" | "scene" | "result";
@@ -139,6 +140,25 @@ export default function SzenarioTrainer({
       }
     };
   }, []);
+
+  // UI-012: Space/Enter mirror the mouse — toggle Record while a question is
+  // live ("scene"), advance via the primary "New question" once a verdict is
+  // showing ("result"). "intro" (the one-time how-it-works card, with its own
+  // "Start" button) is deliberately left alone — not a record control or a
+  // verdict continue. The Record button here has no `disabled` prop — it
+  // simply isn't rendered while `checking` — so that's the only extra guard.
+  useSpeakHotkey(() => {
+    if (phase === "result") {
+      onNewQuestion();
+      return;
+    }
+    if (phase !== "scene" || checking) return;
+    if (recording) {
+      stopRecording();
+    } else {
+      void startRecording();
+    }
+  });
 
   async function startRecording() {
     setFailed(null);
@@ -515,6 +535,12 @@ export default function SzenarioTrainer({
                 {recording
                   ? "speak, then tap stop — ✕ discards"
                   : "tap record — answer in German, short and simple"}
+                {/* UI-012: desktop-only Space hint — hidden on touch (no
+                    hover) devices, where there's no keyboard to hint at. */}
+                <span className="hidden [@media(hover:hover)]:inline">
+                  {" "}
+                  · Space
+                </span>
               </p>
             </>
           )}

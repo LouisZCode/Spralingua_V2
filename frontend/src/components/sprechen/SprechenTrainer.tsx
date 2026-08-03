@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { NudgeWord, SpokenTask, SprechenVerdict } from "./api";
 import Glossable from "../shared/Glossable";
 import VocabNudgePill from "../shared/VocabNudge";
+import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import type { GlossInfo } from "../satzschmiede/api";
 import { diffWords, segmentTranscript } from "./slipDiff";
 
@@ -119,6 +120,24 @@ export default function SprechenTrainer({
       }
     };
   }, []);
+
+  // UI-012: Space/Enter mirror the mouse — toggle Record while the task is
+  // still open, advance via the primary Next/Finish once a verdict (real or
+  // given-up) is showing. The Record button here has no `disabled` prop at
+  // all — it simply isn't rendered while `checking` — so the only guard
+  // needed is not calling into it during that window.
+  useSpeakHotkey(() => {
+    if (verdict !== null) {
+      next();
+      return;
+    }
+    if (checking) return;
+    if (recording) {
+      stopRecording();
+    } else {
+      void startRecording();
+    }
+  });
 
   async function startRecording() {
     setFailed(null);
@@ -371,6 +390,12 @@ export default function SprechenTrainer({
                   {recording
                     ? "speak, then tap stop — ✕ discards"
                     : "take a breath, plan your sentences, tap record"}
+                  {/* UI-012: desktop-only Space hint — hidden on touch (no
+                      hover) devices, where there's no keyboard to hint at. */}
+                  <span className="hidden [@media(hover:hover)]:inline">
+                    {" "}
+                    · Space
+                  </span>
                 </p>
                 {/* FLOW-002: deliberately unstyled/small — never a rival to Record. */}
                 {allowGiveUp && onGiveUp && (
