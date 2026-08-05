@@ -109,6 +109,9 @@ export default function ConversationView({
   const typeInputRef = useRef<HTMLInputElement | null>(null);
   const finishedRef = useRef(false);
   const endReasonRef = useRef<"user" | "agent" | null>(null);
+  // BUG-005: guards against two fast Enter presses firing sendText twice
+  // before React clears `draft`.
+  const sendingRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pendingBotTextRef = useRef<string | null>(null);
   const botStartedTimeRef = useRef<number | null>(null);
@@ -123,15 +126,21 @@ export default function ConversationView({
   // watchdog below can tell a merely-quiet conversation from a dead socket.
   const lastActivityRef = useRef<number>(Date.now());
 
-  // Fetch briefing copy when the view mounts.
+  // Fetch briefing copy when the view mounts. Aborted on unmount so a fast
+  // unmount can't setState on an unmounted component.
   useEffect(() => {
-    fetch(`${HTTP_BASE}/lessons/${params.lesson}`)
+    const controller = new AbortController();
+    fetch(`${HTTP_BASE}/lessons/${params.lesson}`, { signal: controller.signal })
       .then((r) => r.json())
       .then((data: LessonMeta) => {
         setMeta(data);
         setStatus("Ready");
       })
-      .catch((e) => setStatus(`Failed to load: ${e}`));
+      .catch((e) => {
+        if ((e as Error)?.name === "AbortError") return;
+        setStatus(`Failed to load: ${e}`);
+      });
+    return () => controller.abort();
   }, [params.lesson]);
 
   // Scroll the transcript box, not the window — scrollIntoView would scroll
@@ -416,6 +425,10 @@ export default function ConversationView({
   const sendText = async () => {
     const text = draft.trim();
     if (!text || phase !== "live" || !token || !user) return;
+    // BUG-005: two fast Enter presses can both pass the guard above before
+    // React clears `draft` — bail on the second call.
+    if (sendingRef.current) return;
+    sendingRef.current = true;
     setDraft("");
     setTypeOpen(false);
     setMessages((prev) => [...prev, { speaker: "you", text }]);
@@ -429,9 +442,17 @@ export default function ConversationView({
         },
         body: JSON.stringify({ text }),
       });
-      if (!r.ok) setStatus(`Send failed: ${r.status}`);
+      if (!r.ok) {
+        // Send failed — still the user's turn, don't leave the orb thinking.
+        setStatus(`Send failed: ${r.status}`);
+        setSpeakerState("your_turn");
+      }
     } catch (e) {
+      // Send failed — still the user's turn, don't leave the orb thinking.
       setStatus(`Send error: ${e}`);
+      setSpeakerState("your_turn");
+    } finally {
+      sendingRef.current = false;
     }
   };
 
