@@ -115,3 +115,52 @@ STILL OPEN → v4 candidates:
 CODE-SIDE: `goodbye_after` override works exactly as designed; the weil
 slip went uncorrected once (variance, not regression — same ladder caught
 it in v2).
+
+## v3 prod findings (2026-08-05) — regressed to v1
+
+Two days of real prod sessions (Langfuse 2026-08-04/05: `7ec005eb…`,
+`e874f047…`, `025d18cd…`) surfaced what the adversarial sims never tested:
+topic continuity with an engaged, cooperative partner.
+
+- Topic-jumping: the v3 question brake ("two question-ended replies → next
+  reply must contain NO question: react, share one small piece of your own
+  life (from above)") pulls from the five canned background details
+  regardless of the current topic — every brake turn is a canned-detail
+  drop, felt as a subject change. Worst case (`025d18cd` turn 7): the
+  learner asked Lena a direct question ("hast Du verschiedene
+  [Ausgleiche]?"); the brake made her ignore it, emit a canned react to
+  nothing ("Ach, das klingt nach einer guten Mischung"), and jump to the
+  Chef/Buchladen story.
+- Detail repetition across sessions: Chef/Rente opener in both Aug-5
+  sessions; Elbe training dropped in all three. No memory of used details.
+- Context misattribution: the learner asked about LENA's training ("Das
+  ist auf Training, oder?"); she asked back "Wie läuft dein Training für
+  die Elbe-Tour?" and pressed on after an explicit denial. The debrief
+  then wrote "plans to train for the Elbe Tour" into the learner's notes —
+  the exact v2 CODE-SIDE bug (session 006), still unfixed, now polluting
+  prod memory (see todo TAND-009).
+- Non-focus nudges in prod: "Meintest du „einen sehr großen Schritt“?"
+  (adjektivendungen not a target that session) and "Meinst du „mit einem
+  Fahrer“?" (dative slip) — v4 candidate 1 confirmed live, including the
+  literally-forbidden "Meintest du …?" format.
+- Lena's own German slipped: "das kleine Buchladen" (→ den kleinen
+  Buchladen).
+- Verbatim parroting: learner asked "welche Sport liebst Du am besten?";
+  she answered and asked the identical question straight back (v3 open
+  issue 3, now seen with an engaged partner too).
+
+Root process gap: the v2/v3 sim suite was all adversarial guardrail
+profiles (mistake-maker, shy, teacher-baiter, mid-chat goodbye, rude) —
+nobody simulated a normal engaged partner staying on one topic and asking
+Lena questions back. v2's scorecard even REWARDED self-disclosure count
+("background shared richly, 7-8 per chat" = PASS), optimizing toward
+detail-dropping.
+
+Decision (2026-08-05): regress `tandem.yaml` to the v1 baseline
+(`prompt_versions/tandem_v1.yaml`) for live field-testing — the user
+collects feel-of-conversation feedback on v1, then a fresh iteration cycle
+starts from zero with a continuity-aware sim suite (engaged-partner
+profile scoring topic continuity, direct-question answering, cross-session
+detail repetition) on top of the old adversarial one. v2/v3 stay archived
+in `prompt_versions/`. Paul (TAND-008) carries the v3 contract verbatim
+and has no v1 to regress to.
