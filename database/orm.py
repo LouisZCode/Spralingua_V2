@@ -19,11 +19,12 @@ Indexes match the two access patterns we already know we'll need:
 - ``(user_id, lesson_id)`` — "has this user attempted/passed this lesson?"
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    Date,
     DateTime,
     ForeignKey,
     ForeignKeyConstraint,
@@ -66,6 +67,16 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'normal'")
     )
+    # GAME-001: denormalized streak cache, updated on write (repository.
+    # credit_streak_day) — O(1) read and write, no hot-path scan. Days bucket
+    # by UTC calendar day; for users west of UTC the day rolls over mid-evening
+    # local time — known limitation pending a user timezone column.
+    current_streak: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    longest_streak: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    last_streak_day: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # The one missed day the automatic weekly grace forgave, at most once per
+    # rolling 7 days. Never purchasable (GAME-001: no repair economy).
+    streak_grace_used_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 

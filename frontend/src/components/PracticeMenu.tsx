@@ -5,7 +5,12 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
-import { fetchRecommendation, type Recommendation } from "./development/api";
+import {
+  fetchRecommendation,
+  fetchStats,
+  type Recommendation,
+  type Streak,
+} from "./development/api";
 
 // Post-login hub. After the Google sign-in flow (StartCta) the user lands here
 // instead of dropping straight into a lesson, and picks which practice mode to
@@ -39,6 +44,22 @@ export default function PracticeMenu() {
     fetchRecommendation(token)
       .then((r) => {
         if (!cancelled) setRec(r);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // GAME-001: the streak badge in the header. Non-fatal — any load failure
+  // just means no badge; only the streak object is kept out of the full stats.
+  const [streak, setStreak] = useState<Streak | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchStats(token)
+      .then((s) => {
+        if (!cancelled) setStreak(s.streak);
       })
       .catch(() => {});
     return () => {
@@ -86,6 +107,19 @@ export default function PracticeMenu() {
               Spralingua
             </span>
           </Link>
+          {/* GAME-001: attempted-not-passed daily streak, free weekly grace
+              day, longest is a permanent PR. */}
+          {streak && streak.current > 0 && (
+            <div
+              className={`flex items-center gap-1.5 rounded-2xl border-[3px] border-ink px-3 py-1.5 ${streak.practicedToday ? "bg-flag-gold" : "bg-white"}`}
+              title={`Longest: ${streak.longest} days${streak.practicedToday ? "" : " — practice today to keep it going"}`}
+            >
+              <FlameIcon muted={!streak.practicedToday} />
+              <span className="font-display text-[15px] font-black text-ink">
+                {streak.current}
+              </span>
+            </div>
+          )}
         </div>
       </header>
 
@@ -305,6 +339,24 @@ function ChartIcon() {
       <line x1="5" y1="19" x2="5" y2="13" />
       <line x1="12" y1="19" x2="12" y2="8" />
       <line x1="19" y1="19" x2="19" y2="4" />
+    </svg>
+  );
+}
+
+// Streak flame (GAME-001) — filled red when today already counts, an outline
+// when it doesn't yet. Kept local like ChartIcon, one-off for the header badge.
+function FlameIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={muted ? "none" : "currentColor"}
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={`h-5 w-5 ${muted ? "text-ink-muted" : "text-flag-red"}`}
+    >
+      <path d="M12 3c1 3-3 4.5-3 8a3.5 3.5 0 0 0 7 0c0-1.5-.7-2.6-1.5-3.5-.4 1-.9 1.5-1.5 2C13.5 7 14 5 12 3Z" />
     </svg>
   );
 }

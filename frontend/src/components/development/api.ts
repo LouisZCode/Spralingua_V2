@@ -72,6 +72,14 @@ export type SeriesPoint = {
   firstTryCorrect: number;
 };
 
+// GAME-001: forgiving daily streak — attempted-not-passed, one free weekly
+// grace day, longest is a permanent PR that never resets.
+export type Streak = {
+  current: number;
+  longest: number;
+  practicedToday: boolean;
+};
+
 export type DevelopmentStats = {
   week: PeriodStats;
   prevWeek: PeriodStats;
@@ -79,6 +87,7 @@ export type DevelopmentStats = {
   focus: FocusPattern[];
   retired: RetiredPattern[];
   series: SeriesPoint[];
+  streak: Streak;
 };
 
 export async function fetchStats(token: string): Promise<DevelopmentStats> {

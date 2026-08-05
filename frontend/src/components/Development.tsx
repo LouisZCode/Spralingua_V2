@@ -146,6 +146,7 @@ export default function Development() {
               retired={stats.retired}
               weekTotal={stats.week.attemptsTotal}
               prevWeekTotal={stats.prevWeek.attemptsTotal}
+              streak={stats.streak}
             />
 
             {noActivity ? (
@@ -172,10 +173,12 @@ function PositiveCard({
   retired,
   weekTotal,
   prevWeekTotal,
+  streak,
 }: {
   retired: RetiredPattern[];
   weekTotal: number;
   prevWeekTotal: number;
+  streak: DevelopmentStats["streak"];
 }) {
   return (
     <section className="rounded-[28px] border-[3px] border-success bg-success-soft p-7">
@@ -205,6 +208,15 @@ function PositiveCard({
       {weekTotal > 0 && (
         <p className="mt-4 font-body text-[13px] font-semibold text-ink-soft">
           {weekTotal} attempts this week · {prevWeekTotal} last week
+        </p>
+      )}
+      {/* GAME-001: forgiving daily streak. current=0 never shames the reset —
+          it falls back to the longest-streak PR, which never decreases. */}
+      {(streak.current > 0 || streak.longest > 0) && (
+        <p className="mt-2 font-body text-[13px] font-semibold text-ink-soft">
+          {streak.current > 0
+            ? `🔥 ${streak.current}-day streak · longest ${streak.longest}`
+            : `Longest streak: ${streak.longest} days`}
         </p>
       )}
     </section>

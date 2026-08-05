@@ -268,6 +268,59 @@ async def record_drill_attempt(
     except SQLAlchemyError:
         await db.rollback()
         raise
+    # GAME-001: any graded attempt marks the UTC day as practiced. Non-fatal —
+    # a streak hiccup must never break the attempt it rides on.
+    try:
+        await credit_streak_day(db, user_id=user_id)
+    except SQLAlchemyError:
+        logger.warning("Streak credit failed (non-fatal)")
+
+
+async def credit_streak_day(db: AsyncSession, *, user_id: str) -> None:
+    """Credit today's UTC calendar day toward the daily streak (GAME-001).
+
+    A no-op once today is already credited (the common case — most attempts
+    in a day arrive after the first). Otherwise: a consecutive day (gap=1)
+    extends the streak; exactly one missed day (gap=2) is forgiven by the
+    automatic weekly grace — at most once per rolling 7 days — else the
+    streak resets to 1; any bigger gap, or no prior credit at all, also
+    resets to 1. ``longest_streak`` is a permanent PR and never decreases.
+    Same contract as the other ledger ops: re-raises on ``SQLAlchemyError``,
+    caller owns the non-fatal wrapping.
+    """
+    today = datetime.now(timezone.utc).date()
+    try:
+        user = await db.get(User, user_id)
+        if user is None:
+            return
+        last = user.last_streak_day
+        if last == today:
+            return  # already credited today
+        if last is None:
+            new = 1
+        else:
+            gap = (today - last).days
+            if gap == 1:
+                new = user.current_streak + 1
+            elif gap == 2:
+                grace_available = (
+                    user.streak_grace_used_on is None
+                    or (today - user.streak_grace_used_on).days >= 7
+                )
+                if grace_available:
+                    new = user.current_streak + 1
+                    user.streak_grace_used_on = today - timedelta(days=1)
+                else:
+                    new = 1
+            else:
+                new = 1
+        user.current_streak = new
+        user.longest_streak = max(user.longest_streak, new)
+        user.last_streak_day = today
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
 
 
 # Consecutive correct spontaneous productions in tandem sessions before a
@@ -678,6 +731,42 @@ async def load_vocab_words(
 # Read-only helpers over ``drill_attempts`` (the event log) and
 # ``user_errors`` (the ledger). All SQL for the stats endpoint lives here;
 # ``stats/routes.py`` only picks time windows and assembles the response.
+
+
+async def load_streak(db: AsyncSession, *, user_id: str) -> dict:
+    """The streak the stats endpoint should display (GAME-001).
+
+    ``current`` mirrors the stored cache only while the chain is still
+    provably alive: last credited today, yesterday, or exactly 2 days ago
+    with the weekly grace still available (the same check
+    :func:`credit_streak_day` uses at write time) — otherwise the chain has
+    silently broken since the last write and ``current`` reads 0 without
+    touching the stored row. ``longest`` always reflects the stored PR.
+    Missing user row (shouldn't happen post-login) → all-zero dict.
+    """
+    today = datetime.now(timezone.utc).date()
+    user = await db.get(User, user_id)
+    if user is None:
+        return {"current": 0, "longest": 0, "practicedToday": False}
+    last = user.last_streak_day
+    if last is None:
+        alive = False
+    else:
+        gap = (today - last).days
+        if gap in (0, 1):
+            alive = True
+        elif gap == 2:
+            alive = (
+                user.streak_grace_used_on is None
+                or (today - user.streak_grace_used_on).days >= 7
+            )
+        else:
+            alive = False
+    return {
+        "current": user.current_streak if alive else 0,
+        "longest": user.longest_streak,
+        "practicedToday": last == today,
+    }
 
 
 async def load_period_summary(

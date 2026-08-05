@@ -45,6 +45,7 @@ from grammar import load_taxonomy
 from database import create_session_row, finalize_session_row, get_sessionmaker
 from database.repository import (
     credit_pattern_success,
+    credit_streak_day,
     load_grammar_focus,
     load_tandem_notes,
     load_vocab_words,
@@ -853,6 +854,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         error_eval=error_eval_dict,
                         passed=passed,
                     )
+                    # GAME-001: a finished conversation counts as a practiced
+                    # day too (matches REC-001's active-day union). The demo
+                    # sentinel accumulates no streak.
+                    if db_user_id != "demo":
+                        await credit_streak_day(db, user_id=db_user_id)
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
                 logger.warning(
                     f"DB session finalize failed (non-fatal): {type(e).__name__}: {e}"

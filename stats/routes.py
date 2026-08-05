@@ -33,6 +33,7 @@ from database.repository import (
     load_period_summary,
     load_recent_sessions,
     load_retired_patterns,
+    load_streak,
     load_top_errors,
 )
 
@@ -80,6 +81,8 @@ async def get_my_stats(
     # DATA-005: 56 days of daily buckets — the frontend derives both the day
     # and the week view from this one series.
     series = await load_attempt_series(db, user_id=user_id, start=now - timedelta(days=56))
+    # GAME-001: forgiving daily streak — O(1) read off the users cache.
+    streak = await load_streak(db, user_id=user_id)
 
     return {
         "week": week,
@@ -88,6 +91,7 @@ async def get_my_stats(
         "focus": focus,
         "retired": retired,
         "series": series,
+        "streak": streak,
     }
 
 
