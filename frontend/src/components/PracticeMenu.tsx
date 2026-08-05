@@ -175,6 +175,15 @@ export default function PracticeMenu() {
           style={{ animationDelay: "160ms" }}
         >
           <ModeCard
+            href="/teacher"
+            accent="red"
+            icon="bulb"
+            kicker="Your teacher · in English"
+            title="Ask the Teacher"
+            body="Don't understand why? Clara explains the German you keep getting wrong — simply, in English, one thing at a time."
+            cta="Ask Clara"
+          />
+          <ModeCard
             href="/genus"
             accent="gold"
             icon="circles"
@@ -378,7 +387,8 @@ type ModeIconName =
   | "target"
   | "palette"
   | "infinity"
-  | "circles";
+  | "circles"
+  | "bulb";
 
 function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
@@ -485,6 +495,15 @@ function ModeIcon({ name }: { name: ModeIconName }) {
     return (
       <svg {...common}>
         <path d="M9.828 9.172a4 4 0 1 0 0 5.656 10 10 0 0 0 2.172-2.828 10 10 0 0 1 2.172-2.828 4 4 0 1 1 0 5.656 10 10 0 0 1-2.172-2.828 10 10 0 0 0-2.172-2.828" />
+      </svg>
+    );
+  }
+  if (name === "bulb") {
+    // lightbulb — "the moment it clicks"
+    return (
+      <svg {...common}>
+        <path d="M9 18h6M10 21h4" />
+        <path d="M12 3a6 6 0 0 1 3.6 10.8c-.7.5-1.1 1.3-1.1 2.2H9.5c0-.9-.4-1.7-1.1-2.2A6 6 0 0 1 12 3Z" />
       </svg>
     );
   }

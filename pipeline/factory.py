@@ -63,9 +63,11 @@ ACTIVE_TASKS: dict[str, PipelineTask] = {}
 # The voice runtime is German. These lessons stay English: `lesson_zero` is the
 # open-conversation default (kept English by decision — its fake_profiles profile
 # targets English), `welcome` is the front-page English concierge (product
-# positioning), and `goodbye_test` is a dev fixture. Content lessons (a1_l1,
-# b1_l1) are German — remove each from this set as it converts.
-ENGLISH_LESSONS = {"welcome", "goodbye_test", "lesson_zero"}
+# positioning), `goodbye_test` is a dev fixture, and `teacher` is the
+# explanation agent (AGENT-001) — Clara explains German IN English by design.
+# Content lessons (a1_l1, b1_l1) are German — remove each from this set as it
+# converts.
+ENGLISH_LESSONS = {"welcome", "goodbye_test", "lesson_zero", "teacher"}
 
 
 def lesson_language(lesson_id: str) -> str:
@@ -230,33 +232,37 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 f"DB session insert failed (non-fatal): {type(e).__name__}: {e}"
             )
 
-        # Tandem grammar-focus + memory layers (TANDEM-001). The prompt
-        # middleware is sync, so these async DB reads happen here, once at
-        # connect, and ride on Context. Only tandem lessons carry them. Non-fatal:
-        # a DB hiccup just means a less-personalised chat, never a failed connect.
+        # Ledger-backed prompt layers. The prompt middleware is sync, so these
+        # async DB reads happen here, once at connect, and ride on Context.
+        # Tandem lessons (TANDEM-001) carry all three; the teacher (AGENT-001)
+        # carries only the grammar focus — no debrief means no notes, and vocab
+        # weaving is a tandem behaviour, not a teaching one. Non-fatal: a DB
+        # hiccup just means a less-personalised chat, never a failed connect.
         grammar_focus: list = []
         session_notes: list = []
         vocab_words: list = []
-        if lesson_snapshot.get("type") == "tandem":
+        snapshot_type = lesson_snapshot.get("type")
+        if snapshot_type in ("tandem", "teacher"):
             try:
                 async with get_sessionmaker()() as db:
                     grammar_focus = await load_grammar_focus(db, user_id=db_user_id)
-                    # TAND-008: memory is per partner — Paul's notes never
-                    # reach Lena's prompt and vice versa.
-                    session_notes = await load_tandem_notes(
-                        db, user_id=db_user_id, lesson_id=lesson_id
-                    )
-                    # TAND-002: 7, not the default 10 — fewer words lowers the
-                    # cramming pressure on Lena's short replies (vocab dose).
-                    vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=7)
+                    if snapshot_type == "tandem":
+                        # TAND-008: memory is per partner — Paul's notes never
+                        # reach Lena's prompt and vice versa.
+                        session_notes = await load_tandem_notes(
+                            db, user_id=db_user_id, lesson_id=lesson_id
+                        )
+                        # TAND-002: 7, not the default 10 — fewer words lowers the
+                        # cramming pressure on Lena's short replies (vocab dose).
+                        vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=7)
                 logger.info(
-                    f"Tandem layers: focus_patterns={len(grammar_focus)} "
+                    f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
                     f"notes={len(session_notes)} vocab_words={len(vocab_words)} "
                     f"topic={topic!r} user={db_user_id}"
                 )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
                 logger.warning(
-                    f"Tandem layer fetch failed (non-fatal): {type(e).__name__}: {e}"
+                    f"{snapshot_type.capitalize()} layer fetch failed (non-fatal): {type(e).__name__}: {e}"
                 )
 
         # Per-client wrapper (agent + logger + context settings inside)

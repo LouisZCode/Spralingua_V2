@@ -336,6 +336,25 @@ def _format_session_notes(notes: list) -> str:
     return "\n".join(f"- {n}" for n in notes)
 
 
+def _format_teacher_focus(focus: list) -> str:
+    """Render the ledger patterns for the teacher (AGENT-001).
+
+    Same enriched dicts as ``_format_grammar_focus``, but without the tandem's
+    ``elicit`` line — the teacher explains openly, she doesn't steer covertly.
+    """
+    blocks: list[str] = []
+    for p in focus:
+        lines = [f"- {p['label']}: {p['description']}"]
+        for ex in p.get("examples", []):
+            sentence, corrected = ex.get("sentence"), ex.get("corrected")
+            if sentence and corrected:
+                lines.append(f'  Their own slip: "{sentence}" → "{corrected}"')
+            elif sentence:
+                lines.append(f'  Their own slip: "{sentence}"')
+        blocks.append("\n".join(lines))
+    return "\n".join(blocks)
+
+
 def _format_vocab_words(words: list) -> str:
     """Render the tandem vocab sample as ``word — gloss`` bullets.
 
@@ -403,6 +422,18 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         if ctx.session_notes:
             parts.append(
                 lesson["long_term_header"] + _format_session_notes(ctx.session_notes)
+            )
+        assembled = "\n---\n\n".join(parts)
+    elif lesson_type == "teacher":
+        # The explanation teacher (AGENT-001): English persona + short-term
+        # (today) + the learner's open ledger patterns. No vocab, no session
+        # notes — the teacher has no debrief, so no memory layer exists.
+        base = lesson["persona_prompt"]
+        short = lesson["short_term_template"].format(today=date.today().isoformat())
+        parts = [base, short]
+        if ctx.grammar_focus:
+            parts.append(
+                lesson["grammar_focus_header"] + _format_teacher_focus(ctx.grammar_focus)
             )
         assembled = "\n---\n\n".join(parts)
     elif lesson_type == "respond":

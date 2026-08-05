@@ -16,6 +16,7 @@ import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import Glossable from "./shared/Glossable";
 import { useRecorder } from "./shared/recorder";
 import { TANDEM_LESSONS, partnerByLesson } from "./shared/tandem";
+import { TEACHER_LESSON } from "./shared/teacher";
 import type { GlossInfo } from "./satzschmiede/api";
 
 // Briefing field values are either a single prose string OR a list of
@@ -66,6 +67,7 @@ export default function ConversationView({
   onGloss,
   onAdd,
   practiceMode,
+  typedInput,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -83,6 +85,10 @@ export default function ConversationView({
   // existing caller) is Natural and stays byte-identical: the mic connects
   // exactly as before and none of the practice branches below ever render.
   practiceMode?: boolean;
+  // AGENT-001: surface the type-a-turn overlay as a first-class button (the
+  // teacher's text-chat channel). Absent/false keeps the overlay dev-only
+  // (press /).
+  typedInput?: boolean;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -521,10 +527,11 @@ export default function ConversationView({
             speakerState={speakerState}
             transcriptRef={transcriptRef}
             onFinish={() => setShowFinishConfirm(true)}
-            prominentFinish={TANDEM_LESSONS.has(params.lesson)}
+            prominentFinish={TANDEM_LESSONS.has(params.lesson) || params.lesson === TEACHER_LESSON}
             onGloss={onGloss}
             onAdd={onAdd}
             practiceMode={practiceMode}
+            onOpenType={typedInput ? () => setTypeOpen(true) : undefined}
             recording={recorder.recording}
             elapsed={recorder.elapsed}
             sending={practiceSending}
@@ -552,7 +559,7 @@ export default function ConversationView({
           <div className="type-overlay w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-paper-warm px-5 pt-5 pb-6 shadow-[0_-12px_30px_rgba(15,15,16,0.18)]">
             <div className="flex items-center justify-between">
               <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
-                Dev · type a turn
+                {typedInput ? "Type a message" : "Dev · type a turn"}
               </span>
               <span className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
                 Esc to close
@@ -567,7 +574,7 @@ export default function ConversationView({
                 onKeyDown={(e) => {
                   if (e.key === "Enter") sendText();
                 }}
-                placeholder="Hallo, ich heiße…"
+                placeholder={typedInput ? "Ask about German…" : "Hallo, ich heiße…"}
                 className="flex-1 rounded-2xl border-[3px] border-ink bg-white px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
               />
               <button
@@ -787,6 +794,7 @@ function LivePhase({
   onStartRecording,
   onStopRecording,
   onCancelRecording,
+  onOpenType,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -814,6 +822,9 @@ function LivePhase({
   onStopRecording?: () => void;
   // UI-006: escape hatch for a take the learner doesn't want sent.
   onCancelRecording?: () => void;
+  // AGENT-001: opens the type-a-turn overlay from a visible button, not just
+  // the dev-only "/" shortcut.
+  onOpenType?: () => void;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   // No barge-in by design: while Lena is composing or speaking, recording a
@@ -961,6 +972,23 @@ function LivePhase({
               {recordError}
             </p>
           )}
+        </div>
+      )}
+
+      {/* AGENT-001: visible text-input entry — same overlay "/" opens. */}
+      {onOpenType && (
+        <div
+          className="rise-in flex justify-center pb-2"
+          style={{ animationDelay: "120ms" }}
+        >
+          <button
+            type="button"
+            onClick={onOpenType}
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+            style={{ ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties}
+          >
+            ⌨ Type instead
+          </button>
         </div>
       )}
 
