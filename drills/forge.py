@@ -11,7 +11,10 @@ gold answer:
 * **Bauteil** (nouns with an article): the LLM only CHOOSES — an adjective
   from a concat-safe list, a case, an article type, a frame. The inflected
   answer is built DETERMINISTICALLY from declension tables below, so the gold
-  ending cannot be wrong.
+  ending cannot be wrong. The tables guarantee grammar, not sense — a
+  ``has_fit`` gate lets the LLM tombstone nouns no listed adjective pairs
+  with naturally (abstract/meta words: the live example was "Ich spreche mit
+  dem wichtigen Geschlecht").
 * **Verbindungen** (base verbs): fixed verb+preposition chunks aren't
   table-derivable, so a second verify LLM pass gates every drafted item; a
   verb with no standard chunk yields a tombstone (NULL item) and is never
@@ -142,6 +145,7 @@ def build_bauteil_answer(
 
 class BauteilForgeDraft(BaseModel):
     """LLM choices for one declension item — the answer is built in code."""
+    has_fit: bool = Field(description="True iff at least one listed adjective pairs naturally with this noun in an everyday sentence")
     adjective: str = Field(description="One adjective from the allowed list, base form")
     case: Literal["nominative", "accusative", "dative"] = Field(description="The case the frame forces")
     article_type: Literal["definite", "ein", "kein", "mein", "dein", "sein", "ihr", "unser", "euer", "bare"] = Field(description="Article slot of the phrase")
@@ -175,6 +179,9 @@ You choose the ingredients for one German declension drill item ("Bauteil-Sätze
 - noun: {noun}
 - its article (gender marker): {article}
 - meaning: {gloss}
+
+# First — has_fit
+Decide honestly: does at least ONE adjective from the list below make a natural, everyday phrase with "{noun}" — something a German speaker would actually say? Abstract or grammar-flavoured nouns often have no natural pairing here, and a grammatically perfect but absurd sentence ("Ich spreche mit dem wichtigen Geschlecht") must never reach a learner. If none fits, set has_fit=false and fill the other fields with any reasonable placeholder — the item will be discarded.
 
 # Your choices
 1. `adjective` — pick ONE adjective from this exact list that plausibly fits the noun's MEANING (never invent one, never pick a clashing one):
@@ -258,6 +265,12 @@ async def _forge_bauteil_item(row_id: str, card: VocabCard, user_id: str) -> Opt
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
 
+    if not result.has_fit:
+        logger.info(
+            "Bauteil forge: no natural adjective fit for {!r} — tombstoned",
+            card.target,
+        )
+        return None
     if result.adjective not in SAFE_ADJECTIVES:
         logger.warning(
             "Bauteil forge picked an unsafe adjective {!r} for {!r}",
