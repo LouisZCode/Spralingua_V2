@@ -8,6 +8,7 @@ Each client connection gets its own ClientWrapper instance, holding:
 """
 
 import asyncio
+import re
 import time
 
 from loguru import logger
@@ -73,10 +74,14 @@ GOODBYE_PHRASES = [
     "schönen tag", "schönes wochenende", "gute nacht", "alles gute",
 ]
 
+# CHORE-001: plain substring matching could false-positive inside a larger word
+# (e.g. "vorbye"); \b is Unicode-aware so umlaut phrases (e.g. "tschüss") still
+# match correctly.
+_GOODBYE_RE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in GOODBYE_PHRASES) + r")\b")
+
 
 def _contains_goodbye(text: str) -> bool:
-    lowered = text.lower()
-    return any(phrase in lowered for phrase in GOODBYE_PHRASES)
+    return bool(_GOODBYE_RE.search(text.lower()))
 
 
 class ClientWrapper:

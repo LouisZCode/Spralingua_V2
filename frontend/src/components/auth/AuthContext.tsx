@@ -80,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
+    // Shared-browser hygiene (CHORE-001): don't leave the dev-unlock flag set
+    // for whoever signs in next on this device.
+    localStorage.removeItem("spralingua_dev_unlocked");
   }
 
   return (

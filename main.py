@@ -138,8 +138,10 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # CHORE-001: enumerated from the actual route decorators (GET/POST/DELETE
+    # across main.py + every routers/*.py) instead of "*".
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Google sign-in + session-JWT routes (AUTH-001).

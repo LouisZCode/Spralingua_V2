@@ -10,6 +10,7 @@ HTTP routes use ``get_db`` via ``Depends`` if/when read endpoints land.
 rather than producing silent broken persistence at runtime.
 """
 
+import os
 from collections.abc import AsyncIterator
 
 from loguru import logger
@@ -44,10 +45,15 @@ async def init_engine(database_url: str) -> None:
             "(form: postgresql+asyncpg://user:password@host:port/dbname)."
         )
 
+    # CHORE-001: env-configurable so a deployment can size the pool without a
+    # code edit; same os.environ.get(...) + int(...) pattern as config/settings.py.
+    pool_size = int(os.environ.get("DB_POOL_SIZE", "5"))
+    max_overflow = int(os.environ.get("DB_MAX_OVERFLOW", "5"))
+
     _engine = create_async_engine(
         database_url,
-        pool_size=5,
-        max_overflow=5,
+        pool_size=pool_size,
+        max_overflow=max_overflow,
         pool_pre_ping=True,
         # Bound how long a request waits for a pooled connection, and how
         # long a query / new connection can run, so a hung Postgres can't

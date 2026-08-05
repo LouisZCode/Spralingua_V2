@@ -127,11 +127,15 @@ async def upsert_user(
     (SQL) and must survive re-logins — and we ``RETURNING`` it so the caller can
     embed it in the session JWT + sign-in response. New rows get the column
     default ("normal").
+
+    CHORE-001: ``email`` is lowercased here (the write site) for case-insensitive
+    uniqueness — Google itself is case-insensitive on the local part, so two
+    sign-ins that differ only in case must land on the same row.
     """
     try:
         stmt = pg_insert(User).values(
             id=user_id,
-            email=email,
+            email=email.lower() if email else None,
             name=name,
             picture=picture,
             last_login_at=func.now(),

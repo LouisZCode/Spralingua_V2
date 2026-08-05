@@ -521,7 +521,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             _rtvi_heartbeat(rtvi_processor, wrapper, user_id)
         )
 
-        print(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
+        logger.info(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
 
         # Hoisted out of the inner try-blocks so the DB finalize step below
         # can read them. They stay None when the corresponding evaluator
@@ -874,4 +874,4 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             # OTel call — run it off the event loop so a slow Langfuse OTLP
             # endpoint can't freeze every other connected client's pipeline.
             await asyncio.to_thread(flush_traces)
-            print(f"Client disconnected: {user_id}")
+            logger.info(f"Client disconnected: {user_id}")
