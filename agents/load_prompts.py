@@ -14,6 +14,46 @@ from loguru import logger
 _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _FALLBACK = "lesson_zero"
 
+# PROMPT-003: schema validation so authoring errors (a typo'd field name, a
+# forgotten section) fail loud at load — and therefore at startup, since the
+# lifespan's validate_lesson_languages() already calls load_prompts() for
+# every lesson id — instead of surfacing as a KeyError mid-connect.
+_COMMON_REQUIRED = ("id", "type", "title")
+_REQUIRED_BY_TYPE = {
+    "conversation": ("base_prompt", "short_term_template", "long_term_template"),
+    "respond": ("persona_prompt",),
+    "tandem": ("persona_prompt", "short_term_template", "grammar_focus_header", "vocab_header", "long_term_header"),
+    "teacher": ("persona_prompt", "short_term_template", "grammar_focus_header"),
+}
+
+
+def _validate_lesson(data: dict, path: Path) -> None:
+    """Raise ValueError naming every missing/invalid field, all at once."""
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: lesson YAML must be a mapping, got {type(data).__name__}")
+
+    errors = []
+
+    def _require_str(field: str) -> None:
+        value = data.get(field)
+        if not isinstance(value, str) or not value.strip():
+            errors.append(f"{field!r} (missing or empty string)")
+
+    for field in _COMMON_REQUIRED:
+        _require_str(field)
+
+    max_exchanges = data.get("max_exchanges")
+    if not isinstance(max_exchanges, int) or isinstance(max_exchanges, bool) or max_exchanges < 1:
+        errors.append("'max_exchanges' (missing or not an int >= 1)")
+
+    # Unknown `type` values validate common fields only — the middleware
+    # falls back to lesson_zero with a warning for those.
+    for field in _REQUIRED_BY_TYPE.get(data.get("type"), ()):
+        _require_str(field)
+
+    if errors:
+        raise ValueError(f"{path}: invalid lesson YAML — " + ", ".join(errors))
+
 
 def load_prompts(lesson_id: str) -> dict:
     """Load a lesson's YAML. Falls back to `lesson_zero` on missing file."""
@@ -24,7 +64,9 @@ def load_prompts(lesson_id: str) -> dict:
         logger.warning(f"Unknown lesson_id={lesson_id!r}; falling back to {_FALLBACK!r}")
         return load_prompts(_FALLBACK)
     with open(path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+        data = yaml.safe_load(f)
+    _validate_lesson(data, path)
+    return data
 
 
 def list_lesson_ids() -> list[str]:
