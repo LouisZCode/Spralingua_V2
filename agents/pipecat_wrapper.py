@@ -385,6 +385,14 @@ class ClientWrapper:
         if self._end_pending and self._end_task is None and self._pipeline_task:
             logger.info("[END] Bot finished speaking — closing pipeline")
             self._end_task = asyncio.create_task(self._end_pipeline())
+            # BUG-006: nothing awaits this task — without a done-callback an
+            # exception in _end_pipeline vanishes and the session hangs open
+            # with no log line.
+            self._end_task.add_done_callback(
+                lambda t: t.cancelled()
+                or t.exception() is None
+                or logger.error(f"_end_pipeline failed: {t.exception()!r}")
+            )
 
     async def _end_pipeline(self):
         """Gracefully end the pipeline once in-flight TTS audio is done streaming.
