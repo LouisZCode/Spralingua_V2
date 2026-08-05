@@ -14,6 +14,7 @@ import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
 import { useAuth } from "../auth/AuthContext";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
+import { playSound } from "../shared/sound";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -425,6 +426,18 @@ export default function VocabTrainer({
     onDoneChange?.(roundDone);
   }, [roundDone, onDoneChange]);
 
+  // GAME-001: "Alles geschmiedet!" fires once per round, not on every render
+  // of the done panel (e.g. the "+ Noch üben" follow-up re-entering it).
+  const doneSoundRef = useRef(false);
+  useEffect(() => {
+    if (roundDone && !doneSoundRef.current) {
+      doneSoundRef.current = true;
+      playSound("bigwin");
+    } else if (!roundDone) {
+      doneSoundRef.current = false;
+    }
+  }, [roundDone]);
+
   // UI-012: Space/Enter mirror the mouse exactly — toggle the Record button
   // while a card is live, advance via the primary "Next word" once a verdict
   // is showing. Both startRecording and handleNext already no-op safely with
@@ -522,6 +535,7 @@ export default function VocabTrainer({
         res = await onAttempt(card.id, audio, activeSessionId);
       }
       setResult(res);
+      playSound(res.wordOk ? "win" : "fail");
       // A rehearsal's own miss never counts toward the SATZ-011 lapse cap —
       // the original graded attempt already stands; this is bonus practice.
       if (!browsing && !isRehearsal && res.wordOk !== true) {
@@ -701,9 +715,11 @@ export default function VocabTrainer({
     if (!card || busy || flipped || genderOk || wrongPick) return;
     if (article === card.article) {
       setGenderOkFor(card.id);
+      playSound("tick");
       return;
     }
     setWrongPick(article);
+    playSound("fail");
     missesRef.current.set(card.id, (missesRef.current.get(card.id) ?? 0) + 1);
     onGenderMiss?.(card.id);
     wrongTimerRef.current = setTimeout(() => {

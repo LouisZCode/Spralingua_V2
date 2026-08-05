@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ZeitItem, ZeitVerdict } from "./api";
 import { FeedbackCard } from "../shared/feedback";
+import { playSound } from "../shared/sound";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer / VerbindungenTrainer. `retry` marks the copy.
@@ -92,6 +93,16 @@ export default function ZeitfaerbungTrainer({
     }
   }, [phase, index, verdict]);
 
+  // GAME-001: "Round complete" is standalone-only — flow mode hands off via
+  // onFlowDone before phase ever reaches "done" (see advance below).
+  const doneSoundRef = useRef(false);
+  useEffect(() => {
+    if (phase === "done" && !doneSoundRef.current) {
+      doneSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [phase]);
+
   const advance = useCallback(() => {
     // FLOW-001: no "done" phase in flow mode — hand the verdict to the
     // parent, which deals the next item (a fresh mount, via `key`).
@@ -142,6 +153,10 @@ export default function ZeitfaerbungTrainer({
       }
       setGuidance(null);
       setVerdict(res);
+      // GAME-001: "Auch richtig" is a discovery, not an ordinary win — the
+      // unrecognized kind above already returned before reaching a sound at
+      // all (it's guidance, never a miss).
+      playSound(res.correct ? (res.alt ? "bonus" : "win") : "fail");
       if (res.correct) {
         if (!item.retry) setFirstTryGreens((n) => n + 1);
       } else if (!item.retry) {

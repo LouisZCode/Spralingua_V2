@@ -8,6 +8,7 @@ import VocabNudgePill from "../shared/VocabNudge";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import type { GlossInfo } from "../satzschmiede/api";
 import { diffWords, segmentTranscript } from "./slipDiff";
+import { playSound } from "../shared/sound";
 
 type Phase = "drill" | "done";
 
@@ -110,6 +111,16 @@ export default function SprechenTrainer({
     }
   }, [recording, elapsed, stopRecording]);
 
+  // GAME-001: "Round complete" is standalone-only — flow mode hands off via
+  // onFlowDone before phase ever reaches "done" (see next() below).
+  const doneSoundRef = useRef(false);
+  useEffect(() => {
+    if (phase === "done" && !doneSoundRef.current) {
+      doneSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [phase]);
+
   // Unmount mid-recording: kill the mic, never submit the partial clip.
   useEffect(() => {
     return () => {
@@ -182,6 +193,7 @@ export default function SprechenTrainer({
     try {
       const res = await onAttempt(task.id, audio);
       setVerdict(res);
+      playSound(res.passed ? "win" : "fail");
       setResults((r) => {
         const next = [...r];
         next[index] = res;

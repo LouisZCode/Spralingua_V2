@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { BauteilVerdict, RoundItem } from "./api";
 import { FeedbackCard } from "../shared/feedback";
+import { playSound } from "../shared/sound";
 
 // A missed item returns once at the end of the round — a second chance from
 // memory, after the correction has had time to fade. `retry` marks the copy
@@ -90,6 +91,16 @@ export default function BauteilTrainer({
     }
   }, [phase, index, verdict]);
 
+  // GAME-001: "Round complete" is standalone-only — flow mode hands off via
+  // onFlowDone before phase ever reaches "done" (see advance below).
+  const doneSoundRef = useRef(false);
+  useEffect(() => {
+    if (phase === "done" && !doneSoundRef.current) {
+      doneSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [phase]);
+
   const advance = useCallback(() => {
     // FLOW-001: no "done" phase in flow mode — hand the verdict to the
     // parent, which deals the next item (a fresh mount, via `key`).
@@ -131,6 +142,7 @@ export default function BauteilTrainer({
     try {
       const res = await onAttempt(item.id, answer);
       setVerdict(res);
+      playSound(res.correct ? "win" : "fail");
       if (res.correct) {
         if (!item.retry) setFirstTryGreens((n) => n + 1);
       } else if (!item.retry) {

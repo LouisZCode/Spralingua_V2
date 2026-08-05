@@ -5,6 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import { playSound } from "./shared/sound";
+import SoundToggle from "./shared/SoundToggle";
 
 import BauteilTrainer from "./bauteil/BauteilTrainer";
 import {
@@ -700,11 +702,26 @@ export default function Flow() {
         ...p,
         [kind]: { done: p[kind].done + 1, correct: p[kind].correct + (correct ? 1 : 0) },
       }));
+      // GAME-001: one earcon per dealt item, echoing the mascot mood below.
+      playSound(correct ? "win" : "fail");
       // FLOW-004: the outcome shapes the transition beat's mascot mood.
       dealNext(kind, correct ? "happy" : "sad");
     },
     [dealNext]
   );
+
+  // GAME-001: the round-summary card is a bigger moment than any one item —
+  // fires once per reveal (round target reached or manual Finish), guarded
+  // against double-fire from the "Keep going" → re-finish round trip.
+  const finishedSoundRef = useRef(false);
+  useEffect(() => {
+    if (finished && !finishedSoundRef.current) {
+      finishedSoundRef.current = true;
+      playSound("bigwin");
+    } else if (!finished) {
+      finishedSoundRef.current = false;
+    }
+  }, [finished]);
 
   // FLOW-005: auto-finish once the completed tally hits a finite round's
   // target — same summary screen the manual Finish button shows. Exact
@@ -1167,14 +1184,17 @@ export default function Flow() {
                       </>
                     )}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setFinished(true)}
-                    className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
-                    style={inkShadow}
-                  >
-                    Finish
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <SoundToggle />
+                    <button
+                      type="button"
+                      onClick={() => setFinished(true)}
+                      className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+                      style={inkShadow}
+                    >
+                      Finish
+                    </button>
+                  </div>
                 </div>
 
                 {beat !== null && (

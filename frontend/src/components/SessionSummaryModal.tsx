@@ -11,9 +11,10 @@
 // `ended_at` is briefly NULL when the modal opens. We poll until
 // `ended_at` is set (or 90s timeout) and then render.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
 import { useAuth } from "./auth/AuthContext";
+import { playSound } from "./shared/sound";
 
 export type CompletionStatus = "success" | "info" | "warning";
 
@@ -203,6 +204,16 @@ export default function SessionSummaryModal({
       if (slowTimeoutId) clearTimeout(slowTimeoutId);
     };
   }, [sessionId, token]);
+
+  // GAME-001: a passed eval is the celebration moment — fires once per load,
+  // never on a failed eval.
+  const passSoundRef = useRef(false);
+  useEffect(() => {
+    if (evalStatus === "ready" && sessionData?.passed === true && !passSoundRef.current) {
+      passSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [evalStatus, sessionData]);
 
   const title = completion?.title ?? DEFAULT_TITLE;
   const status = completion?.status ?? DEFAULT_STATUS;

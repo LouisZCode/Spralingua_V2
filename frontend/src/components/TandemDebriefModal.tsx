@@ -12,11 +12,12 @@
 //   { patterns[], new_errors[], session_note }
 // The session_note is Lena's private memory — deliberately NOT shown here.
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
 import { useAuth } from "./auth/AuthContext";
 import type { CompletionData, CompletionStatus } from "./SessionSummaryModal";
 import { diffTokens, MarkedText } from "./shared/feedback";
+import { playSound } from "./shared/sound";
 
 interface DebriefPattern {
   pattern_id: string;
@@ -149,6 +150,19 @@ export default function TandemDebriefModal({
       if (slowTimeoutId) clearTimeout(slowTimeoutId);
     };
   }, [sessionId, token]);
+
+  // GAME-001: a retired pattern is the RetiredBanner "Mastered" moment —
+  // fires once per load, never on an ordinary (no-retirement) debrief.
+  const retiredSoundRef = useRef(false);
+  useEffect(() => {
+    const hasRetired =
+      evalStatus === "ready" &&
+      (sessionData?.error_eval?.patterns ?? []).some((p) => p.retired);
+    if (hasRetired && !retiredSoundRef.current) {
+      retiredSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [evalStatus, sessionData]);
 
   const title = completion?.title ?? DEFAULT_TITLE;
   const status = completion?.status ?? DEFAULT_STATUS;

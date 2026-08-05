@@ -24,6 +24,7 @@ import {
 } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 import { fetchMeta } from "./genus/api";
+import SoundToggle from "./shared/SoundToggle";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -323,12 +324,15 @@ export default function Satzschmiede() {
               Spralingua
             </span>
           </Link>
-          <Link
-            href="/practice"
-            className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
-          >
-            ← Menu
-          </Link>
+          <div className="flex items-center gap-4">
+            <SoundToggle />
+            <Link
+              href="/practice"
+              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+            >
+              ← Menu
+            </Link>
+          </div>
         </div>
       </header>
 

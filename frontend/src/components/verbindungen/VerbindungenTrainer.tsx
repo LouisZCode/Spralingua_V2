@@ -6,6 +6,7 @@ import type { ChunkItem, ChunkVerdict } from "./api";
 import Glossable from "../shared/Glossable";
 import type { GlossInfo } from "../satzschmiede/api";
 import { FeedbackCard } from "../shared/feedback";
+import { playSound } from "../shared/sound";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer. `retry` marks the copy.
@@ -101,6 +102,16 @@ export default function VerbindungenTrainer({
     }
   }, [phase, index, verdict]);
 
+  // GAME-001: "Round complete" is standalone-only — flow mode hands off via
+  // onFlowDone before phase ever reaches "done" (see advance below).
+  const doneSoundRef = useRef(false);
+  useEffect(() => {
+    if (phase === "done" && !doneSoundRef.current) {
+      doneSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [phase]);
+
   const advance = useCallback(() => {
     // FLOW-001: no "done" phase in flow mode — hand the verdict to the
     // parent, which deals the next item (a fresh mount, via `key`).
@@ -143,6 +154,7 @@ export default function VerbindungenTrainer({
     try {
       const res = await onAttempt(item.id, answer);
       setVerdict(res);
+      playSound(res.correct ? "win" : "fail");
       if (res.correct) {
         if (!item.retry) setFirstTryGreens((n) => n + 1);
       } else if (!item.retry) {

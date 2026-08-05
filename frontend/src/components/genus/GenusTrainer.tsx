@@ -12,6 +12,7 @@ import type {
 } from "./api";
 import VocabNudgePill, { type NudgeWord } from "../shared/VocabNudge";
 import { FeedbackCard } from "../shared/feedback";
+import { playSound } from "../shared/sound";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as ZeitfaerbungTrainer. `retry` marks the copy. An item counts as
@@ -167,6 +168,16 @@ export default function GenusTrainer({
     }
   }, [drop, verdict]);
 
+  // GAME-001: "Round complete" is standalone-only — flow mode hands off via
+  // onFlowDone before phase ever reaches "done" (see advance above).
+  const doneSoundRef = useRef(false);
+  useEffect(() => {
+    if (phase === "done" && !doneSoundRef.current) {
+      doneSoundRef.current = true;
+      playSound("bigwin");
+    }
+  }, [phase]);
+
   const advance = useCallback(() => {
     // Flow deals the drag beat only, so a clean item there is a first-try
     // drop; standalone additionally needs the phrase beat green.
@@ -224,10 +235,12 @@ export default function GenusTrainer({
       if (res.correct) {
         setTrapNote(null);
         setDrop(res);
+        playSound("win");
       } else {
         setShakeKey((k) => k + 1);
         setTrapNote(res.trapped ? (res.note ?? null) : null);
         firstSlip();
+        playSound("fail");
       }
     } catch (err) {
       setFailed(
