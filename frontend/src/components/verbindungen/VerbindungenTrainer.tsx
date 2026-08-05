@@ -82,6 +82,9 @@ export default function VerbindungenTrainer({
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [verdict, setVerdict] = useState<ChunkVerdict | null>(null);
+  // The English gloss primes L1 interference ("from" → von where the chunk
+  // wants bei), so it stays hidden until asked; grading always reveals it.
+  const [hintShown, setHintShown] = useState(false);
   const [firstTryGreens, setFirstTryGreens] = useState(0);
   // First-try misses with the chunk captured from the verdict — the round
   // summary shows the chunks to memorize (that's the take-away of the drill).
@@ -110,6 +113,7 @@ export default function VerbindungenTrainer({
     }
     setVerdict(null);
     setValue("");
+    setHintShown(false);
     if (index + 1 >= queue.length) {
       setPhase("done");
     } else {
@@ -318,9 +322,21 @@ export default function VerbindungenTrainer({
             after
           )}
         </p>
-        <p className="mt-2 text-center font-body text-[13px] italic text-ink-muted">
-          {item.hint}
-        </p>
+        {solved || hintShown ? (
+          <p className="mt-2 text-center font-body text-[13px] italic text-ink-muted">
+            {item.hint}
+          </p>
+        ) : (
+          <p className="mt-2 text-center">
+            <button
+              type="button"
+              onClick={() => setHintShown(true)}
+              className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline"
+            >
+              Show English
+            </button>
+          </p>
+        )}
 
         {!solved ? (
           <form onSubmit={check} className="mt-6">
