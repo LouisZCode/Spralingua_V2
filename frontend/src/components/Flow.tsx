@@ -35,6 +35,15 @@ import {
   type CaseVerdict,
 } from "./faelle/api";
 
+import SatzbauTrainer from "./satzbau/SatzbauTrainer";
+import {
+  fetchRound as fetchSatzbauRound,
+  submitAttempt as submitSatzbauAttempt,
+  giveUp as giveUpSatzbau,
+  type ClauseItem,
+  type ClauseVerdict,
+} from "./satzbau/api";
+
 import ZeitfaerbungTrainer from "./zeitfaerbung/ZeitfaerbungTrainer";
 import {
   fetchRound as fetchZeitfaerbungRound,
@@ -110,7 +119,8 @@ type SourceKind =
   | "zeitfaerbung"
   | "sprechen"
   | "genus"
-  | "faelle";
+  | "faelle"
+  | "satzbau";
 
 const ALL_KINDS: SourceKind[] = [
   "satz",
@@ -121,6 +131,7 @@ const ALL_KINDS: SourceKind[] = [
   "sprechen",
   "genus",
   "faelle",
+  "satzbau",
 ];
 
 const KICKER: Record<SourceKind, string> = {
@@ -132,6 +143,7 @@ const KICKER: Record<SourceKind, string> = {
   sprechen: "SPRECHEN",
   genus: "ARTIKEL",
   faelle: "FÄLLE",
+  satzbau: "SATZBAU",
 };
 
 // One dealt turn: exactly one item from exactly one source, tagged with a
@@ -145,6 +157,7 @@ type Deal =
   | { kind: "sprechen"; key: number; item: SpokenTask }
   | { kind: "genus"; key: number; item: GenusItem }
   | { kind: "faelle"; key: number; item: CaseItem }
+  | { kind: "satzbau"; key: number; item: ClauseItem }
   | { kind: "satz"; key: number; card: DeckCard; rehearsal: boolean }
   | { kind: "verbformen"; key: number; card: DeckCard };
 
@@ -311,6 +324,7 @@ type FlowBag = {
   sprechen: SpokenTask[];
   genus: GenusItem[];
   faelle: CaseItem[];
+  satzbau: ClauseItem[];
   satz: SatzCycle;
   verbformen: CardCycle;
   dealCounter: number;
@@ -324,6 +338,7 @@ function emptyBag(): FlowBag {
     sprechen: [],
     genus: [],
     faelle: [],
+    satzbau: [],
     satz: { deck: [], gradedOrder: [], rehearsalOrder: [] },
     verbformen: { deck: [], order: [] },
     dealCounter: 0,
@@ -337,6 +352,7 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
   if (kind === "sprechen") return bag.sprechen.length;
   if (kind === "genus") return bag.genus.length;
   if (kind === "faelle") return bag.faelle.length;
+  if (kind === "satzbau") return bag.satzbau.length;
   // FLOW-003: benched cards can never be dealt, so a deck that's 100%
   // benched must drop satz out of the rotation cleanly instead of stalling
   // pickSource on a source that always deals null. Verbformen keeps its old
@@ -382,6 +398,10 @@ function dealFromSource(bag: FlowBag, kind: SourceKind): Deal | null {
     const item = bag.faelle.shift();
     return item ? { kind, key, item } : null;
   }
+  if (kind === "satzbau") {
+    const item = bag.satzbau.shift();
+    return item ? { kind, key, item } : null;
+  }
   if (kind === "satz") {
     const dealt = nextSatzCard(bag.satz);
     return dealt ? { kind, key, card: dealt[0], rehearsal: dealt[1] } : null;
@@ -394,7 +414,14 @@ function dealFromSource(bag: FlowBag, kind: SourceKind): Deal | null {
 // forget, dedupe not needed (an overlapping refill just appends twice).
 function refillIfLow(
   bag: FlowBag,
-  kind: "bauteil" | "verbindungen" | "zeitfaerbung" | "sprechen" | "genus" | "faelle",
+  kind:
+    | "bauteil"
+    | "verbindungen"
+    | "zeitfaerbung"
+    | "sprechen"
+    | "genus"
+    | "faelle"
+    | "satzbau",
   token: string
 ) {
   if (kind === "bauteil" && bag.bauteil.length <= 1) {
@@ -433,6 +460,12 @@ function refillIfLow(
         bag.faelle = [...bag.faelle, ...items];
       })
       .catch(() => {});
+  } else if (kind === "satzbau" && bag.satzbau.length <= 1) {
+    fetchSatzbauRound(token)
+      .then((items) => {
+        bag.satzbau = [...bag.satzbau, ...items];
+      })
+      .catch(() => {});
   }
 }
 
@@ -448,6 +481,7 @@ function emptyTallies(): Record<SourceKind, Tally> {
     sprechen: { done: 0, correct: 0 },
     genus: { done: 0, correct: 0 },
     faelle: { done: 0, correct: 0 },
+    satzbau: { done: 0, correct: 0 },
   };
 }
 
@@ -614,7 +648,8 @@ export default function Flow() {
           kind === "zeitfaerbung" ||
           kind === "sprechen" ||
           kind === "genus" ||
-          kind === "faelle")
+          kind === "faelle" ||
+          kind === "satzbau")
       ) {
         refillIfLow(bag, kind, token);
       }
@@ -695,6 +730,9 @@ export default function Flow() {
       }),
       loadOne(fetchFaelleRound(token), (items) => {
         bag.faelle = items;
+      }),
+      loadOne(fetchSatzbauRound(token), (items) => {
+        bag.satzbau = items;
       }),
       loadOne(fetchSatzDeck(token), (payload) => {
         // FLOW-003: due-first + the server's dosed daily new-word drip —
@@ -851,6 +889,32 @@ export default function Flow() {
       if (!token) throw new UnauthorizedError("/faelle/attempts");
       try {
         return await giveUpFaelle(token, itemId, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleSatzbauAttempt = useCallback(
+    async (itemId: string, order: string[]): Promise<ClauseVerdict> => {
+      if (!token) throw new UnauthorizedError("/satzbau/attempts");
+      try {
+        return await submitSatzbauAttempt(token, itemId, order, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  const handleSatzbauGiveUp = useCallback(
+    async (itemId: string): Promise<ClauseVerdict> => {
+      if (!token) throw new UnauthorizedError("/satzbau/attempts");
+      try {
+        return await giveUpSatzbau(token, itemId, sid());
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
@@ -1379,6 +1443,18 @@ export default function Flow() {
                         onFlowDone={(correct) => handleItemDone("faelle", correct)}
                         allowGiveUp
                         onGiveUp={handleFaelleGiveUp}
+                      />
+                    )}
+                    {deal.kind === "satzbau" && (
+                      <SatzbauTrainer
+                        key={deal.key}
+                        round={[deal.item]}
+                        onAttempt={handleSatzbauAttempt}
+                        onNewRound={noopNewRound}
+                        flow
+                        onFlowDone={(correct) => handleItemDone("satzbau", correct)}
+                        allowGiveUp
+                        onGiveUp={handleSatzbauGiveUp}
                       />
                     )}
                     {deal.kind === "satz" && (

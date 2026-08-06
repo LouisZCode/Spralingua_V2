@@ -27,6 +27,7 @@ from genus import (
     load_rules as load_genus_rules,
     router as genus_router,
 )
+from satzbau import load_items as load_satzbau_items, router as satzbau_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
 from stats import router as stats_router
 from szenario import load_scenarios as load_szenario_scenarios, router as szenario_router
@@ -113,6 +114,7 @@ async def lifespan(app: FastAPI):
     load_verbindungen_items()
     load_zeitfaerbung_items()
     load_faelle_items()
+    load_satzbau_items()
     # And for Artikel-Anker's gender rules + noun catalog — the items loader
     # cross-checks every curated noun against the ending classifier, so a
     # mistagged rule/trap aborts startup here, not mid-drag.
@@ -168,6 +170,11 @@ app.include_router(zeitfaerbung_router)
 # Fälle (GRAM-006 Proposal-1, "the case cluster"): six case-decision
 # patterns drilled interleaved so no single pattern lets the learner coast.
 app.include_router(faelle_router)
+# Satzbau: five clause-construction patterns (relative clauses, indirect
+# questions, zu-infinitives, um-zu/damit purpose clauses, question word
+# order) — order chips into the correct clause, drilled interleaved same as
+# Fälle.
+app.include_router(satzbau_router)
 # Artikel-Anker: noun gender via ending anchors — drag der/die/das onto the
 # word, then produce the carrier phrase. Deterministic grading, no judge LLM.
 app.include_router(genus_router)

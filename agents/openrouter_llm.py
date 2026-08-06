@@ -182,7 +182,7 @@ def _log_fallback_engaged(x):
     return x
 
 
-def _cerebras_leg(deadline_s: float) -> DeadlineChatOpenAI:
+def _cerebras_leg(deadline_s: float, temperature: float | None = None) -> DeadlineChatOpenAI:
     return DeadlineChatOpenAI(
         model=CEREBRAS_JUDGE_MODEL,
         base_url=CEREBRAS_BASE_URL,
@@ -191,10 +191,11 @@ def _cerebras_leg(deadline_s: float) -> DeadlineChatOpenAI:
         max_retries=1,
         http_async_client=judge_http_client(),
         deadline_s=deadline_s,
+        **({} if temperature is None else {"temperature": temperature}),
     )
 
 
-def _openrouter_leg(deadline_s: float) -> DeadlineChatOpenAI:
+def _openrouter_leg(deadline_s: float, temperature: float | None = None) -> DeadlineChatOpenAI:
     return DeadlineChatOpenAI(
         model=OPENROUTER_JUDGE_MODEL,
         base_url=openrouter_base_url,
@@ -203,6 +204,7 @@ def _openrouter_leg(deadline_s: float) -> DeadlineChatOpenAI:
         max_retries=1,
         http_async_client=judge_http_client(),
         deadline_s=deadline_s,
+        **({} if temperature is None else {"temperature": temperature}),
         # allow_fallbacks=True here (unlike the old pinned wiring): this leg
         # only runs when Cerebras-direct already failed, so let OpenRouter
         # serve off any upstream rather than risk parking again waiting
@@ -212,7 +214,9 @@ def _openrouter_leg(deadline_s: float) -> DeadlineChatOpenAI:
     )
 
 
-def _judge_legs(deadline_s: float) -> tuple[DeadlineChatOpenAI, DeadlineChatOpenAI | None]:
+def _judge_legs(
+    deadline_s: float, temperature: float | None = None
+) -> tuple[DeadlineChatOpenAI, DeadlineChatOpenAI | None]:
     """Build the (primary, fallback) leg pair. ``fallback`` is ``None`` only
     in the no-Cerebras-key degraded mode, where ``primary`` IS the OpenRouter
     leg (deadline still applied) and there is nothing left to fall back to."""
@@ -221,8 +225,8 @@ def _judge_legs(deadline_s: float) -> tuple[DeadlineChatOpenAI, DeadlineChatOpen
         if not _missing_cerebras_key_warned:
             logger.warning("CEREBRAS_API_KEY not set — judges running OpenRouter-only")
             _missing_cerebras_key_warned = True
-        return _openrouter_leg(deadline_s), None
-    return _cerebras_leg(deadline_s), _openrouter_leg(deadline_s)
+        return _openrouter_leg(deadline_s, temperature), None
+    return _cerebras_leg(deadline_s, temperature), _openrouter_leg(deadline_s, temperature)
 
 
 def structured_judge_llm(
@@ -232,8 +236,21 @@ def structured_judge_llm(
     include_raw: bool = True,
     strict: bool | None = True,
     deadline_s: float = 12.0,
+    temperature: float | None = None,
 ) -> Runnable:
     """Cerebras-direct primary + OpenRouter-fallback structured-output judge.
+
+    TEMPERATURE (2026-08-07): defaults to ``None`` = don't send the field at
+    all, which is what every judge did before this parameter existed, i.e.
+    the provider default of 1.0. That is sampling, and it means a judge can
+    return DIFFERENT verdicts for byte-identical input — measured on the
+    Satzbau clause judge, which accepted a valid German word order twice and
+    rejected it once out of three identical calls, the rejection asserting a
+    grammar rule that was backwards. A learner resubmitting the same correct
+    sentence being told they are wrong is corrosive in a way a consistently
+    strict judge is not. Pass ``temperature=0`` for any judge whose job is a
+    verdict rather than prose. Left opt-in rather than defaulted so this
+    doesn't silently change the behaviour of the judges that predate it.
 
     Drop-in replacement for the old
     ``ProviderChatOpenAI(...).with_structured_output(schema, include_raw=True)``
@@ -266,7 +283,7 @@ def structured_judge_llm(
     leg FIRST, then ``.with_fallbacks(...)`` — ``RunnableWithFallbacks`` has
     no ``.with_structured_output`` of its own.
     """
-    primary, fallback = _judge_legs(deadline_s)
+    primary, fallback = _judge_legs(deadline_s, temperature)
     primary_structured = primary.with_structured_output(
         schema, method=method, include_raw=include_raw, strict=strict
     )

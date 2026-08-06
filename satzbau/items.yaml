@@ -1,0 +1,632 @@
+# Satzbau item catalog — order chips into a correct German subordinate
+# clause or question. Content-as-data; satzbau/content.py validates
+# fail-loud at startup.
+#
+# Fields per item (all required, though `given` and `accepts` may be
+# legitimately empty — see below):
+#   id         — stable slug
+#   pattern_id — grammar/taxonomy.yaml id (one of the five this drill
+#                targets: relativsatz | indirekte-frage | zu-infinitiv |
+#                um-zu-damit | fragen-wortstellung)
+#   level      — a1 | a2 | b1
+#   given      — the fixed lead-in shown above the chips, unmovable. May be
+#                "" for fragen-wortstellung items, where the whole sentence
+#                is chips (a direct question has no lead-in to hang off).
+#   task       — one English line stating the MEANING to build. This is
+#                what turns the puzzle into a real production task instead
+#                of a jigsaw — the learner is building a SPECIFIC sentence.
+#   chips      — the answer's tokens (the round handler shuffles them
+#                per-serve; the order listed here doesn't matter).
+#   answer     — the canonical correct order.
+#   accepts    — every OTHER genuinely valid German order. Left empty for
+#                every item below ON PURPOSE: each item was deliberately
+#                kept to a single adverbial/object slot so only one natural
+#                Mittelfeld order exists — and where real doubt remained
+#                about a second valid order, it was left for the judge
+#                (satzbau/judge.py) rather than guessed at here. accepts is
+#                only a zero-cost fast path; the judge is the authority, so
+#                an empty list costs a judge call on a genuine-but-uncommon
+#                order, never a wrongly-graded miss.
+#   hint       — one English line pointing at the DECISION (which rule
+#                applies), never the answer.
+#   rule       — one line teaching the why, shown with the verdict — the
+#                drill's whole teaching payload.
+#
+# THE FIVE PATTERNS ARE ONE PROBLEM: build the clause, then put the verb
+# where German puts it — clause-final for a relative clause / indirect
+# question / purpose clause, second position (verb-first for yes/no) for a
+# direct question. relativsatz varies the pronoun across every gender,
+# number and case (der/die/das/den/dem/deren/dessen/denen) so "der" never
+# becomes the only pronoun a learner recognizes. indirekte-frage mixes
+# W-question and ob forms — both send the verb to the end, but only one of
+# them has a question word to anchor on. zu-infinitiv is mostly separable
+# verbs (anzurufen, mitzukommen, einzuladen, aufzuhören …) because that's
+# the actual trap: zu doesn't go in FRONT of a separable verb, it goes
+# INSIDE it. um-zu-damit is a straight 50/50 split between same-subject
+# (um…zu) and different-subject (damit) purpose clauses so the learner has
+# to decide which connector fits, not pattern-match on "purpose = um zu".
+# fragen-wortstellung splits evenly between yes/no (verb-first) and
+# W-questions (verb second, right after the question word).
+
+items:
+  # ── relativsatz — pronoun varies across gender/number/case ─────────────
+  - id: rs-mann-nom
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist der Mann,"
+    task: "Build the relative clause: he works here."
+    chips: ["der", "hier", "arbeitet"]
+    answer: ["der", "hier", "arbeitet"]
+    accepts: []
+    hint: "Relative clause = subordinate clause. What happens to the verb?"
+    rule: "Nominative masc. relative pronoun is der; the verb goes to the end: … der hier arbeitet."
+
+  - id: rs-frau-nom
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist die Frau,"
+    task: "Build the relative clause: she lives next door."
+    chips: ["die", "nebenan", "wohnt"]
+    answer: ["die", "nebenan", "wohnt"]
+    accepts: []
+    hint: "Same rule, feminine subject — pronoun, then the verb to the end."
+    rule: "Nominative fem. relative pronoun is die; verb still last: … die nebenan wohnt."
+
+  - id: rs-kind-nom
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist das Kind,"
+    task: "Build the relative clause: it is playing in the garden."
+    chips: ["das", "im", "Garten", "spielt"]
+    answer: ["das", "im", "Garten", "spielt"]
+    accepts: []
+    hint: "Neuter subject — the pronoun looks just like the article das."
+    rule: "Nominative neut. relative pronoun is das; verb last: … das im Garten spielt."
+
+  - id: rs-leute-nom
+    pattern_id: relativsatz
+    level: b1
+    given: "Das sind die Leute,"
+    task: "Build the relative clause: they live above us."
+    chips: ["die", "über", "uns", "wohnen"]
+    answer: ["die", "über", "uns", "wohnen"]
+    accepts: []
+    hint: "Plural subject — die again, and the verb agrees with sie."
+    rule: "Nominative plural relative pronoun is die; verb last: … die über uns wohnen."
+
+  - id: rs-mann-akk
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist der Mann,"
+    task: "Build the relative clause: I met him yesterday."
+    chips: ["den", "ich", "gestern", "getroffen", "habe"]
+    answer: ["den", "ich", "gestern", "getroffen", "habe"]
+    accepts: []
+    hint: "He's the OBJECT of treffen here — the pronoun changes shape."
+    rule: "Accusative masc. relative pronoun is den (not der); verb(s) last: … den ich gestern getroffen habe."
+
+  - id: rs-mann-dat
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist der Mann,"
+    task: "Build the relative clause: I helped him yesterday."
+    chips: ["dem", "ich", "gestern", "geholfen", "habe"]
+    answer: ["dem", "ich", "gestern", "geholfen", "habe"]
+    accepts: []
+    hint: "Helfen takes a dative object — the pronoun shows that case."
+    rule: "Dative masc. relative pronoun is dem (helfen governs dative); verb last: … dem ich gestern geholfen habe."
+
+  - id: rs-frau-dat
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist die Frau,"
+    task: "Build the relative clause: I helped her yesterday."
+    chips: ["der", "ich", "gestern", "geholfen", "habe"]
+    answer: ["der", "ich", "gestern", "geholfen", "habe"]
+    accepts: []
+    hint: "Same dative rule, feminine this time — der here means 'to her'."
+    rule: "Dative fem. relative pronoun is der — same spelling as the masc. nominative article, different job."
+
+  - id: rs-kind-dat
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist das Kind,"
+    task: "Build the relative clause: I helped it yesterday."
+    chips: ["dem", "ich", "gestern", "geholfen", "habe"]
+    answer: ["dem", "ich", "gestern", "geholfen", "habe"]
+    accepts: []
+    hint: "Neuter dative — same pronoun shape as masculine dative."
+    rule: "Dative neut. relative pronoun is dem too; verb last: … dem ich gestern geholfen habe."
+
+  - id: rs-leute-dat
+    pattern_id: relativsatz
+    level: b1
+    given: "Das sind die Leute,"
+    task: "Build the relative clause: I helped them yesterday."
+    chips: ["denen", "ich", "gestern", "geholfen", "habe"]
+    answer: ["denen", "ich", "gestern", "geholfen", "habe"]
+    accepts: []
+    hint: "Dative plural relative pronoun is its own word, not die."
+    rule: "Dative plural relative pronoun is denen; verb last: … denen ich gestern geholfen habe."
+
+  - id: rs-frau-gen
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist die Frau,"
+    task: "Build the relative clause: her son works here."
+    chips: ["deren", "Sohn", "hier", "arbeitet"]
+    answer: ["deren", "Sohn", "hier", "arbeitet"]
+    accepts: []
+    hint: "This is 'whose' — the genitive pronoun, then the thing owned, then the rest."
+    rule: "Genitive 'whose' for a woman is deren; it's followed by the noun, then the clause runs to the verb."
+
+  - id: rs-mann-gen
+    pattern_id: relativsatz
+    level: b1
+    given: "Das ist der Mann,"
+    task: "Build the relative clause: his car is broken."
+    chips: ["dessen", "Auto", "kaputt", "ist"]
+    answer: ["dessen", "Auto", "kaputt", "ist"]
+    accepts: []
+    hint: "'Whose' for a man or a neuter noun — the genitive pronoun, then the thing owned."
+    rule: "Genitive 'whose' for a man/neuter is dessen; followed by the noun, then the clause runs to the verb."
+
+  # ── indirekte-frage — W-question and ob forms, both verb-final ─────────
+  - id: if-wann
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect question: when he is coming."
+    chips: ["wann", "er", "kommt"]
+    answer: ["wann", "er", "kommt"]
+    accepts: []
+    hint: "This isn't a direct question anymore — where does the verb go now?"
+    rule: "After 'ich weiß nicht', the question word keeps its verb at the end: wann er kommt."
+
+  - id: if-wo
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect question: where the station is."
+    chips: ["wo", "der", "Bahnhof", "ist"]
+    answer: ["wo", "der", "Bahnhof", "ist"]
+    accepts: []
+    hint: "Same rule — the question word introduces the clause, the verb waits."
+    rule: "wo der Bahnhof ist — verb-final, exactly like every subordinate clause."
+
+  - id: if-warum
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect question: why she is learning German."
+    chips: ["warum", "sie", "Deutsch", "lernt"]
+    answer: ["warum", "sie", "Deutsch", "lernt"]
+    accepts: []
+    hint: "Warum is the question word — subject, object, then verb at the end."
+    rule: "warum sie Deutsch lernt — the conjugated verb closes the clause."
+
+  - id: if-wie-heisst
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Kannst du mir sagen,"
+    task: "Build the indirect question: what his name is (literally: how he is called)."
+    chips: ["wie", "er", "heißt"]
+    answer: ["wie", "er", "heißt"]
+    accepts: []
+    hint: "'Sagen' relays a question the same way 'weiß nicht' does."
+    rule: "wie er heißt — verb-final after the relayed question word."
+
+  - id: if-was-beruf
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect question: what he does for work."
+    chips: ["was", "er", "beruflich", "macht"]
+    answer: ["was", "er", "beruflich", "macht"]
+    accepts: []
+    hint: "Was is the question word here — keep the verb for last."
+    rule: "was er beruflich macht — the question word plus a verb-final clause."
+
+  - id: if-wer
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect question: who called."
+    chips: ["wer", "angerufen", "hat"]
+    answer: ["wer", "angerufen", "hat"]
+    accepts: []
+    hint: "Wer is both the question word AND the subject here — one slot, not two."
+    rule: "wer angerufen hat — even when the question word IS the subject, the verb(s) still land at the end."
+
+  - id: if-wohin
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect question: where he is driving to."
+    chips: ["wohin", "er", "fährt"]
+    answer: ["wohin", "er", "fährt"]
+    accepts: []
+    hint: "Wohin asks about direction — same verb-final rule applies."
+    rule: "wohin er fährt — verb-final, same as every indirect question."
+
+  - id: if-ob-kommt
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect yes/no question: whether he is coming."
+    chips: ["ob", "er", "kommt"]
+    answer: ["ob", "er", "kommt"]
+    accepts: []
+    hint: "There's no question word here — a yes/no question needs a different connector."
+    rule: "A relayed yes/no question uses ob, and the verb still goes last: ob er kommt."
+
+  - id: if-ob-zeit
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Kannst du mir sagen,"
+    task: "Build the indirect yes/no question: whether she has time tomorrow."
+    chips: ["ob", "sie", "morgen", "Zeit", "hat"]
+    answer: ["ob", "sie", "morgen", "Zeit", "hat"]
+    accepts: []
+    hint: "Yes/no question, so ob — then subject, then the rest, verb last."
+    rule: "ob sie morgen Zeit hat — ob replaces the question word, verb still final."
+
+  - id: if-ob-verstanden
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich weiß nicht,"
+    task: "Build the indirect yes/no question: whether they understood everything."
+    chips: ["ob", "sie", "alles", "verstanden", "haben"]
+    answer: ["ob", "sie", "alles", "verstanden", "haben"]
+    accepts: []
+    hint: "Yes/no again — ob, then subject and object, verb cluster at the very end."
+    rule: "ob sie alles verstanden haben — ob + verb-final, same as a wenn- or dass-clause."
+
+  - id: if-wielange
+    pattern_id: indirekte-frage
+    level: b1
+    given: "Ich frage mich,"
+    task: "Build the indirect question: how long the flight takes."
+    chips: ["wie", "lange", "der", "Flug", "dauert"]
+    answer: ["wie", "lange", "der", "Flug", "dauert"]
+    accepts: []
+    hint: "'Wie lange' is a two-word question phrase — keep it together, verb last."
+    rule: "wie lange der Flug dauert — a multi-word question phrase moves as a block, verb still final."
+
+  # ── zu-infinitiv — mostly separable verbs (the actual trap) ────────────
+  - id: zi-fenster-schliessen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich habe vergessen,"
+    task: "Build the infinitive clause: to close the window."
+    chips: ["das", "Fenster", "zu", "schließen"]
+    answer: ["das", "Fenster", "zu", "schließen"]
+    accepts: []
+    hint: "Vergessen + infinitive always takes zu."
+    rule: "vergessen, … zu schließen — the infinitive needs zu, right before the verb."
+
+  - id: zi-anrufen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich versuche,"
+    task: "Build the infinitive clause: to call him back (separable verb: anrufen)."
+    chips: ["ihn", "anzurufen"]
+    answer: ["ihn", "anzurufen"]
+    accepts: []
+    hint: "anrufen is separable — zu doesn't go in front of it, it goes INSIDE it."
+    rule: "anrufen splits: an + zu + rufen → anzurufen. zu never stands as its own word here."
+
+  - id: zi-mitkommen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich habe keine Lust,"
+    task: "Build the infinitive clause: to come along tomorrow (separable verb: mitkommen)."
+    chips: ["morgen", "mitzukommen"]
+    answer: ["morgen", "mitzukommen"]
+    accepts: []
+    hint: "mitkommen is separable — zu slots inside the prefix. Where does the time word go?"
+    rule: "mitkommen → mitzukommen (one word); the adverb comes before the infinitive: morgen mitzukommen."
+
+  - id: zi-anfangen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich versuche,"
+    task: "Build the infinitive clause: to start early (separable verb: anfangen)."
+    chips: ["früh", "anzufangen"]
+    answer: ["früh", "anzufangen"]
+    accepts: []
+    hint: "anfangen is separable — zu goes inside the prefix again."
+    rule: "anfangen → anzufangen; the adverb comes first: früh anzufangen."
+
+  - id: zi-wiedersehen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich hoffe,"
+    task: "Build the infinitive clause: to see you again soon (separable verb: wiedersehen)."
+    chips: ["dich", "bald", "wiederzusehen"]
+    answer: ["dich", "bald", "wiederzusehen"]
+    accepts: []
+    hint: "wiedersehen is separable too — the object and adverb both come before the one-word verb."
+    rule: "wiedersehen → wiederzusehen; dich bald wiederzusehen — object, adverb, then the verb."
+
+  - id: zi-buch-lesen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich habe geplant,"
+    task: "Build the infinitive clause: to read this book."
+    chips: ["dieses", "Buch", "zu", "lesen"]
+    answer: ["dieses", "Buch", "zu", "lesen"]
+    accepts: []
+    hint: "lesen is a normal verb — zu simply stands right in front of it."
+    rule: "planen, … zu lesen — zu stands alone before a non-separable verb."
+
+  - id: zi-einkaufen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Ich habe keine Zeit,"
+    task: "Build the infinitive clause: to go shopping today (separable verb: einkaufen)."
+    chips: ["heute", "einzukaufen"]
+    answer: ["heute", "einzukaufen"]
+    accepts: []
+    hint: "einkaufen is separable — same pattern: zu hides inside the prefix."
+    rule: "einkaufen → einzukaufen; the time word comes first: heute einzukaufen."
+
+  - id: zi-regeln-lernen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Es ist wichtig,"
+    task: "Build the infinitive clause: to learn the rules."
+    chips: ["die", "Regeln", "zu", "lernen"]
+    answer: ["die", "Regeln", "zu", "lernen"]
+    accepts: []
+    hint: "Same zu + infinitive pattern after an adjective phrase."
+    rule: "Es ist wichtig, … zu lernen — zu still stands right before the plain verb."
+
+  - id: zi-einladen
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Es freut mich,"
+    task: "Build the infinitive clause: to invite you (separable verb: einladen)."
+    chips: ["dich", "einzuladen"]
+    answer: ["dich", "einzuladen"]
+    accepts: []
+    hint: "einladen splits the same way — zu goes inside, not in front."
+    rule: "einladen → einzuladen; zu is buried between ein- and -laden."
+
+  - id: zi-aufhoeren
+    pattern_id: zu-infinitiv
+    level: a2
+    given: "Es ist schwierig,"
+    task: "Build the infinitive clause: to stop smoking (separable verb: aufhören)."
+    chips: ["mit", "dem", "Rauchen", "aufzuhören"]
+    answer: ["mit", "dem", "Rauchen", "aufzuhören"]
+    accepts: []
+    hint: "aufhören is separable — zu slots inside again, and it still closes the phrase."
+    rule: "aufhören → aufzuhören; the rest of the phrase comes first, the one-word verb closes it."
+
+  # ── um-zu-damit — same subject (um…zu) vs different subject (damit) ────
+  - id: uzd-lernen-arbeiten
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich lerne Deutsch,"
+    task: "Build the purpose clause: (in order) to work in Germany — same person learns and works."
+    chips: ["um", "in", "Deutschland", "zu", "arbeiten"]
+    answer: ["um", "in", "Deutschland", "zu", "arbeiten"]
+    accepts: []
+    hint: "Same person does both actions — which connector fits same-subject purpose?"
+    rule: "Same subject → um … zu + infinitive: um in Deutschland zu arbeiten."
+
+  - id: uzd-erklaere-verstehst
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich erkläre es langsam,"
+    task: "Build the purpose clause: so that you understand it — a different person needs to understand."
+    chips: ["damit", "du", "es", "verstehst"]
+    answer: ["damit", "du", "es", "verstehst"]
+    accepts: []
+    hint: "A DIFFERENT person needs to understand — um…zu can't take its own subject."
+    rule: "Different subject → damit + a full clause, verb last: damit du es verstehst."
+
+  - id: uzd-spare-kaufen
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich spare Geld,"
+    task: "Build the purpose clause: (in order) to buy a car — same person saves and buys."
+    chips: ["um", "ein", "Auto", "zu", "kaufen"]
+    answer: ["um", "ein", "Auto", "zu", "kaufen"]
+    accepts: []
+    hint: "Same subject again — the shorter connector works here."
+    rule: "um ein Auto zu kaufen — same subject, um…zu + infinitive."
+
+  - id: uzd-schreibe-kennt
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich schreibe eine E-Mail,"
+    task: "Build the purpose clause: so that my boss knows the plan — my boss is a different person."
+    chips: ["damit", "mein", "Chef", "den", "Plan", "kennt"]
+    answer: ["damit", "mein", "Chef", "den", "Plan", "kennt"]
+    accepts: []
+    hint: "My boss is a different person from me — full clause, verb at the end."
+    rule: "damit mein Chef den Plan kennt — different subject, conjugated verb last."
+
+  - id: uzd-bett-fit
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich gehe früh ins Bett,"
+    task: "Build the purpose clause: (in order) to be fit tomorrow — same person tonight and tomorrow."
+    chips: ["um", "morgen", "fit", "zu", "sein"]
+    answer: ["um", "morgen", "fit", "zu", "sein"]
+    accepts: []
+    hint: "Same person, tonight and tomorrow — um…zu again."
+    rule: "um morgen fit zu sein — same subject, um…zu + infinitive (sein counts as the infinitive here)."
+
+  - id: uzd-rufe-bescheid
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich rufe dich an,"
+    task: "Build the purpose clause: so that you're informed — you're a different person from the caller."
+    chips: ["damit", "du", "Bescheid", "weißt"]
+    answer: ["damit", "du", "Bescheid", "weißt"]
+    accepts: []
+    hint: "You're the one who needs to know — different subject from the caller."
+    rule: "damit du Bescheid weißt — different subject, verb last (Bescheid wissen = to be informed)."
+
+  - id: uzd-fenster-lueften
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich öffne das Fenster,"
+    task: "Build the purpose clause: (in order) to air out the room — same person opens and airs it out."
+    chips: ["um", "das", "Zimmer", "zu", "lüften"]
+    answer: ["um", "das", "Zimmer", "zu", "lüften"]
+    accepts: []
+    hint: "Same subject doing both actions — the short connector fits."
+    rule: "um das Zimmer zu lüften — same subject, um…zu + infinitive."
+
+  - id: uzd-fluestere-hoeren
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich flüstere,"
+    task: "Build the purpose clause: so that the children don't hear it — the children are different people."
+    chips: ["damit", "die", "Kinder", "es", "nicht", "hören"]
+    answer: ["damit", "die", "Kinder", "es", "nicht", "hören"]
+    # The pronoun object may precede the full-NP subject — this order is
+    # correct German and arguably the more idiomatic of the two. Listed here
+    # so it green-lights on the deterministic path instead of depending on
+    # the judge, which was measured rejecting it 1 call in 3.
+    accepts:
+      - ["damit", "es", "die", "Kinder", "nicht", "hören"]
+    hint: "The children are the ones who mustn't hear — not the speaker."
+    rule: "damit die Kinder es nicht hören — different subject, verb last, nicht right before the verb it negates."
+
+  - id: uzd-vokabeln-bestehen
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich lerne jeden Tag Vokabeln,"
+    task: "Build the purpose clause: (in order) to pass the exam — same person learns and takes the exam."
+    chips: ["um", "die", "Prüfung", "zu", "bestehen"]
+    answer: ["um", "die", "Prüfung", "zu", "bestehen"]
+    accepts: []
+    hint: "Same learner passes the exam — um…zu again."
+    rule: "um die Prüfung zu bestehen — same subject, um…zu + infinitive."
+
+  - id: uzd-karte-freut
+    pattern_id: um-zu-damit
+    level: b1
+    given: "Ich schicke ihr eine Karte,"
+    task: "Build the purpose clause: so that she is happy — she's a different person from the sender."
+    chips: ["damit", "sie", "sich", "freut"]
+    answer: ["damit", "sie", "sich", "freut"]
+    accepts: []
+    hint: "She's the one who ends up happy — a different person from the sender."
+    rule: "damit sie sich freut — different subject, reflexive pronoun before the verb, verb last."
+
+  # ── fragen-wortstellung — yes/no (verb-first) vs W-question (verb-second) ─
+  - id: fw-kommst-morgen
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Are you coming tomorrow?"
+    chips: ["Kommst", "du", "morgen"]
+    answer: ["Kommst", "du", "morgen"]
+    accepts: []
+    hint: "No question word here — where does the verb go in a yes/no question?"
+    rule: "Yes/no question → verb first: Kommst du morgen?"
+
+  - id: fw-wo-wohnst
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Where do you live?"
+    chips: ["Wo", "wohnst", "du"]
+    answer: ["Wo", "wohnst", "du"]
+    accepts: []
+    hint: "W-question — the verb sits right after the question word."
+    rule: "W-question → verb second, right after the question word: Wo wohnst du?"
+
+  - id: fw-hast-zeit
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Do you have time today?"
+    chips: ["Hast", "du", "heute", "Zeit"]
+    answer: ["Hast", "du", "heute", "Zeit"]
+    accepts: []
+    hint: "Verb-first again — no question word to anchor it."
+    rule: "Hast du heute Zeit? — verb first, subject second."
+
+  - id: fw-was-machst
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: What are you doing this weekend?"
+    chips: ["Was", "machst", "du", "am", "Wochenende"]
+    answer: ["Was", "machst", "du", "am", "Wochenende"]
+    accepts: []
+    hint: "Was is the question word — the verb comes right after it."
+    rule: "Was machst du am Wochenende? — verb second, straight after was."
+
+  - id: fw-ist-richtig
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Is that right?"
+    chips: ["Ist", "das", "richtig"]
+    answer: ["Ist", "das", "richtig"]
+    accepts: []
+    hint: "No question word — verb-first, this is a yes/no question."
+    rule: "Ist das richtig? — verb first."
+
+  - id: fw-warum-lernst
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Why are you learning German?"
+    chips: ["Warum", "lernst", "du", "Deutsch"]
+    answer: ["Warum", "lernst", "du", "Deutsch"]
+    accepts: []
+    hint: "Warum is the question word — the verb sits right behind it."
+    rule: "Warum lernst du Deutsch? — verb second, right after warum."
+
+  - id: fw-kannst-helfen
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Can you help me?"
+    chips: ["Kannst", "du", "mir", "helfen"]
+    answer: ["Kannst", "du", "mir", "helfen"]
+    accepts: []
+    hint: "Modal verb question — still verb-first, the infinitive waits at the end."
+    rule: "Kannst du mir helfen? — the modal goes first, the infinitive still closes the sentence."
+
+  - id: fw-wann-beginnt
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: When does the film start?"
+    chips: ["Wann", "beginnt", "der", "Film"]
+    answer: ["Wann", "beginnt", "der", "Film"]
+    accepts: []
+    hint: "Wann introduces it, the verb comes right after."
+    rule: "Wann beginnt der Film? — verb second, right after wann."
+
+  - id: fw-hat-angerufen
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Did she call?"
+    chips: ["Hat", "sie", "angerufen"]
+    answer: ["Hat", "sie", "angerufen"]
+    accepts: []
+    hint: "Perfekt question — the auxiliary leads, the participle waits at the end."
+    rule: "Hat sie angerufen? — auxiliary first, participle last, same shape as any yes/no question."
+
+  - id: fw-wer-ist
+    pattern_id: fragen-wortstellung
+    level: a1
+    given: ""
+    task: "Ask: Who is that?"
+    chips: ["Wer", "ist", "das"]
+    answer: ["Wer", "ist", "das"]
+    accepts: []
+    hint: "Wer is both question word and subject here — still just one verb slot, right after it."
+    rule: "Wer ist das? — verb straight after wer, even though wer is also the subject."

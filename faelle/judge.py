@@ -96,7 +96,9 @@ async def judge_case(item: dict, typed: str) -> CaseDiagnosis:
     """One structured-output diagnosis call over the item + typed answer."""
     # Cerebras-direct primary + OpenRouter fallback with 12s/leg deadline —
     # see agents/openrouter_llm.structured_judge_llm.
-    llm = structured_judge_llm(CaseDiagnosis)
+    # temperature=0: this is a verdict, not prose — the same answer
+    # must always get the same grade (see structured_judge_llm).
+    llm = structured_judge_llm(CaseDiagnosis, temperature=0)
     prompt = (
         PROMPT.replace("{frame}", item["frame"])
         .replace("{expected}", item["answer"])
