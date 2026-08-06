@@ -348,3 +348,481 @@ items:
     chunk: wo + von → wovon (asks about a thing)
     hint: What does the delay depend on?
 
+  # ══════════════════════════════════════════════════════════════════════
+  # A1/A2 hygiene batch — five patterns with NO exercise anywhere else in
+  # the app. Unlike the chunk patterns above, `chunk` here carries the RULE
+  # itself (a compact contrast line to memorize), and `hint` points at the
+  # decision rather than translating the sentence.
+  # ══════════════════════════════════════════════════════════════════════
+
+  # ── nicht-vs-kein — both directions, including the traps: negating a ────
+  # ── verb, an adjective, and a definite/possessive noun (kein impossible) ─
+  - id: nvk-auto-01
+    pattern_id: nicht-vs-kein
+    frame: "Ich habe ___ Auto."
+    answer: "kein"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "Are you negating a thing, or an action?"
+
+  - id: nvk-zeit
+    pattern_id: nicht-vs-kein
+    frame: "Ich habe heute ___ Zeit."
+    answer: "keine"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "Same decision as always — but 'Zeit' is feminine."
+
+  - id: nvk-hund
+    pattern_id: nicht-vs-kein
+    frame: "Wir haben ___ Hund."
+    answer: "keinen"
+    chunk: "kein + noun · nicht + verb or adjective (kein still takes case endings: keinen for a masc. direct object)"
+    hint: "'Hund' is masculine and it's a direct object — which ending?"
+
+  - id: nvk-kinder
+    pattern_id: nicht-vs-kein
+    frame: "Sie haben ___ Kinder."
+    answer: "keine"
+    chunk: "kein + noun · nicht + verb or adjective (plural also takes keine)"
+    hint: "Plural nouns take the same ending as feminine — which word?"
+
+  - id: nvk-arbeite-heute
+    pattern_id: nicht-vs-kein
+    frame: "Ich arbeite heute ___."
+    answer: "nicht"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "There's no noun here to negate — what are you negating instead?"
+
+  - id: nvk-schoen
+    pattern_id: nicht-vs-kein
+    frame: "Das Wetter ist heute ___ schön."
+    answer: "nicht"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "'schön' is an adjective, not a noun — which negator fits?"
+
+  - id: nvk-mein-auto
+    pattern_id: nicht-vs-kein
+    frame: "Das ist ___ mein Auto."
+    answer: "nicht"
+    chunk: "kein can't attach to a noun that already has an article or possessive — use nicht instead"
+    hint: "'mein Auto' already has a possessive in front of it — can 'kein' go there too?"
+
+  - id: nvk-den-film
+    pattern_id: nicht-vs-kein
+    frame: "Ich mag den Film ___."
+    answer: "nicht"
+    chunk: "kein can't attach to a noun that already has an article or possessive — use nicht instead"
+    hint: "'den Film' already has its own article — which negator works with that?"
+
+  - id: nvk-kaffee
+    pattern_id: nicht-vs-kein
+    frame: "Er trinkt ___ Kaffee."
+    answer: "keinen"
+    chunk: "kein + noun · nicht + verb or adjective (kein still takes case endings: keinen for a masc. direct object)"
+    hint: "'Kaffee' is masculine and it's a direct object — which ending?"
+
+  - id: nvk-mitkommen
+    pattern_id: nicht-vs-kein
+    frame: "Er kommt heute ___ mit."
+    answer: "nicht"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "This negates the whole action of coming along — which negator?"
+
+  - id: nvk-gibt-supermarkt
+    pattern_id: nicht-vs-kein
+    frame: "Hier gibt es ___ Supermarkt."
+    answer: "keinen"
+    chunk: "kein + noun · nicht + verb or adjective (kein still takes case endings: keinen for a masc. direct object)"
+    hint: "'Supermarkt' is masculine and it's a direct object — which ending?"
+
+  - id: nvk-verstehe
+    pattern_id: nicht-vs-kein
+    frame: "Ich verstehe das ___."
+    answer: "nicht"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "There's no noun after the verb here — what are you negating?"
+
+  - id: nvk-teuer
+    pattern_id: nicht-vs-kein
+    frame: "Die Wohnung ist ___ teuer."
+    answer: "nicht"
+    chunk: "kein + noun · nicht + verb or adjective"
+    hint: "'teuer' describes the apartment — adjective or noun?"
+
+  # ── sein-vs-haben — the fixed pairs where English reaches for the ───────
+  # ── wrong verb: Hunger/Durst/Angst/Recht → haben; müde/Jahre alt → sein ──
+  - id: svh-hunger-ich
+    pattern_id: sein-vs-haben
+    frame: "Ich ___ Hunger."
+    answer: "habe"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Hunger is a fixed haben-pair in German, unlike English 'I am hungry'."
+
+  - id: svh-durst-ich
+    pattern_id: sein-vs-haben
+    frame: "Ich ___ großen Durst."
+    answer: "habe"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Same fixed pair as Hunger — which verb?"
+
+  - id: svh-angst-er
+    pattern_id: sein-vs-haben
+    frame: "Er ___ Angst vor Spinnen."
+    answer: "hat"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Angst is another fixed haben-pair — which form for 'er'?"
+
+  - id: svh-recht-du
+    pattern_id: sein-vs-haben
+    frame: "Du ___ Recht, das stimmt."
+    answer: "hast"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "'Recht haben' — which form for 'du'?"
+
+  - id: svh-muede-ich
+    pattern_id: sein-vs-haben
+    frame: "Ich ___ heute sehr müde."
+    answer: "bin"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "'müde' is an adjective describing a state — which verb pairs with it?"
+
+  - id: svh-alt-ich
+    pattern_id: sein-vs-haben
+    frame: "Ich ___ 23 Jahre alt."
+    answer: "bin"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Age uses the same verb as 'müde' — which one?"
+
+  - id: svh-wie-alt-du
+    pattern_id: sein-vs-haben
+    frame: "Wie alt ___ du?"
+    answer: "bist"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Asking age uses the same verb as stating it — which one, for 'du'?"
+
+  - id: svh-hunger-wir
+    pattern_id: sein-vs-haben
+    frame: "Wir ___ großen Hunger."
+    answer: "haben"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Same fixed pair as before — which form for 'wir'?"
+
+  - id: svh-alt-schwester
+    pattern_id: sein-vs-haben
+    frame: "Meine Schwester ___ 30 Jahre alt."
+    answer: "ist"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Age again — which verb, for 'meine Schwester'?"
+
+  - id: svh-muede-ihr
+    pattern_id: sein-vs-haben
+    frame: "Ihr ___ sicher müde nach der Reise."
+    answer: "seid"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "'müde' again — which verb, for 'ihr'?"
+
+  - id: svh-wie-alt-sie-formal
+    pattern_id: sein-vs-haben
+    frame: "Wie alt ___ Sie?"
+    answer: "sind"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Formal 'Sie' asking age — which verb?"
+
+  - id: svh-angst-kinder
+    pattern_id: sein-vs-haben
+    frame: "Die Kinder ___ Angst vor dem Hund."
+    answer: "haben"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Angst again, this time plural — which verb?"
+
+  - id: svh-durst-du
+    pattern_id: sein-vs-haben
+    frame: "___ du auch Durst?"
+    answer: "Hast"
+    chunk: "Hunger, Durst, Angst, Recht → haben · müde, Jahre alt → sein"
+    hint: "Question form — same fixed pair, which verb for 'du'?"
+
+  # ── subjekt-verb-endung — all six persons, stem-changers (fahren/ ───────
+  # ── sprechen/nehmen) and -t/-d stems needing an extra e (arbeiten/finden) ─
+  - id: sve-wohnen-du
+    pattern_id: subjekt-verb-endung
+    frame: "Ich wohne in Berlin. Du ___ in Hamburg."
+    answer: "wohnst"
+    chunk: "ich -e · du -st · er/sie/es -t · wir/ihr/sie/Sie -en/-t"
+    hint: "Which ending goes with 'du'?"
+
+  - id: sve-wohnen-ich
+    pattern_id: subjekt-verb-endung
+    frame: "Du wohnst in Berlin. Ich ___ in München."
+    answer: "wohne"
+    chunk: "ich -e · du -st · er/sie/es -t · wir/ihr/sie/Sie -en/-t"
+    hint: "Which ending goes with 'ich'?"
+
+  - id: sve-kommen-ihr
+    pattern_id: subjekt-verb-endung
+    frame: "Ich komme aus Italien. Ihr ___ aus Spanien."
+    answer: "kommt"
+    chunk: "ich -e · du -st · er/sie/es -t · wir/ihr/sie/Sie -en/-t"
+    hint: "Which ending goes with 'ihr'?"
+
+  - id: sve-fahren-er
+    pattern_id: subjekt-verb-endung
+    frame: "Ich fahre mit dem Bus zur Arbeit. Mein Kollege ___ mit dem Auto."
+    answer: "fährt"
+    chunk: "fahren stem-changes a→ä for du/er/sie/es: du fährst, er fährt"
+    hint: "This verb changes its vowel for 'er' — which form?"
+
+  - id: sve-fahren-du
+    pattern_id: subjekt-verb-endung
+    frame: "Ich fahre gern Fahrrad. ___ du auch gern Fahrrad?"
+    answer: "Fährst"
+    chunk: "fahren stem-changes a→ä for du/er/sie/es: du fährst, er fährt"
+    hint: "Same vowel change as 'er' — but for 'du'?"
+
+  - id: sve-sprechen-sie
+    pattern_id: subjekt-verb-endung
+    frame: "Ich spreche Englisch und Deutsch. Meine Schwester ___ auch Französisch."
+    answer: "spricht"
+    chunk: "sprechen stem-changes e→i for du/er/sie/es: du sprichst, er/sie spricht"
+    hint: "The stem vowel shifts for 'sie' (she) here — which form?"
+
+  - id: sve-sprechen-du
+    pattern_id: subjekt-verb-endung
+    frame: "Ich spreche ein bisschen Spanisch. ___ du auch Spanisch?"
+    answer: "Sprichst"
+    chunk: "sprechen stem-changes e→i for du/er/sie/es: du sprichst, er/sie spricht"
+    hint: "Same stem shift as 'sie' — but for 'du'?"
+
+  - id: sve-nehmen-er
+    pattern_id: subjekt-verb-endung
+    frame: "Ich nehme den Zug. Mein Vater ___ lieber das Auto."
+    answer: "nimmt"
+    chunk: "nehmen stem-changes e→i(mm) for du/er/sie/es: du nimmst, er nimmt"
+    hint: "This verb's stem changes even more for 'er' — which form?"
+
+  - id: sve-nehmen-du
+    pattern_id: subjekt-verb-endung
+    frame: "Ich nehme immer die Treppe. ___ du auch die Treppe?"
+    answer: "Nimmst"
+    chunk: "nehmen stem-changes e→i(mm) for du/er/sie/es: du nimmst, er nimmt"
+    hint: "Same stem shift as 'er' — but for 'du'?"
+
+  - id: sve-arbeiten-du
+    pattern_id: subjekt-verb-endung
+    frame: "Ich arbeite im Büro. Wo ___ du?"
+    answer: "arbeitest"
+    chunk: "stems ending in -t/-d insert an extra e: du arbeitest, er arbeitet"
+    hint: "This verb's stem ends in -t — what extra letter joins the ending?"
+
+  - id: sve-arbeiten-er
+    pattern_id: subjekt-verb-endung
+    frame: "Ich arbeite von zu Hause. Mein Bruder ___ im Büro."
+    answer: "arbeitet"
+    chunk: "stems ending in -t/-d insert an extra e: du arbeitest, er arbeitet"
+    hint: "Same extra letter as 'du' — but for 'er'?"
+
+  - id: sve-finden-du
+    pattern_id: subjekt-verb-endung
+    frame: "Ich finde den Film gut. ___ du ihn auch gut?"
+    answer: "Findest"
+    chunk: "stems ending in -t/-d insert an extra e: du findest, er findet"
+    hint: "This verb's stem ends in -d — what extra letter joins the ending?"
+
+  - id: sve-finden-er
+    pattern_id: subjekt-verb-endung
+    frame: "Ich finde Deutsch leicht. Mein Freund ___ es schwer."
+    answer: "findet"
+    chunk: "stems ending in -t/-d insert an extra e: du findest, er findet"
+    hint: "Same extra letter as 'du' — but for 'er'?"
+
+  - id: sve-wohnen-wir
+    pattern_id: subjekt-verb-endung
+    frame: "Du wohnst allein. Wir ___ zu dritt."
+    answer: "wohnen"
+    chunk: "ich -e · du -st · er/sie/es -t · wir/ihr/sie/Sie -en/-t"
+    hint: "Which ending goes with 'wir'?"
+
+  - id: sve-spielen-sie-pl
+    pattern_id: subjekt-verb-endung
+    frame: "Ich spiele Tennis. Meine Freunde ___ Fußball."
+    answer: "spielen"
+    chunk: "ich -e · du -st · er/sie/es -t · wir/ihr/sie/Sie -en/-t"
+    hint: "Which ending goes with 'meine Freunde' (they)?"
+
+  - id: sve-kommen-sie-formal
+    pattern_id: subjekt-verb-endung
+    frame: "Ich komme um neun Uhr. Wann ___ Sie?"
+    answer: "kommen"
+    chunk: "formal Sie always takes -en, same as wir/sie(they)"
+    hint: "Which ending goes with formal 'Sie'?"
+
+  # ── am-um-im-zeit — am + day/date, um + clock time, im + month/season ───
+  - id: aui-montag
+    pattern_id: am-um-im-zeit
+    frame: "Ich arbeite ___ Montag."
+    answer: "am"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "Is this a day, a clock time, or a month/season?"
+
+  - id: aui-acht-uhr
+    pattern_id: am-um-im-zeit
+    frame: "Der Unterricht beginnt ___ acht Uhr."
+    answer: "um"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "This is a specific clock time — which preposition?"
+
+  - id: aui-winter
+    pattern_id: am-um-im-zeit
+    frame: "___ Winter schneit es oft."
+    answer: "Im"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "This is a season — which preposition?"
+
+  - id: aui-wochenende
+    pattern_id: am-um-im-zeit
+    frame: "___ Wochenende schlafe ich lange."
+    answer: "Am"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit (Wochenende behaves like a day)"
+    hint: "'Wochenende' behaves like a day here — which preposition?"
+
+  - id: aui-januar
+    pattern_id: am-um-im-zeit
+    frame: "Mein Geburtstag ist ___ Januar."
+    answer: "im"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "This is a month — which preposition?"
+
+  - id: aui-siebzehnten
+    pattern_id: am-um-im-zeit
+    frame: "Die Party ist ___ siebzehnten Mai."
+    answer: "am"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit (a date also behaves like a day)"
+    hint: "A calendar date behaves like a day — which preposition?"
+
+  - id: aui-zwoelf-uhr
+    pattern_id: am-um-im-zeit
+    frame: "Wir essen ___ zwölf Uhr zu Mittag."
+    answer: "um"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "Another clock time — which preposition?"
+
+  - id: aui-sommer
+    pattern_id: am-um-im-zeit
+    frame: "___ Sommer fahren wir ans Meer."
+    answer: "Im"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "This is a season again — which preposition?"
+
+  - id: aui-freitag
+    pattern_id: am-um-im-zeit
+    frame: "Wir treffen uns ___ Freitag."
+    answer: "am"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "This is a day of the week — which preposition?"
+
+  - id: aui-mitternacht
+    pattern_id: am-um-im-zeit
+    frame: "Der Zug fährt ___ Mitternacht ab."
+    answer: "um"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "Midnight is a clock time — which preposition?"
+
+  - id: aui-april
+    pattern_id: am-um-im-zeit
+    frame: "Die Bäume blühen ___ April."
+    answer: "im"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit"
+    hint: "This is a month — which preposition?"
+
+  - id: aui-abend
+    pattern_id: am-um-im-zeit
+    frame: "___ Abend gehe ich oft spazieren."
+    answer: "Am"
+    chunk: "am + Tag/Datum · um + Uhrzeit · im + Monat/Jahreszeit (parts of the day behave like days)"
+    hint: "Parts of the day behave like days here — which preposition?"
+
+  # ── komparativ-form — -er (+ als), umlauting adjectives, and the ────────
+  # ── irregulars (besser, mehr, lieber, höher) — never "mehr + adjective" ──
+  - id: komp-schoen
+    pattern_id: komparativ-form
+    frame: "Der Sommer ist ___ als der Winter. (schön)"
+    answer: "schöner"
+    chunk: "adjective + -er (+ als) · never 'mehr + adjective'"
+    hint: "Just add the ending — don't reach for 'mehr'."
+
+  - id: komp-schnell
+    pattern_id: komparativ-form
+    frame: "Der Zug ist ___ als das Auto. (schnell)"
+    answer: "schneller"
+    chunk: "adjective + -er (+ als) · never 'mehr + adjective'"
+    hint: "Just add the ending — don't reach for 'mehr'."
+
+  - id: komp-billig
+    pattern_id: komparativ-form
+    frame: "Der Bus ist ___ als das Taxi. (billig)"
+    answer: "billiger"
+    chunk: "adjective + -er (+ als) · never 'mehr + adjective'"
+    hint: "Just add the ending — don't reach for 'mehr'."
+
+  - id: komp-alt
+    pattern_id: komparativ-form
+    frame: "Mein Bruder ist ___ als ich. (alt)"
+    answer: "älter"
+    chunk: "short adjectives often add an umlaut in the comparative: alt → älter"
+    hint: "This short adjective takes an umlaut in the comparative."
+
+  - id: komp-gross
+    pattern_id: komparativ-form
+    frame: "Berlin ist ___ als München. (groß)"
+    answer: "größer"
+    chunk: "short adjectives often add an umlaut in the comparative: groß → größer"
+    hint: "Another umlauting adjective — which form?"
+
+  - id: komp-jung
+    pattern_id: komparativ-form
+    frame: "Meine Schwester ist ___ als mein Bruder. (jung)"
+    answer: "jünger"
+    chunk: "short adjectives often add an umlaut in the comparative: jung → jünger"
+    hint: "This one umlauts too — which form?"
+
+  - id: komp-warm
+    pattern_id: komparativ-form
+    frame: "Der Sommer in Spanien ist ___ als in Deutschland. (warm)"
+    answer: "wärmer"
+    chunk: "short adjectives often add an umlaut in the comparative: warm → wärmer"
+    hint: "Another umlauting adjective — which form?"
+
+  - id: komp-kalt
+    pattern_id: komparativ-form
+    frame: "Der Winter in Kanada ist ___ als der Winter hier. (kalt)"
+    answer: "kälter"
+    chunk: "short adjectives often add an umlaut in the comparative: kalt → kälter"
+    hint: "Another umlauting adjective — which form?"
+
+  - id: komp-gut
+    pattern_id: komparativ-form
+    frame: "Dieser Kaffee schmeckt ___ als der von gestern. (gut)"
+    answer: "besser"
+    chunk: "irregular comparatives: gut → besser, viel → mehr, gern → lieber, hoch → höher"
+    hint: "This adjective is irregular — not 'guter'."
+
+  - id: komp-viel
+    pattern_id: komparativ-form
+    frame: "Ich habe ___ Zeit als du. (viel)"
+    answer: "mehr"
+    chunk: "irregular comparatives: gut → besser, viel → mehr, gern → lieber, hoch → höher"
+    hint: "This one is already irregular in the positive too — which word?"
+
+  - id: komp-gern
+    pattern_id: komparativ-form
+    frame: "Ich trinke ___ Tee als Kaffee. (gern)"
+    answer: "lieber"
+    chunk: "irregular comparatives: gut → besser, viel → mehr, gern → lieber, hoch → höher"
+    hint: "This comparative doesn't come from an adjective at all — which word?"
+
+  - id: komp-hoch
+    pattern_id: komparativ-form
+    frame: "Der Berg ist ___ als der Turm. (hoch)"
+    answer: "höher"
+    chunk: "irregular comparatives: gut → besser, viel → mehr, gern → lieber, hoch → höher"
+    hint: "This one drops a letter before adding -er — which form?"
+

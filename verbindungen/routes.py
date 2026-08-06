@@ -10,6 +10,7 @@ tracing under the frontend-minted practice-session id.
 import asyncio
 import random
 import re
+from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
@@ -40,6 +41,119 @@ ROUND_SIZE = 10
 MAX_HOT = 6
 # CONT-002: the personal half of a 10-item round.
 PERSONAL_MAX = 5
+
+# THE INTERLEAVING RULE (GRAM-002 widen, borrowed verbatim from
+# faelle/routes.py): with 3 patterns MAX_HOT alone was enough — a
+# ledger-weighted round could serve at most 6 of one pattern out of 10,
+# leaving 4 decoy/other-pattern slots. With 8 patterns that headroom is no
+# longer a real mix: 6 hot + a handful of the SAME rest pattern can still
+# legitimately dominate a round. These two knobs apply ONLY to the generic
+# catalog selection below — CONT-002 personal-forged items are never capped
+# or dropped, only combined in afterward (see get_round).
+MAX_PER_PATTERN = 3
+MIN_PATTERNS = 4
+
+
+def _cap_and_diversify(chosen: list[dict], pool: list[dict]) -> list[dict]:
+    """Enforce MAX_PER_PATTERN and MIN_PATTERNS on a selected round, topping
+    up from ``pool`` (the full generic catalog) when the initial
+    ledger-weighted selection over-indexes on too few patterns.
+
+    Identical to ``faelle/routes.py``'s helper of the same name — see there
+    for the full rationale. The cap is enforced on every single insertion
+    below — including during top-up — not just on the initial selection.
+    """
+    chosen_ids = {i["id"] for i in chosen}
+    counts: Counter = Counter()
+    kept: list[dict] = []
+    kept_ids: set[str] = set()
+    for item in chosen:
+        pid = item["pattern_id"]
+        if counts[pid] < MAX_PER_PATTERN:
+            kept.append(item)
+            kept_ids.add(item["id"])
+            counts[pid] += 1
+
+    target = len(chosen)
+    reserve = [i for i in pool if i["id"] not in chosen_ids]
+    random.shuffle(reserve)
+
+    def _fill(candidates: list[dict]) -> None:
+        for c in candidates:
+            if len(kept) >= target:
+                return
+            pid = c["pattern_id"]
+            if c["id"] in kept_ids or counts[pid] >= MAX_PER_PATTERN:
+                continue
+            kept.append(c)
+            kept_ids.add(c["id"])
+            counts[pid] += 1
+
+    # Prefer patterns not yet represented first (pushes toward
+    # MIN_PATTERNS without needing the swap loop below), then anything else
+    # still under cap — a smaller/uneven catalog may still land short of
+    # `target`, which beats silently breaking the cap to hit the count.
+    _fill([i for i in reserve if counts[i["pattern_id"]] == 0])
+    _fill(reserve)
+
+    # Still short of MIN_PATTERNS distinct ids (small/uneven catalog): swap
+    # one item out of the currently-fattest pattern for an unrepresented
+    # one, repeating until the floor is met or candidates run out.
+    distinct = {p for p, n in counts.items() if n > 0}
+    if len(distinct) < MIN_PATTERNS:
+        candidates = [
+            i for i in pool if i["pattern_id"] not in distinct and i["id"] not in kept_ids
+        ]
+        random.shuffle(candidates)
+        for c in candidates:
+            if len(distinct) >= MIN_PATTERNS:
+                break
+            fattest = counts.most_common(1)[0][0]
+            for idx, i in enumerate(kept):
+                if i["pattern_id"] == fattest:
+                    kept[idx] = c
+                    kept_ids.discard(i["id"])
+                    kept_ids.add(c["id"])
+                    counts[fattest] -= 1
+                    counts[c["pattern_id"]] += 1
+                    distinct.add(c["pattern_id"])
+                    break
+    return kept
+
+
+def _order_no_adjacent_repeats(items: list[dict]) -> list[dict]:
+    """Greedy reorder so no two consecutive items share a pattern_id,
+    whenever the multiset allows it.
+
+    Identical to ``faelle/routes.py``'s helper of the same name. Run over
+    the generic-catalog items AND the CONT-002 personal items together
+    (both carry ``pattern_id`` internally — see ``drills/forge.py``): the
+    cap above only ever touches the generic selection, but a well-mixed
+    final ORDER benefits from seeing personal items too, so a learner never
+    hits e.g. three reflexive-chunk items in a row just because two of them
+    happened to be personal.
+    """
+    buckets: dict[str, list[dict]] = {}
+    for item in items:
+        buckets.setdefault(item["pattern_id"], []).append(item)
+    for bucket in buckets.values():
+        random.shuffle(bucket)
+
+    ordered: list[dict] = []
+    last_pattern: str | None = None
+    while any(buckets.values()):
+        candidates = [p for p, b in buckets.items() if b and p != last_pattern]
+        if not candidates:
+            # Only the just-placed pattern has items left — an unavoidable
+            # repeat, kept as a safety net for a small/uneven catalog.
+            candidates = [p for p, b in buckets.items() if b]
+        # Most-common remaining pattern first, so a big bucket never gets
+        # stranded at the end where it has no choice but to repeat itself.
+        candidates.sort(key=lambda p: len(buckets[p]), reverse=True)
+        chosen_pattern = candidates[0]
+        ordered.append(buckets[chosen_pattern].pop())
+        last_pattern = chosen_pattern
+    return ordered
 
 
 @router.get("/round")
@@ -91,12 +205,18 @@ async def get_round(
     if len(chosen) < generic_size:
         chosen += hot_items[MAX_HOT : MAX_HOT + generic_size - len(chosen)]
 
-    result = [
-        {"id": i["id"], "frame": i["frame"], "hint": i["hint"]} for i in chosen
-    ] + [
-        {"id": p["id"], "frame": p["frame"], "hint": p["hint"]} for p in personal
-    ]
-    random.shuffle(result)
+    # THE INTERLEAVING RULE (see MAX_PER_PATTERN above): cap+diversify the
+    # GENERIC selection only — personal items are never capped or dropped,
+    # they combine in afterward exactly as many as the ledger read found
+    # (up to PERSONAL_MAX). Then order the FULL round (generic + personal)
+    # so the mix holds by POSITION too, not just by count — this replaces
+    # the old blind `random.shuffle(result)`, which would have scrambled
+    # the cap's careful composition right back into clumps.
+    chosen = _cap_and_diversify(chosen, items)
+    combined = chosen + personal
+    ordered = _order_no_adjacent_repeats(combined)
+
+    result = [{"id": i["id"], "frame": i["frame"], "hint": i["hint"]} for i in ordered]
 
     # CONT-002: top up any missing personal items in the background — never
     # blocks or fails the round it rode in on.

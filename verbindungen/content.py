@@ -13,9 +13,21 @@ from grammar import load_taxonomy
 
 _ITEMS_PATH = Path(__file__).parent / "items.yaml"
 
-# The taxonomy patterns this exercise targets (todo GRAM-002, Exercise D —
-# lexicon chunks: reflexivity, fixed prepositions, da-/wo-compounds).
-TARGET_PATTERNS = ("reflexivpronomen", "verben-mit-praepositionen", "da-wo-komposita")
+# The taxonomy patterns this exercise targets (todo GRAM-002, Exercise D).
+# The first three are the original lexicon chunks (reflexivity, fixed
+# prepositions, da-/wo-compounds); the remaining five are an A1/A2 hygiene
+# batch — patterns with no exercise anywhere else in the app. The loader
+# below cross-checks every id against grammar/taxonomy.yaml.
+TARGET_PATTERNS = (
+    "reflexivpronomen",
+    "verben-mit-praepositionen",
+    "da-wo-komposita",
+    "subjekt-verb-endung",
+    "sein-vs-haben",
+    "nicht-vs-kein",
+    "am-um-im-zeit",
+    "komparativ-form",
+)
 
 _REQUIRED = ("id", "pattern_id", "frame", "answer", "chunk", "hint")
 
