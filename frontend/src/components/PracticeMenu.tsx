@@ -51,8 +51,8 @@ export default function PracticeMenu() {
     };
   }, [token]);
 
-  // GAME-001: the streak badge in the header. Non-fatal — any load failure
-  // just means no badge; only the streak object is kept out of the full stats.
+  // GAME-001: the streak banner above the recommendation. Non-fatal — any load
+  // failure just means no banner; only the streak object is kept out of stats.
   const [streak, setStreak] = useState<Streak | null>(null);
   useEffect(() => {
     if (!token) return;
@@ -107,19 +107,6 @@ export default function PracticeMenu() {
               Spralingua
             </span>
           </Link>
-          {/* GAME-001: attempted-not-passed daily streak, free weekly grace
-              day, longest is a permanent PR. */}
-          {streak && streak.current > 0 && (
-            <div
-              className={`flex items-center gap-1.5 rounded-2xl border-[3px] border-ink px-3 py-1.5 ${streak.practicedToday ? "bg-flag-gold" : "bg-white"}`}
-              title={`Longest: ${streak.longest} days${streak.practicedToday ? "" : " — practice today to keep it going"}`}
-            >
-              <FlameIcon muted={!streak.practicedToday} />
-              <span className="font-display text-[15px] font-black text-ink">
-                {streak.current}
-              </span>
-            </div>
-          )}
         </div>
       </header>
 
@@ -131,10 +118,37 @@ export default function PracticeMenu() {
           <h1 className="mt-3 font-display text-[clamp(30px,5vw,50px)] font-black leading-[1.02] tracking-tight text-ink">
             How do you want to practice?
           </h1>
-          <p className="mt-4 max-w-lg font-body text-[16px] leading-relaxed text-ink-soft">
-            Pick a mode to get started. You can switch any time.
-          </p>
         </div>
+
+        {/* GAME-001: attempted-not-passed daily streak, free weekly grace day,
+            longest is a permanent PR. It sits here — above the recommendation,
+            in the first thing the eye lands on after the headline — rather than
+            as the old header badge, which was small enough to miss entirely and
+            hid itself at zero. Always rendered once loaded: a visible 0 is what
+            invites the first day. */}
+        {streak && (
+          <div
+            className="rise-in mt-6 flex flex-wrap items-center gap-x-4 gap-y-2"
+            style={{ animationDelay: "40ms" }}
+          >
+            <div
+              className={`flex items-center gap-2 rounded-2xl border-[3px] border-ink px-4 py-2 ${
+                streak.practicedToday ? "bg-flag-gold" : "bg-white"
+              }`}
+            >
+              <FlameIcon muted={!streak.practicedToday} />
+              <span className="font-display text-[24px] font-black leading-none text-ink">
+                {streak.current}
+              </span>
+              <span className="font-body text-[12px] font-bold uppercase tracking-[0.18em] text-ink">
+                {streak.current === 1 ? "day" : "days"}
+              </span>
+            </div>
+            <p className="font-body text-[15px] leading-snug text-ink-soft">
+              {streakNote(streak)}
+            </p>
+          </div>
+        )}
 
         {/* REC-001: after ~3 active days this week, the data may pick one
             pillar to push today. Absent = no clear signal, and that's fine. */}
@@ -343,8 +357,25 @@ function ChartIcon() {
   );
 }
 
+// The line beside the streak badge: what the number means and what to do about
+// it. Never scolds a broken streak — the grace day and the permanent PR are the
+// point of the forgiving design, so a zero reads as an invitation, not a loss.
+function streakNote(streak: Streak): string {
+  if (streak.current === 0) {
+    return streak.longest > 0
+      ? `Any exercise today starts a new streak. Your best: ${streak.longest} days.`
+      : "Any exercise today starts your streak.";
+  }
+  if (!streak.practicedToday) {
+    return "Practice today to keep it going.";
+  }
+  return streak.current >= streak.longest
+    ? "Today counts — this is your longest streak yet."
+    : `Today counts. Your best: ${streak.longest} days.`;
+}
+
 // Streak flame (GAME-001) — filled red when today already counts, an outline
-// when it doesn't yet. Kept local like ChartIcon, one-off for the header badge.
+// when it doesn't yet. Kept local like ChartIcon, one-off for the streak badge.
 function FlameIcon({ muted }: { muted: boolean }) {
   return (
     <svg

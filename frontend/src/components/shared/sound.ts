@@ -5,7 +5,7 @@
 // lazily and unlocked on the first real user gesture (browser autoplay policy);
 // the mute preference is app-wide via localStorage so every surface honors it.
 
-export type SoundKind = "win" | "bigwin" | "bonus" | "fail" | "tick";
+export type SoundKind = "win" | "bigwin" | "bonus" | "fail" | "bigfail" | "tick";
 
 const MUTE_KEY = "spralingua-sound-muted-v1";
 
@@ -116,6 +116,15 @@ export function playSound(kind: SoundKind): void {
         // Descending, warm, informational — never harsh. Rounded attack.
         note(c, "sine", 587.33, 0, 0.12, 0.09, 0.02);
         note(c, "sine", 440, 0.1, 0.18, 0.09, 0.02);
+        break;
+      case "bigfail":
+        // "fail" scaled to summary weight: the same warm sine descent, one
+        // note longer and slower so it reads as a verdict on the round rather
+        // than on an item. Deliberately not sad — a weak round is information,
+        // and the learner is about to be offered "Keep going".
+        note(c, "sine", 587.33, 0, 0.2, 0.1, 0.02);
+        note(c, "sine", 493.88, 0.14, 0.22, 0.1, 0.02);
+        note(c, "sine", 392, 0.3, 0.34, 0.1, 0.02);
         break;
     }
   } catch {

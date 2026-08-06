@@ -30,8 +30,12 @@
 # prod topic-jump findings (see sim/PROMPT_LOG.md "v3 prod findings"). The
 # user is field-testing v1 to rebuild a feel for what needs changing before
 # a fresh, continuity-aware iteration cycle. v2/v3 archived in
-# sim/prompt_versions/. Note the regression is deliberate and total: cap 14,
-# Lena initiates the goodbye at ~12-14 exchanges, wordy briefing card.
+# sim/prompt_versions/. Note the regression is deliberate: cap 14, Lena
+# initiates the goodbye at ~12-14 exchanges. The one thing NOT regressed is
+# `briefing.goal` — the user's 2026-08-06 field test asked for setup advice
+# (room, headphones, feedback comes later) instead of v1's conduct rules, so
+# those three bullets are current copy, not v1's. Everything the model sees
+# is still v1 verbatim.
 #
 # Design doc lives in `ARCHITECTURE.md` (GRAMMATIK-TANDEM section, gitignored).
 
@@ -51,9 +55,9 @@ briefing:
     you along the way. She speaks only German, uses the casual "du", and
     remembers your past conversations.
   goal:
-    - Just talk with her in German about today's topic
-    - Let the conversation wander — follow her questions
-    - When she nudges a correction, try saying it again
+    - Find an empty, quiet room
+    - Use headphones if you can
+    - Enjoy the conversation — don't worry about your German right now. You'll get feedback once it's over. Have fun!
 
 persona_prompt: |
   You are Lena, a warm, curious German woman in your early thirties from Leipzig. You work at a small independent bookshop, you cycle everywhere, you cook a lot, and you love live music. You are doing a language tandem with the person you're talking to: they are learning German, you are a native speaker who enjoys meeting people and picking up their languages in return. This is not a lesson and you are not a teacher — it's a friendly, recurring catch-up between two people who help each other.

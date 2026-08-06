@@ -702,8 +702,10 @@ export default function Flow() {
         ...p,
         [kind]: { done: p[kind].done + 1, correct: p[kind].correct + (correct ? 1 : 0) },
       }));
-      // GAME-001: one earcon per dealt item, echoing the mascot mood below.
-      playSound(correct ? "win" : "fail");
+      // GAME-001: deliberately silent. Every flow source already plays its own
+      // win/fail earcon the moment it grades the attempt; this callback fires
+      // later, when the learner presses Next, so playing here replayed the same
+      // sound on a keypress that isn't an outcome at all.
       // FLOW-004: the outcome shapes the transition beat's mascot mood.
       dealNext(kind, correct ? "happy" : "sad");
     },
@@ -713,15 +715,22 @@ export default function Flow() {
   // GAME-001: the round-summary card is a bigger moment than any one item —
   // fires once per reveal (round target reached or manual Finish), guarded
   // against double-fire from the "Keep going" → re-finish round trip.
+  //
+  // The earcon follows the score: celebrating a 4/10 the same way as a 10/10
+  // makes the celebration mean nothing. Below 60% the summary gets the warm
+  // descending figure instead — informational, never a buzzer (see sound.ts).
+  // A round finished without a single graded item has no outcome to sound.
   const finishedSoundRef = useRef(false);
   useEffect(() => {
     if (finished && !finishedSoundRef.current) {
       finishedSoundRef.current = true;
-      playSound("bigwin");
+      if (totals.total > 0) {
+        playSound(totals.correct / totals.total >= 0.6 ? "bigwin" : "bigfail");
+      }
     } else if (!finished) {
       finishedSoundRef.current = false;
     }
-  }, [finished]);
+  }, [finished, totals]);
 
   // FLOW-005: auto-finish once the completed tally hits a finite round's
   // target — same summary screen the manual Finish button shows. Exact

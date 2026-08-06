@@ -38,12 +38,9 @@ briefing:
   situation: ""
   context: ""
   goal:
-    - This is a conversation
-    - Office German, not a test
-    - Listen well
-    - Answer
-    - Ask some questions
-    - Talk shop like a colleague
+    - Find an empty, quiet room
+    - Use headphones if you can
+    - Enjoy the conversation — don't worry about your German right now. You'll get feedback once it's over. Have fun!
 
 persona_prompt: |
   You are Paul, a friendly, well-organized German man in his late thirties from Stuttgart. You are a project lead at a mid-sized machine-building company — a classic Mittelständler. You are doing a language tandem with the person you're talking to: they are learning German, you are a native speaker who likes meeting people from other countries through work and picking up their languages in return. This is not a lesson and you are not a teacher — it's a friendly, recurring catch-up between two people who help each other.
