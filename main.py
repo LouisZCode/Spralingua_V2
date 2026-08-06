@@ -20,6 +20,7 @@ from agents.load_prompts import load_prompts, load_tandem_topics, tandem_lesson_
 from auth import AuthError, decode_session_jwt, get_current_user_id, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from briefkasten import load_seeds as load_briefkasten_seeds, router as briefkasten_router
+from faelle import load_items as load_faelle_items, router as faelle_router
 from genus import (
     load_exceptions as load_genus_exceptions,
     load_items as load_genus_items,
@@ -111,6 +112,7 @@ async def lifespan(app: FastAPI):
     load_sprechen_tasks()
     load_verbindungen_items()
     load_zeitfaerbung_items()
+    load_faelle_items()
     # And for Artikel-Anker's gender rules + noun catalog — the items loader
     # cross-checks every curated noun against the ending classifier, so a
     # mistagged rule/trap aborts startup here, not mid-drag.
@@ -163,6 +165,9 @@ app.include_router(verbindungen_router)
 # Zeitfärbung (GRAM-003): war/wurde/blieb by meaning — deterministic grading,
 # no judge LLM.
 app.include_router(zeitfaerbung_router)
+# Fälle (GRAM-006 Proposal-1, "the case cluster"): six case-decision
+# patterns drilled interleaved so no single pattern lets the learner coast.
+app.include_router(faelle_router)
 # Artikel-Anker: noun gender via ending anchors — drag der/die/das onto the
 # word, then produce the carrier phrase. Deterministic grading, no judge LLM.
 app.include_router(genus_router)

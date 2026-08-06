@@ -1,0 +1,591 @@
+# Fälle item catalog (GRAM-006 Proposal-1, "the case cluster") — complete the
+# ONE gap a case decision governs: an article, a possessive, a pronoun, or a
+# preposition + article. Content-as-data; faelle/content.py validates
+# fail-loud at startup.
+#
+# Fields per item (all required):
+#   id         — stable slug
+#   pattern_id — grammar/taxonomy.yaml id (one of the six this drill targets:
+#                wechselpraepositionen | dativ-praepositionen |
+#                akkusativ-praepositionen | akkusativ-artikel | dativ-verben |
+#                pronomen-akk-dat)
+#   level      — a1 | a2
+#   frame      — the sentence with ONE ___ gap over the case-decision region;
+#                everything else is correct German the learner is NOT tested
+#                on
+#   answer     — the words that fill the gap
+#   hint       — one English line pointing at the DECISION, never the answer
+#                (never names the case for wechselpraepositionen — that IS
+#                the answer there)
+#   rule       — one line teaching the why, shown with the verdict (correct
+#                AND wrong) — this is the drill's whole teaching payload
+#
+# THE MIX IS THE MECHANISM (same design rule as Verbindungen's reflexive/
+# non-reflexive contrast): wechselpraepositionen items below split roughly
+# half accusative (movement, wohin?) / half dative (location, wo?) using the
+# SAME vocabulary in mirrored pairs — a learner who only ever sees "in +
+# Akkusativ" items learns "in = accusative", which is exactly the
+# misconception this pattern exists to kill. dativ-verben items mix the real
+# dative-only verbs (helfen, danken, gefallen, gehören, passen, schmecken,
+# folgen, antworten) with accusative-verb DECOYS (kennen, besuchen, anrufen,
+# fragen) tagged under the SAME pattern_id — recognizing that a verb does
+# NOT belong to the dative-only group is itself the skill being tested, same
+# as Verbindungen's non-reflexive decoys. akkusativ-artikel mixes masculine
+# nouns (which visibly change, der → den) with feminine/neuter/plural decoys
+# (which don't) so "just add -n to everything" never becomes a winning
+# strategy. The interleaving ACROSS these six patterns within one round is
+# enforced in code — see faelle/routes.py's MAX_PER_PATTERN / MIN_PATTERNS.
+
+items:
+  # ── wechselpraepositionen — mirrored acc/dat pairs, same vocabulary ──────
+  - id: wp-vase-01
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Ich stelle die Vase ___ Tisch."
+    answer: "auf den"
+    hint: "Does the vase move there, or is it already there?"
+    rule: "stellen = movement toward → Akkusativ. der Tisch → auf den Tisch."
+
+  - id: wp-vase-02
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Die Vase steht schon ___ Tisch."
+    answer: "auf dem"
+    hint: "Is she describing where the vase already stands, or where it's headed?"
+    rule: "stehen = no movement, just location → Dativ. der Tisch → auf dem Tisch."
+
+  - id: wp-bild-haengen-tr
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Er hängt das Bild ___ Wand."
+    answer: "an die"
+    hint: "Is the picture arriving on the wall, or was it always hanging there?"
+    rule: "hängen (transitive) = puts it there → Akkusativ. die Wand → an die Wand."
+
+  - id: wp-bild-haengt
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Das Bild hängt schon lange ___ Wand."
+    answer: "an der"
+    hint: "Nothing is being moved this time — where has it been hanging?"
+    rule: "hängen (intransitive) = just sits there → Dativ. die Wand → an der Wand."
+
+  - id: wp-kino-gehen
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Wir gehen heute Abend ___ Kino."
+    answer: "ins"
+    hint: "They're heading somewhere they aren't yet — in + das fuses into one word."
+    rule: "gehen = movement toward a destination → Akkusativ. in das → ins Kino."
+
+  - id: wp-kino-sein
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Wir sind gerade ___ Kino, der Film läuft schon."
+    answer: "im"
+    hint: "They're already inside — in + dem also fuses into one word."
+    rule: "sein + gerade = already there, no movement → Dativ. in dem → im Kino."
+
+  - id: wp-katze-springt
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Die Katze springt ___ Sofa."
+    answer: "aufs"
+    hint: "One quick jump — where does she land?"
+    rule: "springen (onto something) = movement → Akkusativ. auf das → aufs Sofa."
+
+  - id: wp-katze-schlaeft
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Die Katze schläft schon seit Stunden ___ Sofa."
+    answer: "auf dem"
+    hint: "She's been sleeping for hours — has she gone anywhere?"
+    rule: "schlafen = staying put → Dativ. das Sofa → auf dem Sofa."
+
+  - id: wp-schluessel-legen
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Ich lege den Schlüssel ___ Schublade."
+    answer: "in die"
+    hint: "The key is going somewhere it wasn't a second ago."
+    rule: "legen = putting something down → Akkusativ. die Schublade → in die Schublade."
+
+  - id: wp-schluessel-liegt
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Der Schlüssel liegt normalerweise ___ Schublade."
+    answer: "in der"
+    hint: "This describes a habit — where does it usually just sit?"
+    rule: "liegen = describing where it rests → Dativ. die Schublade → in der Schublade."
+
+  - id: wp-baum-laeuft
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Die Katze läuft schnell ___ Baum, wenn sie den Hund sieht."
+    answer: "unter den"
+    hint: "She's fleeing somewhere — is she already under it, or getting there?"
+    rule: "laufen (fleeing to a spot) = movement → Akkusativ. der Baum → unter den Baum."
+
+  - id: wp-baum-sitzt
+    pattern_id: wechselpraepositionen
+    level: a2
+    frame: "Die Katze sitzt oft stundenlang ___ Baum."
+    answer: "unter dem"
+    hint: "Where does she like to sit for hours — has she gone anywhere?"
+    rule: "sitzen unter = a fixed spot, not a move → Dativ. der Baum → unter dem Baum."
+
+  # ── dativ-praepositionen — mit/nach/bei/von/zu/aus/seit, always Dativ ────
+  - id: dp-bruder-mit
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Ich wohne mit ___ Bruder zusammen."
+    answer: "meinem"
+    hint: "This preposition never changes which case it takes — what ending does 'mein' need here?"
+    rule: "mit always takes Dativ. mein Bruder → meinem Bruder."
+
+  - id: dp-schule-nach
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Nach ___ Schule gehe ich immer einkaufen."
+    answer: "der"
+    hint: "nach is one of the fixed-case prepositions — which case do they all share?"
+    rule: "nach always takes Dativ. die Schule → der Schule."
+
+  - id: dp-eltern-bei
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Am Wochenende bin ich bei ___ Eltern."
+    answer: "meinen"
+    hint: "Plural nouns get their own dative ending too — what is it?"
+    rule: "bei always takes Dativ, and dative plural articles end in -n. meine Eltern → meinen Eltern."
+
+  - id: dp-freundin-von
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Das ist ein Geschenk von ___ Freundin."
+    answer: "meiner"
+    hint: "von is fixed-case too — what's the feminine dative ending?"
+    rule: "von always takes Dativ. meine Freundin → meiner Freundin."
+
+  - id: dp-arbeit-zu
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Ich fahre jeden Tag zu ___ Arbeit."
+    answer: "der"
+    hint: "zu never varies its case — what's the feminine dative article?"
+    rule: "zu always takes Dativ. die Arbeit → der Arbeit."
+
+  - id: dp-kueche-aus
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Der Kaffeeduft kommt aus ___ Küche."
+    answer: "der"
+    hint: "aus is fixed-case as well — same feminine ending as zu and von."
+    rule: "aus always takes Dativ. die Küche → der Küche."
+
+  - id: dp-kindheit-seit
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Seit ___ Kindheit spielt er Klavier."
+    answer: "seiner"
+    hint: "seit is part of the fixed-case group too — what ending does 'sein' take here?"
+    rule: "seit always takes Dativ. seine Kindheit → seiner Kindheit."
+
+  - id: dp-arzt-mit
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Ich habe morgen einen Termin mit ___ Arzt."
+    answer: "dem"
+    hint: "Same preposition as the very first item — what's the masculine dative article?"
+    rule: "mit always takes Dativ. der Arzt → dem Arzt."
+
+  - id: dp-konzert-nach
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Nach ___ Konzert gehen wir noch etwas essen."
+    answer: "dem"
+    hint: "Neuter and masculine share their dative article — which one is it?"
+    rule: "nach always takes Dativ. das Konzert → dem Konzert."
+
+  - id: dp-nachbarn-bei
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Die Kinder spielen bei ___ Nachbarn."
+    answer: "den"
+    hint: "Another plural noun after a fixed-case preposition — same ending as before?"
+    rule: "bei always takes Dativ; dative plural is always den + noun-n. die Nachbarn → den Nachbarn."
+
+  - id: dp-bahnhof-von
+    pattern_id: dativ-praepositionen
+    level: a2
+    frame: "Der Bus fährt von ___ Bahnhof ab."
+    answer: "dem"
+    hint: "von again — what's the masculine dative article?"
+    rule: "von always takes Dativ. der Bahnhof → dem Bahnhof."
+
+  # ── akkusativ-praepositionen — für/ohne/gegen/durch/um, always Akkusativ ─
+  - id: ap-fuer-vater
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Das Geschenk ist für ___ Vater."
+    answer: "meinen"
+    hint: "für is fixed-case — what's the masculine ending for 'mein' here?"
+    rule: "für always takes Akkusativ. mein Vater → meinen Vater."
+
+  - id: ap-ohne-schwester
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Ich gehe nicht ohne ___ Schwester."
+    answer: "meine"
+    hint: "ohne is fixed-case too, even where the ending doesn't visibly move — which case is it?"
+    rule: "ohne always takes Akkusativ; feminine 'meine' stays the same there. meine Schwester → meine Schwester."
+
+  - id: ap-gegen-mann
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Er kämpft gegen ___ Mann im Ring."
+    answer: "den"
+    hint: "gegen is fixed-case — what's the masculine accusative article?"
+    rule: "gegen always takes Akkusativ. der Mann → den Mann."
+
+  - id: ap-durch-park
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Wir laufen durch ___ Park."
+    answer: "den"
+    hint: "durch never varies its case — same masculine ending as before?"
+    rule: "durch always takes Akkusativ. der Park → den Park."
+
+  - id: ap-um-tisch
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Die Kinder sitzen um ___ Tisch."
+    answer: "den"
+    hint: "um is fixed-case too — masculine accusative again."
+    rule: "um always takes Akkusativ. der Tisch → den Tisch."
+
+  - id: ap-fuer-kind
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Das Spielzeug ist für ___ Kind."
+    answer: "das"
+    hint: "Neuter nouns don't visibly change in this case — but which one is it?"
+    rule: "für always takes Akkusativ, though neuter 'das' looks the same there. das Kind → das Kind."
+
+  - id: ap-ohne-handy
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Ich fahre nie ohne ___ Handy."
+    answer: "mein"
+    hint: "Another neuter noun, no visible change — same reasoning as before."
+    rule: "ohne always takes Akkusativ; neuter 'mein' stays the same there. mein Handy → mein Handy."
+
+  - id: ap-gegen-wand
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Der Ball fliegt gegen ___ Wand."
+    answer: "die"
+    hint: "Feminine nouns don't visibly change in this case either — which article is it?"
+    rule: "gegen always takes Akkusativ; feminine 'die' stays the same there. die Wand → die Wand."
+
+  - id: ap-durch-wald
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Sie joggt jeden Morgen durch ___ Wald."
+    answer: "den"
+    hint: "durch again — same masculine ending?"
+    rule: "durch always takes Akkusativ. der Wald → den Wald."
+
+  - id: ap-um-see
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Wir gehen einmal um ___ See."
+    answer: "den"
+    hint: "um again — masculine accusative, same as before?"
+    rule: "um always takes Akkusativ. der See → den See."
+
+  - id: ap-fuer-freundin
+    pattern_id: akkusativ-praepositionen
+    level: a2
+    frame: "Die Blumen sind für ___ Freundin."
+    answer: "meine"
+    hint: "für again, but feminine — does the ending visibly move here?"
+    rule: "für always takes Akkusativ; feminine 'meine' stays the same there. meine Freundin → meine Freundin."
+
+  # ── akkusativ-artikel — masculine der/ein → den/einen, MIXED with ───────
+  # ── feminine/neuter/plural decoys (unchanged in Akkusativ) ──────────────
+  - id: aa-mann-sehen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich sehe ___ Mann dort drüben."
+    answer: "den"
+    hint: "Is 'der Mann' doing the seeing, or is he the one being seen?"
+    rule: "Direct object, masculine → den. der Mann → den Mann."
+
+  - id: aa-frau-sehen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich sehe ___ Frau dort drüben."
+    answer: "die"
+    hint: "Same sentence pattern as before — but does a feminine article actually change here?"
+    rule: "Direct object, but feminine 'die' doesn't change in Akkusativ. die Frau → die Frau."
+
+  - id: aa-kaffee-bestellen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich bestelle ___ Kaffee."
+    answer: "einen"
+    hint: "Is the coffee ordering itself, or is someone ordering it?"
+    rule: "Direct object, masculine → einen. der Kaffee → einen Kaffee."
+
+  - id: aa-wasser-bestellen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich bestelle ___ Wasser."
+    answer: "das"
+    hint: "Same verb as before — does a neuter article change here?"
+    rule: "Direct object, but neuter 'das' doesn't change in Akkusativ. das Wasser → das Wasser."
+
+  - id: aa-film-moegen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich mag ___ Film sehr."
+    answer: "den"
+    hint: "What's being liked here — the film, or is the film doing the liking?"
+    rule: "Direct object, masculine → den. der Film → den Film."
+
+  - id: aa-buch-lesen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich lese ___ Buch."
+    answer: "das"
+    hint: "Another neuter direct object — visible change or not?"
+    rule: "Direct object, but neuter 'das' doesn't change in Akkusativ. das Buch → das Buch."
+
+  - id: aa-hund-haben
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Wir haben ___ Hund."
+    answer: "einen"
+    hint: "Same pattern as the coffee — masculine indefinite article as a direct object."
+    rule: "Direct object, masculine → einen. der Hund → einen Hund."
+
+  - id: aa-katze-haben
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Wir haben ___ Katze."
+    answer: "eine"
+    hint: "Feminine this time — does 'eine' change from nominative to accusative?"
+    rule: "Direct object, but feminine 'eine' doesn't change in Akkusativ. eine Katze → eine Katze."
+
+  - id: aa-tisch-kaufen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Wir kaufen ___ Tisch."
+    answer: "einen"
+    hint: "Another masculine direct object — same ending as 'Hund' and 'Kaffee'."
+    rule: "Direct object, masculine → einen. der Tisch → einen Tisch."
+
+  - id: aa-kinder-sehen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich sehe ___ Kinder im Park spielen."
+    answer: "die"
+    hint: "Plural this time — do plural articles shift for this case either?"
+    rule: "Direct object, but plural 'die' doesn't change in Akkusativ. die Kinder → die Kinder."
+
+  - id: aa-freund-anrufen
+    pattern_id: akkusativ-artikel
+    level: a1
+    frame: "Ich rufe ___ Freund heute Abend an."
+    answer: "meinen"
+    hint: "Masculine possessive as a direct object — same shift as 'der' → 'den'."
+    rule: "Direct object, masculine → meinen. mein Freund → meinen Freund."
+
+  # ── dativ-verben — helfen/danken/gefallen/gehören/passen/schmecken/ ─────
+  # ── folgen/antworten, MIXED with accusative-verb decoys (kennen/ ────────
+  # ── besuchen/anrufen/fragen) tagged under the SAME pattern_id ───────────
+  - id: dv-helfen-mutter
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Ich helfe ___ Mutter im Haushalt."
+    answer: "meiner"
+    hint: "helfen doesn't take a direct object the normal way — what case does it want instead?"
+    rule: "helfen takes Dativ, not Akkusativ. meine Mutter → meiner Mutter."
+
+  - id: dv-danken-lehrer
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Wir danken ___ Lehrer für die Geduld."
+    answer: "dem"
+    hint: "danken behaves like helfen — same case family."
+    rule: "danken takes Dativ, not Akkusativ. der Lehrer → dem Lehrer."
+
+  - id: dv-gefallen-freundin
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Die Stadt gefällt ___ Freundin sehr gut."
+    answer: "meiner"
+    hint: "Here the city is the one doing the pleasing — who receives that?"
+    rule: "gefallen takes Dativ, not Akkusativ. meine Freundin → meiner Freundin."
+
+  - id: dv-gehoeren-kind
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Das Buch gehört ___ Kind."
+    answer: "dem"
+    hint: "gehören is another member of this small dative-only group."
+    rule: "gehören takes Dativ, not Akkusativ. das Kind → dem Kind."
+
+  - id: dv-passen-schwester
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Die Schuhe passen ___ Schwester nicht."
+    answer: "meiner"
+    hint: "passen (to fit) works just like gefallen — who do the shoes fit here?"
+    rule: "passen takes Dativ, not Akkusativ. meine Schwester → meiner Schwester."
+
+  - id: dv-schmecken-kindern
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Die Suppe schmeckt ___ Kindern nicht."
+    answer: "den"
+    hint: "schmecken (to taste good to someone) is dative too — and plural dative has its own ending."
+    rule: "schmecken takes Dativ; dative plural is den + noun-n. die Kinder → den Kindern."
+
+  - id: dv-folgen-besitzer
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Der Hund folgt ___ Besitzer überallhin."
+    answer: "seinem"
+    hint: "folgen (to follow) is dative too, unlike most action verbs."
+    rule: "folgen takes Dativ, not Akkusativ. sein Besitzer → seinem Besitzer."
+
+  - id: dv-antworten-chef
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Sie antwortet ___ Chef sofort."
+    answer: "ihrem"
+    hint: "antworten is dative too — one of the last of this small group."
+    rule: "antworten takes Dativ, not Akkusativ. ihr Chef → ihrem Chef."
+
+  - id: dv-kennen-decoy
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Ich kenne ___ Lehrer schon lange."
+    answer: "den"
+    hint: "This verb only LOOKS like it belongs with helfen and danken — does it take the same case?"
+    rule: "kennen is a normal Akkusativ verb, unlike helfen/danken/gefallen. der Lehrer → den Lehrer."
+
+  - id: dv-besuchen-decoy
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Wir besuchen ___ Onkel am Sonntag."
+    answer: "unseren"
+    hint: "Visiting someone sounds dative-ish, but is besuchen actually in that small group?"
+    rule: "besuchen is a normal Akkusativ verb, unlike gehören/passen/folgen. unser Onkel → unseren Onkel."
+
+  - id: dv-anrufen-decoy
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Ich rufe ___ Bruder heute Abend an."
+    answer: "meinen"
+    hint: "anrufen is a classic trap — it sounds dative-flavored but isn't."
+    rule: "anrufen is a normal Akkusativ verb, not part of the dative-verb group. mein Bruder → meinen Bruder."
+
+  - id: dv-fragen-decoy
+    pattern_id: dativ-verben
+    level: a2
+    frame: "Ich frage ___ Frau nach dem Weg."
+    answer: "die"
+    hint: "fragen someone (for directions) — is that verb in the dative-verb group, or not?"
+    rule: "fragen is a normal Akkusativ verb, not part of the dative-verb group. die Frau → die Frau."
+
+  # ── pronomen-akk-dat — mich/dich/ihn (Akk) vs. mir/dir/ihm (Dat) ────────
+  - id: pad-anrufen-mich
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Kannst du ___ morgen anrufen?"
+    answer: "mich"
+    hint: "anrufen takes a direct object — which pronoun form is that?"
+    rule: "anrufen + Akkusativ. ich → mich."
+
+  - id: pad-helfen-mir
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Kannst du ___ bitte helfen?"
+    answer: "mir"
+    hint: "helfen is one of the verbs that never takes a direct object — which form does it want?"
+    rule: "helfen + Dativ. ich → mir."
+
+  - id: pad-sehen-dich
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Ich sehe ___ morgen in der Uni."
+    answer: "dich"
+    hint: "sehen takes a direct object — same family as anrufen."
+    rule: "sehen + Akkusativ. du → dich."
+
+  - id: pad-danken-dir
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Ich danke ___ für deine Hilfe."
+    answer: "dir"
+    hint: "danken behaves like helfen — which pronoun form?"
+    rule: "danken + Dativ. du → dir."
+
+  - id: pad-fragen-mich
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Warum fragst du ___ das nicht selbst?"
+    answer: "mich"
+    hint: "fragen takes a direct object, even though it's about getting information."
+    rule: "fragen + Akkusativ. ich → mich."
+
+  - id: pad-gefallen-mir
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Das neue Café gefällt ___ sehr."
+    answer: "mir"
+    hint: "The café is doing the pleasing here — who receives it, in this case?"
+    rule: "gefallen + Dativ. ich → mir."
+
+  - id: pad-besuchen-dich
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Wir besuchen ___ am Wochenende."
+    answer: "dich"
+    hint: "besuchen takes a direct object — same as sehen and anrufen."
+    rule: "besuchen + Akkusativ. du → dich."
+
+  - id: pad-mit-mir
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Kommst du heute Abend mit ___ ins Kino?"
+    answer: "mir"
+    hint: "This preposition is always dative, no matter which pronoun follows."
+    rule: "mit + Dativ. ich → mir."
+
+  - id: pad-kennen-ihn
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Ich kenne ___ schon seit der Schule."
+    answer: "ihn"
+    hint: "kennen takes a direct object — which pronoun form does 'er' become?"
+    rule: "kennen + Akkusativ. er → ihn."
+
+  - id: pad-antworten-ihm
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Sie antwortet ___ nicht mehr."
+    answer: "ihm"
+    hint: "antworten is in the small dative-only group — which pronoun form does 'er' become?"
+    rule: "antworten + Dativ. er → ihm."
+
+  - id: pad-verstehen-mich
+    pattern_id: pronomen-akk-dat
+    level: a1
+    frame: "Verstehst du ___ jetzt besser?"
+    answer: "mich"
+    hint: "verstehen takes a direct object — same pattern as sehen and fragen."
+    rule: "verstehen + Akkusativ. ich → mich."
