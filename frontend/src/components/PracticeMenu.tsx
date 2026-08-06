@@ -317,6 +317,15 @@ export default function PracticeMenu() {
             body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
             cta="Pick the verb"
           />
+          <ModeCard
+            href="/briefkasten"
+            accent="gold"
+            icon="mail"
+            kicker="Briefkasten"
+            title="Letter Writing"
+            body="A letter arrives — reply in German. Hints first, then corrections, then how a German would really say it."
+            cta="Write back"
+          />
         </div>
 
         <Link
@@ -481,7 +490,8 @@ type ModeIconName =
   | "palette"
   | "infinity"
   | "circles"
-  | "bulb";
+  | "bulb"
+  | "mail";
 
 function ModeIcon({ name }: { name: ModeIconName }) {
   const common = {
@@ -597,6 +607,15 @@ function ModeIcon({ name }: { name: ModeIconName }) {
       <svg {...common}>
         <path d="M9 18h6M10 21h4" />
         <path d="M12 3a6 6 0 0 1 3.6 10.8c-.7.5-1.1 1.3-1.1 2.2H9.5c0-.9-.4-1.7-1.1-2.2A6 6 0 0 1 12 3Z" />
+      </svg>
+    );
+  }
+  if (name === "mail") {
+    // envelope — "a letter arrives, you write back"
+    return (
+      <svg {...common}>
+        <rect x="3" y="5.5" width="18" height="13" rx="2" />
+        <path d="m3.5 6.5 8.5 7 8.5-7" />
       </svg>
     );
   }

@@ -19,6 +19,7 @@ from pipecat.processors.aggregators.llm_context import LLMContext
 from agents.load_prompts import load_prompts, load_tandem_topics, tandem_lesson_ids
 from auth import AuthError, decode_session_jwt, get_current_user_id, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
+from briefkasten import load_seeds as load_briefkasten_seeds, router as briefkasten_router
 from genus import (
     load_exceptions as load_genus_exceptions,
     load_items as load_genus_items,
@@ -119,6 +120,10 @@ async def lifespan(app: FastAPI):
     # And for Szenario-Sparring's scenario catalog (P1, thin slice) — same
     # fail-loud rule as the grammar-exercise catalogs above.
     load_szenario_scenarios()
+    # And for Briefkasten's letter seeds — same rule again. A seed is only a
+    # situation (the German is written per request), so what's validated here
+    # is the shape the writer and both judges depend on.
+    load_briefkasten_seeds()
     yield
     # Graceful drain: let in-flight pipelines finalize their DB rows before the
     # engine is disposed (a redeploy mid-session otherwise orphans them).
@@ -164,6 +169,9 @@ app.include_router(genus_router)
 # Szenario-Sparring (P1, thin slice): in-character question, one spoken
 # answer, structure-only judge + silent grammar-ledger credit.
 app.include_router(szenario_router)
+# Briefkasten: a letter arrives, the learner writes back — hints on the first
+# draft, corrections + score on the revision. The one written production mode.
+app.include_router(briefkasten_router)
 # Cross-drill practice stats (DATA-004): GET /me/stats.
 app.include_router(stats_router)
 

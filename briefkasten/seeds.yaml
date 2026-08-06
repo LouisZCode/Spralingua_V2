@@ -1,0 +1,188 @@
+# Briefkasten — the seed pool.
+#
+# A seed is the SITUATION, never the letter. `briefkasten/writer.py` writes
+# the actual German at request time, weaving in the learner's own deck words
+# (CONT-002), so the same seed never produces the same letter twice.
+#
+# `register` is a real parameter, not decoration: informal seeds use "du" and
+# everyday German, formal seeds use "Sie" and real Behörden/Geschäft register.
+# The writer, both judges, and the "how would a German write this" pass all
+# read it. Ship both — a learner who only ever writes to friends never learns
+# the register they actually need for a Mietvertrag or an Amt.
+#
+# `level` drives the word target (briefkasten/content.py::WORD_TARGETS), which
+# is what the learner is asked to write and what the score is judged against.
+#
+# `points` are ENGLISH — they are instructions to the learner, not content of
+# the letter. Exactly 4, each one concretely checkable, because the hint judge
+# reports per-point coverage back as a checklist.
+
+seeds:
+  # ---------------------------------------------------------------- informal
+  - id: katrin-umzug
+    register: informal
+    level: a2
+    sender:
+      name: Katrin
+      relation: an old friend who has just moved to Hamburg
+    situation: >
+      She has finally moved into her new flat in Hamburg after a chaotic
+      week of boxes and paperwork. The flat is smaller than she hoped but
+      the neighbourhood is lovely. She misses her old circle and wants to
+      hear what you have been up to.
+    points:
+      - Congratulate her on the new flat
+      - Tell her how your own week has been
+      - Ask two questions about Hamburg
+      - Suggest when you could come and visit
+
+  - id: jonas-geburtstag
+    register: informal
+    level: a1
+    sender:
+      name: Jonas
+      relation: a friend from your German course
+    situation: >
+      He is turning thirty next month and is planning a small party at his
+      place on a Saturday. He is not sure yet how many people are coming or
+      what food to make, and he would like you to be there.
+    points:
+      - Thank him for the invitation
+      - Say whether you can come
+      - Ask what you should bring
+      - Ask who else will be there
+
+  - id: tandem-partnerin
+    register: informal
+    level: a2
+    sender:
+      name: Svenja
+      relation: someone you were matched with on a language-exchange app
+    situation: >
+      This is her first message to you. She is learning your language, works
+      as a nurse in Leipzig, and has an irregular shift schedule. She wants
+      to introduce herself and work out how the two of you could practise
+      together every week.
+    points:
+      - Introduce yourself briefly
+      - Say why you are learning German
+      - Tell her when you are usually free
+      - Ask her something about her work
+
+  - id: wg-mitbewohner
+    register: informal
+    level: b1
+    sender:
+      name: Tobias
+      relation: your former flatmate, now living in Vienna
+    situation: >
+      He has landed a job in Vienna and is slowly settling in, though the
+      Austrian German still catches him out. He has found an old box of your
+      things in his cellar and wants to know what to do with it. He is also
+      a little homesick and in the mood for a proper catch-up.
+    points:
+      - React to his news about the job
+      - Say what he should do with your box
+      - Tell him about a change in your own life
+      - Ask how he is finding Vienna
+
+  - id: reise-einladung
+    register: informal
+    level: b1
+    sender:
+      name: Miriam
+      relation: a friend who organises a hiking trip every year
+    situation: >
+      She is organising this year's trip — four days in the Black Forest in
+      September, six people so far, sharing a holiday flat. She needs to book
+      soon and wants to know if you are in. She also remembers that you were
+      not thrilled with last year's route.
+    points:
+      - Say whether you want to come
+      - Give a reason for your answer
+      - Say what you would prefer to do differently this time
+      - Ask about the cost and what to pack
+
+  - id: alte-kollegin
+    register: informal
+    level: b1
+    sender:
+      name: Anja
+      relation: a former colleague who has changed careers
+    situation: >
+      She has quit her office job and retrained as a carpenter. She is much
+      happier but earning less and still doubts the decision on bad days. She
+      is curious whether you have ever thought about changing direction too.
+    points:
+      - React to her career change
+      - Say what you think about her decision
+      - Tell her whether you have ever considered something similar
+      - Ask how her family reacted
+
+  - id: nachbarin-pflanzen
+    register: informal
+    level: a2
+    sender:
+      name: Beate
+      relation: your neighbour from the flat downstairs
+    situation: >
+      She is going away for three weeks and would like you to water her
+      plants and take in her post. She has left a key with the caretaker and
+      wants to explain the details before she leaves on Friday.
+    points:
+      - Say whether you can help
+      - Ask what exactly you need to do
+      - Ask how to reach her while she is away
+      - Wish her a good trip
+
+  # ------------------------------------------------------------------ formal
+  - id: vermieter-termin
+    register: formal
+    level: b1
+    sender:
+      name: Herr Wagner
+      relation: your landlord
+    situation: >
+      The heating in your flat has been reported as faulty. He has arranged
+      for a technician to come on Tuesday between 8 and 12, and needs to know
+      whether someone will be at home. If not, he asks you to propose two
+      alternative dates in the next two weeks.
+    points:
+      - Confirm that you received his letter
+      - Say whether Tuesday works for you
+      - Propose two alternative dates
+      - Ask to be told the technician's name in advance
+
+  - id: vhs-kurs
+    register: formal
+    level: a2
+    sender:
+      name: Frau Dr. Lehmann
+      relation: the course office at the Volkshochschule
+    situation: >
+      Your German course place is confirmed, but the course has been moved
+      from Wednesday evening to Monday morning, which clashes with your work.
+      The office asks you to confirm your place or say what you would like to
+      do instead. Payment is due within two weeks.
+    points:
+      - Thank her for the confirmation
+      - Explain why Monday morning is a problem for you
+      - Ask whether an evening group is still available
+      - Ask about the payment deadline
+
+  - id: versicherung-unterlagen
+    register: formal
+    level: b2
+    sender:
+      name: Herr Özdemir
+      relation: a caseworker at your insurance company
+    situation: >
+      Your claim cannot be processed because two documents are missing and a
+      date on your form contradicts the one in an earlier letter. He needs the
+      missing documents within fourteen days, otherwise the file will be
+      closed, and asks you to clarify the discrepancy.
+    points:
+      - Apologise for the incomplete documents
+      - Explain how the wrong date came about
+      - Say when you will send the missing documents
+      - Ask what happens if the deadline cannot be met
