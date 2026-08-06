@@ -200,8 +200,15 @@ export default function PracticeMenu() {
           />
         </div>
 
+        {/* MVP-001: the four core exercises, and only these four. Every other
+            drill still exists and still runs — it is reached from the dev
+            block at the bottom of /development, and, for the single-grammar
+            ones, from inside the Flow, which is where a learner meets them.
+            Two columns rather than three: four cards divide evenly, and the
+            extra width is what makes these read as the whole product rather
+            than the first row of a longer list. */}
         <div
-          className="rise-in mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
+          className="rise-in mt-10 grid gap-6 sm:grid-cols-2"
           style={{ animationDelay: "120ms" }}
         >
           <ModeCard
@@ -219,7 +226,7 @@ export default function PracticeMenu() {
             icon="infinity"
             kicker="alle Übungen · endlos"
             title="Flow"
-            body="One stream, every exercise — words, endings, chunks, verb forms, articles, speaking — dealt one at a time until you say stop."
+            body="One stream, every exercise — words, endings, chunks, verb forms, articles, cases, clauses, speaking — dealt one at a time until you say stop."
             cta="Go with the flow"
           />
           <ModeCard
@@ -230,92 +237,6 @@ export default function PracticeMenu() {
             title="Tandem Partner"
             body="Daily German chat with Lena or Paul — everyday German or office German. Each remembers your talks and gently fixes the grammar you keep missing."
             cta="Meet your partners"
-          />
-        </div>
-
-        {/* The rest of the modes — a beat of space below the top three. */}
-        <div
-          className="rise-in mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
-          style={{ animationDelay: "160ms" }}
-        >
-          <ModeCard
-            href="/teacher"
-            accent="red"
-            icon="bulb"
-            kicker="Your teacher · in English"
-            title="Ask the Teacher"
-            body="Don't understand why? Clara explains the German you keep getting wrong — simply, in English, one thing at a time."
-            cta="Ask Clara"
-          />
-          <ModeCard
-            href="/genus"
-            accent="gold"
-            icon="circles"
-            kicker="der · die · das"
-            title="Artikel-Anker"
-            body="Drag the color onto the ending — most endings give the gender away. Then prove it: eine neue Wohnung."
-            cta="Drag the article"
-          />
-          <ModeCard
-            href="/learn"
-            accent="red"
-            icon="mic"
-            title="Conversation Practice"
-            body="Real-time voice conversations with your AI partner — the scenario lessons you already know."
-            cta="Start talking"
-          />
-          <ModeCard
-            href="/bauteil"
-            accent="red"
-            icon="blocks"
-            kicker="Bauteil-Sätze"
-            title="Declension Practice"
-            body="Raw parts in — ein · gut · Job — the right endings out. Read the sentence, spot the case, and put the flag where it belongs."
-            cta="Start building"
-          />
-          <ModeCard
-            href="/sprechen"
-            accent="gold"
-            icon="wave"
-            kicker="Sprechen"
-            title="Speaking Drills"
-            body="Constrained speaking tasks that trap the structure — use weil twice, front every sentence — then see what you actually said."
-            cta="Start speaking"
-          />
-          <ModeCard
-            href="/verbformen"
-            accent="ink"
-            icon="clock"
-            kicker="Verbformen"
-            title="Past-Tense Verbs"
-            body="Drill the spoken past of your own verbs — ist gefahren, hat gedacht, war, wollte — until the forms come without thinking."
-            cta="Drill your verbs"
-          />
-          <ModeCard
-            href="/verbindungen"
-            accent="red"
-            icon="link"
-            kicker="Feste Verbindungen"
-            title="Verb Chunks"
-            body="sich freuen auf, warten auf, denken an — complete the chunk: pronoun, preposition, case. Mixed, so nothing is predictable."
-            cta="Fill the gaps"
-          />
-          <ModeCard
-            href="/szenario"
-            accent="gold"
-            icon="target"
-            title="Szenario-Sparring"
-            body="Answer unpredictable questions with clear structure."
-            cta="Step into the scene"
-          />
-          <ModeCard
-            href="/zeitfaerbung"
-            accent="ink"
-            icon="palette"
-            kicker="war · wurde · blieb"
-            title="Zeitfärbung"
-            body="Same blank, different meaning — war, wurde, or blieb? Pick the Präteritum verb that fits what actually happened."
-            cta="Pick the verb"
           />
           <ModeCard
             href="/briefkasten"

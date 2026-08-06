@@ -162,8 +162,63 @@ export default function Development() {
             {sessions.length > 0 && <RecentSessionsCard sessions={sessions} />}
           </div>
         )}
+
+        {/* MVP-001: every drill that no longer has a card on /practice. It
+            sits OUTSIDE the stats conditional on purpose — a backend that
+            can't serve stats is exactly when you want to open a drill and
+            find out why. Collapsed by default; nothing here is part of the
+            learner's path. */}
+        <AllExercisesCard />
       </main>
     </div>
+  );
+}
+
+// ─── Dev-only drill index (MVP-001). ──────────────────────────────────────
+//
+// /practice shows four exercises. The rest still exist, still run, and are
+// still reachable — the single-grammar ones are how the Flow is built, so
+// they have to stay individually testable. This is that door.
+const HIDDEN_EXERCISES: { href: string; name: string; note: string }[] = [
+  { href: "/faelle", name: "Fälle", note: "case cluster — in Flow" },
+  { href: "/satzbau", name: "Satzbau", note: "clause builder — in Flow" },
+  { href: "/bauteil", name: "Bauteil-Sätze", note: "declension — in Flow" },
+  { href: "/verbindungen", name: "Feste Verbindungen", note: "chunks — in Flow" },
+  { href: "/zeitfaerbung", name: "Zeitfärbung", note: "Präteritum — in Flow" },
+  { href: "/verbformen", name: "Verbformen", note: "past forms — in Flow" },
+  { href: "/genus", name: "Artikel-Anker", note: "der/die/das — in Flow" },
+  { href: "/sprechen", name: "Sprechen", note: "speaking drills — in Flow" },
+  { href: "/szenario", name: "Szenario-Sparring", note: "dormant" },
+  { href: "/learn", name: "Conversation Practice", note: "dormant" },
+];
+
+function AllExercisesCard() {
+  return (
+    <details className="mt-10 rounded-[28px] border-[3px] border-ink-faint bg-paper-warm p-6">
+      <summary className="cursor-pointer list-none font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+        All exercises · dev
+      </summary>
+      <p className="mt-3 font-body text-[13px] leading-relaxed text-ink-soft">
+        Every drill, including the ones without a card on the practice menu.
+        The ones marked <em>in Flow</em> are what the Flow deals from.
+      </p>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {HIDDEN_EXERCISES.map((ex) => (
+          <Link
+            key={ex.href}
+            href={ex.href}
+            className="flex items-baseline justify-between gap-3 rounded-2xl border-[3px] border-ink bg-white px-4 py-2.5 transition-colors hover:bg-flag-gold-soft"
+          >
+            <span className="font-display text-[14px] font-black tracking-tight text-ink">
+              {ex.name}
+            </span>
+            <span className="font-body text-[11px] font-semibold text-ink-faint">
+              {ex.note}
+            </span>
+          </Link>
+        ))}
+      </div>
+    </details>
   );
 }
 
