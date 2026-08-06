@@ -22,6 +22,8 @@ runs to completion without interleaving; that's why plain dicts are safe here.
 import time
 from collections import deque
 
+from loguru import logger
+
 from config.settings import (
     allowed_origins,
     demo_max_concurrent,
@@ -57,6 +59,24 @@ _say_last_by_user: dict[str, float] = {}        # user_id -> monotonic time of l
 GLOSS_MAX_PER_USER_PER_WINDOW = 30
 GLOSS_WINDOW_S = 60.0
 _gloss_by_user: dict[str, deque] = {}    # user_id -> timestamps of recent fresh-LLM glosses
+
+# Paid drill /attempts (and /nudge, /explain) routes: each call fires Deepgram
+# transcription and/or a judge LLM, so an uncapped signed-in user can loop them
+# for an uncapped cost-DoS. Cost is fungible across drills -- a scripted abuser
+# doesn't care which endpoint burns the budget -- so this is ONE shared cap per
+# user, not one per route. Two windows on the same deque, sized off the actual
+# per-item cost rather than per-call: the decorative vocab-nudge fires once per
+# item alongside the attempt itself, so a single drill item can burn two calls
+# against this budget. 90/min is 45 items a minute -- roughly one item every
+# 1.3s sustained -- above any human, but still a hard ceiling on a scripted
+# loop. 2000/hour is ~1000 items an hour; a genuinely fast learner drilling for
+# a solid hour lands near 1200 calls, so the cap sits clear of real practice
+# while bounding a runaway script to a knowable cost.
+DRILL_MAX_PER_USER_PER_MIN = 90
+DRILL_WINDOW_S = 60.0
+DRILL_MAX_PER_USER_PER_HOUR = 2000
+DRILL_HOUR_WINDOW_S = 3600.0
+_drill_by_user: dict[str, deque] = {}    # user_id -> timestamps of recent paid drill calls (shared across all drill routes)
 
 # Opportunistic memory reclaim so a long-running process under IP-rotation abuse
 # doesn't accumulate dead per-IP entries forever.
@@ -98,6 +118,11 @@ def _maybe_prune(now: float) -> None:
         _evict(dq, now, GLOSS_WINDOW_S)
         if not dq:
             del _gloss_by_user[user_id]
+    for user_id in list(_drill_by_user.keys()):
+        dq = _drill_by_user[user_id]
+        _evict(dq, now, DRILL_HOUR_WINDOW_S)
+        if not dq:
+            del _drill_by_user[user_id]
 
 
 def client_ip(conn) -> str:
@@ -250,4 +275,41 @@ def gloss_try_admit(user_id: str) -> bool:
     if len(hits) >= GLOSS_MAX_PER_USER_PER_WINDOW:
         return False
     hits.append(now)
+    return True
+
+
+def drill_try_admit(user_id: str) -> bool:
+    """Sliding-window admit for a paid drill call (STT and/or judge LLM),
+    shared across ALL drill routes for `user_id` -- see the module-level
+    comment above `_drill_by_user` for why the budget is shared and how the
+    per-minute and per-hour limits were sized.
+
+    One deque per user holds every call inside the hour window; the minute
+    check counts how many of those timestamps fall inside the last
+    `DRILL_WINDOW_S` seconds. Returns False (no timestamp recorded) if either
+    window is already exhausted.
+    """
+    # Both windows are calibrated against estimated human pace (see the
+    # module-level comment above), not measured field data -- a warning here
+    # on every rejection is the only way to find out later that a real
+    # learner, not a script, tripped the cap and the calibration is wrong.
+    now = time.monotonic()
+    _maybe_prune(now)
+    dq = _drill_by_user.setdefault(user_id, deque())
+    _evict(dq, now, DRILL_HOUR_WINDOW_S)
+    minute_cutoff = now - DRILL_WINDOW_S
+    minute_count = sum(1 for t in dq if t >= minute_cutoff)
+    if minute_count >= DRILL_MAX_PER_USER_PER_MIN:
+        logger.warning(
+            "drill_try_admit: minute window exhausted for user_id={} ({}/{} in {}s)",
+            user_id, minute_count, DRILL_MAX_PER_USER_PER_MIN, DRILL_WINDOW_S,
+        )
+        return False
+    if len(dq) >= DRILL_MAX_PER_USER_PER_HOUR:
+        logger.warning(
+            "drill_try_admit: hour window exhausted for user_id={} ({}/{} in {}s)",
+            user_id, len(dq), DRILL_MAX_PER_USER_PER_HOUR, DRILL_HOUR_WINDOW_S,
+        )
+        return False
+    dq.append(now)
     return True

@@ -29,6 +29,7 @@ from database.orm import UserCard, UserVerbformen, VocabCard
 from database.repository import record_drill_attempt, record_grammar_error
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.scheduler import lapse_interval, schedule
+from security import drill_try_admit
 
 router = APIRouter(prefix="/verbformen", tags=["verbformen"])
 
@@ -138,6 +139,11 @@ async def submit_attempt(
     """Judge one spoken past form — the satz pipeline end to end (transcribe →
     examine → verdict), with the schedule written to the ``user_verbformen``
     overlay instead of the shared pool row."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     row = (
         await db.execute(_deck_row_query(user_id).where(VocabCard.id == card_id))
     ).first()

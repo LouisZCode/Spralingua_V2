@@ -50,6 +50,7 @@ from genus.content import (
 )
 from genus.judge import GenderVerdict, judge_gender
 from genus.nudge import suggest_vocab
+from security import drill_try_admit
 from vocab_nudge import filter_picks, load_deck
 
 router = APIRouter(prefix="/genus", tags=["genus"])
@@ -525,6 +526,11 @@ async def submit_attempt(
 ):
     """Grade one beat deterministically, log it, return the verdict (+ the
     anchor scene — only now: shipping it with the round would answer beat 1)."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     item = await _resolve_item(db, user_id, body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
@@ -698,6 +704,11 @@ async def vocab_nudge(
     Decorative by contract — every failure path (empty deck, judge outage,
     hallucinated picks) returns ``{"words": []}``, never an error the drill
     would have to handle. Nothing here is an attempt: no DATA-004 row."""
+    # The shared drill budget covers this route too (it makes a judge call),
+    # but the decorative contract above outranks the 429: a throttled learner
+    # gets no pill, never an error the drill would have to handle.
+    if not drill_try_admit(user_id):
+        return {"words": []}
     item = await _resolve_item(db, user_id, body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")

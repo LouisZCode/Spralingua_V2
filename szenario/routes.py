@@ -25,6 +25,7 @@ from auth.deps import get_current_user_id
 from database.connection import get_sessionmaker
 from database.repository import record_drill_attempt, record_grammar_error
 from satz.examiner import transcribe_attempt
+from security import drill_try_admit
 from szenario.content import load_scenarios
 from szenario.judge import judge_structure
 
@@ -190,6 +191,11 @@ async def submit_attempt(
     grammar ledger, return transcript + structure verdict. Grammar never
     reaches this response — it's a separate, invisible harvest that now runs
     in the background (TASK 4), off the response's critical path."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     scenario = load_scenarios().get(scenarioId)
     if scenario is None:
         raise HTTPException(status_code=404, detail="Unknown scenario.")

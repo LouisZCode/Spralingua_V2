@@ -28,6 +28,7 @@ from database.repository import (
     record_grammar_error,
 )
 from drills.forge import backfill_missing
+from security import drill_try_admit
 from verbindungen.content import TARGET_PATTERNS, load_items
 from verbindungen.judge import judge_chunk
 
@@ -153,6 +154,11 @@ async def submit_attempt(
 ):
     """Judge one typed chunk completion, feed the ledger, return the verdict
     + the canonical chunk to memorize (only now — it would answer the item)."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     item = load_items().get(body.item_id)
     if item is None:
         # CONT-002: personal forged items live in user_drill_items, keyed by

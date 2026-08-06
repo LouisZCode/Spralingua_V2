@@ -30,6 +30,7 @@ from database.repository import (
     record_grammar_error,
 )
 from satz.examiner import transcribe_attempt
+from security import drill_try_admit
 from sprechen.content import TARGET_PATTERNS, load_tasks
 from sprechen.judge import judge_spoken
 from sprechen.nudge import suggest_vocab
@@ -164,6 +165,11 @@ async def submit_attempt(
     """Transcribe one spoken clip, judge constraint + target structure, feed
     the ledger, return transcript + verdict (the raw transcript is part of
     the format — seeing what you actually said is the exercise)."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     task = load_tasks().get(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")
@@ -396,6 +402,11 @@ async def vocab_nudge(
     Decorative by contract — every failure path (empty deck, judge outage,
     hallucinated picks) returns ``{"words": []}``, never an error the drill
     would have to handle. Nothing here is an attempt: no DATA-004 row."""
+    # The shared drill budget covers this route too (it makes a judge call),
+    # but the decorative contract above outranks the 429: a throttled learner
+    # gets no pill, never an error the drill would have to handle.
+    if not drill_try_admit(user_id):
+        return {"words": []}
     task = load_tasks().get(body.task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")

@@ -37,6 +37,7 @@ from database.repository import (
     record_grammar_error,
 )
 from drills.forge import backfill_missing
+from security import drill_try_admit
 
 router = APIRouter(prefix="/bauteil", tags=["bauteil"])
 
@@ -165,6 +166,11 @@ async def submit_attempt(
     db: AsyncSession = Depends(get_db),
 ):
     """Judge one typed phrase, feed the ledger, return the two-axis verdict."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     item = load_items().get(body.item_id)
     if item is None:
         # CONT-002: personal forged items live in user_drill_items, keyed by

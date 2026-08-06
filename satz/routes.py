@@ -38,7 +38,7 @@ from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
 from satz.glosser import gloss_word
 from satz.scheduler import lapse_interval, schedule
-from security import gloss_try_admit
+from security import drill_try_admit, gloss_try_admit
 
 router = APIRouter(prefix="/satz", tags=["satzschmiede"])
 
@@ -470,6 +470,11 @@ async def add_word(
     shared-canonical model pack cards use. Verbs arrive as a pair: the base
     card plus a spoken-past sibling, each on its own schedule.
     """
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     word = " ".join(body.word.split())
     if not word:
         raise HTTPException(status_code=422, detail="Type a word first.")
@@ -650,6 +655,11 @@ async def submit_attempt(
     row is skipped entirely rather than logged oddly; the fact still rides
     on this request's span as the ``rehearsal`` attribute either way.
     """
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     row = (
         await db.execute(
             select(VocabCard, UserCard)
@@ -1096,6 +1106,11 @@ async def explain_attempt(
     call, no schedule/ledger/attempt-log writes. Keyed on the catalog card
     (not pool ownership) so the Verbformen mount of the same trainer works
     against its overlay deck too."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     transcript = body.transcript.strip()
     corrected = body.corrected.strip()
     if not transcript or not corrected:
