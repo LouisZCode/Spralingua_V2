@@ -44,6 +44,7 @@ import {
   giveUpArticle as giveUpGenusArticle,
   type Article as GenusArticle,
   type ArticleVerdict as GenusArticleVerdict,
+  type EndingSheet,
   type GenusItem,
   type PhraseVerdict as GenusPhraseVerdict,
 } from "./genus/api";
@@ -1016,6 +1017,25 @@ export default function Flow() {
     [token, signOut]
   );
 
+  // The Artikel item's peekable "Endungen" sheet. GenusTrainer renders the
+  // toggle whenever it HAS the sheet, but Flow never passed one — so the whole
+  // premise of the exercise ("most endings give the gender away") had no way to
+  // be looked up mid-stream, while the standalone page offers it one tap away.
+  // Fetched once, on the first Artikel item dealt: a flow round that never
+  // deals one shouldn't pay for the call.
+  const [genusEndings, setGenusEndings] = useState<EndingSheet | null>(null);
+  const genusEndingsAskedRef = useRef(false);
+  useEffect(() => {
+    if (!token || deal?.kind !== "genus" || genusEndingsAskedRef.current) return;
+    genusEndingsAskedRef.current = true;
+    fetchGenusMeta(token)
+      .then((m) => setGenusEndings(m.endings))
+      .catch((e) => {
+        // Decorative — a missing sheet just means no toggle, as before.
+        if (e instanceof UnauthorizedError) signOut();
+      });
+  }, [token, deal, signOut]);
+
   // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
   const handleSatzGenderCues = useCallback(async () => {
     if (!token) throw new UnauthorizedError("/genus/rules");
@@ -1284,6 +1304,7 @@ export default function Flow() {
                         onPhrase={handleGenusPhrase}
                         onNewRound={noopNewRound}
                         flow
+                        endings={genusEndings}
                         onFlowDone={(correct) => handleItemDone("genus", correct)}
                         allowGiveUp
                         onGiveUp={handleGenusGiveUp}

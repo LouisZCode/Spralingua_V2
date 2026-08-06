@@ -128,7 +128,7 @@ export default function PracticeMenu() {
             invites the first day. */}
         {streak && (
           <div
-            className="rise-in mt-6 flex flex-wrap items-center gap-x-4 gap-y-2"
+            className="rise-in mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center"
             style={{ animationDelay: "40ms" }}
           >
             <div
@@ -183,6 +183,22 @@ export default function PracticeMenu() {
             </Link>
           </div>
         )}
+
+        {/* AGENT-001: Clara stands alone above the three practice pillars —
+            she isn't a drill, she's who you ask when a drill made no sense, so
+            burying her among the modes hid the one thing that explains the
+            others. Full width on purpose: this is the promotion, not a card. */}
+        <div className="rise-in mt-10" style={{ animationDelay: "100ms" }}>
+          <ModeCard
+            href="/teacher"
+            accent="red"
+            icon="bulb"
+            kicker="Your teacher · in English"
+            title="Ask the Teacher"
+            body="Don't understand why? Clara explains the German you keep getting wrong — simply, in English, one thing at a time."
+            cta="Ask Clara"
+          />
+        </div>
 
         <div
           className="rise-in mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3"
@@ -357,21 +373,15 @@ function ChartIcon() {
   );
 }
 
-// The line beside the streak badge: what the number means and what to do about
-// it. Never scolds a broken streak — the grace day and the permanent PR are the
-// point of the forgiving design, so a zero reads as an invitation, not a loss.
-function streakNote(streak: Streak): string {
-  if (streak.current === 0) {
-    return streak.longest > 0
-      ? `Any exercise today starts a new streak. Your best: ${streak.longest} days.`
-      : "Any exercise today starts your streak.";
+// The line beside the streak badge exists for one message only: you are at your
+// personal best. Any other state — a broken streak, a good-but-not-record run —
+// says nothing at all, because a running count of days you didn't beat is a
+// scoreboard against yourself, and the forgiving design has no use for one.
+function streakNote(streak: Streak): string | null {
+  if (streak.current > 0 && streak.current >= streak.longest) {
+    return "This is your longest streak yet.";
   }
-  if (!streak.practicedToday) {
-    return "Practice today to keep it going.";
-  }
-  return streak.current >= streak.longest
-    ? "Today counts — this is your longest streak yet."
-    : `Today counts. Your best: ${streak.longest} days.`;
+  return null;
 }
 
 // Streak flame (GAME-001) — filled red when today already counts, an outline
