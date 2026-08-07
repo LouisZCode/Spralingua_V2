@@ -132,6 +132,17 @@ class ClientWrapper:
         # goodbye-driven endings at realistic session lengths.
         self._goodbye_after = lesson.get("goodbye_after") or max(1, self._max_exchanges - 1)
 
+        # AGENT-001: optional per-lesson opening line. When present,
+        # `pipeline/factory.py` injects this text as a synthetic first user
+        # turn right after connect — the same LLMContextFrame mechanism
+        # `/say` uses — so the agent speaks first instead of the learner
+        # facing silence until they break the ice. Absent (None) on every
+        # lesson that doesn't set a `kickoff:` key in its YAML, which today
+        # is all of them but the teacher (Clara opens with a greeting rather
+        # than waiting). Data-driven by design: no lesson_id special-casing
+        # here or in the factory.
+        self._kickoff = (lesson.get("kickoff") or "").strip() or None
+
         # Bot reply is buffered here at the end of each LLM stream. The push to
         # the client happens later, when TTSDurationTracker fires its on_turn_complete
         # callback (`flush_bot_output`) with the authoritative audio duration. That
@@ -299,14 +310,26 @@ class ClientWrapper:
                 # Capture the turn for the post-session evaluator. Runs in the
                 # finally so even partial turns (interruptions, errors mid-stream)
                 # land in the transcript with whatever the bot managed to say.
-                self._transcript.append(("user", text))
+                #
+                # AGENT-001: the kickoff (self._kickoff, if set) is a stage
+                # direction WE injected at connect — not something the learner
+                # said. Letting it in would put a fake "User:" line at the top
+                # of activity_session.transcript and hand it to any evaluator
+                # that reads the transcript. The bot's greeting that follows
+                # IS real and must stay, so only the bot line is appended for
+                # this one turn.
+                is_kickoff = self._kickoff is not None and text == self._kickoff
+                if not is_kickoff:
+                    self._transcript.append(("user", text))
                 self._transcript.append(("bot", output_text))
                 # Stamp the user text with the current VAD-stop seq so the
                 # pronunciation evaluator can pair it with the matching audio
                 # at disconnect (BUG-002). Empty/whitespace inputs are skipped
                 # — `/say` injection or the (extremely rare) all-whitespace
                 # transcript shouldn't reach Azure as a reference text anyway.
-                if text.strip():
+                # The kickoff is skipped for the same reason: it has no
+                # matching VAD-stop seq / audio clip to pair with (AGENT-001).
+                if text.strip() and not is_kickoff:
                     self._user_turn_text.append((self._current_vad_seq, text))
 
         # After first LLM call, capture system prompt for transcript

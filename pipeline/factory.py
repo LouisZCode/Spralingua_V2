@@ -10,6 +10,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from services import stt_deepgram, tts_minimax, transport_fastapi_ws
 
+# AGENT-001: same two frame-construction imports main.py's /say endpoint
+# uses to inject a typed turn into a live pipeline. _kickoff_turn below
+# reuses that exact mechanism to make the agent speak first on connect.
+from pipecat.frames.frames import LLMContextFrame
+from pipecat.processors.aggregators.llm_context import LLMContext
+
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.pipeline.runner import PipelineRunner
@@ -167,6 +173,44 @@ async def _session_watchdog(task: PipelineTask, timeout_s: float, user_id: str):
         return
     logger.info(f"Session wall-clock cap hit ({timeout_s}s); ending: user_id={user_id}")
     await task.stop_when_done()
+
+
+# AGENT-001: settle delay before the kickoff turn fires, so the injected
+# LLMContextFrame doesn't reach the pipeline before it has finished
+# assembling (LLM/TTS processors wired, RTVI handshake in flight). Matches
+# sim/chat.py's own 1.5s wait before its first /say call, for the identical
+# reason ("let the pipeline finish assembling").
+KICKOFF_SETTLE_S = 1.5
+
+
+async def _kickoff_turn(task: PipelineTask, text: str, user_id: str) -> None:
+    """Makes the agent speak first (AGENT-001) for lessons that set a
+    `kickoff:` YAML key (today: only the teacher — Clara). Sleeps
+    ``KICKOFF_SETTLE_S`` then injects ``text`` as a synthetic first user
+    turn using the exact ``LLMContext``/``LLMContextFrame`` construction
+    ``/say`` uses in main.py — so the kickoff runs a real, complete LLM → TTS
+    turn: exchange counting, goodbye detection, Langfuse spans, and the
+    bot-output push to the client all fire identically to a spoken or `/say`
+    turn. `ClientWrapper.astream` (agents/pipecat_wrapper.py) recognizes this
+    exact text as the kickoff sentinel and keeps the fake "user" line out of
+    the transcript — only the bot's real greeting is recorded.
+
+    Wrapped so any failure (a race with pipeline teardown, a queue_frame
+    error) only logs a warning — a missing greeting must never kill a
+    session; the learner can still speak first and get a normal reply.
+    `asyncio.CancelledError` is a `BaseException`, not caught by the
+    `except Exception` below, so a fast disconnect that cancels this task
+    (see run_pipeline's `finally`) propagates untouched instead of being
+    swallowed here.
+    """
+    try:
+        await asyncio.sleep(KICKOFF_SETTLE_S)
+        context = LLMContext([{"role": "user", "content": text}])
+        await task.queue_frame(LLMContextFrame(context=context))
+    except Exception as e:  # noqa: BLE001 — a missing greeting must never crash the pipeline
+        logger.warning(
+            f"Kickoff turn failed (non-fatal): {type(e).__name__}: {e} user_id={user_id}"
+        )
 
 
 async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None):
@@ -529,6 +573,20 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             _rtvi_heartbeat(rtvi_processor, wrapper, user_id)
         )
 
+        # AGENT-001: makes the agent speak first when the lesson's YAML sets
+        # a `kickoff:` key (today, only the teacher — Clara; every other
+        # lesson leaves `wrapper._kickoff` None and gets no task at all,
+        # keeping today's silence-until-the-learner-speaks behavior
+        # unchanged). Data-driven per CLAUDE.md: no lesson_id check here,
+        # just the wrapper field `ClientWrapper.__init__` already derived
+        # from `load_prompts(lesson_id)`. Cancelled in `finally` below,
+        # same lifecycle as `heartbeat_task` and `watchdog`.
+        kickoff_task = (
+            asyncio.create_task(_kickoff_turn(task, wrapper._kickoff, user_id))
+            if wrapper._kickoff
+            else None
+        )
+
         logger.info(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
 
         # Hoisted out of the inner try-blocks so the DB finalize step below
@@ -555,6 +613,8 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             if watchdog is not None:
                 watchdog.cancel()
             heartbeat_task.cancel()  # BUG-009 — per-client, never outlives this connection
+            if kickoff_task is not None:
+                kickoff_task.cancel()  # AGENT-001 — per-client, never outlives this connection
             # Identity-guarded: if the same user opened a second tab, its
             # connect overwrote our entry — popping blindly here would break
             # /say for that still-live session (BUG-004).
