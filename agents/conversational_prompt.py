@@ -375,6 +375,12 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
     - `conversation` (e.g. lesson_zero): assembles base + short_term + long_term
       from the lesson YAML, injecting today + student name/level + the
       StudentProfile (`Context.profile`).
+    - `tandem` (tandem, tandem_paul): persona + short_term (today + topic) +
+      the three DB-backed layers stashed on Context at connect, each omitted
+      when empty.
+    - `teacher` (teacher — Clara): persona + short_term (today + the picked
+      topic) + the learner's open ledger patterns, rendered without the
+      tandem's covert elicit hints.
     - `respond` (e.g. a1_l1): returns `persona_prompt` verbatim — diegetic
       roleplay, no profile/level/date injection.
 
@@ -426,10 +432,24 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         assembled = "\n---\n\n".join(parts)
     elif lesson_type == "teacher":
         # The explanation teacher (AGENT-001): English persona + short-term
-        # (today) + the learner's open ledger patterns. No vocab, no session
-        # notes — the teacher has no debrief, so no memory layer exists.
+        # (today + whatever the learner picked on the way in) + the learner's
+        # open ledger patterns. No vocab, no session notes — the teacher has
+        # no debrief, so no memory layer exists.
         base = lesson["persona_prompt"]
-        short = lesson["short_term_template"].format(today=date.today().isoformat())
+        # AGENT-001 note 5: the entry screen sends the chosen ledger pattern's
+        # label (or free text) as `?topic=` — the same param the tandem uses,
+        # so nothing new is plumbed. An empty topic is a real choice here (the
+        # "I just want to talk" link), not a missing value, and it restores
+        # v1's behaviour of asking. Only the opening paragraph differs between
+        # the two, so both live in the YAML instead of being assembled here.
+        topic_block = (
+            lesson["topic_opening"].format(topic=ctx.topic)
+            if ctx.topic
+            else lesson["no_topic_opening"]
+        )
+        short = lesson["short_term_template"].format(
+            today=date.today().isoformat(), topic_block=topic_block
+        )
         parts = [base, short]
         if ctx.grammar_focus:
             parts.append(
