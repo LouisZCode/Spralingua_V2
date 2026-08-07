@@ -1223,9 +1223,13 @@ export default function Flow() {
     [token, signOut]
   );
 
-  // UI-009: word-gloss popover wiring — Flow mounts SprechenTrainer,
-  // VerbindungenTrainer and VocabTrainer without onGloss/onAdd, silently
-  // dropping the glossing those trainers offer on their standalone pages.
+  // UI-009: word-gloss popover wiring. Threaded into every trainer that
+  // shows German prose the learner did not write: Verbindungen, Sprechen,
+  // Fälle, Satzbau and both VocabTrainer mounts. Bauteil, Zeitfärbung and
+  // Genus are mounted without it — their items are bare parts or single
+  // words, so there is no sentence to gloss. Since MVP-001 the Flow is the
+  // ONLY way a learner reaches Satzbau and Fälle, so a gloss those pages
+  // have but the Flow doesn't pass through is a gloss nobody can use.
   // Same auth-guarded pattern as every handler above, filed under the
   // sitting's own OBS-007 session id (sid()) like every other Flow attempt.
   const handleGloss = useCallback(
@@ -1451,6 +1455,8 @@ export default function Flow() {
                         round={[deal.item]}
                         onAttempt={handleSatzbauAttempt}
                         onNewRound={noopNewRound}
+                        onGloss={handleGloss}
+                        onAdd={handleAddWord}
                         flow
                         onFlowDone={(correct) => handleItemDone("satzbau", correct)}
                         allowGiveUp

@@ -7,14 +7,18 @@ import { UnauthorizedError } from "../satzschmiede/api";
 // Re-exported so callers only need this module for the Development flow.
 export { UnauthorizedError };
 
-// The six practice modes that report into /me/stats.
+// The ten practice modes that report into /me/stats.
 export type ExerciseKey =
   | "satz"
   | "verbformen"
   | "sprechen"
   | "bauteil"
   | "verbindungen"
-  | "szenario";
+  | "szenario"
+  | "genus"
+  | "zeitfaerbung"
+  | "faelle"
+  | "satzbau";
 
 export type ExerciseStat = {
   exercise: ExerciseKey;

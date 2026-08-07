@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { ClauseItem, ClauseVerdict } from "./api";
+import Glossable from "../shared/Glossable";
+import type { GlossInfo } from "../satzschmiede/api";
 import { FeedbackCard } from "../shared/feedback";
 import { playSound } from "../shared/sound";
 
@@ -44,6 +46,8 @@ export default function SatzbauTrainer({
   round,
   onAttempt,
   onNewRound,
+  onGloss,
+  onAdd,
   flow,
   onFlowDone,
   allowGiveUp,
@@ -55,6 +59,11 @@ export default function SatzbauTrainer({
   onAttempt: (itemId: string, order: string[]) => Promise<ClauseVerdict>;
   // Fetch a fresh round; the parent remounts this component with it.
   onNewRound: () => void;
+  // UI-007: word-gloss popover wiring — optional, absent renders plain text.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  // SATZ-013: resolves with the remaining gloss-path adds today (0..3) so
+  // the popover can update its own counter after a successful add.
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
   // FLOW-001: mixed-practice mode — the parent deals exactly one item via
   // `round` and remounts per turn (via `key`), so this trainer only needs
   // to skip its own intro/round chrome and hand the verdict back instead
@@ -343,11 +352,19 @@ export default function SatzbauTrainer({
         {!solved ? (
           <>
             {/* Build line — the given lead-in renders fixed and unmovable;
-                placed chips are tappable to send back to the tray. */}
+                placed chips are tappable to send back to the tray. UI-007:
+                the lead-in is glossable (it's German prose the learner
+                reads), but chips below are deliberately NOT — a chip's tap
+                already has a job (place/remove it), and hijacking that tap
+                for a gloss popover would break the drill. */}
             <div className="mt-5 flex min-h-[72px] flex-wrap items-center justify-center gap-2 rounded-[18px] border-[3px] border-dashed border-ink-faint bg-paper-warm p-4">
               {item.given && (
                 <span className="font-body text-[18px] font-bold leading-relaxed text-ink">
-                  {item.given}
+                  {onGloss ? (
+                    <Glossable text={item.given} onGloss={onGloss} onAdd={onAdd} />
+                  ) : (
+                    item.given
+                  )}
                 </span>
               )}
               {placedIdx.length === 0 && !item.given && (
@@ -382,9 +399,16 @@ export default function SatzbauTrainer({
             </div>
           </>
         ) : (
+          // The chips are gone once solved — this is now plain text (right
+          // or wrong), so UI-007 glosses it same as the lead-in above. The
+          // give-up placeholder is English, not German: no gloss on that one.
           <p className="mt-5 text-center font-body text-[19px] font-bold leading-relaxed text-ink">
             <span className={verdict.correct ? "text-success" : "text-flag-red-deep"}>
-              {builtText}
+              {onGloss && !gaveUp ? (
+                <Glossable text={builtText} onGloss={onGloss} onAdd={onAdd} />
+              ) : (
+                builtText
+              )}
             </span>
           </p>
         )}

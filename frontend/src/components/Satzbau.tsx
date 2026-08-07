@@ -12,7 +12,12 @@ import {
   type ClauseItem,
   type ClauseVerdict,
 } from "./satzbau/api";
-import { UnauthorizedError } from "./satzschmiede/api";
+import {
+  addWord,
+  fetchGloss,
+  UnauthorizedError,
+  type GlossInfo,
+} from "./satzschmiede/api";
 
 // Satzbau — five clause-construction patterns (relative clauses, indirect
 // questions, zu-infinitives, um-zu/damit purpose clauses, question word
@@ -80,6 +85,51 @@ export default function Satzbau() {
     [token, signOut]
   );
 
+  // UI-007: word-gloss popover wiring — same auth-guarded pattern as
+  // handleAttempt above. Both are optional on the trainer's props.
+  const handleGloss = useCallback(
+    async (word: string, context: string): Promise<GlossInfo> => {
+      if (!token) throw new UnauthorizedError("/satz/gloss");
+      try {
+        return await fetchGloss(
+          token,
+          word,
+          context,
+          practiceSessionRef.current ?? undefined
+        );
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
+  const handleAddWord = useCallback(
+    async (lemma: string): Promise<{ glossRemaining?: number } | void> => {
+      if (!token) throw new UnauthorizedError("/satz/cards");
+      try {
+        // SATZ-013: this is the gloss popover's one-tap add — mark it so
+        // the backend counts it against the daily gloss-add cap.
+        const res = await addWord(
+          token,
+          lemma,
+          practiceSessionRef.current ?? undefined,
+          "gloss"
+        );
+        return { glossRemaining: res.glossRemaining };
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          signOut();
+        }
+        throw e;
+      }
+    },
+    [token, signOut]
+  );
+
   if (!ready || !token) {
     return null;
   }
@@ -135,6 +185,8 @@ export default function Satzbau() {
             round={round}
             onAttempt={handleAttempt}
             onNewRound={loadRound}
+            onGloss={handleGloss}
+            onAdd={handleAddWord}
           />
         )}
       </main>
