@@ -164,3 +164,11 @@ profile scoring topic continuity, direct-question answering, cross-session
 detail repetition) on top of the old adversarial one. v2/v3 stay archived
 in `prompt_versions/`. Paul (TAND-008) carries the v3 contract verbatim
 and has no v1 to regress to.
+
+## Student profiles (2026-08-07)
+
+Student-subagent briefs + scorecards now live in `sim/STUDENT_PROFILES.md`
+(TAND-010 Proposal-2's engaged-partner profile is the first entry) rather
+than in this log — this file stays scoped to prompt versions per its own
+header. Not yet run: `sim/` only has the real account (`0001`) seeded,
+blocked on TEST-001 (isolated fixture profiles).
