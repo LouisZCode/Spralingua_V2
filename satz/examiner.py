@@ -15,11 +15,13 @@ one-shot calls turn the clip into feedback:
 """
 
 import re
+import time
 from typing import Optional
 from urllib.parse import quote
 
 import aiohttp
 from agents.openrouter_llm import structured_judge_llm
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -46,6 +48,12 @@ _DEEPGRAM_URL = (
     f"https://api.deepgram.com/v1/listen?model={_DEEPGRAM_MODEL}&language=de"
     "&smart_format=true&filler_words=true"
 )
+
+# STT-004.1: measured baseline for this call is ~0.8-1.5s, but a bad window
+# on 2026-08 produced 5.4s/9.6s/16.2s/22.4s/30.9s calls (the last grazing the
+# `aiohttp.ClientTimeout(total=30)` below) with no visibility beyond digging
+# through Langfuse after the fact. Anything past this is logged + tagged.
+_SLOW_TRANSCRIBE_THRESHOLD_S = 4.0
 
 
 async def transcribe_attempt(
@@ -83,10 +91,20 @@ async def transcribe_attempt(
         if terms:
             span.set_attribute("keyterms", ", ".join(terms))
         span.set_attribute("audio.bytes", len(audio))
+        call_started = time.monotonic()
         async with aiohttp.ClientSession(timeout=timeout) as session:
             async with session.post(url, headers=headers, data=audio) as resp:
                 resp.raise_for_status()
                 body = await resp.json()
+        elapsed_s = time.monotonic() - call_started
+        is_slow = elapsed_s > _SLOW_TRANSCRIBE_THRESHOLD_S
+        span.set_attribute("stt.duration_s", elapsed_s)
+        span.set_attribute("stt.slow", is_slow)
+        if is_slow:
+            logger.warning(
+                f"Deepgram prerecorded call was slow: {elapsed_s:.1f}s "
+                f"(threshold {_SLOW_TRANSCRIBE_THRESHOLD_S:.1f}s)"
+            )
         transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
         record_generation_output(span, transcript)
     return transcript
@@ -153,6 +171,7 @@ You examine one spoken attempt in a German vocabulary trainer. The learner saw a
 # Grammar-pattern catalog (for `pattern_id`)
 {taxonomy}
 
+- `perfekt-satzklammer` vs `partizip2-form`: `perfekt-satzklammer` is a POSITION error — haben/sein isn't in position two, or the Partizip II isn't closing the bracket. `partizip2-form` is a FORM error — the participle's own shape is wrong: a bad ge-/-en/-t shape, a strong verb wearing a weak ending, or an auxiliary paired with a finite past-tense form (e.g. "habe … übergab") instead of the participle.
 - `pattern_id`: when your judgement found a mistake (word_ok or grammar_ok false) AND the broken rule matches exactly one catalog entry above, return that entry's id. Use ONLY ids from the catalog — never invent one. Purely lexical slips — the target's gender misremembered, a wrong word sense — get null: the card's own schedule already tracks those. But a case, word-order or tense error is a pattern even when it lands on the target word (a nominative article in an object slot is akkusativ-artikel, a missing reflexive pronoun is reflexivpronomen). When everything is right: null.
 """
 

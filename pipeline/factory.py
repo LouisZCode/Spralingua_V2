@@ -578,6 +578,21 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 analysis_span.set_attribute("user.id", user_id)
                 analysis_span.set_attribute("lesson_id", lesson_id)
 
+                # AGENT-001.2 invariant: the teacher room (Clara, lesson_id
+                # "teacher") is deliberately exempt from every learner-
+                # assessment path below — it's a room for understanding, not
+                # assessment, and nothing said there is ever written to the
+                # user_errors ledger. Today that exemption is only an
+                # accident of missing YAML keys: teacher.yaml has no `goals`
+                # (load_goal() -> None, so _run_goal_eval and the drill
+                # harvester inside _run_grammar_or_tandem both skip), no
+                # `locale` (load_pronunciation_locale() -> None, so
+                # _run_pronunciation skips), and its `type` is "teacher", not
+                # "tandem" (so the debrief branch in _run_grammar_or_tandem
+                # skips too). Any NEW evaluator added to this gather() must
+                # preserve that exemption explicitly — do not assume a future
+                # YAML edit keeps it true by accident.
+
                 async def _run_goal_eval() -> None:
                     """Post-session evaluator (EVAL-001). Best-effort: any
                     failure here (LLM outage, missing goal entry, network) is
