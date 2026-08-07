@@ -35,19 +35,32 @@ from grammar import load_taxonomy, taxonomy_brief
 EXAMINER_MODEL = "openai/gpt-oss-120b"
 
 # One-shot (prerecorded) endpoint — same nova-3 model as the live pipeline's
-# streaming STT (services/stt.py::DEEPGRAM_MODEL), always German: Satzschmiede
-# sentences are in the target language (the English-by-design conversation
-# lessons don't apply here).
+# streaming STT (services/stt.py::DEEPGRAM_MODEL). Language is a per-call
+# parameter on `transcribe_attempt` (default "de"), not a fixed constant:
+# AGENT-001 is about to route Clara's teacher room — an English-STT lesson —
+# through the same upload path this module serves (/tandem/say-audio), so a
+# single hardcoded German URL would mis-transcribe every one of her turns.
+# Every existing caller (Satzschmiede itself, sprechen, szenario, verbformen)
+# still tests the German target language, so the default keeps their calls
+# byte-for-byte identical.
 _DEEPGRAM_MODEL = "nova-3"
 # STT-005: filler_words=true — without it nova-3 strips "um"-like tokens even
 # from FLUENT German ("…folgen, um das Zimmer zu erreichen" came back without
 # the "um" in a controlled A/B, 2026-08-03), and a missing "um" is a grammar
 # error here, not a filler. The docs say the param is English-only; the A/B
 # says it works on language=de. Keep it.
-_DEEPGRAM_URL = (
-    f"https://api.deepgram.com/v1/listen?model={_DEEPGRAM_MODEL}&language=de"
-    "&smart_format=true&filler_words=true"
-)
+
+
+def _deepgram_url(language: str) -> str:
+    """Prerecorded-endpoint URL for one call. Kept as a single helper — not
+    inlined per-call — so the query-param shape (model/language/smart_format/
+    filler_words) stays in exactly one place; callers only ever append
+    `&keyterm=` on top of what this returns."""
+    return (
+        f"https://api.deepgram.com/v1/listen?model={_DEEPGRAM_MODEL}"
+        f"&language={language}&smart_format=true&filler_words=true"
+    )
+
 
 # STT-004.1: measured baseline for this call is ~0.8-1.5s, but a bad window
 # on 2026-08 produced 5.4s/9.6s/16.2s/22.4s/30.9s calls (the last grazing the
@@ -57,7 +70,10 @@ _SLOW_TRANSCRIBE_THRESHOLD_S = 4.0
 
 
 async def transcribe_attempt(
-    audio: bytes, mimetype: str | None, keyterms: list[str] | None = None
+    audio: bytes,
+    mimetype: str | None,
+    keyterms: list[str] | None = None,
+    language: str = "de",
 ) -> str:
     """One POST to Deepgram's prerecorded API: finished clip in, transcript out.
 
@@ -68,8 +84,14 @@ async def transcribe_attempt(
     ``&keyterm=`` query params). Satzschmiede's strongest case — the card names
     the exact word the learner was told to say, so we bias the recognizer toward
     it and its spoken past form, cutting *false* fails on rare target words.
+
+    AGENT-001: ``language`` defaults to German so every pre-existing caller
+    (satz, sprechen, szenario, verbformen) is unaffected without touching a
+    call site. The one caller that passes something else is
+    ``/tandem/say-audio``, which derives "en" server-side from the live
+    session's lesson (Clara's English teacher room) — never from client input.
     """
-    url = _DEEPGRAM_URL
+    url = _deepgram_url(language)
     terms = [t for t in ((kt or "").strip() for kt in keyterms or []) if t]
     for term in terms:
         url += f"&keyterm={quote(term)}"  # quote handles umlauts/ß/spaces

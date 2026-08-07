@@ -60,6 +60,13 @@ from logs import setup_session_logger
 # from CLAUDE.md still holds — this is just a lookup, not shared state.
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
 
+# Lesson id running under each live session, keyed the same as ACTIVE_TASKS.
+# AGENT-001: lets an HTTP route that injects into a live session (e.g.
+# /tandem/say-audio) derive that session's runtime language server-side
+# (via lesson_language() below) instead of assuming one language for every
+# caller of this registry.
+ACTIVE_LESSONS: dict[str, str] = {}
+
 
 # The voice runtime is German. These lessons stay English: `lesson_zero` is the
 # open-conversation default (kept English by decision — its fake_profiles profile
@@ -502,6 +509,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
 
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
+        ACTIVE_LESSONS[user_id] = lesson_id  # AGENT-001: this session's runtime language
 
         # Wall-clock session cap (SEC-001). Armed only when a timeout is passed
         # (the public demo route does; /learn passes None → no watchdog, so its
@@ -552,6 +560,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             # /say for that still-live session (BUG-004).
             if ACTIVE_TASKS.get(user_id) is task:
                 ACTIVE_TASKS.pop(user_id, None)
+                ACTIVE_LESSONS.pop(user_id, None)  # kept in lockstep — same guard, same branch
             # B3: must not be bare — an unhandled raise here would skip every
             # step after it in this `finally` (evaluators, DB finalize, OTel
             # flush), leaving the activity_session row ended_at=NULL forever.

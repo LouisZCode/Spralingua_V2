@@ -44,7 +44,7 @@ from config import database_url
 from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
-from pipeline.factory import ACTIVE_TASKS, lesson_language, validate_lesson_languages
+from pipeline.factory import ACTIVE_LESSONS, ACTIVE_TASKS, lesson_language, validate_lesson_languages
 from satz import router as satz_router, sync_curated_content
 from satz.examiner import transcribe_attempt
 from security import (
@@ -58,16 +58,12 @@ from security import (
     say_user_try_admit,
 )
 
-# TAND-003: /tandem/say-audio (below) reuses satz/examiner.py::transcribe_attempt
-# as-is — that helper hardcodes German + nova-3 for its prerecorded Deepgram
-# call rather than taking a language param. That happens to already match
-# tandem's own runtime language (pipeline/factory.py::lesson_language), so no
-# new param/plumbing was added. Fail loud at import time if that ever drifts
-# (e.g. tandem joining ENGLISH_LESSONS) instead of silently mis-transcribing.
-assert all(lesson_language(lid) == "de" for lid in tandem_lesson_ids()), (
-    "a tandem lesson's runtime language changed — satz.examiner.transcribe_attempt "
-    "is hardcoded to German and no longer matches; update /tandem/say-audio"
-)
+# AGENT-001: the TAND-003 hardcoded-German assert that used to live here is
+# gone. satz/examiner.py::transcribe_attempt no longer bakes German into its
+# Deepgram URL — /tandem/say-audio now derives the language per call from
+# ACTIVE_LESSONS (the live session's own lesson_id, via lesson_language()),
+# so the route serves both the German tandem partners and Clara's English
+# teacher room correctly without a static cross-check to keep in sync.
 
 # The session JWT rides as ``?token=`` on the WS handshake URL (see
 # ws_endpoint below); uvicorn's WebSocket access logging writes the full
@@ -513,12 +509,17 @@ async def tandem_say_audio(
     gate as ``/say``'s authenticated branch (``say_user_try_admit``) — without
     it a scripted caller could hammer Deepgram + the LLM for free.
 
-    Transcription reuses ``satz/examiner.py::transcribe_attempt`` verbatim
-    (Deepgram's prerecorded REST endpoint, nova-3, German) — the exact model +
-    language ``services/stt.py``'s streaming STT already uses for tandem (see
-    the module-level assert above this route). No new HTTP client/SDK needed:
-    aiohttp is the established pattern for one-shot Deepgram calls in this
-    codebase (satz/examiner.py, also used by sprechen/szenario/verbformen).
+    Transcription reuses ``satz/examiner.py::transcribe_attempt`` (Deepgram's
+    prerecorded REST endpoint, nova-3) — same model ``services/stt.py``'s
+    streaming STT uses. AGENT-001: the language is no longer hardcoded German
+    inside that helper. This route derives it from ``ACTIVE_LESSONS``, the
+    same live session ``ACTIVE_TASKS`` looked up two lines below, via
+    ``lesson_language()`` — so a German tandem session still transcribes as
+    German and Clara's English teacher room now transcribes as English,
+    both server-side and both from the session that's actually live, never
+    from client input. No new HTTP client/SDK needed: aiohttp is the
+    established pattern for one-shot Deepgram calls in this codebase
+    (satz/examiner.py, also used by sprechen/szenario/verbformen).
     """
     if not say_user_try_admit(user_id):
         raise HTTPException(status_code=429, detail="too many requests")
@@ -539,8 +540,14 @@ async def tandem_say_audio(
             detail="That recording is too long — try a shorter turn.",
         )
 
+    # AGENT-001: derived from the SAME live session looked up above, not from
+    # anything the client sent — Clara's teacher room runs English STT/TTS
+    # (pipeline/factory.py::ENGLISH_LESSONS) while every tandem partner stays
+    # German. "tandem" fallback only fires if ACTIVE_LESSONS and ACTIVE_TASKS
+    # ever disagree, which preserves today's (German) behavior for that edge.
+    language = lesson_language(ACTIVE_LESSONS.get(user_id, "tandem"))
     try:
-        transcript = await transcribe_attempt(data, audio.content_type)
+        transcript = await transcribe_attempt(data, audio.content_type, language=language)
     except Exception as e:  # noqa: BLE001 — a Deepgram outage must 502, not 500
         logger.warning(f"Tandem say-audio transcription failed: {type(e).__name__}: {e}")
         raise HTTPException(
