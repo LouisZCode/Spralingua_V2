@@ -120,12 +120,15 @@ export default function PracticeMenu() {
           </h1>
         </div>
 
-        {/* GAME-001: attempted-not-passed daily streak, free weekly grace day,
-            longest is a permanent PR. It sits here — above the recommendation,
-            in the first thing the eye lands on after the headline — rather than
-            as the old header badge, which was small enough to miss entirely and
-            hid itself at zero. Always rendered once loaded: a visible 0 is what
-            invites the first day. */}
+        {/* GAME-001: forgiving daily streak, free weekly grace day, longest is
+            a permanent PR. A day is now earned by completing 3 of the 4
+            practice modes below, not by a single graded attempt — the
+            progress bar just under this badge is the 0-3 counter for that. It
+            sits here — above the recommendation, in the first thing the eye
+            lands on after the headline — rather than as the old header badge,
+            which was small enough to miss entirely and hid itself at zero.
+            Always rendered once loaded: a visible 0 is what invites the first
+            day. */}
         {streak && (
           <div
             className="rise-in mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2 text-center"
@@ -147,6 +150,25 @@ export default function PracticeMenu() {
             <p className="font-body text-[15px] leading-snug text-ink-soft">
               {streakNote(streak)}
             </p>
+          </div>
+        )}
+
+        {/* GAME-001: silent progress toward today's 3-of-4 mode requirement.
+            No caption, no numbers, in any state — it sits under the streak
+            badge, not beside it, so it never competes for the eye. Same
+            non-fatal rule as the badge above: renders only once streak has
+            loaded. */}
+        {streak && (
+          <div
+            className="rise-in mx-auto mt-3 h-[10px] w-full max-w-[200px] overflow-hidden rounded-full border-[3px] border-ink bg-white"
+            style={{ animationDelay: "50ms" }}
+          >
+            <div
+              className="h-full rounded-full bg-flag-gold transition-[width] duration-500 ease-out"
+              style={{
+                width: `${Math.min(streak.modesToday.length / streak.modesRequired, 1) * 100}%`,
+              }}
+            />
           </div>
         )}
 
@@ -219,6 +241,7 @@ export default function PracticeMenu() {
             title="Vocabulary Practice"
             body="Put new words to work in sentences of your own. A strict examiner checks each one and helps it stick."
             cta="Try it out"
+            done={streak?.modesToday.includes("satz")}
           />
           <ModeCard
             href="/flow"
@@ -228,6 +251,7 @@ export default function PracticeMenu() {
             title="Flow"
             body="One stream, every exercise — words, endings, chunks, verb forms, articles, cases, clauses, speaking — dealt one at a time until you say stop."
             cta="Go with the flow"
+            done={streak?.modesToday.includes("flow")}
           />
           <ModeCard
             href="/tandem"
@@ -237,6 +261,7 @@ export default function PracticeMenu() {
             title="Tandem Partner"
             body="Daily German chat with Lena or Paul — everyday German or office German. Each remembers your talks and gently fixes the grammar you keep missing."
             cta="Meet your partners"
+            done={streak?.modesToday.includes("tandem")}
           />
           <ModeCard
             href="/briefkasten"
@@ -246,6 +271,7 @@ export default function PracticeMenu() {
             title="Letter Writing"
             body="A letter arrives — reply in German. Hints first, then corrections, then how a German would really say it."
             cta="Write back"
+            done={streak?.modesToday.includes("briefkasten")}
           />
         </div>
 
@@ -340,6 +366,7 @@ function ModeCard({
   kicker,
   body,
   cta,
+  done,
 }: {
   href: string;
   accent: "red" | "gold" | "ink";
@@ -348,6 +375,10 @@ function ModeCard({
   kicker?: string;
   body: string;
   cta: string;
+  // GAME-001: true once this mode is already in today's modesToday. Never
+  // disables the card — done just means "already counted today", not
+  // "nothing left to do here".
+  done?: boolean;
 }) {
   const chip =
     accent === "red"
@@ -358,19 +389,42 @@ function ModeCard({
   return (
     <Link
       href={href}
-      className="btn-3d flex flex-col rounded-[28px] border-[3px] border-ink bg-white p-7"
+      className={`btn-3d flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
+        done ? "bg-flag-gold-soft" : "bg-white"
+      }`}
       style={inkShadow}
     >
       <div className="flex items-center justify-between">
-        <div
-          className={`grid h-14 w-14 place-items-center rounded-2xl border-[3px] border-ink ${chip}`}
-        >
-          <ModeIcon name={icon} />
+        <div className="relative">
+          <div
+            className={`grid h-14 w-14 place-items-center rounded-2xl border-[3px] border-ink ${chip}`}
+          >
+            <ModeIcon name={icon} />
+          </div>
+          {/* GAME-001: done badge on the icon tile's corner — dark disc +
+              white check reads against every chip color, unlike a colored
+              badge which would wash out on the gold/red tiles. */}
+          {done && (
+            <div className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border-[3px] border-ink bg-ink">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={3}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="h-3 w-3 text-white"
+              >
+                <path d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+          )}
         </div>
       </div>
       {kicker && (
         <p className="mt-6 font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
           {kicker}
+          {done && " · DONE"}
         </p>
       )}
       <h2

@@ -76,13 +76,24 @@ export type SeriesPoint = {
   firstTryCorrect: number;
 };
 
-// GAME-001: forgiving daily streak — attempted-not-passed, one free weekly
-// grace day, longest is a permanent PR that never resets.
+// GAME-001: forgiving daily streak, one free weekly grace day, longest is a
+// permanent PR that never resets. A day is earned by completing 3 of the 4
+// learner-facing practice modes on /practice (satz, flow, tandem,
+// briefkasten) — a single graded attempt no longer credits the day on its
+// own. `practicedToday` now means the day is earned (modesRequired reached);
+// `modesToday` is which of the four already count, server-ordered.
 export type Streak = {
   current: number;
   longest: number;
   practicedToday: boolean;
+  modesToday: PracticeMode[];
+  modesRequired: number;
 };
+
+// GAME-001: the four practice modes that count toward the daily streak.
+// Clara (the teacher) is deliberately not one of these — her card is exempt
+// from the streak entirely.
+export type PracticeMode = "satz" | "flow" | "tandem" | "briefkasten";
 
 export type DevelopmentStats = {
   week: PeriodStats;
@@ -105,6 +116,32 @@ export async function fetchStats(token: string): Promise<DevelopmentStats> {
     throw new Error(`/me/stats failed (${res.status})`);
   }
   return res.json() as Promise<DevelopmentStats>;
+}
+
+// GAME-001: fire-and-forget progress ping for the two modes that can't be
+// credited server-side from a single backend call (satz/flow — tandem and
+// briefkasten are credited server-side on their own). Posting a mode with no
+// matching attempt logged today is a silent no-op on the backend (200), and
+// this client is just as silent on failure: a learner who just finished a
+// round must never see or feel a broken streak ping. Swallow everything —
+// network errors, non-OK statuses, all of it — nothing here is worth
+// surfacing.
+export async function postModeComplete(
+  token: string,
+  mode: "satz" | "flow"
+): Promise<void> {
+  try {
+    await fetch(`${HTTP_BASE}/streak/mode`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ mode }),
+    });
+  } catch {
+    // Non-fatal by design — see comment above.
+  }
 }
 
 // ── BUG-010 / UI-005 minimal: recent conversation sessions ────────────────

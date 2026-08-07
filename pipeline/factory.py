@@ -35,7 +35,7 @@ from agents.evaluator import evaluate
 from agents.error_extractor import extract_errors
 from agents.debrief import debrief as run_debrief
 from agents.load_goals import load_goal
-from agents.load_prompts import list_lesson_ids, load_prompts
+from agents.load_prompts import list_lesson_ids, load_prompts, tandem_lesson_ids
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
 from agents.observability import flush_traces, tracer
@@ -44,8 +44,8 @@ from grammar import load_taxonomy
 
 from database import create_session_row, finalize_session_row, get_sessionmaker
 from database.repository import (
+    complete_daily_mode,
     credit_pattern_success,
-    credit_streak_day,
     load_grammar_focus,
     load_tandem_notes,
     load_vocab_words,
@@ -878,11 +878,24 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         error_eval=error_eval_dict,
                         passed=passed,
                     )
-                    # GAME-001: a finished conversation counts as a practiced
-                    # day too (matches REC-001's active-day union). The demo
-                    # sentinel accumulates no streak.
-                    if db_user_id != "demo":
-                        await credit_streak_day(db, user_id=db_user_id)
+                    # GAME-001 v2: only a real tandem conversation credits
+                    # the "tandem" mode slot — not the older "any finished
+                    # conversation" rule. Deliberately excluded: the demo
+                    # sentinel (no streak at all), Clara (`type: teacher`,
+                    # not a tandem lesson_id — she's exempt from every
+                    # evaluator, this included), the /learn lessons (not in
+                    # tandem_lesson_ids()), and a tandem session that never
+                    # actually exchanged anything (wrapper._transcript empty
+                    # — same truthiness finalize_session_row just used above
+                    # for "did anything happen").
+                    if (
+                        db_user_id != "demo"
+                        and lesson_id in tandem_lesson_ids()
+                        and wrapper._transcript
+                    ):
+                        await complete_daily_mode(
+                            db, user_id=db_user_id, mode="tandem"
+                        )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
                 logger.warning(
                     f"DB session finalize failed (non-fatal): {type(e).__name__}: {e}"

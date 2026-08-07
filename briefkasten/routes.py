@@ -28,6 +28,7 @@ from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import User
 from database.repository import (
+    complete_daily_mode,
     load_vocab_words,
     record_drill_attempt,
     record_grammar_error,
@@ -349,6 +350,14 @@ async def submit_attempt(
             )
         except Exception:
             logger.exception("Drill-attempt log write failed (seed {})", seed["id"])
+        # GAME-001 v2: one completed letter *is* the whole exercise — there's
+        # no separate "end panel" moment to POST from like satz/flow have, so
+        # attempt 2 landing here IS the natural completion point. Non-fatal
+        # like the attempt-log write above it.
+        try:
+            await complete_daily_mode(db, user_id=user_id, mode="briefkasten")
+        except Exception:
+            logger.exception("Daily-mode completion write failed (seed {})", seed["id"])
     else:
         # SILENT grammar enrichment (GRAM-001) off the critical path. Created
         # only after the span above closes: asyncio.create_task snapshots the

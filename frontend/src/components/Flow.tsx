@@ -100,6 +100,8 @@ import {
   revealCard as revealVerbformenCard,
 } from "./verbformen/api";
 
+import { postModeComplete } from "./development/api";
+
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
 } as React.CSSProperties;
@@ -801,6 +803,23 @@ export default function Flow() {
       finishedSoundRef.current = false;
     }
   }, [finished, totals]);
+
+  // GAME-001: ping the streak alongside the round-summary sound above — same
+  // "reveal" moment, own ref so it can't interfere with the earcon's
+  // double-fire guard. Same "no graded items, no outcome" rule as the sound:
+  // a round finished without a single graded item has no outcome to credit
+  // either. Reset on the same "Keep going" → re-finish round trip.
+  const flowModePingedRef = useRef(false);
+  useEffect(() => {
+    if (finished && !flowModePingedRef.current) {
+      flowModePingedRef.current = true;
+      if (totals.total > 0 && token) {
+        postModeComplete(token, "flow");
+      }
+    } else if (!finished) {
+      flowModePingedRef.current = false;
+    }
+  }, [finished, totals, token]);
 
   // FLOW-005: auto-finish once the completed tally hits a finite round's
   // target — same summary screen the manual Finish button shows. Exact

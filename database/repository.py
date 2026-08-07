@@ -16,14 +16,22 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from loguru import logger
-from sqlalchemy import Text, cast, func, select, update
+from sqlalchemy import Text, cast, func, or_, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from grammar import load_taxonomy
 
-from .orm import ActivitySession, DrillAttempt, User, UserCard, UserError, VocabCard
+from .orm import (
+    ActivitySession,
+    DailyModeCompletion,
+    DrillAttempt,
+    User,
+    UserCard,
+    UserError,
+    VocabCard,
+)
 
 
 async def create_session_row(
@@ -272,12 +280,12 @@ async def record_drill_attempt(
     except SQLAlchemyError:
         await db.rollback()
         raise
-    # GAME-001: any graded attempt marks the UTC day as practiced. Non-fatal —
-    # a streak hiccup must never break the attempt it rides on.
-    try:
-        await credit_streak_day(db, user_id=user_id)
-    except SQLAlchemyError:
-        logger.warning("Streak credit failed (non-fatal)")
+    # GAME-001 v2: a raw attempt no longer credits the day by itself — that
+    # was v1's rule (any graded attempt = practiced day). Credit now comes
+    # from complete_daily_mode() at each mode's own completion point (the
+    # frontend end-panel POST for satz/flow, the disconnect path for tandem,
+    # the second attempt for briefkasten), which requires 3 of the 4 modes
+    # before the streak day is actually earned.
 
 
 async def credit_streak_day(db: AsyncSession, *, user_id: str) -> None:
@@ -325,6 +333,130 @@ async def credit_streak_day(db: AsyncSession, *, user_id: str) -> None:
     except SQLAlchemyError:
         await db.rollback()
         raise
+
+
+# GAME-001 v2: the four learner-facing practice modes on /practice, and how
+# many of them earn a streak day. Order here is the display order the UI
+# renders "modes done today" pills in — load_modes_today sorts to match, so
+# the frontend never has to re-sort an arbitrary DB return order.
+STREAK_MODES = ("satz", "flow", "tandem", "briefkasten")
+_STREAK_MODES_REQUIRED = 3
+
+
+async def complete_daily_mode(db: AsyncSession, *, user_id: str, mode: str) -> None:
+    """Record that ``mode`` was completed today, and credit the streak day
+    once enough modes have been (GAME-001 v2).
+
+    This is the "earned" half of the new rule: GAME-001 v1 let any single
+    graded attempt touch the day via ``credit_streak_day`` directly. Now a
+    day is only *earned* once the learner has completed
+    ``_STREAK_MODES_REQUIRED`` (3) of the 4 ``STREAK_MODES`` — so this
+    function first logs today's completion of ``mode``, then re-counts how
+    many distinct modes today has, and only calls ``credit_streak_day`` once
+    that count clears the bar. Below the bar it's a pure ledger write with
+    no visible effect yet; the day quietly fills in as more modes land.
+
+    Idempotent: the INSERT is ``ON CONFLICT DO NOTHING`` on the
+    ``(user_id, day, mode)`` primary key, so completing the same mode twice
+    in a day is a no-op the second time — and even if the count crosses the
+    bar again on a later call, ``credit_streak_day`` itself already returns
+    early once today is credited. Calling this twice for the same mode/day
+    is safe and cheap.
+
+    Same contract as the other ledger ops: re-raises on ``SQLAlchemyError``,
+    caller owns the non-fatal wrapping.
+    """
+    if mode not in STREAK_MODES:
+        raise ValueError(f"Unknown streak mode: {mode!r}")
+    today = datetime.now(timezone.utc).date()
+    try:
+        await db.execute(
+            pg_insert(DailyModeCompletion)
+            .values(user_id=user_id, day=today, mode=mode)
+            .on_conflict_do_nothing(
+                index_elements=["user_id", "day", "mode"]
+            )
+        )
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+    distinct_modes = await db.scalar(
+        select(func.count(func.distinct(DailyModeCompletion.mode))).where(
+            DailyModeCompletion.user_id == user_id,
+            DailyModeCompletion.day == today,
+        )
+    )
+    if (distinct_modes or 0) >= _STREAK_MODES_REQUIRED:
+        await credit_streak_day(db, user_id=user_id)
+
+
+async def load_modes_today(db: AsyncSession, *, user_id: str) -> list[str]:
+    """Modes completed today, in ``STREAK_MODES`` order (GAME-001 v2).
+
+    Fixed display order rather than alphabetical or insertion order, so the
+    "3 of 4 done today" UI never reshuffles its pills between renders.
+    """
+    today = datetime.now(timezone.utc).date()
+    done = set(
+        (
+            await db.execute(
+                select(DailyModeCompletion.mode).where(
+                    DailyModeCompletion.user_id == user_id,
+                    DailyModeCompletion.day == today,
+                )
+            )
+        ).scalars().all()
+    )
+    return [mode for mode in STREAK_MODES if mode in done]
+
+
+async def has_attempt_today(db: AsyncSession, *, user_id: str, mode: str) -> bool:
+    """Anti-spoof check for ``POST /streak/mode`` (GAME-001 v2): has this
+    user actually logged a matching ``drill_attempts`` row today, so the
+    client's "I finished" ping has real work behind it?
+
+    Only ``satz`` and ``flow`` are supported — ``tandem`` and
+    ``briefkasten`` are credited server-side from their own completion
+    paths (conversation disconnect, second letter attempt) and never go
+    through this check at all.
+
+    The two modes share the same underlying exercises but are told apart by
+    ``session_id`` prefix, not by a dedicated column: every frontend surface
+    mints a distinctly-prefixed session id, and ``Flow.tsx`` deliberately
+    overrides VocabTrainer's own id with its own ``flow-`` prefixed one (see
+    the FLOW-001 comment there) before handing a Satzschmiede/Verbformen
+    round to the Flow. So:
+
+    - ``satz``: ``exercise IN ('satz', 'verbformen')`` AND the session id is
+      either absent or does NOT start with ``flow-`` — a standalone
+      Satzschmiede/Verbformen sitting, not one embedded in a Flow round.
+    - ``flow``: ``session_id LIKE 'flow-%'`` — any exercise, since a Flow
+      round mixes drill types under one session id.
+    """
+    if mode not in ("satz", "flow"):
+        raise ValueError(f"has_attempt_today only supports satz/flow, got {mode!r}")
+    today_start = datetime.now(timezone.utc).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    conditions = [
+        DrillAttempt.user_id == user_id,
+        DrillAttempt.created_at >= today_start,
+    ]
+    if mode == "satz":
+        conditions.append(DrillAttempt.exercise.in_(("satz", "verbformen")))
+        conditions.append(
+            or_(
+                DrillAttempt.session_id.is_(None),
+                DrillAttempt.session_id.notlike("flow-%"),
+            )
+        )
+    else:  # flow
+        conditions.append(DrillAttempt.session_id.like("flow-%"))
+    count = await db.scalar(
+        select(func.count()).select_from(DrillAttempt).where(*conditions)
+    )
+    return bool(count)
 
 
 # Consecutive correct spontaneous productions in tandem sessions before a
@@ -747,11 +879,29 @@ async def load_streak(db: AsyncSession, *, user_id: str) -> dict:
     silently broken since the last write and ``current`` reads 0 without
     touching the stored row. ``longest`` always reflects the stored PR.
     Missing user row (shouldn't happen post-login) → all-zero dict.
+
+    ``practicedToday`` is still exactly ``last_streak_day == today`` — the
+    code hasn't changed since v1, but what it *means* has: under GAME-001 v2
+    ``last_streak_day`` is only ever set by :func:`credit_streak_day`, which
+    :func:`complete_daily_mode` now calls only once 3 of the 4
+    ``STREAK_MODES`` are done. So a true ``practicedToday`` no longer means
+    "did one graded thing today" — it means the day is *earned*.
+
+    ``modesToday`` / ``modesRequired`` are the progress readout toward that:
+    which of the 4 modes already have a row for today, and how many are
+    needed. The UI uses these to show "2 of 3" before the day flips.
     """
     today = datetime.now(timezone.utc).date()
+    modes_today = await load_modes_today(db, user_id=user_id)
     user = await db.get(User, user_id)
     if user is None:
-        return {"current": 0, "longest": 0, "practicedToday": False}
+        return {
+            "current": 0,
+            "longest": 0,
+            "practicedToday": False,
+            "modesToday": modes_today,
+            "modesRequired": _STREAK_MODES_REQUIRED,
+        }
     last = user.last_streak_day
     if last is None:
         alive = False
@@ -770,6 +920,8 @@ async def load_streak(db: AsyncSession, *, user_id: str) -> dict:
         "current": user.current_streak if alive else 0,
         "longest": user.longest_streak,
         "practicedToday": last == today,
+        "modesToday": modes_today,
+        "modesRequired": _STREAK_MODES_REQUIRED,
     }
 
 

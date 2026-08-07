@@ -24,6 +24,7 @@ import {
 } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 import { fetchMeta } from "./genus/api";
+import { postModeComplete } from "./development/api";
 import SoundToggle from "./shared/SoundToggle";
 
 const redShadow = {
@@ -285,6 +286,21 @@ export default function Satzschmiede() {
     },
     [token, signOut]
   );
+
+  // GAME-001: ping the streak the moment the post-round end screen shows —
+  // trainerDone (SATZ-012) is exactly that signal. Guarded by a ref (not
+  // just the trainerDone state) so the true→true re-render in between
+  // doesn't refire; reset when trainerDone drops back to false so the next
+  // round's end screen pings again.
+  const satzModePingedRef = useRef(false);
+  useEffect(() => {
+    if (trainerDone && !satzModePingedRef.current) {
+      satzModePingedRef.current = true;
+      if (token) postModeComplete(token, "satz");
+    } else if (!trainerDone) {
+      satzModePingedRef.current = false;
+    }
+  }, [trainerDone, token]);
 
   if (!ready || !token) {
     return null;

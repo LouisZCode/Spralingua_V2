@@ -81,6 +81,40 @@ class User(Base):
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 
 
+class DailyModeCompletion(Base):
+    """GAME-001 v2: per-mode day-earning ledger.
+
+    One row per ``(user_id, day, mode)`` the learner actually completed —
+    written by ``database.repository.complete_daily_mode`` from each mode's
+    own completion point (frontend POST for satz/flow, server-side for
+    tandem at disconnect and briefkasten at the second attempt). A day now
+    only advances the ``users`` streak cache above once 3 of the 4 modes
+    have a row for it; a single graded attempt is no longer enough (that
+    was GAME-001 v1's rule, tightened here).
+
+    ``mode`` is plain Text, not an enum type, deliberately — same
+    content-as-data choice already made for ``UserError.pattern_id``: the
+    four slugs (``satz``/``flow``/``tandem``/``briefkasten``) are validated
+    in code (``database.repository.STREAK_MODES``), not by the schema.
+
+    CASCADE on ``user_id`` like the other per-user learning-state tables
+    (``user_cards``, ``user_errors``, ``drill_attempts``) — this is
+    disposable derived state, not audit-of-record like ``activity_session``.
+    """
+
+    __tablename__ = "daily_mode_completions"
+
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    day: Mapped[date] = mapped_column(Date, primary_key=True)
+    mode: Mapped[str] = mapped_column(Text, primary_key=True)
+
+    # No extra index: the PK's leading columns (user_id, day) already serve
+    # the "how many distinct modes did this user finish today" lookup that
+    # complete_daily_mode runs on every write.
+
+
 class ActivitySession(Base):
     __tablename__ = "activity_session"
 

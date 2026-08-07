@@ -18,16 +18,20 @@ timezone, so every cutoff here is a tz-aware UTC ``datetime``):
 """
 
 from datetime import datetime, time, timedelta, timezone
+from typing import Literal
 
 from fastapi import APIRouter, Depends
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.load_prompts import tandem_lesson_ids
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
+    complete_daily_mode,
     count_active_days,
     count_sessions_since,
+    has_attempt_today,
     load_attempt_series,
     load_focus_with_recency,
     load_period_summary,
@@ -93,6 +97,44 @@ async def get_my_stats(
         "series": series,
         "streak": streak,
     }
+
+
+class ModeCompleteBody(BaseModel):
+    mode: Literal["satz", "flow"]
+
+
+@router.post("/streak/mode")
+async def complete_streak_mode(
+    body: ModeCompleteBody,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Frontend "I finished a round" ping for the two client-detected modes
+    (GAME-001 v2): Satzschmiede posts when its end panel shows, Flow posts
+    when its round summary shows.
+
+    Security note: only ``satz`` and ``flow`` are postable here at all — the
+    ``Literal`` on ``ModeCompleteBody.mode`` rejects anything else at the
+    request-validation layer, before this handler even runs. ``tandem`` and
+    ``briefkasten`` are credited server-side from their own completion paths
+    (conversation disconnect in ``pipeline/factory.py``, the second letter
+    attempt in ``briefkasten/routes.py``) and must never be claimable by a
+    client — a learner could otherwise POST a mode they never actually did.
+
+    ``has_attempt_today`` is the anti-spoof check: a POST for a mode with no
+    matching ``drill_attempts`` row logged today is silently NOT credited —
+    this returns 200 with an unchanged streak, not an error. A Flow round
+    that finished with zero graded items simply doesn't count; that's a
+    normal outcome of how the learner played it, not a client error worth
+    surfacing as a 4xx.
+
+    Either way the response is the fresh :func:`load_streak` shape, so the
+    caller never needs a second round-trip to see whether today just got
+    earned.
+    """
+    if await has_attempt_today(db, user_id=user_id, mode=body.mode):
+        await complete_daily_mode(db, user_id=user_id, mode=body.mode)
+    return await load_streak(db, user_id=user_id)
 
 
 @router.get("/me/sessions")
