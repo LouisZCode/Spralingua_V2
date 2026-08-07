@@ -117,11 +117,17 @@ class Judgement(BaseModel):
     word_ok: bool = Field(
         description=(
             "True iff the target word itself was used correctly: present, in "
-            "its intended sense, with the grammar the word owns done right"
+            "its intended sense, with the grammar the word owns done right. "
+            "A speech-recognition artifact (trimmed ending, homophone) is "
+            "never grounds for false"
         )
     )
     grammar_ok: bool = Field(
-        description="True iff the rest of the sentence is grammatical German"
+        description=(
+            "True iff the rest of the sentence is grammatical German. A "
+            "speech-recognition artifact elsewhere in the transcript is "
+            "never grounds for false"
+        )
     )
     error: Optional[str] = Field(
         default=None,
@@ -160,6 +166,14 @@ You examine one spoken attempt in a German vocabulary trainer. The learner saw a
 
 # How to judge — two SEPARATE calls
 - The transcript comes from speech recognition: IGNORE punctuation and capitalization entirely, and forgive an obviously misheard small word — judge the sentence the learner most plausibly said. A filler ("ähm") is fine.
+
+## Where graders go wrong on ASR noise
+A trimmed ending or homophone Deepgram wrote instead of what was said ("das"/"dass", "seid"/"seit") is the RECOGNIZER's doing, not the learner's.
+- target 'Bahnhof' · "...am Bahnho" → **word_ok: true** — clipped letter, not a wrong word.
+- "ich glaube das er schon da ist" → **grammar_ok: true** — "das" is Deepgram's spelling of "dass".
+- "mein bester Freund seid der Schule" → **grammar_ok: true** — "seid" is Deepgram's spelling of "seit".
+- "heute ich gehe ins Kino" → **grammar_ok: false** — no artifact excuses this V2 violation.
+
 - `word_ok` — did the learner use the TARGET WORD correctly? This covers only the word itself: it appears (any correctly conjugated or declined form counts; separable verbs may split), in its intended meaning, with the grammar the word OWNS done right — its article/gender/case agreement, its own ending, the reflexive pronoun if it is reflexive. false when the word is missing, used in the wrong sense, or its own grammar is broken.
 - MEANING CHECK for `word_ok` (SATZ-008): before settling word_ok, first restate to yourself what the learner is trying to SAY, then ask: is the target the word a German speaker would actually use for that idea? The word being present with clean grammar is NOT enough. Worked example: card 'erkennen' (to recognize) in "Ich habe letztes Jahr eine neue App erkannt, und jetzt verkaufe ich sie" — selling it means they MADE it, and you cannot 'erkennen' something you created yourself: the fitting verb is 'entwickelt' or 'erfunden', so word_ok=false and `corrected` swaps the verb in. Fail on sense only when the mismatch is clear from the sentence itself; a genuinely plausible correct reading keeps word_ok=true.
 - {evidence_line}

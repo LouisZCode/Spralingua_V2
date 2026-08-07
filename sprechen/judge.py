@@ -31,12 +31,17 @@ class Slip(BaseModel):
     )
     corrected: str = Field(description="The minimal repair of that quote, in German")
     note: str = Field(
-        description="One short English line (AT MOST 10 words) naming the broken rule"
+        description=(
+            "One short English line (AT MOST 10 words) naming the broken "
+            "rule — never a transcription artifact"
+        )
     )
 
 
 class SpokenVerdict(BaseModel):
-    """Constraint compliance + target-structure slips. Nothing else is judged."""
+    """Constraint compliance + target-structure slips. Nothing else is judged
+    — including how Deepgram transcribed it: a misspelling, a dropped
+    filler, or a homophone swap in the transcript is never a slip."""
 
     constraint_met: bool = Field(
         description=(
@@ -52,7 +57,10 @@ class SpokenVerdict(BaseModel):
         ),
     )
     hits: int = Field(
-        description="How many times the TARGET structure was produced correctly"
+        description=(
+            "How many times the TARGET structure was produced correctly — "
+            "judge what was spoken, never how the transcript spells it"
+        )
     )
     hit_quotes: list[str] = Field(
         default_factory=list,
@@ -88,7 +96,16 @@ You judge one SPOKEN attempt in a German speaking drill. The learner was given a
 # Transcript (raw speech recognition)
 "{transcript}"
 
-# How to judge
+# STEP 1 — separate transcription noise from a real structural break
+This is speech recognition, not something the learner typed — they never saw these words on a screen. A misspelling, a missing umlaut, a homophone Deepgram wrote instead of the word actually spoken ("das" for "dass", "seit" for "seid"), a dropped filler, or a missing sentence break is an ARTIFACT OF TRANSCRIPTION, not something the learner got wrong. None of that may cost a hit or create a slip — only the actual shape of what they said (word order, verb form, connector choice) is graded.
+
+## This is where graders go wrong
+- target: nebensatz-verbende, verb clause-final · transcript "ich bleibe heute zuhause weil ich mich nicht gut fühle ähm" → **hit**. "ähm" is a filler the recognizer kept in; the clause itself already has the verb last.
+- target: nebensatz-verbende, verb clause-final · transcript "ich glaube das er heute kommt" → **hit**. Deepgram wrote "das" for "dass" — they sound identical, so this is a transcription spelling, not a wrong connector; the verb is still last, which is what's graded.
+- target: v2-wortstellung, verb-second main clause · transcript "heute abend geh ich ins kino" → **hit**. "geh" for "gehe" is the recognizer trimming an ending, not the learner dropping it — the verb still sits in position 2.
+- target: nebensatz-verbende, verb clause-final · transcript "ich bleibe zuhause weil ich bin müde" → **slip**. THIS is a real break: the verb sits in position 2 of the weil-clause instead of last. No transcription artifact explains that — it is the word order itself.
+
+# STEP 2 — grade
 - The transcript comes from speech recognition: IGNORE punctuation and capitalization, forgive obviously misheard small words and fillers ("ähm"), and judge the sentences the learner most plausibly said. Sentence boundaries may be missing — infer them.
 - `constraint_met` — did the learner ATTEMPT the task in the required quantity? Count attempts, not quality: an element with broken word order still counts toward the constraint (its break is recorded as a slip instead). constraint_met=false ONLY when the elements the forces section names are missing or too few (said "weil" once when two were asked, skipped a required verb). Count ONLY the named elements — clauses, conjunctions, openers, verbs. NEVER count "sentences": speech recognition strips the boundaries, so two spoken sentences often arrive joined as one.
 - `constraint_note` — when constraint_met=false: one short English line naming what's MISSING (never a grammar comment). null when met.

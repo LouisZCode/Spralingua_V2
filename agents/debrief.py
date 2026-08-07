@@ -49,7 +49,7 @@ class PatternOutcome(BaseModel):
         description="True if this structure actually came up in the LEARNER's own German this session"
     )
     produced_correctly: bool = Field(
-        description="True if the learner used the structure correctly and spontaneously at least once; false if it never came up or every attempt was wrong"
+        description="True if the learner used the structure correctly and spontaneously at least once; false if it never came up or every attempt was wrong. A speech-recognition artifact (a dropped filler, a homophone spelling) never counts as a wrong attempt"
     )
     evidence: str = Field(
         description="The learner's German sentence showing the structure — the correct one if produced_correctly, otherwise the clearest slip; 'none' if it never came up"
@@ -67,7 +67,7 @@ class NewError(BaseModel):
         description="A taxonomy id that is NOT one of the target patterns, copied verbatim from the catalog"
     )
     sentence: str = Field(
-        description="The learner's own erroneous German sentence, quoted from one of their turns"
+        description="The learner's own erroneous German sentence, quoted from a User: turn — never the partner's Bot: line, and never a speech-recognition artifact"
     )
     corrected: str = Field(
         description="That sentence minimally repaired in German — keep the learner's idea and words, change only what is wrong"
@@ -78,6 +78,11 @@ class NewError(BaseModel):
 
 
 class TandemDebrief(BaseModel):
+    """One pass over a tandem transcript. Judges only the LEARNER's own
+    `User:` German — never the partner's `Bot:` lines, and never a
+    speech-recognition artifact (a homophone, a dropped filler, a trimmed
+    ending)."""
+
     patterns: list[PatternOutcome] = Field(
         description="One entry per target pattern, in the same order given; empty when no targets were provided"
     )
@@ -102,6 +107,17 @@ You are the private post-session debrief for a German language-tandem partner na
 - taxonomy: the full catalog of German grammar-error patterns, one per line as `id — label ("wrong" → "right")`, for classifying NON-target errors.
 - transcript: the conversation. `User:` lines are the LEARNER; `Bot:` lines are {partner}, a native speaker — never classify {partner}'s German.
 
+# STEP 1 — separate {partner}'s German and recognizer noise from a real break
+Two things in the transcript are NEVER the learner's mistake:
+- Every `Bot:` line — {partner}'s own German, however it reads. Even a line that itself breaks a rule is not something the learner said; it can never set `elicited`, `produced_correctly`, or a `new_errors` entry.
+- Speech-recognition noise inside a `User:` line. This is Deepgram's transcript, not something the learner typed: a filler the recognizer kept ("äh", "um"), a trimmed verb ending, a missing sentence break, or a homophone written for the word actually spoken ("das" for "dass", "seit" for "seid") is a transcription artifact, not a grammar pattern.
+
+## This is where graders go wrong
+- target: nebensatz-verbende · Bot: "Na, dann bleibst du mal besser zuhause, weil du bist ja erkältet." → IGNORE. {partner}'s line breaks the rule, but it's not the learner's German — it can never affect this target's verdict.
+- target: nebensatz-verbende · User: "ich bleibe heute zuhause weil ich mich nicht gut fühle ähm" → produced_correctly: true. "ähm" is a kept filler; the clause already has the verb last.
+- target: nebensatz-verbende · User: "ich glaube das er heute kommt" → judge the word order only. Deepgram wrote "das" for "dass" (homophones) — not a wrong connector — and the verb is still last.
+- target: nebensatz-verbende · User: "ich bleibe zuhause weil ich bin müde" → produced_correctly: false. THIS is a real break — the verb sits in position 2, not a transcription artifact.
+
 # 1. Target patterns
 For EACH target, in the same order, decide:
 - elicited: did this structure actually come up in the LEARNER's own German this session? Judge the learner's production, not whether {partner} used it.
@@ -112,6 +128,7 @@ For EACH target, in the same order, decide:
 
 # 2. New errors
 Separately, find grammar mistakes the learner made in German that are NOT one of the target patterns, and map each to the ONE taxonomy id whose wrong→right pair matches it.
+- STEP 1 applies here too: never {partner}'s lines, never recognizer noise.
 - Use ids from the catalog only — never invent one.
 - Do NOT include any target pattern here — those are fully handled in section 1.
 - A pattern counts once: if the learner breaks the same non-target rule several times, emit ONE entry with the clearest example.

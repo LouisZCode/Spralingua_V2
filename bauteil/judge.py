@@ -33,8 +33,10 @@ class Diagnosis(BaseModel):
         description=(
             "True ONLY when the learner's phrase is a fully correct solution "
             "that differs from the expected one trivially — the whole sentence "
-            "typed around it, punctuation, capitalization. A changed, added or "
-            "missing ending, letter or umlaut is NEVER trivial"
+            "typed around it, punctuation, capitalization, and a spelling slip "
+            "in the noun/adjective STEM (handed to them verbatim in the raw "
+            "parts — not graded). A changed, added or missing ENDING letter "
+            "or umlaut is NEVER trivial"
         )
     )
     case_ok: bool = Field(
@@ -70,7 +72,15 @@ You diagnose one WRITTEN attempt in a German declension drill ("Bauteil-Sätze")
 # What the learner typed
 "{typed}"
 
-# How to diagnose — two SEPARATE axes, never conflated
+# STEP 1 — the stem is not on trial
+The raw parts above were handed to the learner verbatim — they only supply the ENDINGS. A spelling slip in the noun or adjective STEM itself (a doubled letter, a dropped umlaut, a typo) is not a declension error: diagnose the endings as if the stem were spelled correctly, and never let a stem slip flip any field below.
+
+## This is where graders go wrong
+- required nominative, expected "ein guter Job", typed "ein guter Jobb" → correct: true, case_ok: true, carrier_ok: true. "Jobb" is a stem typo; the ending "-er" on "guter" is exactly right.
+- required accusative, expected "einen alten Freund", typed "einen alten Freund, mein bester Freundd" → correct: true, case_ok: true, carrier_ok: true. The graded phrase is right; "Freundd" only appears in the extra words wrapped around it.
+- required dative, expected "einem netten Kunden", typed "einem nettem Kunden" → correct: false, case_ok: true, carrier_ok: false. THIS is a real ending error — "einem" already carries the case marking, so the adjective must take the weak "-en", not "-em".
+
+# STEP 2 — diagnose the two axes, never conflated
 A declined-phrase error has two independent axes. Work in two steps:
 
 1. Identify the learner's AIM — with a charitable default: the aim is the REQUIRED case, unless their phrase is a clean, fully well-formed build of a DIFFERENT case (then that case is the aim). A phrase with any malformed or inconsistent ending is an execution problem within the required case — never evidence of a different aim. ("ein alter Freund" is a clean nominative → aim nominative; "ein gute Job" is a clean build of nothing → aim = the required case.)
@@ -85,7 +95,7 @@ Consequences you must respect:
 - Capitalization and punctuation break neither axis.
 
 Then:
-- `correct` — true ONLY when the learner's phrase is a fully correct solution and differs from the expected one trivially: the whole sentence typed around it, punctuation, capitalization. A changed, added or missing ending, letter or umlaut is NEVER trivial.
+- `correct` — true ONLY when the learner's phrase is a fully correct solution and differs from the expected one trivially: the whole sentence typed around it, punctuation, capitalization, and a stem spelling slip (see STEP 1). A changed, added or missing ENDING letter or umlaut is NEVER trivial.
 - `note` — when correct=false: ONE short English line (AT MOST 14 words) naming which axis broke and teaching the why. Name the axes in PLAIN ENGLISH ONLY — "case" and "endings" — and NEVER write the internal field names `case_ok` or `carrier_ok` (the learner never sees those). The corrected phrase is shown to the learner separately — never restate it. When correct=true: null.
 
 # Worked examples

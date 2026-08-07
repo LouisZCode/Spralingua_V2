@@ -37,7 +37,9 @@ class GenderVerdict(BaseModel):
         description=(
             "True iff every gender-dependent word referring to the noun "
             "(articles, determiners, adjective endings, pronouns) agrees "
-            "with its true gender, in whatever case the sentence uses"
+            "with its true gender, in whatever case the sentence uses — "
+            "never affected by any OTHER error in the sentence (spelling, "
+            "verb form, word order)"
         )
     )
     wrong_word: str = Field(
@@ -71,6 +73,12 @@ You check ONE thing in a German learner's sentence: whether the grammatical gend
 
 # What does NOT count
 Ignore everything else completely: word order, verb forms and agreement, spelling of other words, missing words, punctuation, capitalization, style, whether the sentence makes sense. A clumsy sentence with correct gender marking is correct=true.
+
+## This is where graders go wrong
+- die Wohnung, typed "Ich habe eine schöne Wohnug gesehen." → correct: true. "Wohnug" is a spelling slip in the noun itself, not a gender-marking word — "eine" and "schöne" both agree correctly.
+- der Mann, typed "Der Mann esse gerne Äpfel." → correct: true. "esse" is a wrong verb form, not gender — "Der" agrees correctly.
+- das Kind, typed "Ich das Kind sehe jeden Tag." → correct: true. Word order is broken, but "das" still agrees correctly.
+- das Auto, typed "Ich habe ein neues Auto, aber der Auto ist kaputt." → correct: false, wrong_word: "der". THIS is a real gender error — "der" wrongly marks das Auto as masculine.
 
 # Output rules
 - gender_shown=false when {noun} appears only in plural, or so bare that no word reveals its gender — then set correct=true, wrong_word="", and let note tell the learner to use the singular with an article so the gender shows.

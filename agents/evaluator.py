@@ -27,10 +27,14 @@ EVALUATOR_MODEL = "openai/gpt-oss-120b"
 
 
 class GoalResult(BaseModel):
+    """One goal's pass/fail verdict. Judges whether the communicative act
+    happened in the target language — never the grammar, gender, case, or
+    spelling used to perform it."""
+
     goal: str = Field(description="The goal text copied verbatim from input")
-    passed: bool = Field(description="Whether the learner performed this goal in the target language")
+    passed: bool = Field(description="Whether the learner performed this goal in the target language; grammar, gender, case, or spelling mistakes inside a correct-language attempt never flip this to false")
     evidence: str = Field(description="Exact quote from the student's turn that performs or attempts this goal, or 'none' if no relevant student turn exists")
-    reasoning: str = Field(description="One or two short sentences in clear English describing the pass/fail decision")
+    reasoning: str = Field(description="One or two short sentences in clear English describing the pass/fail decision. For a pass despite grammar noise, say so — never cite grammar as a reason to fail")
 
 
 class EvaluationResult(BaseModel):
@@ -49,6 +53,13 @@ Be strict. For each goal:
 - FAIL if the student performed the act in another language, performed the wrong act, or did not perform it at all.
 
 A goal can be passed at any point in the transcript. One clear instance is enough; multiple attempts are fine.
+
+## This is where graders go wrong
+(These use German for illustration — apply the same logic to whatever {language} is.)
+- goal "Ask what time the train leaves." · student said "Wann fährt die Zug ab?" → **pass**. "die Zug" is a gender error, not a wrong act — the departure-time question was still asked, in German.
+- goal "Introduce yourself." · student said "Ich bin Luis geheißen." → **pass**. The verb form is malformed, but the student still gave their name, in German.
+- goal "Ask their name in return." · student said "Wie du heißt?" → **pass**. Word order is broken, but the question itself was asked, in German.
+- goal "Say goodbye politely." · student said "Bye!" → **fail**. THIS is a real miss — no German was attempted at all, not a grammar slip inside one.
 
 # Scoring
 - Each goal carries an equal share of 100 points.

@@ -143,6 +143,12 @@ Nested German is where learners collapse under pressure. Short main clauses (ver
 # The transcript has no punctuation
 This is SPOKEN German straight from speech recognition: there is no punctuation and no capitalization, and sentence boundaries are not marked. Segment it into sentences yourself, by meaning, before weighing each one. Forgive obviously misheard filler words ("ähm", "so") — they are not part of what you are weighing.
 
+## Transcription noise is not complexity — read intent, not artifacts
+A dropped filler, a trimmed verb ending ("geh" for "gehe"), or a homophone the recognizer picked ("das" for "dass") is Deepgram's doing, not the learner's — it must never push a sentence's `weight` up. Weigh what they most plausibly MEANT to say, not the recognizer's spelling of it.
+- "ich geh heute einkaufen und dann koch ich was leckeres" → **light**. "geh"/"koch" are trimmed endings from the recognizer, not simpler grammar — still two main clauses joined by "und ... dann", exactly the light target.
+- "ich war müde deshalb bin ich früh ins bett gegangen" → **light**. Missing comma, nothing else — two main clauses joined by "deshalb" is still coordination, not nesting.
+- "ich bin früh ins bett gegangen weil ich einen anstrengenden tag hatte und am nächsten morgen fit sein wollte für die prüfung die sehr wichtig war" → **heavy**, and transcription has nothing to do with it: a weil-clause carrying a further relative clause ("die sehr wichtig war") is genuine nesting.
+
 # Per-sentence `weight` — rate EVERY sentence you segment
 - `light`: a single main clause, OR two main clauses joined by und/aber/oder/denn/deshalb/dann/also, with the verb in position 2, present or perfect tense. THIS IS THE TARGET — this is good. IMPORTANT: two main clauses coordinated with "und" is LIGHT, not heavy — do NOT tell the learner to split clean coordination. `simpler` MUST be null.
 - `medium`: ONE subordinate clause that pushes the verb to the end (weil/dass/wenn/obwohl/da/während/damit), or one slightly heavier construction. Fine and common — note it lightly. `simpler` is optional.

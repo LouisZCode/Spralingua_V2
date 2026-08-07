@@ -37,11 +37,15 @@ EXTRACTOR_MODEL = "openai/gpt-oss-120b"
 
 
 class ExtractedError(BaseModel):
+    """One classified grammar slip from the LEARNER's own `User:` turns only
+    — never the partner's `Bot:` German, and never a speech-recognition
+    artifact (a homophone, a dropped filler, a trimmed ending)."""
+
     pattern_id: str = Field(
         description="The taxonomy id of the broken rule, copied verbatim from the catalog"
     )
     sentence: str = Field(
-        description="The learner's own erroneous German sentence, quoted from one of their turns"
+        description="The learner's own erroneous German sentence, quoted from a User: turn — never a Bot: line, and never a transcription artifact"
     )
     corrected: str = Field(
         description="That sentence minimally repaired in German — keep the learner's idea and words, change only what is wrong"
@@ -53,7 +57,7 @@ class ExtractedError(BaseModel):
 
 class ErrorExtraction(BaseModel):
     errors: list[ExtractedError] = Field(
-        description="One entry per DISTINCT broken pattern; empty when the learner made no classifiable grammar errors"
+        description="One entry per DISTINCT broken pattern found in the learner's own User: turns; empty when the learner made no classifiable grammar errors"
     )
 
 
@@ -64,9 +68,19 @@ You harvest German grammar errors from one language-learning conversation, for a
 - taxonomy: a fixed catalog of German grammar-error patterns, one per line as `id — label ("wrong" → "right")`.
 - transcript: the conversation in chat format. `User:` lines are the LEARNER; `Bot:` lines are the native-speaking partner.
 
+# STEP 1 — isolate the learner's own words, then forget the rest
+Two things in the transcript are NEVER the learner's mistake and must never become an entry:
+- Every `Bot:` line. That is the native partner's own German, however it reads — even a line that itself breaks a rule is not something the learner said.
+- Speech-recognition noise inside a `User:` line. This is Deepgram's transcript, not something the learner typed: a filler the recognizer kept ("äh", "um"), a trimmed verb ending, a missing sentence break, or a homophone written for the word actually spoken ("das" for "dass", "seit" for "seid") is a transcription artifact, not a grammar pattern.
+
+## This is where graders go wrong
+- Bot: "Na, dann bleibst du mal besser zuhause, weil du bist ja erkältet." → IGNORE. This clause breaks nebensatz-verbende, but it's the partner's line, not the learner's — never classify it, no matter how broken it reads.
+- User: "Ich glaube, dass er... äh... heute kommt." → nothing to classify. "äh" is a filler the recognizer kept; "dass er heute kommt" already has the verb last.
+- User: "Ich glaube das er heute kommt." → nothing to classify. Deepgram wrote "das" for "dass" — they're homophones, a transcription spelling, not a wrong connector — and the verb is still last.
+- User: "Ich bleibe zuhause, weil ich bin krank." → **classify** as nebensatz-verbende. This is a real word-order break in the learner's own line, not noise.
+
 # What to classify
-- Look ONLY at the `User:` lines. The `Bot:` partner is a native speaker — never classify their German.
-- Find grammar mistakes the learner made **in German**, and map each to the ONE catalog pattern whose wrong→right pair matches it. Use ids from the catalog only — never invent one.
+- Look ONLY at the `User:` lines, after STEP 1. Find grammar mistakes the learner made **in German**, and map each to the ONE catalog pattern whose wrong→right pair matches it. Use ids from the catalog only — never invent one.
 - A pattern counts once. If the learner breaks the same rule several times, emit ONE entry for it and quote the single clearest example.
 
 # What to skip
@@ -124,7 +138,7 @@ User: Ja, gestern. Ich habe zum Arzt gegangen und habe der Termin verpasst.
     }
   ]
 }
-("bleibe" misspelt as "bleibe/bleibe" is speech-recognition noise, not a pattern; the native Bot turns were ignored.)
+(Both Bot turns were ignored — that's the native partner's German, not the learner's.)
 
 # Now classify
 taxonomy:
