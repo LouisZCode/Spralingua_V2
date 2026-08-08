@@ -84,7 +84,9 @@ class HintVerdict(BaseModel):
 class Correction(BaseModel):
     """One correction, with its reason."""
 
-    error: str = Field(description="What the learner wrote, quoted exactly")
+    error: str = Field(
+        description="What the learner wrote, quoted exactly from the revised letter — never the first draft"
+    )
     correction: str = Field(description="The corrected German")
     why: str = Field(description="One short English line naming the rule")
 
@@ -132,7 +134,13 @@ _ERROR_CATEGORIES = """- Cases: nominative/accusative/dative/genitive after verb
 - Adjective endings after der/die/das, ein/eine, and with no article
 - Noun capitalization: every noun, and only nouns (not adjectives, not verbs, not pronouns other than sentence-initial)
 - Umlauts and ß where they belong
-- Register consistency: du-forms all the way through an informal letter, Sie-forms all the way through a formal one"""
+- Register consistency: du-forms all the way through an informal letter, Sie-forms all the way through a formal one
+
+## The salutation exception — do not over-apply "capitalize the first word"
+After a salutation that ends in a comma ("Hallo Anna," / "Liebe Frau Meier," / "Sehr geehrter Herr Klein,"), German continues the letter body in LOWERCASE. The word touching that comma is capitalized ONLY if it would be anyway — a noun, a proper name, or the formal "Sie"/"Ihr". This is standard Duden convention, not a mistake:
+- "Hallo Anna,\nein Urlaub klingt sehr spannend!" — "ein" stays lowercase. This is correct as written. Do NOT flag it.
+- CONTROL — "Liebe Anna,\nvielen dank für deinen Brief." — "dank" is a noun ("der Dank"), so it is capitalized regardless of position. DO flag it: "dank" → "Dank".
+- CONTROL — the exception covers only the single word touching the salutation comma. Every later sentence start is graded normally: "...spannend! wo gehst du hin?" — "wo" opens a NEW sentence after "!", well past the salutation, and must still become "Wo". Flag it."""
 
 
 HINT_PROMPT = """# Role
@@ -219,6 +227,12 @@ Style is not an error. Do not "correct" a sentence for being simple or for a wor
 
 # `explanations`
 At most 5 — the ones most worth understanding, not every comma. Each names the rule in one short English line. Skip anything already obvious from the correction.
+
+## Quote only the revised letter — the first draft is context, not a source
+The first draft above exists so you can judge `improvements_from_first`. It is NOT something you grade or quote from. Before writing an `error` string, check: does this exact phrase appear in "Their revised letter" above? If it appears ONLY in the first draft, the learner already fixed it — leave it out of `explanations` entirely. Telling them to fix something they already fixed is worse than saying nothing.
+- First draft: "Ich habe eine Frage über das Wetter." Revised: "Ich habe eine Frage zum Wetter." — the "über"/"zum" error is GONE from the revised letter. Do NOT put it in `explanations`.
+- CONTROL — First draft: "Ich freue mich auf dich sehen." Revised: "Ich freue mich auf dich sehen." (unchanged) — the same infinitive-clause error is STILL there in the revised letter, so it MUST be flagged, quoting it from the revised letter exactly as it stands.
+- CONTROL — First draft: "der Wetter ist schön." Revised: "das Wetter ist schön, aber ich mag der Regen nicht." — "der Wetter" was fixed to "das Wetter" (do not flag it), but "der Regen" is a new, still-uncorrected error that only exists in the revised letter — flag that one.
 
 # `score`
 0-100, against what is expected AT LEVEL {level} — not against a native. A letter that addresses all four points in correct, simple, level-appropriate German scores high even if it is plain. Weigh: did it address the four points, is the register consistent, is the grammar sound for this level, is it roughly the right length. Do not deduct for simplicity.
