@@ -172,3 +172,45 @@ Student-subagent briefs + scorecards now live in `sim/STUDENT_PROFILES.md`
 than in this log — this file stays scoped to prompt versions per its own
 header. Not yet run: `sim/` only has the real account (`0001`) seeded,
 blocked on TEST-001 (isolated fixture profiles).
+
+## teacher v4 (2026-08-08) — AGENT-001 P3: "why" gets an answer, not a drill
+
+The last of the three v3 findings. Clara's room exists for "but WHY is it
+like that?", and she answered whys with a ladder rung plus a quiz — the
+reason itself deferred, sometimes for good. Rule 7 makes the reason arrive
+in the same reply and names the three honest shapes: a clean reason, "there
+is no reason, learn it as a set" (which she used to withhold), or shortest-
+true-version-first with the long road offered after. It buys no extra room:
+still three sentences, still one question.
+
+Four sim rounds, same why-asking beginner profile, same topic ("Dative-only
+prepositions"), user `test-clara-v4` with a copy of 0001's ledger. Runs
+compare directly. Two things only the sim could have found:
+
+- **Rule 7 crowded out rule 4.** A curious student answers you AND asks
+  their why in one breath. With the reason mandatory and the sentence cap
+  unchanged, the credit is what got dropped — two correct answers ignored,
+  the same question re-asked four times. Fixed by making rule 7 handle both
+  halves in order, rule 4 forbid re-asking an answered question, and adding
+  the bundled-shape transcript.
+- **The ladder was manufacturing the fake quiz.** Her step one was "the list
+  of prepositions"; a list has nothing in it to understand, so a lookup was
+  the only question available. Banning inventory-rungs (rule 1) moved this
+  more than any rewording of the question rule did.
+
+Scores across the four runs: why-answered FAIL -> 3/3 · no-reason honesty
+FAIL -> PASS · credits-your-answer FAIL -> 3/3 · never-re-asks FAIL(4x) ->
+PASS · ghost-credit FAIL -> PASS · list-as-a-step -> PASS · pointing
+questions 4 violations -> 2 of 9.
+
+OPEN: those last 2 of 9 are all one shape (she hands over the exact word one
+clause before asking for it). Worth another round, but NOT another counter-
+example — at ~20k chars the rules compete: one-question-at-the-end and
+ghost-credit each passed twice and slipped twice, which is variance. Also
+still open: unglossed jargon ("preposition", "noun", "dependent clause").
+
+NOT a prompt-mechanism issue, logged here because the sim surfaced it: her
+German content is sometimes confidently wrong. Run 4 taught and praised
+"sie studiert bei der Universität" (should be "an der Universität"); run 3
+explained für's accusative as marking "direction toward something". Factual
+accuracy has no mechanism in this file and needs its own pass.
