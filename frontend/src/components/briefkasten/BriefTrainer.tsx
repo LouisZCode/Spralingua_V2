@@ -11,6 +11,8 @@ import type {
   Letter,
 } from "./api";
 import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
+import Glossable from "../shared/Glossable";
+import type { GlossInfo } from "../satzschmiede/api";
 
 type Phase = "writing" | "hints" | "feedback";
 
@@ -32,6 +34,109 @@ const CATEGORY_ORDER = Object.keys(CATEGORY_LABEL) as HintItem["category"][];
 function wordCount(text: string): number {
   const t = text.trim();
   return t ? t.split(/\s+/).length : 0;
+}
+
+// ─── Task 3: locate each hint's quoted phrase inside the learner's draft ───
+// The judge is told to quote "exactly as they wrote it", but LLM quoting
+// drifts — trailing punctuation, a collapsed double space, different
+// capitalization. We try three passes, most-exact first, and if none land
+// we skip the phrase silently: a missed highlight is invisible, a wrong one
+// (or a crash) is not acceptable in a learner's own writing.
+type DraftMatch = { start: number; end: number };
+
+// Collapses runs of whitespace to a single space and records, for every
+// character of the *collapsed* string, which original-string range it
+// stands for. That lets a whitespace-insensitive match on the collapsed
+// string be translated back into exact offsets in the untouched original —
+// required because we still have to reproduce `firstAttemptText` character
+// for character, line breaks included.
+function collapseWithMap(s: string): {
+  collapsed: string;
+  starts: number[];
+  ends: number[];
+} {
+  let collapsed = "";
+  const starts: number[] = [];
+  const ends: number[] = [];
+  let i = 0;
+  while (i < s.length) {
+    if (/\s/.test(s[i])) {
+      const runStart = i;
+      while (i < s.length && /\s/.test(s[i])) i++;
+      collapsed += " ";
+      starts.push(runStart);
+      ends.push(i);
+    } else {
+      collapsed += s[i];
+      starts.push(i);
+      ends.push(i + 1);
+      i++;
+    }
+  }
+  return { collapsed, starts, ends };
+}
+
+function findQuotedPhrase(haystack: string, needle: string): DraftMatch | null {
+  if (!needle.trim()) return null;
+
+  // Pass 1: exact substring.
+  const exact = haystack.indexOf(needle);
+  if (exact !== -1) return { start: exact, end: exact + needle.length };
+
+  // Pass 2: whitespace-normalized (collapsed runs of whitespace, both
+  // sides), mapped back to original offsets.
+  const { collapsed, starts, ends } = collapseWithMap(haystack);
+  const needleCollapsed = collapseWithMap(needle).collapsed.trim();
+  if (needleCollapsed) {
+    const idx = collapsed.indexOf(needleCollapsed);
+    if (idx !== -1) {
+      const lastIdx = idx + needleCollapsed.length - 1;
+      return { start: starts[idx], end: ends[lastIdx] };
+    }
+  }
+
+  // Pass 3: case-insensitive, on the original (un-collapsed) text. German
+  // lowercase-folding doesn't change string length for anything this text
+  // realistically contains, so original indices stay valid.
+  const idxCi = haystack.toLowerCase().indexOf(needle.toLowerCase());
+  if (idxCi !== -1) return { start: idxCi, end: idxCi + needle.length };
+
+  return null;
+}
+
+// Resolves every hint's quoted phrase to a span, drops any span that
+// overlaps one already accepted (earliest-start wins), and renders the
+// draft as alternating plain-text / <mark> chunks that together reproduce
+// `text` exactly — no character added, dropped, or duplicated.
+function renderHighlightedDraft(text: string, items: HintItem[]) {
+  const candidates = items
+    .map((item) => findQuotedPhrase(text, item.text))
+    .filter((m): m is DraftMatch => m !== null)
+    .sort((a, b) => a.start - b.start);
+
+  const accepted: DraftMatch[] = [];
+  for (const m of candidates) {
+    const prev = accepted[accepted.length - 1];
+    if (prev && m.start < prev.end) continue; // overlaps — discard
+    accepted.push(m);
+  }
+
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  accepted.forEach((m, i) => {
+    if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
+    nodes.push(
+      <mark
+        key={i}
+        className="rounded-[4px] bg-flag-gold-soft px-0.5 text-ink"
+      >
+        {text.slice(m.start, m.end)}
+      </mark>
+    );
+    cursor = m.end;
+  });
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
 }
 
 // The four required points as a checklist. Plain (no ticks) until a hint
@@ -117,7 +222,18 @@ function MarkedLetter({
   );
 }
 
-function LetterPanel({ letter }: { letter: Letter }) {
+function LetterPanel({
+  letter,
+  onGloss,
+  onAdd,
+}: {
+  letter: Letter;
+  // UI-007: hover/tap gloss popover for the incoming letter — optional so
+  // the panel still renders plain text when the parent hasn't wired a
+  // token yet (mirrors every other Glossable call site in the codebase).
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
+}) {
   return (
     <div
       className="rounded-[28px] border-[3px] border-ink bg-white p-7"
@@ -132,10 +248,21 @@ function LetterPanel({ letter }: { letter: Letter }) {
         </span>
       </div>
       <p className="mt-4 font-display text-[17px] font-black leading-snug text-ink">
-        {letter.betreff}
+        {onGloss ? (
+          <Glossable text={letter.betreff} onGloss={onGloss} onAdd={onAdd} />
+        ) : (
+          letter.betreff
+        )}
       </p>
+      {/* whitespace-pre-line lives on this wrapping <p> — `white-space` is
+          an inherited CSS property, so the paragraph breaks survive even
+          though the actual text now sits inside Glossable's inner <span>. */}
       <p className="mt-4 whitespace-pre-line font-body text-[15px] leading-relaxed text-ink">
-        {letter.body}
+        {onGloss ? (
+          <Glossable text={letter.body} onGloss={onGloss} onAdd={onAdd} />
+        ) : (
+          letter.body
+        )}
       </p>
     </div>
   );
@@ -166,6 +293,8 @@ export default function BriefTrainer({
   letter,
   onAttempt,
   onNewLetter,
+  onGloss,
+  onAdd,
 }: {
   letter: Letter;
   // Judge one attempt (POST /briefkasten/attempts via the parent, which owns
@@ -181,6 +310,11 @@ export default function BriefTrainer({
   }) => Promise<AttemptResult>;
   // Fetch a fresh letter; the parent remounts this component with it.
   onNewLetter: () => void;
+  // UI-007: word-gloss popover for the incoming letter (Task 1) — optional,
+  // threaded straight down to LetterPanel. Absent means plain text, same
+  // as before this wiring landed.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
 }) {
   const [phase, setPhase] = useState<Phase>("writing");
   // The learner's reply — survives the attempt-1 -> attempt-2 transition on
@@ -374,73 +508,27 @@ export default function BriefTrainer({
   return (
     <div>
       <div className="grid gap-6 lg:grid-cols-2">
-        <LetterPanel letter={letter} />
+        <LetterPanel letter={letter} onGloss={onGloss} onAdd={onAdd} />
 
         <div
           className="rounded-[28px] border-[3px] border-ink bg-white p-7"
           style={inkShadow}
         >
-          {phase === "hints" && hintResult && (
-            <>
-              <p className="font-display text-[15px] font-black leading-snug text-ink">
-                {hintResult.message}
-              </p>
-              {hintResult.items.length > 0 && (
-                <div className="mt-5 space-y-4">
-                  {CATEGORY_ORDER.map((cat) => {
-                    const items = hintResult.items.filter(
-                      (i) => i.category === cat
-                    );
-                    if (items.length === 0) return null;
-                    return (
-                      <div
-                        key={cat}
-                        className="rounded-[16px] border-[3px] border-ink bg-white px-4 py-3"
-                      >
-                        <p className="font-body text-[10px] font-black uppercase tracking-[0.2em] text-flag-red">
-                          {CATEGORY_LABEL[cat]}
-                        </p>
-                        <ul className="mt-2 space-y-3">
-                          {items.map((item, i) => (
-                            <li key={i}>
-                              <p className="font-body text-[14px] italic leading-snug text-ink">
-                                “{item.text}”
-                              </p>
-                              <p className="mt-1 font-body text-[13px] leading-snug text-ink-soft">
-                                {item.hint}
-                              </p>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              <div className="mt-6 border-t-[3px] border-dashed border-ink/15 pt-5">
-                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                  What to cover
-                </p>
-                <div className="mt-2">
-                  <PointsChecklist
-                    points={letter.points}
-                    covered={hintResult.coveredPoints}
-                  />
-                </div>
-              </div>
-            </>
-          )}
-
-          {phase === "writing" && (
-            <div>
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                What to cover
-              </p>
-              <div className="mt-2">
-                <PointsChecklist points={letter.points} />
-              </div>
+          {/* The writing brief. Present in both phases — attempt 1 shows it
+              undecided (no ticks yet), attempt 2 shows it graded against
+              `coveredPoints`. This is instructions, not feedback, so unlike
+              the hint message/cards below it never leaves this column. */}
+          <div>
+            <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+              What to cover
+            </p>
+            <div className="mt-2">
+              <PointsChecklist
+                points={letter.points}
+                covered={phase === "hints" ? hintResult?.coveredPoints : undefined}
+              />
             </div>
-          )}
+          </div>
 
           <div className="mt-5">
             <textarea
@@ -491,6 +579,71 @@ export default function BriefTrainer({
           </div>
         </div>
       </div>
+
+      {/* First-round feedback lives here, below BOTH panels — not stacked
+          above the answer column, where it used to sit right on top of
+          where the learner's own letter was about to go back in. */}
+      {phase === "hints" && hintResult && (
+        <div
+          className="mt-6 rounded-[28px] border-[3px] border-ink bg-white p-7"
+          style={inkShadow}
+        >
+          <p className="font-display text-[15px] font-black leading-snug text-ink">
+            {hintResult.message}
+          </p>
+
+          {/* Task 3: replay the first draft with each flagged phrase
+              highlighted. Deliberately `firstAttemptText`, the snapshot
+              taken the moment attempt 1 was sent — NOT the live `text`
+              state. The learner is already editing `text` for attempt 2 by
+              the time this renders, so highlighting the live value would
+              chase a moving target and light up the wrong words the
+              instant a single character changed. */}
+          {firstAttemptText && (
+            <div className="mt-5">
+              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                Your draft — look at the marked spots
+              </p>
+              <p className="mt-2 whitespace-pre-line font-body text-[14px] leading-relaxed text-ink">
+                {renderHighlightedDraft(firstAttemptText, hintResult.items)}
+              </p>
+            </div>
+          )}
+
+          {hintResult.items.length > 0 && (
+            <div className="mt-5 space-y-4">
+              {CATEGORY_ORDER.map((cat) => {
+                const items = hintResult.items.filter(
+                  (i) => i.category === cat
+                );
+                if (items.length === 0) return null;
+                return (
+                  <div
+                    key={cat}
+                    className="rounded-[16px] border-[3px] border-ink bg-white px-4 py-3"
+                  >
+                    <p className="font-body text-[10px] font-black uppercase tracking-[0.2em] text-flag-red">
+                      {CATEGORY_LABEL[cat]}
+                    </p>
+                    <ul className="mt-2 space-y-3">
+                      {items.map((item, i) => (
+                        <li key={i}>
+                          <p className="font-body text-[14px] italic leading-snug text-ink">
+                            “{item.text}”
+                          </p>
+                          <p className="mt-1 font-body text-[13px] leading-snug text-ink-soft">
+                            {item.hint}
+                          </p>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       <Footer onNewLetter={onNewLetter} />
     </div>
