@@ -24,7 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.observability import tracer
+from agents.observability import mark_span_error, tracer
 from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
@@ -38,6 +38,7 @@ from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
 from satz.glosser import gloss_word
 from satz.scheduler import lapse_interval, schedule
+from satz.verifier import verify_card
 from security import drill_try_admit, gloss_try_admit
 
 router = APIRouter(prefix="/satz", tags=["satzschmiede"])
@@ -269,21 +270,79 @@ async def _fresh_id(
     return cid
 
 
+# SATZ-021: forge -> fact-check -> retry-with-feedback, capped. A measured
+# 10.1% of LLM-forged cards carried a confirmed factual error (wrong sense,
+# invented plural, wrong Perfekt auxiliary, …) — this is the gate that
+# catches those before they enter the shared catalog.
+_MAX_FORGE_ATTEMPTS = 3
+
+
 async def _forge_card(
     db: AsyncSession, word: str, user_id: str, *, session_id: str | None = None
 ) -> tuple[VocabCard, EnrichedCard]:
-    """Catalog miss → enrich via LLM, validate against the curated card rules,
-    insert a ``community`` canonical row. Flushed but not committed — the
-    caller commits together with the pool link. Returns the enrichment too so
-    a verb's past sibling can be forged without a second LLM call."""
-    try:
-        enriched = await enrich_word(word, user_id=user_id, session_id=session_id)
-    except Exception:
-        logger.exception("Satz enrichment call failed for {!r}", word)
-        raise HTTPException(
-            status_code=502,
-            detail="The word forge is unavailable right now — try again in a moment.",
+    """Catalog miss → enrich via LLM, fact-check it, validate against the
+    curated card rules, insert a ``community`` canonical row. Flushed but
+    not committed — the caller commits together with the pool link. Returns
+    the enrichment too so a verb's past sibling can be forged without a
+    second LLM call.
+
+    SATZ-021: ``_validate_card`` below only checks the card's SHAPE — never
+    whether the German is TRUE. Before building the card, up to
+    ``_MAX_FORGE_ATTEMPTS`` rounds of enrich -> ``verify_card`` fact-check
+    run: a rejected verdict's ``problem`` feeds back into the next
+    ``enrich_word`` call so the retry fixes exactly what was named instead
+    of just resampling the same mistake. Exhausting every attempt still
+    ships the last one — the learner asked for this word and must not be
+    blocked — but marks the Langfuse span an error so the failure stays
+    visible: the verdict is forgotten, a wrong card in the catalog is not.
+    """
+    feedback: str | None = None
+    enriched: EnrichedCard | None = None
+    for attempt in range(1, _MAX_FORGE_ATTEMPTS + 1):
+        try:
+            enriched = await enrich_word(
+                word, user_id=user_id, session_id=session_id, feedback=feedback
+            )
+        except Exception:
+            logger.exception("Satz enrichment call failed for {!r}", word)
+            raise HTTPException(
+                status_code=502,
+                detail="The word forge is unavailable right now — try again in a moment.",
+            )
+        if not enriched.valid or not enriched.target or not enriched.type:
+            # Reject/translate outcome — there is no card here to fact-check.
+            break
+        try:
+            verdict = await verify_card(enriched, user_id=user_id, session_id=session_id)
+        except Exception:
+            # The verifier itself going down must never block an add — ship
+            # this attempt unverified, same as every other non-fatal failure
+            # in this module.
+            logger.exception("Satz card verification call failed for {!r}", word)
+            break
+        if verdict.ok:
+            break
+        feedback = verdict.problem
+        logger.warning(
+            "Satz forge attempt {}/{} rejected for {!r}: {}",
+            attempt, _MAX_FORGE_ATTEMPTS, word, feedback,
         )
+    else:
+        # All _MAX_FORGE_ATTEMPTS rounds came back rejected — ship the last
+        # attempt anyway, but make the failure loud in Langfuse rather than
+        # silent.
+        with tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
+            if session_id:
+                span.set_attribute("langfuse.session.id", session_id)
+            span.set_attribute("user.id", user_id)
+            span.set_attribute("word", word)
+            span.set_attribute("satz.gate", "base_card")
+            mark_span_error(span, feedback or "verification failed")
+        logger.warning(
+            "Satz forge exhausted {} attempts for {!r}, shipping unverified: {}",
+            _MAX_FORGE_ATTEMPTS, word, feedback,
+        )
+
     if not enriched.valid or not enriched.target or not enriched.type:
         if enriched.german_equivalent:
             # SATZ-005: the input is a real foreign word we can name a German
@@ -381,7 +440,15 @@ async def _ensure_past_sibling(
     geflogen", "dachte · hat gedacht"). Find the sibling, or forge it — from
     the enrichment already in hand on a fresh forge, or one extra enricher
     call when a catalog hit predates verb pairing. Returns None (with a log)
-    rather than failing the add: the present card alone is still a win."""
+    rather than failing the add: the present card alone is still a win.
+
+    SATZ-021: the already-in-hand ``enriched`` case is never re-verified
+    here — it already went through ``_forge_card``'s fact-check loop over
+    the WHOLE card, past fields included. Only the catalog-hit branch below
+    (its own fresh ``enrich_word`` call) runs the fact-check gate, and on
+    exhaustion it gives up on the sibling rather than risk inserting a
+    wrong one — a missing past sibling is strictly better than a wrong one.
+    """
     sibling = await db.scalar(
         select(VocabCard).where(
             VocabCard.type == "verb",
@@ -393,15 +460,64 @@ async def _ensure_past_sibling(
         return sibling
 
     if enriched is None or not enriched.past_form:
-        try:
-            enriched = await enrich_word(
-                present.target, user_id=user_id, session_id=session_id
+        feedback: str | None = None
+        fresh: EnrichedCard | None = None
+        for attempt in range(1, _MAX_FORGE_ATTEMPTS + 1):
+            try:
+                fresh = await enrich_word(
+                    present.target,
+                    user_id=user_id,
+                    session_id=session_id,
+                    feedback=feedback,
+                )
+            except Exception:
+                logger.exception(
+                    "Satz past-sibling enrichment failed for {!r}", present.target
+                )
+                return None
+            if not fresh.past_form:
+                # Nothing to fact-check — the missing-past-form warning
+                # below handles this exactly as before.
+                break
+            try:
+                verdict = await verify_card(
+                    fresh, user_id=user_id, session_id=session_id
+                )
+            except Exception:
+                # Verifier outage: ship this attempt unverified rather than
+                # block the add, same non-fatal handling as everywhere else.
+                logger.exception(
+                    "Satz past-sibling verification call failed for {!r}",
+                    present.target,
+                )
+                break
+            if verdict.ok:
+                break
+            feedback = verdict.problem
+            logger.warning(
+                "Satz past-sibling forge attempt {}/{} rejected for {!r}: {}",
+                attempt, _MAX_FORGE_ATTEMPTS, present.target, feedback,
             )
-        except Exception:
-            logger.exception(
-                "Satz past-sibling enrichment failed for {!r}", present.target
+        else:
+            # Exhausted every attempt without a passing verdict — skip the
+            # sibling instead of inserting one we couldn't fact-check clean.
+            # Same Langfuse error signal as the base-card gate: giving up is
+            # the safe outcome here, but it must never be a *silent* one, or
+            # verbs quietly stop getting past siblings and nobody notices.
+            with tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
+                if session_id:
+                    span.set_attribute("langfuse.session.id", session_id)
+                span.set_attribute("user.id", user_id)
+                span.set_attribute("word", present.target)
+                span.set_attribute("satz.gate", "past_sibling")
+                mark_span_error(span, feedback or "verification failed")
+            logger.warning(
+                "Satz past sibling for {!r} never verified after {} attempts "
+                "— skipping rather than risking a wrong one: {}",
+                present.target, _MAX_FORGE_ATTEMPTS, feedback,
             )
             return None
+        enriched = fresh
     if not enriched.past_form:
         logger.warning(
             "Satz enricher gave no past form for {!r} — pairing skipped",

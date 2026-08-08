@@ -130,6 +130,19 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
 The learner typed: {word}
 """
 
+# SATZ-021: appended (never blended into PROMPT itself) when a previous
+# attempt for this same word failed satz/verifier.py's fact-check — without
+# this, a "retry" is just resampling the same call and reliably reproduces
+# the same error. Kept as its own block so the base PROMPT stays byte-
+# identical when feedback is absent (the default).
+FEEDBACK_BLOCK = """
+
+# Your previous attempt was rejected
+A fact-checker reviewed your last card for this same word and rejected it for this specific reason:
+"{feedback}"
+Fix EXACTLY that problem. Keep every other field the same if it was already correct — do not introduce a new error while fixing this one.
+"""
+
 
 def _normalize(e: EnrichedCard) -> EnrichedCard:
     """Defensive post-pass: enforce the card rules even when the model drifts
@@ -171,6 +184,7 @@ async def enrich_word(
     user_id: str | None = None,
     *,
     session_id: str | None = None,
+    feedback: str | None = None,
 ) -> EnrichedCard:
     """One structured-output judgement call: reject or forge a rule-conformant card.
 
@@ -178,10 +192,19 @@ async def enrich_word(
     ``satz-forge`` span so an add-a-word call fired mid-conversation (e.g.
     from a drill route) files into that conversation's Langfuse session
     instead of standing alone.
+
+    ``feedback`` (SATZ-021), when set, is the ``problem`` from a rejected
+    ``satz/verifier.py::verify_card`` verdict on this exact word's previous
+    attempt — appended to the prompt so a retry actually fixes the named
+    issue instead of resampling and reproducing it. ``None`` (the default)
+    leaves the prompt byte-identical to before this parameter existed.
     """
     # Cerebras-direct primary + OpenRouter fallback with 12s/leg deadline —
     # see agents/openrouter_llm.structured_judge_llm.
     llm = structured_judge_llm(EnrichedCard)
+    prompt = PROMPT.replace("{word}", word)
+    if feedback:
+        prompt += FEEDBACK_BLOCK.replace("{feedback}", feedback)
     # OBS-006: the forge is its own single-generation Langfuse trace — the
     # add-a-word path's latency and verdicts were previously invisible.
     with generation_span(
@@ -192,7 +215,7 @@ async def enrich_word(
         session_id=session_id,
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(
-            await llm.ainvoke(PROMPT.replace("{word}", word))
+            await llm.ainvoke(prompt)
         )
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
     return _normalize(result)

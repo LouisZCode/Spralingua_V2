@@ -24,6 +24,7 @@ from contextlib import contextmanager
 from loguru import logger
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.trace import Status, StatusCode
 from pipecat.utils.tracing.setup import setup_tracing
 
 from config import (
@@ -172,6 +173,27 @@ def record_generation_output(
         provider = response_metadata.get("openrouter_provider") or response_metadata.get("provider")
         if provider is not None:
             span.set_attribute("openrouter.provider", provider)
+
+
+def mark_span_error(span, message: str) -> None:
+    """Stamp a span as a Langfuse-visible ERROR (SATZ-021).
+
+    Every other helper in this module records a happy-path Generation; this
+    one exists for the opposite case — a call that ran to completion (no
+    exception) but whose RESULT is a failure the rest of the system should
+    still surface loudly, e.g. the Satzschmiede forge gate exhausting every
+    verify/retry round and shipping an unverified card anyway rather than
+    blocking the learner. Sets the OTel span status to ERROR (so it reads as
+    a failed span on the trace itself) and stamps
+    ``langfuse.observation.level``/``langfuse.observation.status_message``
+    (Langfuse's own error-level attributes) so it also shows up as an error
+    in the Langfuse UI, not just another green Generation. Same no-op-safe
+    contract as the rest of this module: with LANGFUSE_* unconfigured the
+    tracer is a no-op and every call here is swallowed at zero cost.
+    """
+    span.set_status(Status(StatusCode.ERROR, message))
+    span.set_attribute("langfuse.observation.level", "ERROR")
+    span.set_attribute("langfuse.observation.status_message", message)
 
 
 def unwrap_structured_output(result) -> tuple:
