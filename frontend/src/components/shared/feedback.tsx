@@ -66,7 +66,9 @@ export function MarkedText({
   renderToken,
 }: {
   tokens: MarkedToken[];
-  mark: "red" | "green";
+  // "blue" is IDIOM-002's mark: what the Germanizer changed. Not red —
+  // the learner's line wasn't WRONG, a native just phrases it differently.
+  mark: "red" | "green" | "blue";
   // SATZ-018: optional per-token content override — lets a caller (e.g. the
   // corrected sentence on a Satzschmiede vocab card) wrap each token in
   // something else (Glossable) while this component still owns the diff
@@ -75,7 +77,11 @@ export function MarkedText({
   renderToken?: (token: MarkedToken, index: number) => ReactNode;
 }) {
   const markClass =
-    mark === "red" ? "font-semibold text-flag-red-deep" : "text-success";
+    mark === "red"
+      ? "font-semibold text-flag-red-deep"
+      : mark === "blue"
+        ? "font-semibold text-blue-600"
+        : "text-success";
   return (
     <>
       {tokens.map((t, i) => (

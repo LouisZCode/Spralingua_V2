@@ -47,8 +47,10 @@ async def rephrase(
     body: RephraseIn,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Return the plain-but-native version of one learner line, or nulls
-    when their German already sounds German (the silence case)."""
+    """Return the plain-but-native version of one learner line, or null
+    when their German already sounds German (the silence case). Just the
+    rewrite, no commentary — it speaks for itself next to their own line
+    (user call, 2026-08-10)."""
     if not drill_try_admit(user_id):
         raise HTTPException(
             status_code=429,
@@ -83,4 +85,4 @@ async def rephrase(
             )
         span.set_attribute("idiom.rewrote", result.natural is not None)
 
-    return {"natural": result.natural, "explanation": result.explanation}
+    return {"natural": result.natural}

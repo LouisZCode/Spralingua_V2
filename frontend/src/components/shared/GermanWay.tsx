@@ -15,8 +15,11 @@
 import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
 import { useAuth } from "../auth/AuthContext";
+import { diffTokens, MarkedText } from "./feedback";
 
-type Rephrase = { natural: string | null; explanation: string | null };
+// Just the rewrite — no explanation field by design (user call, 2026-08-10):
+// the German version next to the learner's own line speaks for itself.
+type Rephrase = { natural: string | null };
 
 const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
@@ -77,31 +80,30 @@ export default function GermanWay({
     }
   };
 
+  // Light the words the judge changed in BLUE, not red — the learner's line
+  // wasn't wrong, a native just phrases it differently (user call,
+  // 2026-08-10). Case-insensitive: the attempt is an STT transcript whose
+  // casing is an ASR artifact (SATZ-016).
+  const naturalDiff =
+    state === "done" && result?.natural
+      ? diffTokens(text, result.natural, { caseInsensitive: true }).corrected
+      : null;
+
   const revealed =
     state === "done" &&
     open &&
-    (result?.natural ? (
+    (result?.natural && naturalDiff ? (
       variant === "card" ? (
         <div className="mt-3 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-left">
-          <p className="whitespace-pre-line font-body text-[15px] leading-relaxed text-ink">
-            {result.natural}
+          <p className="font-body text-[15px] leading-relaxed text-ink">
+            <MarkedText tokens={naturalDiff} mark="blue" />
           </p>
-          {result.explanation && (
-            <p className="mt-2 font-body text-[12px] leading-snug text-ink-soft">
-              {result.explanation}
-            </p>
-          )}
         </div>
       ) : (
         <div className="mt-1.5 max-w-[420px] rounded-[14px] border-[2px] border-ink/40 bg-paper-warm px-3 py-2 text-left">
           <p className="font-body text-[13px] leading-snug text-ink">
-            {result.natural}
+            <MarkedText tokens={naturalDiff} mark="blue" />
           </p>
-          {result.explanation && (
-            <p className="mt-1 font-body text-[11px] leading-snug text-ink-soft">
-              {result.explanation}
-            </p>
-          )}
         </div>
       )
     ) : (

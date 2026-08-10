@@ -38,14 +38,6 @@ class IdiomRephrase(BaseModel):
             "also produce gets null, not a polish"
         ),
     )
-    explanation: Optional[str] = Field(
-        default=None,
-        description=(
-            "1-2 short English lines naming what a German says differently "
-            "and why it sounds more natural. Never grammar talk, never "
-            "rule names. MUST be null whenever natural is null"
-        ),
-    )
 
 
 _REGISTER_GUIDANCE = {
@@ -86,7 +78,7 @@ Worked examples:
 - "Er hat mir mit den Hausaufgaben geholfen" → natural: "Er hat mir bei den Hausaufgaben geholfen." "mit" is English's *help with* wearing German clothes — Germans help "bei" something. Word choice, so it IS your department.
 - CONTROL — "Ich bin glücklich zu hören, dass deine Prüfung gut war" → natural: "Schön, dass deine Prüfung gut gelaufen ist!" The grammar is fine; the phrasing is English wearing German words. THIS is your department.
 
-When you rewrite, your German will naturally come out with correct endings even where theirs slipped — that is unavoidable and fine, but the `explanation` NEVER points at it. No mention of endings, articles, cases or rules, ever — only the phrasing choice.
+When you rewrite, your German will naturally come out with correct endings even where theirs slipped — that is unavoidable and fine. The rewrite is ALL you return: it speaks for itself, side by side with their line. No commentary of any kind.
 
 # `natural` — read this twice
 Write one when the line is German that no native would produce — most often English translated word for word. These are exactly the cases to catch:
@@ -98,12 +90,11 @@ Write one when the line is German that no native would produce — most often En
 
 Return null when the line already sounds like German — simple, plain German counts as natural. Do NOT rewrite to add sophistication, vary word choice, or make it more interesting. Plain but native is the target, not impressive.
 
+A rewrite that keeps their words and only changes the ORDER is not a rewrite — moving the right words around is grammar territory or taste, never phrasing. Return null instead.
+
 The test is: would a German notice something is off in how it's PHRASED? If yes, rewrite. If they would simply hear it and answer, return null.
 
 Keep the rewrite the same size and register as their line — one spoken turn, not a speech. Register: {register_guidance}
-
-# `explanation`
-1-2 short English lines: which phrasing a German reaches for instead, and what makes it the natural choice. Talk like a friend explaining how people actually say it, not like a teacher. Null whenever `natural` is null.
 """
 
 
@@ -111,6 +102,15 @@ def _normalized(s: str) -> str:
     """Casefold and strip everything but letters/digits — two lines that
     differ only in spacing, casing or punctuation are the same line."""
     return "".join(ch for ch in s.casefold() if ch.isalnum())
+
+
+def _token_multiset(s: str) -> list[str]:
+    """The line's words, casefolded and order-blind. A 'rewrite' with the
+    identical multiset only moved words around — that is grammar territory
+    or taste, not phrasing advice, and counts as the null case."""
+    return sorted(
+        "".join(ch if ch.isalnum() else " " for ch in s.casefold()).split()
+    )
 
 
 async def germanize(
@@ -133,12 +133,15 @@ async def germanize(
             await llm.ainvoke(prompt)
         )
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
-    # A whitespace-only rewrite, or one identical to the input modulo
-    # casing/punctuation, IS the null case — same guard briefkasten runs.
+    # A whitespace-only rewrite, one identical to the input modulo
+    # casing/punctuation, or one that merely REORDERS the learner's own
+    # words IS the null case — enforced as code, not left to the prompt.
     if result.natural is not None:
         candidate = result.natural.strip()
-        if not candidate or _normalized(candidate) == _normalized(text):
+        if (
+            not candidate
+            or _normalized(candidate) == _normalized(text)
+            or _token_multiset(candidate) == _token_multiset(text)
+        ):
             result.natural = None
-    if result.natural is None:
-        result.explanation = None
     return result
