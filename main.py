@@ -27,6 +27,7 @@ from genus import (
     load_rules as load_genus_rules,
     router as genus_router,
 )
+from idiom import router as idiom_router
 from satzbau import load_items as load_satzbau_items, router as satzbau_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
 from stats import router as stats_router
@@ -180,6 +181,10 @@ app.include_router(szenario_router)
 # Briefkasten: a letter arrives, the learner writes back — hints on the first
 # draft, corrections + score on the revision. The one written production mode.
 app.include_router(briefkasten_router)
+# Idiom (IDIOM-002 Proposal-1): the on-demand "how would a German say this?"
+# rephrase — one judge call per tap, null when their German already sounds
+# German. Writes nothing; every surface's own verdict stays untouched.
+app.include_router(idiom_router)
 # Cross-drill practice stats (DATA-004): GET /me/stats.
 app.include_router(stats_router)
 

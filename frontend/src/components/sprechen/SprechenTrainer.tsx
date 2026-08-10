@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { NudgeWord, SpokenTask, SprechenVerdict } from "./api";
+import GermanWay from "../shared/GermanWay";
 import Glossable from "../shared/Glossable";
 import VocabNudgePill from "../shared/VocabNudge";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
@@ -564,6 +565,12 @@ export default function SprechenTrainer({
                   </li>
                 ))}
               </ul>
+            )}
+
+            {/* IDIOM-002 P1: on-demand phrasing advice on the whole take —
+                separate from the slips above, which grade grammar. */}
+            {verdict.transcript.trim() !== "" && (
+              <GermanWay text={verdict.transcript} context={task.prompt} />
             )}
 
             <div className="mt-6 flex items-center justify-center gap-4">

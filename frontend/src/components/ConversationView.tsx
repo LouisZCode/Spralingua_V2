@@ -13,6 +13,7 @@ import SessionSummaryModal, {
 import TandemDebriefModal from "./TandemDebriefModal";
 import { useAuth } from "./auth/AuthContext";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
+import GermanWay from "./shared/GermanWay";
 import Glossable from "./shared/Glossable";
 import { useRecorder } from "./shared/recorder";
 import { TANDEM_LESSONS, partnerByLesson } from "./shared/tandem";
@@ -549,6 +550,7 @@ export default function ConversationView({
             transcriptRef={transcriptRef}
             onFinish={() => setShowFinishConfirm(true)}
             prominentFinish={TANDEM_LESSONS.has(params.lesson) || params.lesson === TEACHER_LESSON}
+            germanWay={TANDEM_LESSONS.has(params.lesson)}
             onGloss={onGloss}
             onAdd={onAdd}
             practiceMode={practiceMode}
@@ -805,6 +807,7 @@ function LivePhase({
   transcriptRef,
   onFinish,
   prominentFinish,
+  germanWay,
   onGloss,
   onAdd,
   practiceMode,
@@ -826,6 +829,10 @@ function LivePhase({
   // rarely-hit backstop — so tandem gets an unmissable primary button here
   // instead of the small "✕ Finish" other lessons keep.
   prominentFinish?: boolean;
+  // IDIOM-002 P1: tandem only — the on-demand "How would a German say
+  // this?" link under the learner's own bubbles. Clara and the /learn
+  // lessons never see it.
+  germanWay?: boolean;
   // UI-009: word-gloss popover wiring, forwarded from ConversationView —
   // see that component's props for the contract.
   onGloss?: (word: string, context: string) => Promise<GlossInfo>;
@@ -1027,15 +1034,35 @@ function LivePhase({
               m.speaker === "you" ? "justify-end" : "justify-start"
             }`}
           >
-            <div className={`bubble ${m.speaker === "you" ? "bubble-you" : "bubble-them"}`}>
-              {/* UI-009: only the partner's own words get glossed — the
-                  learner's bubbles stay plain, they wrote them. */}
-              {m.speaker === "bot" && onGloss ? (
-                <Glossable text={m.text} onGloss={onGloss} onAdd={onAdd} />
-              ) : (
-                m.text
-              )}
-            </div>
+            {m.speaker === "you" && germanWay ? (
+              // IDIOM-002 P1: the learner's bubble grows a small on-demand
+              // "more German way" link underneath. The partner's last line
+              // before this turn rides along as judge context — background
+              // only, never graded (the judge's prompt says so).
+              <div className="flex min-w-0 flex-col items-end">
+                <div className="bubble bubble-you">{m.text}</div>
+                <GermanWay
+                  variant="inline"
+                  text={m.text}
+                  context={
+                    messages
+                      .slice(0, i)
+                      .reverse()
+                      .find((x) => x.speaker === "bot")?.text
+                  }
+                />
+              </div>
+            ) : (
+              <div className={`bubble ${m.speaker === "you" ? "bubble-you" : "bubble-them"}`}>
+                {/* UI-009: only the partner's own words get glossed — the
+                    learner's bubbles stay plain, they wrote them. */}
+                {m.speaker === "bot" && onGloss ? (
+                  <Glossable text={m.text} onGloss={onGloss} onAdd={onAdd} />
+                ) : (
+                  m.text
+                )}
+              </div>
+            )}
           </div>
         ))}
       </section>

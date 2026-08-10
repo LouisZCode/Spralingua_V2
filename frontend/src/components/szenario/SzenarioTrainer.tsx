@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { Scenario, StructureResult } from "./api";
+import GermanWay from "../shared/GermanWay";
 import Glossable from "../shared/Glossable";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { WordRejectedError, type GlossInfo } from "../satzschmiede/api";
@@ -329,6 +330,12 @@ export default function SzenarioTrainer({
               </div>
             )}
           </div>
+
+          {/* IDIOM-002 P1: on-demand phrasing advice on the whole answer —
+              separate from the structure verdict above. */}
+          {verdict.transcript.trim() !== "" && (
+            <GermanWay text={verdict.transcript} context={scenario.question} />
+          )}
 
           {/* Details on demand: what we heard, per-sentence weights, skeleton. */}
           <div className="mt-5 text-center">

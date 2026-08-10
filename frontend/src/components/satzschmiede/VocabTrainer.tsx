@@ -11,6 +11,7 @@ import {
 } from "./api";
 import type { DeckCard } from "./deck";
 import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
+import GermanWay from "../shared/GermanWay";
 import Glossable from "../shared/Glossable";
 import { useAuth } from "../auth/AuthContext";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
@@ -1113,6 +1114,15 @@ export default function VocabTrainer({
                           {explaining ? "Explaining…" : "Explain more →"}
                         </button>
                       ))}
+                    {/* IDIOM-002 P1: on-demand phrasing advice on the whole
+                        spoken sentence — separate from (and never touching)
+                        the word/grammar verdict above. */}
+                    {result.transcript.trim() !== "" && (
+                      <GermanWay
+                        text={result.transcript}
+                        context={`They were asked to use the German word "${card.target}" in one spoken sentence.`}
+                      />
+                    )}
                     {/* SATZ-008: recourse for a verdict that feels wrong —
                         shown on green cards too (a miss the examiner passed
                         is exactly what we want flagged). */}
