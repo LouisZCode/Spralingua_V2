@@ -221,6 +221,18 @@ export default function SzenarioTrainer({
     }
   }
 
+  // Same-question redo: unlike New question (a fresh scenario), this reuses
+  // `scenario` as-is — clear the verdict/details and drop back to "scene" so
+  // the mic UI is live, then start recording immediately. GermanWay isn't
+  // reset here directly: it only renders inside the "result" block, so
+  // flipping the phase unmounts it along with the rest of the verdict.
+  function retry() {
+    setVerdict(null);
+    setShowDetails(false);
+    setPhase("scene");
+    void startRecording();
+  }
+
   if (phase === "intro") {
     return (
       <div
@@ -464,6 +476,13 @@ export default function SzenarioTrainer({
           )}
 
           <div className="mt-7 flex items-center justify-center gap-5">
+            <button
+              type="button"
+              onClick={retry}
+              className="font-body text-[12px] font-bold uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              ↻ Try again
+            </button>
             <button
               type="button"
               onClick={onNewQuestion}
