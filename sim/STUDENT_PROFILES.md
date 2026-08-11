@@ -215,3 +215,56 @@ drives one WebSocket per user id at a time (`start` kills any stale holder
 first). Repeat the whole procedure with `--lesson tandem_paul` to score
 Paul separately; his prompt is a distinct file (`tandem_paul.yaml`) with
 its own memory (`load_tandem_notes` filters per `lesson_id`).
+
+## The good student — "Ben" (added 2026-08-11, teacher v5 rule 8)
+
+### Why this profile exists
+
+Teacher v5 gave Clara a way to END a lesson herself (rule 8: ladder done +
+~3 correct productions in the student's own words → she names the skill and
+says a goodbye phrase, which mechanically closes the session). No existing
+profile can trigger it: the adversarial five never learn the thing, and
+Nina is a tandem profile. Rule 8's failure modes are also specific — she
+either never closes (student has to say goodbye to a finished lesson) or
+closes on nods (rule 6 violation) — so the profile that exercises it has to
+actually *get it*, in German, in his own words.
+
+### Persona brief
+
+Motivated beginner in Clara's room, topic picked on the way in (use a real
+ledger label so the grammar-focus layer is live). Behaviour, in order:
+
+1. Answer her opening question honestly, as a beginner.
+2. Engage each rung genuinely; short answers, no essays.
+3. Get exactly ONE answer wrong mid-lesson, sounding sure — tests the kind,
+   immediate correction (rule 6's wrong-answer branch).
+4. Then produce correct answers **in his own words** — real German
+   productions ("Ich fahre mit dem Bus zur Schule."), never bare "yes" —
+   until ~3 have accumulated.
+5. NEVER say goodbye himself. Ending the lesson is her job; a run where the
+   student has to close it is a rule-8 FAIL.
+6. Optional probe if the flow allows: one bare "ok" mid-lesson to check the
+   ghost-credit rule (she must re-ask smaller, not credit it).
+
+### Scorecard (PASS/FAIL per axis, evidence quote required)
+
+- **Opening without a plan** — greeting + one how-it-works line + straight
+  into the first idea; any "three steps: first X, then Y" enumeration FAILS.
+- **One rung, one question** — spot-check ≥3 replies: ≤3 sentences, exactly
+  one question mark, last.
+- **Wrong answer handled** — the planted error is named wrong immediately
+  and kindly, right answer given with a one-breath reason; crediting it
+  FAILS.
+- **Mastery close (the axis this profile exists for)** — after the ~3rd
+  correct production she closes UNPROMPTED: one sentence naming what he can
+  now do + a real goodbye phrase, and `say` prints
+  `SESSION_ENDING (goodbye, ...)`. Inventing a fourth exercise past mastery
+  FAILS; sailing past exchange 10 with 3+ productions banked FAILS.
+
+### First run (2026-08-11, teacher v5, fixture user `test-clarav5`)
+
+All four axes PASS. Topic "Dative-only prepositions" (seeded ledger);
+4 correct productions around 1 planted error; she closed at exchange 6/40:
+"…you can now pick any of the dative-only prepositions (mit, nach, bei,
+von, zu, aus, seit) and use the right dative article in a sentence. Take
+care, see you next time!" → `SESSION_ENDING (goodbye, exchange 6/40)`.
