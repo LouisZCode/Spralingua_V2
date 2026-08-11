@@ -21,7 +21,7 @@ const strip = (t: string) =>
 export function diffTokens(
   attempt: string,
   corrected: string,
-  // BRIEF-001: `markPunctuation` is opt-in and changes only what counts as
+  // BRIEF-002: `markPunctuation` is opt-in and changes only what counts as
   // "changed", never the ALIGNMENT — that still runs over punctuation-
   // stripped (and optionally lowercased) tokens, same as always, so a lone
   // comma can't shove the whole LCS out of sync. Once two tokens are aligned

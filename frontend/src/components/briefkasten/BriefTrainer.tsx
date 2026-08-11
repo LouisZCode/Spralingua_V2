@@ -198,7 +198,7 @@ function MarkedLetter({
   text: string;
   tokens: MarkedToken[];
   mark: "red" | "green" | "blue";
-  // BRIEF-001: threaded straight through to each line's MarkedText, same
+  // BRIEF-002: threaded straight through to each line's MarkedText, same
   // per-token override GermanWay/VocabTrainer use for Glossable — MarkedLetter
   // only re-drapes tokens over line structure, it doesn't own rendering.
   renderToken?: (token: MarkedToken, index: number) => React.ReactNode;
@@ -393,7 +393,7 @@ export default function BriefTrainer({
   }
 
   if (phase === "feedback" && feedbackResult) {
-    // BRIEF-001: `markPunctuation` on — the learner typed every character of
+    // BRIEF-002: `markPunctuation` on — the learner typed every character of
     // this letter, so a missing/added comma is a real correction, not an ASR
     // artifact to hide (unlike every spoken-surface caller of diffTokens).
     // Case stays sensitive as it was: capitalization is real German grammar
@@ -409,7 +409,7 @@ export default function BriefTrainer({
       !diff.attempt.some((t) => t.changed) &&
       !diff.corrected.some((t) => t.changed);
 
-    // SATZ-018/BRIEF-001: same per-token Glossable override GermanWay and
+    // SATZ-018/BRIEF-002: same per-token Glossable override GermanWay and
     // VocabTrainer use — MarkedText/MarkedLetter still own the diff color
     // and line layout, Glossable just replaces the plain-text leaf. Context
     // sent to onGloss is always the full block being read, not the single
