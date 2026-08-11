@@ -83,6 +83,11 @@ ACTIVE_LESSONS: dict[str, str] = {}
 # converts.
 ENGLISH_LESSONS = {"welcome", "goodbye_test", "lesson_zero", "teacher"}
 
+# AGENT-001 (2026-08-11): Clara teaches in English but her voice runs with
+# MiniMax's German language_boost — German-accented English, and properly
+# pronounced German example words. STT / evaluators stay on lesson_language().
+TTS_LANGUAGE_OVERRIDES = {"teacher": "de"}
+
 
 def lesson_language(lesson_id: str) -> str:
     """STT/TTS language code for a lesson: 'en' for the English exceptions, 'de' otherwise."""
@@ -246,11 +251,15 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # that actually loaded, not the raw query param.
         lesson_snapshot = load_prompts(lesson_id)
         lesson_lang = lesson_language(lesson_snapshot.get("id", lesson_id))
+        # AGENT-001: Clara's voice runs a German language_boost while everything
+        # else about her session (STT, evaluators) stays on lesson_lang — see
+        # TTS_LANGUAGE_OVERRIDES above.
+        tts_lang = TTS_LANGUAGE_OVERRIDES.get(lesson_snapshot.get("id", lesson_id), lesson_lang)
         # STT-003 P2: optional per-lesson keyterm list (nova-3 keyterm prompting).
         # The snapshot is already loaded, so no ordering change — English lessons
         # simply carry no `keyterms:` key and pass None (param omitted).
         stt = stt_deepgram(language=lesson_lang, keyterms=lesson_snapshot.get("keyterms"))
-        tts = tts_minimax(session, voice=voice, language=lesson_lang)
+        tts = tts_minimax(session, voice=voice, language=tts_lang)
         converter = TranscriptionToContextConverter()
 
         # Per-client logger
