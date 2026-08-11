@@ -46,6 +46,9 @@ export default function TeacherChat() {
       // toggle here on purpose, unlike TopicScreen.
       practiceMode
       typedInput
+      // AGENT-001: Clara's `kickoff` key means she speaks first — lock Record
+      // until her opening line finishes, see ConversationView's agentOpens.
+      agentOpens
       onFinish={() => router.push("/practice")}
       // Backing out of the briefing card returns to the picker, not /practice
       // (mirrors TandemChat's onBack -> setTopic(null)).

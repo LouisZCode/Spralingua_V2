@@ -52,6 +52,16 @@ const STATE_LABEL: Record<SpeakerState, string> = {
   agent_speaking: "Speaking",
 };
 
+// AGENT-001: Natural mode's labels ("Speak now" / "Listening…") describe a mic
+// that's always hot — wrong in practice mode, where nothing is listening
+// until the learner taps Record. Same four states, honest copy.
+const PRACTICE_STATE_LABEL: Record<SpeakerState, string> = {
+  idle: "Ready when you are",
+  your_turn: "Your turn",
+  agent_thinking: "Thinking",
+  agent_speaking: "Speaking",
+};
+
 // MOBILE-001 P2: iOS Safari only lets an <audio> element play from inside a
 // real user gesture. The bot track arrives later, async, in onTrackStarted —
 // outside any gesture — so iOS silently rejects that play() and the user never
@@ -69,6 +79,7 @@ export default function ConversationView({
   onAdd,
   practiceMode,
   typedInput,
+  agentOpens,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -90,6 +101,12 @@ export default function ConversationView({
   // teacher's text-chat channel). Absent/false keeps the overlay dev-only
   // (press /).
   typedInput?: boolean;
+  // AGENT-001: lessons with a YAML `kickoff` — the agent speaks first, ~1.5-4s
+  // after connect (pipeline/factory.py::_kickoff_turn). The session opens on
+  // the agent's turn, not the learner's, so Record must stay locked (and the
+  // orb must not read "ready") until that opening line finishes playing.
+  // Absent/false (every existing caller but Clara) is byte-identical.
+  agentOpens?: boolean;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -285,6 +302,12 @@ export default function ConversationView({
       });
     }
     setPhase("live");
+    // AGENT-001: lessons with `kickoff` open on the agent's turn, not idle — lock
+    // Record (and the orb copy) as "agent_thinking" until onBotStartedSpeaking
+    // / onBotStoppedSpeaking below drive it through agent_speaking to
+    // your_turn. Otherwise the window between connect and the kickoff audio
+    // leaves Record clickable over a dead mic.
+    setSpeakerState(agentOpens ? "agent_thinking" : "idle");
     // BUG-009: reset the liveness clock here, not just at mount — a learner
     // who sits on the briefing screen past the 80s threshold would otherwise
     // have the watchdog fire the instant the live phase's interval starts.
@@ -943,7 +966,9 @@ function LivePhase({
           )}
         </div>
         <p className="mt-5 font-display text-[14px] font-bold uppercase tracking-[0.28em] text-ink">
-          {STATE_LABEL[speakerState]}
+          {practiceMode
+            ? PRACTICE_STATE_LABEL[speakerState]
+            : STATE_LABEL[speakerState]}
         </p>
       </div>
 
