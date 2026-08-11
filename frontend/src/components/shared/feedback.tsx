@@ -21,11 +21,27 @@ const strip = (t: string) =>
 export function diffTokens(
   attempt: string,
   corrected: string,
-  opts?: { caseInsensitive?: boolean },
+  // BRIEF-001: `markPunctuation` is opt-in and changes only what counts as
+  // "changed", never the ALIGNMENT — that still runs over punctuation-
+  // stripped (and optionally lowercased) tokens, same as always, so a lone
+  // comma can't shove the whole LCS out of sync. Once two tokens are aligned
+  // as equal, this flag additionally compares their RAW text (case-
+  // insensitively when `caseInsensitive` is also set) and marks both sides
+  // changed if it differs. Written surfaces (Briefkasten) want this — the
+  // learner typed every character, so a missing comma is a real, visible
+  // correction. Spoken surfaces never pass it: there the "attempt" is an STT
+  // transcript that never chose its own punctuation, so lighting up a comma
+  // would flag the recognizer's guess, not the learner's error. Omitted
+  // (the default), behavior is byte-for-byte identical to before this flag
+  // existed.
+  opts?: { caseInsensitive?: boolean; markPunctuation?: boolean },
 ): { attempt: MarkedToken[]; corrected: MarkedToken[] } {
   const norm = opts?.caseInsensitive
     ? (t: string) => strip(t).toLowerCase()
     : strip;
+  const rawEqual = opts?.caseInsensitive
+    ? (x: string, y: string) => x.toLowerCase() === y.toLowerCase()
+    : (x: string, y: string) => x === y;
   const a = attempt.split(/\s+/).filter(Boolean);
   const b = corrected.split(/\s+/).filter(Boolean);
   const an = a.map(norm);
@@ -47,8 +63,9 @@ export function diffTokens(
   let j = 0;
   while (i < a.length && j < b.length) {
     if (an[i] === bn[j]) {
-      aOut[i].changed = false;
-      bOut[j].changed = false;
+      const rawSame = !opts?.markPunctuation || rawEqual(a[i], b[j]);
+      aOut[i].changed = !rawSame;
+      bOut[j].changed = !rawSame;
       i++;
       j++;
     } else if (dp[i + 1][j] >= dp[i][j + 1]) {

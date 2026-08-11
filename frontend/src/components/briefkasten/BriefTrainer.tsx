@@ -193,10 +193,15 @@ function MarkedLetter({
   text,
   tokens,
   mark,
+  renderToken,
 }: {
   text: string;
   tokens: MarkedToken[];
-  mark: "red" | "green";
+  mark: "red" | "green" | "blue";
+  // BRIEF-001: threaded straight through to each line's MarkedText, same
+  // per-token override GermanWay/VocabTrainer use for Glossable — MarkedLetter
+  // only re-drapes tokens over line structure, it doesn't own rendering.
+  renderToken?: (token: MarkedToken, index: number) => React.ReactNode;
 }) {
   const counts = text
     .split("\n")
@@ -214,7 +219,7 @@ function MarkedLetter({
           <div key={i} className="h-2" />
         ) : (
           <p key={i} className="font-body text-[14px] leading-relaxed">
-            <MarkedText tokens={lineTokens} mark={mark} />
+            <MarkedText tokens={lineTokens} mark={mark} renderToken={renderToken} />
           </p>
         )
       )}
@@ -388,7 +393,90 @@ export default function BriefTrainer({
   }
 
   if (phase === "feedback" && feedbackResult) {
-    const diff = diffTokens(text, feedbackResult.correctedText);
+    // BRIEF-001: `markPunctuation` on — the learner typed every character of
+    // this letter, so a missing/added comma is a real correction, not an ASR
+    // artifact to hide (unlike every spoken-surface caller of diffTokens).
+    // Case stays sensitive as it was: capitalization is real German grammar
+    // the learner typed, not a transcript's guess.
+    const diff = diffTokens(text, feedbackResult.correctedText, {
+      markPunctuation: true,
+    });
+    // Nothing changed AND nothing to explain — the "Corrected" box would be
+    // a pixel-identical twin of "What you wrote". Show a one-line
+    // confirmation in its place instead of two boxes with the same text.
+    const nothingToCorrect =
+      feedbackResult.explanations.length === 0 &&
+      !diff.attempt.some((t) => t.changed) &&
+      !diff.corrected.some((t) => t.changed);
+
+    // SATZ-018/BRIEF-001: same per-token Glossable override GermanWay and
+    // VocabTrainer use — MarkedText/MarkedLetter still own the diff color
+    // and line layout, Glossable just replaces the plain-text leaf. Context
+    // sent to onGloss is always the full block being read, not the single
+    // tapped word. `undefined` when the parent hasn't wired onGloss, so both
+    // boxes fall back to their original plain-text rendering.
+    const renderCorrectedToken = onGloss
+      ? (t: MarkedToken) => (
+          <Glossable
+            text={t.text}
+            onGloss={(word: string) => onGloss(word, feedbackResult.correctedText)}
+            onAdd={onAdd}
+          />
+        )
+      : undefined;
+
+    // IDIOM-002: diffed against the CORRECTED letter (not the learner's raw
+    // attempt) — this reveal answers "how would a German phrase the fixed
+    // version", so the comparison base is the fix, not the mistake. Blue,
+    // not red/green: phrasing, not a verdict (SATZ-008). Case-insensitive so
+    // a word moving to sentence-start doesn't light up as "changed". No
+    // markPunctuation — punctuation is a written-grammar concern (see the
+    // diff above), phrasing is not.
+    const naturalDiff = feedbackResult.naturalVersion
+      ? diffTokens(feedbackResult.correctedText, feedbackResult.naturalVersion, {
+          caseInsensitive: true,
+        })
+      : null;
+    const renderNaturalToken = onGloss
+      ? (t: MarkedToken) => (
+          <Glossable
+            text={t.text}
+            onGloss={(word: string) => onGloss(word, feedbackResult.naturalVersion ?? "")}
+            onAdd={onAdd}
+          />
+        )
+      : undefined;
+
+    // IDIOM-002: renders nothing at all when null — no empty card, no
+    // placeholder. Present only when a native would genuinely phrase things
+    // differently. Sits directly under "Corrected" (or its nothing-to-fix
+    // stand-in) and above "What to fix" — the reveal is one more look at the
+    // letter's language, not a footnote after the error list.
+    const naturalToggle = feedbackResult.naturalVersion && (
+      <div className="mt-6 text-center">
+        <button
+          type="button"
+          onClick={() => setShowNatural((v) => !v)}
+          className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+          style={inkShadow}
+        >
+          {showNatural ? "Hide ▴" : "How would a German write this? ▾"}
+        </button>
+        {showNatural && feedbackResult.naturalVersion && naturalDiff && (
+          <div className="mt-3 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-left">
+            <div className="text-ink">
+              <MarkedLetter
+                text={feedbackResult.naturalVersion}
+                tokens={naturalDiff.corrected}
+                mark="blue"
+                renderToken={renderNaturalToken}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
     return (
       <div>
         <div
@@ -418,19 +506,30 @@ export default function BriefTrainer({
                 <MarkedLetter text={text} tokens={diff.attempt} mark="red" />
               </div>
             </div>
-            <div className="rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                Corrected
-              </p>
-              <div className="mt-2 text-ink">
-                <MarkedLetter
-                  text={feedbackResult.correctedText}
-                  tokens={diff.corrected}
-                  mark="green"
-                />
+            {nothingToCorrect ? (
+              <div className="rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
+                <p className="font-body text-[13px] leading-snug text-ink-soft">
+                  Nothing to correct — this letter is grammatically clean.
+                </p>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
+                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
+                  Corrected
+                </p>
+                <div className="mt-2 text-ink">
+                  <MarkedLetter
+                    text={feedbackResult.correctedText}
+                    tokens={diff.corrected}
+                    mark="green"
+                    renderToken={renderCorrectedToken}
+                  />
+                </div>
+              </div>
+            )}
           </div>
+
+          {naturalToggle}
 
           {feedbackResult.explanations.length > 0 && (
             <div className="mt-6">
@@ -470,31 +569,6 @@ export default function BriefTrainer({
                   </li>
                 ))}
               </ul>
-            </div>
-          )}
-
-          {/* IDIOM-002: renders nothing at all when null — no empty card,
-              no placeholder. Present only when a native would genuinely
-              phrase things differently. */}
-          {feedbackResult.naturalVersion && (
-            <div className="mt-6 text-center">
-              <button
-                type="button"
-                onClick={() => setShowNatural((v) => !v)}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
-                style={inkShadow}
-              >
-                {showNatural
-                  ? "Hide ▴"
-                  : "How would a German write this? ▾"}
-              </button>
-              {showNatural && (
-                <div className="mt-3 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-left">
-                  <p className="whitespace-pre-line font-body text-[15px] leading-relaxed text-ink">
-                    {feedbackResult.naturalVersion}
-                  </p>
-                </div>
-              )}
             </div>
           )}
         </div>
