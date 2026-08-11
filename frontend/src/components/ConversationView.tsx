@@ -1050,6 +1050,8 @@ function LivePhase({
                       .reverse()
                       .find((x) => x.speaker === "bot")?.text
                   }
+                  onGloss={onGloss}
+                  onAdd={onAdd}
                 />
               </div>
             ) : (

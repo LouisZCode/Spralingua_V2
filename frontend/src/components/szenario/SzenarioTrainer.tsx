@@ -334,7 +334,12 @@ export default function SzenarioTrainer({
           {/* IDIOM-002 P1: on-demand phrasing advice on the whole answer —
               separate from the structure verdict above. */}
           {verdict.transcript.trim() !== "" && (
-            <GermanWay text={verdict.transcript} context={scenario.question} />
+            <GermanWay
+              text={verdict.transcript}
+              context={scenario.question}
+              onGloss={onGloss}
+              onAdd={onAdd}
+            />
           )}
 
           {/* Details on demand: what we heard, per-sentence weights, skeleton. */}

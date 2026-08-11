@@ -15,7 +15,9 @@
 import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
 import { useAuth } from "../auth/AuthContext";
-import { diffTokens, MarkedText } from "./feedback";
+import { diffTokens, MarkedText, type MarkedToken } from "./feedback";
+import Glossable from "./Glossable";
+import type { GlossInfo } from "../satzschmiede/api";
 
 // Just the rewrite — no explanation field by design (user call, 2026-08-10):
 // the German version next to the learner's own line speaks for itself.
@@ -29,6 +31,9 @@ export default function GermanWay({
   text,
   context,
   variant = "card",
+  onGloss,
+  onAdd,
+  exclude,
 }: {
   // The learner's own line — a verdict card's transcript or a chat bubble.
   text: string;
@@ -36,6 +41,14 @@ export default function GermanWay({
   // only, never graded.
   context?: string;
   variant?: "card" | "inline";
+  // UI-007/SATZ-018: same optional gloss wiring as VocabTrainer's corrected-
+  // sentence diff — hover/tap a word in the Germanized rewrite for a
+  // translation + "add to my words". Undefined when the parent doesn't wire
+  // it, in which case MarkedText renders its original plain-text tokens.
+  onGloss?: (word: string, context: string) => Promise<GlossInfo>;
+  onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
+  // UI-009: a word to skip glossing, forwarded to Glossable.
+  exclude?: string;
 }) {
   const { token } = useAuth();
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
@@ -89,6 +102,23 @@ export default function GermanWay({
       ? diffTokens(text, result.natural, { caseInsensitive: true }).corrected
       : null;
 
+  // SATZ-018: same MarkedText per-token override VocabTrainer's corrected-
+  // sentence diff uses (see shared/feedback.tsx) — each token keeps its blue
+  // diff coloring but renders through Glossable instead of plain text. The
+  // context sent to onGloss is always the FULL Germanized sentence, not the
+  // single tapped token. `undefined` when the parent doesn't wire onGloss,
+  // so MarkedText falls back to its original plain-text rendering.
+  const renderToken = onGloss
+    ? (t: MarkedToken) => (
+        <Glossable
+          text={t.text}
+          onGloss={(word: string) => onGloss(word, result?.natural ?? "")}
+          onAdd={onAdd}
+          exclude={exclude}
+        />
+      )
+    : undefined;
+
   const revealed =
     state === "done" &&
     open &&
@@ -96,13 +126,13 @@ export default function GermanWay({
       variant === "card" ? (
         <div className="mt-3 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-left">
           <p className="font-body text-[15px] leading-relaxed text-ink">
-            <MarkedText tokens={naturalDiff} mark="blue" />
+            <MarkedText tokens={naturalDiff} mark="blue" renderToken={renderToken} />
           </p>
         </div>
       ) : (
         <div className="mt-1.5 max-w-[420px] rounded-[14px] border-[2px] border-ink/40 bg-paper-warm px-3 py-2 text-left">
           <p className="font-body text-[13px] leading-snug text-ink">
-            <MarkedText tokens={naturalDiff} mark="blue" />
+            <MarkedText tokens={naturalDiff} mark="blue" renderToken={renderToken} />
           </p>
         </div>
       )

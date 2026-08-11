@@ -570,7 +570,12 @@ export default function SprechenTrainer({
             {/* IDIOM-002 P1: on-demand phrasing advice on the whole take —
                 separate from the slips above, which grade grammar. */}
             {verdict.transcript.trim() !== "" && (
-              <GermanWay text={verdict.transcript} context={task.prompt} />
+              <GermanWay
+                text={verdict.transcript}
+                context={task.prompt}
+                onGloss={onGloss}
+                onAdd={onAdd}
+              />
             )}
 
             <div className="mt-6 flex items-center justify-center gap-4">

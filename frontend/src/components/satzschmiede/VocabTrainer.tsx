@@ -1121,6 +1121,9 @@ export default function VocabTrainer({
                       <GermanWay
                         text={result.transcript}
                         context={`They were asked to use the German word "${card.target}" in one spoken sentence.`}
+                        onGloss={onGloss}
+                        onAdd={onAdd}
+                        exclude={glossExclude}
                       />
                     )}
                     {/* SATZ-008: recourse for a verdict that feels wrong —
