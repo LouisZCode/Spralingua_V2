@@ -214,3 +214,64 @@ German content is sometimes confidently wrong. Run 4 taught and praised
 "sie studiert bei der Universität" (should be "an der Universität"); run 3
 explained für's accusative as marking "direction toward something". Factual
 accuracy has no mechanism in this file and needs its own pass.
+
+## tandem v4 (2026-08-11) — three v1 field findings, each given a mechanism
+
+Two weeks of v1 field-testing (see "v3 prod findings" above for why v1 was
+brought back) surfaced three problems, distinct from anything the v2/v3 sim
+rounds caught:
+
+1. **Topic-jumping.** She hops from topic to topic instead of staying on the
+   chosen one and going deeper. Mechanism: "How you talk" now makes today's
+   topic the only one SHE ever raises — she digs into the partner's exact
+   detail, and only the partner may change the subject; when they do, she
+   follows them fully, never back. Added a labelled jump counter-example
+   ("Und was isst du sonst gern zum Frühstück?" out of nowhere) plus a good
+   follow-up example (same answer, dug into the detail they gave).
+   `short_term_template`'s "Let it wander from there" — which invited the
+   drift — is now stay-and-go-deeper phrasing.
+2. **Vocab cramming.** `vocab_header`'s "Work EVERY one of them in" made
+   word-salad — exactly the un-natural teacher behaviour the persona bans.
+   Mechanism: words are opportunities, not a checklist — used only when the
+   conversation genuinely passes through their sense, inside a sentence she'd
+   say anyway; unused is fine; never bend the conversation toward a word,
+   never stack two in one sentence.
+3. **Too much talking.** Reply length tightened from "1 to 3 sentences" to
+   1-2 (3 only rarely, sharing something of her own the partner asked for).
+   Default reply shape named explicitly: brief reaction + ONE question
+   digging into what they just said. Added a labelled 4-sentence
+   counter-example (reflects, shares two things of her own, generic
+   question — "ignores their detail").
+
+Also removed the prompt's own hardcoded "after about 12-14 exchanges"
+wrap-up line — the backend now injects a wrap-up cue carrying the session's
+real exchange cap, so the prompt can't carry a copy that drifts from it
+(code-side, not this file).
+
+v1-live snapshotted verbatim at
+`sim/prompt_versions/tandem_v1_live_2026-08-11.yaml` before replacement.
+
+Sim verdict (2026-08-11, Sonnet student, seeded fixture user `test-lenav4`,
+two sessions — 8 exchanges on "Kochen und Essen" at the default cap, 5 on
+"Musik" via `--exchanges 5`):
+
+- One-topic discipline: PASS. All 13 replies across both sessions stayed on
+  the chosen topic; every question dug into the partner's just-given detail
+  (soup → roommate's rice → vegetables → bread → oven → family cooking).
+  No unprompted pivot anywhere.
+- Vocab: PASS. Session A's 7 deck words all went unused (permitted); session
+  B used "schön" 3x as a reaction opener but never bent a sentence toward a
+  word and never stacked two. No cramming.
+- Reply length: mostly PASS — 11 of 13 replies at 2 sentences, two at 3 (one
+  a grammar nudge, one a reaction+question that ran long). No 4+.
+- Correction contract intact: focus-pattern nudge fired on "verbrennt" (and
+  on "mit meine Schwester"); a non-focus slip ("von die Welt") got the
+  silent echo, no comment.
+- Cap override end-to-end: PASS — `--exchanges 5` logged `vocab_words=4`
+  (scaled sample) and closed at `SESSION_ENDING (max_exchanges, 5/5)`.
+
+Open for v5: she occasionally re-asks a fact the partner already answered
+(once per session — "Bei wem bekommst du den Rat?" right after "meine
+Mutter"; "warst du mit deiner Schwester dort?" two turns after the answer).
+A question-is-finished-forever rule, teacher.yaml rule-4 style, is the
+likely mechanism if a future round confirms it.
