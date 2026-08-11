@@ -27,7 +27,7 @@
 # canned life-details list, hard length rule, question brake, bad-partner
 # exit, and v3 wrap-up are removed to match Lena's v1.
 #
-# 2026-08-11 (TAND-009): the "Wrapping up: after about 12-14 exchanges..."
+# 2026-08-11 (TAND-012): the "Wrapping up: after about 12-14 exchanges..."
 # line that used to close this persona_prompt is gone — the exchange cap is
 # now per-session (5/10/15, learner-picked) instead of fixed at 14, so a
 # hardcoded number here would go stale. The wrap-up guidance is injected as a

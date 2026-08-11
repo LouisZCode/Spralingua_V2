@@ -262,7 +262,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         tts = tts_minimax(session, voice=voice, language=tts_lang)
         converter = TranscriptionToContextConverter()
 
-        # TAND-009 (2026-08-11): per-session exchange cap for tandem, whitelisted
+        # TAND-012 (2026-08-11): per-session exchange cap for tandem, whitelisted
         # to {5, 10, 15} by the frontend/main.py query param. Only tandem lessons
         # honor it — anything else (including a stray query param on a non-tandem
         # /learn connect) leaves the YAML's own max_exchanges untouched. Mutating
@@ -330,7 +330,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         )
                         # TAND-002: 7, not the default 10 — fewer words lowers the
                         # cramming pressure on Lena's short replies (vocab dose).
-                        # TAND-009: a shorter session can't naturally fit 7 deck
+                        # TAND-012: a shorter session can't naturally fit 7 deck
                         # words, so scale down with the exchange cap — fewer
                         # exchanges means fewer words to weave, so the partner
                         # never crams.

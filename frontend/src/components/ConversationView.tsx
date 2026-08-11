@@ -425,7 +425,7 @@ export default function ConversationView({
         `?voice=${params.voice}` +
         `&lesson=${params.lesson}` +
         (params.topic ? `&topic=${encodeURIComponent(params.topic)}` : "") +
-        // TAND-009: tandem chat-length picker (5/10/15 exchanges), backend
+        // TAND-012: tandem chat-length picker (5/10/15 exchanges), backend
         // whitelists the value — see TopicScreen.tsx.
         (params.exchanges ? `&exchanges=${params.exchanges}` : "") +
         `&token=${encodeURIComponent(token)}`;

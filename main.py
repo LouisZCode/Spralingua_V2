@@ -349,7 +349,7 @@ async def ws_endpoint(
     a successful admit owns one concurrency slot, released in ``finally`` no
     matter how the session ends.
 
-    ``exchanges`` (TAND-009) is the frontend's per-session exchange-cap picker
+    ``exchanges`` (TAND-012) is the frontend's per-session exchange-cap picker
     for the tandem partners — parsed defensively (a bad/missing value just
     falls through to the lesson's own YAML cap) and whitelisted to
     ``{5, 10, 15}`` here, so only those three values ever reach the pipeline;

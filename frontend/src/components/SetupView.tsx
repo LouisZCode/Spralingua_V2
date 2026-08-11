@@ -85,7 +85,7 @@ export interface SessionParams {
   // Grammatik-Tandem only: the chosen conversation theme, sent as the `?topic=`
   // WS query param. Undefined for scenario lessons.
   topic?: string;
-  // TAND-009: Grammatik-Tandem only: the learner's chosen chat length, sent
+  // TAND-012: Grammatik-Tandem only: the learner's chosen chat length, sent
   // as the `?exchanges=` WS query param (backend whitelists {5,10,15}).
   // Undefined for every other lesson — no query param is appended.
   exchanges?: number;

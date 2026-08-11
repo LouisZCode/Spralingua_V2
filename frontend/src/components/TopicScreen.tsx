@@ -36,7 +36,7 @@ function readMode(): InputMode {
   }
 }
 
-// TAND-009: chat-length picker — how many exchanges the tandem session runs
+// TAND-012: chat-length picker — how many exchanges the tandem session runs
 // before the max_exchanges cap ends it. Rides the WS URL as `&exchanges=`
 // (backend whitelists {5,10,15}). Same persist-and-hydrate idiom as the
 // input-mode toggle above.
@@ -97,7 +97,7 @@ export default function TopicScreen({
     }
   }, []);
 
-  // TAND-009: default to 10 and hydrate from localStorage in an effect —
+  // TAND-012: default to 10 and hydrate from localStorage in an effect —
   // same SSR-safe pattern as the input-mode toggle just above.
   const [exchanges, setExchanges] = useState<number>(10);
 
@@ -234,7 +234,7 @@ export default function TopicScreen({
             </div>
           </div>
 
-          {/* TAND-009: how many exchanges the chat runs before the cap ends
+          {/* TAND-012: how many exchanges the chat runs before the cap ends
               it — same pill language as the Input toggle above. */}
           <div className="mt-3 flex items-center gap-3">
             <span className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">

@@ -71,7 +71,7 @@ class Context:
     grammar_focus: list = field(default_factory=list)
     session_notes: list = field(default_factory=list)
     vocab_words: list = field(default_factory=list)
-    # TAND-009: per-session effective exchange cap (5/10/15, or the lesson's
+    # TAND-012: per-session effective exchange cap (5/10/15, or the lesson's
     # own YAML default when no override is in play). Rendered into the tandem
     # wrap-up line by the conversational_prompt middleware so the persona's
     # "wrap up around N exchanges" guidance tracks the actual cap instead of

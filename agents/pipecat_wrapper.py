@@ -117,7 +117,7 @@ class ClientWrapper:
         self._end_pending: bool = False
 
         lesson = load_prompts(lesson_id)
-        # TAND-009: per-session exchange cap (5/10/15), whitelisted in main.py
+        # TAND-012: per-session exchange cap (5/10/15), whitelisted in main.py
         # and re-gated to tandem-only in pipeline/factory.py. This wrapper
         # re-loads the YAML itself (the factory's `lesson_snapshot` mutation for
         # the DB row doesn't reach here), so the override is passed explicitly

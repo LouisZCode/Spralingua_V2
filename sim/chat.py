@@ -108,7 +108,7 @@ def cmd_start(args: argparse.Namespace) -> None:
 
     token = issue_session_jwt(args.user)
     qs_params = {"lesson": args.lesson, "topic": args.topic, "voice": args.voice, "token": token}
-    # TAND-009: only sent when set, so the default sim behavior (the lesson's
+    # TAND-012: only sent when set, so the default sim behavior (the lesson's
     # own YAML max_exchanges) is unchanged unless the caller explicitly wants
     # to exercise the per-session cap override.
     if args.exchanges is not None:
@@ -262,7 +262,7 @@ def main() -> None:
     # TAND-008: pick the partner — "tandem" (Lena) or "tandem_paul" (Paul).
     s.add_argument("--lesson", default="tandem")
     s.add_argument("--backend-log", default=None)
-    # TAND-009: per-session exchange cap override (5/10/15), same whitelist
+    # TAND-012: per-session exchange cap override (5/10/15), same whitelist
     # main.py's ws_endpoint applies. Omitted (None) by default, which leaves
     # the lesson's own YAML max_exchanges in effect.
     s.add_argument("--exchanges", type=int, default=None)

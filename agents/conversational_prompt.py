@@ -416,7 +416,7 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
             today=date.today().isoformat(),
             topic=ctx.topic or "whatever they feel like talking about",
         )
-        # TAND-009: the wrap-up guidance used to be hardcoded in each partner's
+        # TAND-012: the wrap-up guidance used to be hardcoded in each partner's
         # persona_prompt ("after about 12-14 exchanges..."). With a per-session
         # exchange cap (5/10/15, picked by the learner) that number can no
         # longer live in static YAML text, so it's injected here from

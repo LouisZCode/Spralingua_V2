@@ -28,7 +28,7 @@ export default function TandemChat() {
   // TAND-003: Natural (streaming VAD) vs Practice (tap-record) input mode,
   // picked on TopicScreen alongside the topic itself.
   const [practiceMode, setPracticeMode] = useState(false);
-  // TAND-009: chat-length picker (5/10/15 exchanges), also picked on
+  // TAND-012: chat-length picker (5/10/15 exchanges), also picked on
   // TopicScreen — rides the WS URL as `&exchanges=` via SessionParams.
   const [exchanges, setExchanges] = useState(10);
 
