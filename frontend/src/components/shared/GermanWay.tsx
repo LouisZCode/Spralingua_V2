@@ -9,8 +9,8 @@
 // the back door).
 //
 // Two looks: `card` (default) matches BriefTrainer's natural_version toggle
-// for the drill verdict cards; `inline` is the small right-aligned link under
-// the learner's own tandem bubbles.
+// for the drill verdict cards; `inline` is a miniature of the same pill,
+// right-aligned under the learner's own tandem bubbles.
 
 import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
@@ -155,7 +155,8 @@ export default function GermanWay({
           type="button"
           onClick={ask}
           disabled={state === "loading"}
-          className="font-body text-[10px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-flag-red disabled:opacity-50"
+          className="btn-3d inline-flex items-center rounded-full border-[2px] border-ink bg-white px-3 py-1 font-display text-[10px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-50"
+          style={inkShadow}
         >
           {state === "loading"
             ? "Asking…"
