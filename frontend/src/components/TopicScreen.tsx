@@ -36,6 +36,26 @@ function readMode(): InputMode {
   }
 }
 
+// TAND-009: chat-length picker — how many exchanges the tandem session runs
+// before the max_exchanges cap ends it. Rides the WS URL as `&exchanges=`
+// (backend whitelists {5,10,15}). Same persist-and-hydrate idiom as the
+// input-mode toggle above.
+const EXCHANGES_STORAGE_KEY = "tandem-exchanges-v1";
+const EXCHANGE_OPTIONS = [
+  { value: 5, label: "Short · 5" },
+  { value: 10, label: "Classic · 10" },
+  { value: 15, label: "Long · 15" },
+] as const;
+
+function readExchanges(): number {
+  try {
+    const raw = parseInt(localStorage.getItem(EXCHANGES_STORAGE_KEY) ?? "", 10);
+    return raw === 5 || raw === 10 || raw === 15 ? raw : 10;
+  } catch {
+    return 10;
+  }
+}
+
 // Draw 3 distinct topics from the pool. Only ever called from the mount
 // effect below and the shuffle click handler — never during render — so the
 // pick can't disagree with the server-rendered HTML (no hydration mismatch;
@@ -56,7 +76,7 @@ export default function TopicScreen({
   onSwitchPartner,
 }: {
   partner: TandemPartner;
-  onStart: (topic: string, mode: InputMode) => void;
+  onStart: (topic: string, mode: InputMode, exchanges: number) => void;
   onSwitchPartner: () => void;
 }) {
   const [topics, setTopics] = useState<string[]>([]);
@@ -74,6 +94,18 @@ export default function TopicScreen({
       // SSR-safe hydration from localStorage, same idiom as Szenario.tsx's level toggle.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setMode("practice");
+    }
+  }, []);
+
+  // TAND-009: default to 10 and hydrate from localStorage in an effect —
+  // same SSR-safe pattern as the input-mode toggle just above.
+  const [exchanges, setExchanges] = useState<number>(10);
+
+  useEffect(() => {
+    const stored = readExchanges();
+    if (stored !== 10) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setExchanges(stored);
     }
   }, []);
 
@@ -201,6 +233,36 @@ export default function TopicScreen({
               ))}
             </div>
           </div>
+
+          {/* TAND-009: how many exchanges the chat runs before the cap ends
+              it — same pill language as the Input toggle above. */}
+          <div className="mt-3 flex items-center gap-3">
+            <span className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+              Length
+            </span>
+            <div className="inline-flex overflow-hidden rounded-full border-[3px] border-ink">
+              {EXCHANGE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    if (value === exchanges) return;
+                    setExchanges(value);
+                    try {
+                      localStorage.setItem(EXCHANGES_STORAGE_KEY, String(value));
+                    } catch {}
+                  }}
+                  className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
+                    value === exchanges
+                      ? "bg-ink text-white"
+                      : "bg-white text-ink hover:text-flag-red"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
 
         {/* Today's 3 recommended topics + shuffle */}
@@ -275,7 +337,7 @@ export default function TopicScreen({
         <div className="rise-in mt-9" style={{ animationDelay: "260ms" }}>
           <button
             type="button"
-            onClick={() => onStart(effectiveTopic, mode)}
+            onClick={() => onStart(effectiveTopic, mode, exchanges)}
             disabled={!effectiveTopic}
             className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
             style={inkShadow}

@@ -218,7 +218,7 @@ async def _kickoff_turn(task: PipelineTask, text: str, user_id: str) -> None:
         )
 
 
-async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None):
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None, exchanges: int | None = None):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -261,6 +261,21 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         stt = stt_deepgram(language=lesson_lang, keyterms=lesson_snapshot.get("keyterms"))
         tts = tts_minimax(session, voice=voice, language=tts_lang)
         converter = TranscriptionToContextConverter()
+
+        # TAND-009 (2026-08-11): per-session exchange cap for tandem, whitelisted
+        # to {5, 10, 15} by the frontend/main.py query param. Only tandem lessons
+        # honor it — anything else (including a stray query param on a non-tandem
+        # /learn connect) leaves the YAML's own max_exchanges untouched. Mutating
+        # the snapshot dict (not just a local var) keeps the DB `lesson_snapshot`
+        # column faithful to what the session actually ran with — `load_prompts`
+        # returns a fresh dict per call, so this never leaks into another session.
+        exchanges_override = (
+            exchanges
+            if lesson_snapshot.get("type") == "tandem" and exchanges in (5, 10, 15)
+            else None
+        )
+        if exchanges_override is not None:
+            lesson_snapshot["max_exchanges"] = exchanges_override
 
         # Per-client logger
         session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
@@ -315,7 +330,12 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         )
                         # TAND-002: 7, not the default 10 — fewer words lowers the
                         # cramming pressure on Lena's short replies (vocab dose).
-                        vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=7)
+                        # TAND-009: a shorter session can't naturally fit 7 deck
+                        # words, so scale down with the exchange cap — fewer
+                        # exchanges means fewer words to weave, so the partner
+                        # never crams.
+                        vocab_limit = {5: 4, 10: 7, 15: 10}.get(exchanges_override or 0, 7)
+                        vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=vocab_limit)
                 logger.info(
                     f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
                     f"notes={len(session_notes)} vocab_words={len(vocab_words)} "
@@ -327,7 +347,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 )
 
         # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.

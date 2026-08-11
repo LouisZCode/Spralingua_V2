@@ -416,6 +416,21 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
             today=date.today().isoformat(),
             topic=ctx.topic or "whatever they feel like talking about",
         )
+        # TAND-009: the wrap-up guidance used to be hardcoded in each partner's
+        # persona_prompt ("after about 12-14 exchanges..."). With a per-session
+        # exchange cap (5/10/15, picked by the learner) that number can no
+        # longer live in static YAML text, so it's injected here from
+        # `ctx.max_exchanges` (set by ClientWrapper from the effective cap —
+        # override or the YAML default). Both tandem.yaml and tandem_paul.yaml
+        # had their wrap-up line removed to match.
+        if ctx.max_exchanges:
+            wrap_from = max(1, ctx.max_exchanges - 2)
+            short += (
+                f"\n\n# Wrapping up\n"
+                f"Aim to wrap up after about {wrap_from}–{ctx.max_exchanges} exchanges, or when the "
+                f"conversation reaches a natural end — say a friendly goodbye like \"Tschüss\" / "
+                f"\"Bis bald\" / \"Mach's gut\" and close warmly — you two will talk again soon."
+            )
         parts = [base, short]
         if ctx.grammar_focus:
             parts.append(

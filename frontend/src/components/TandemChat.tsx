@@ -28,6 +28,9 @@ export default function TandemChat() {
   // TAND-003: Natural (streaming VAD) vs Practice (tap-record) input mode,
   // picked on TopicScreen alongside the topic itself.
   const [practiceMode, setPracticeMode] = useState(false);
+  // TAND-009: chat-length picker (5/10/15 exchanges), also picked on
+  // TopicScreen — rides the WS URL as `&exchanges=` via SessionParams.
+  const [exchanges, setExchanges] = useState(10);
 
   // UI-009: word-gloss popover wiring for Lena's chat bubbles — same
   // auth-guarded pattern as Sprechen.tsx's handleGloss/handleAddWord, with
@@ -98,8 +101,9 @@ export default function TandemChat() {
     return (
       <TopicScreen
         partner={partner}
-        onStart={(t, mode) => {
+        onStart={(t, mode, ex) => {
           setPracticeMode(mode === "practice");
+          setExchanges(ex);
           setTopic(t);
         }}
         onSwitchPartner={() => setPartnerId(null)}
@@ -109,7 +113,7 @@ export default function TandemChat() {
 
   return (
     <ConversationView
-      params={{ lesson: partner.lessonId, voice: partner.voice, topic }}
+      params={{ lesson: partner.lessonId, voice: partner.voice, topic, exchanges }}
       practiceMode={practiceMode}
       // Debrief modal's "Back to modes" button promises /practice (BUG-008) —
       // leave /tandem, don't just reset topic state. Backing out of the

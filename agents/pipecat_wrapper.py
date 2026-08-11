@@ -88,7 +88,8 @@ class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
     def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero",
-                 topic="", grammar_focus=None, session_notes=None, vocab_words=None):
+                 topic="", grammar_focus=None, session_notes=None, vocab_words=None,
+                 max_exchanges_override: int | None = None):
         self.user_id = user_id
         self.session_id = session_id
         self.logger = logger
@@ -116,7 +117,16 @@ class ClientWrapper:
         self._end_pending: bool = False
 
         lesson = load_prompts(lesson_id)
-        self._max_exchanges = lesson["max_exchanges"]
+        # TAND-009: per-session exchange cap (5/10/15), whitelisted in main.py
+        # and re-gated to tandem-only in pipeline/factory.py. This wrapper
+        # re-loads the YAML itself (the factory's `lesson_snapshot` mutation for
+        # the DB row doesn't reach here), so the override is passed explicitly
+        # rather than read back off the snapshot.
+        self._max_exchanges = max_exchanges_override or lesson["max_exchanges"]
+        # Rendered into the tandem wrap-up line (agents/conversational_prompt.py)
+        # so the persona's own "wrap up around N exchanges" guidance tracks the
+        # actual per-session cap instead of a hardcoded number in the YAML.
+        self.context.max_exchanges = self._max_exchanges
         self._exchange_count = 0
         # Goodbye detection arms at the lesson's optional `goodbye_after` (an
         # exchange number, 1-based), or by default only in the final exchange

@@ -330,6 +330,7 @@ async def ws_endpoint(
     lesson: str = "lesson_zero",
     topic: str = "",
     token: str = "",
+    exchanges: str = "",
 ):
     """Authenticated learn socket (AUTH-001, P-3, E1).
 
@@ -347,6 +348,12 @@ async def ws_endpoint(
     `sub` (unspoofable, unlike IP) before accept (1013 try-again on reject);
     a successful admit owns one concurrency slot, released in ``finally`` no
     matter how the session ends.
+
+    ``exchanges`` (TAND-009) is the frontend's per-session exchange-cap picker
+    for the tandem partners — parsed defensively (a bad/missing value just
+    falls through to the lesson's own YAML cap) and whitelisted to
+    ``{5, 10, 15}`` here, so only those three values ever reach the pipeline;
+    ``run_pipeline`` re-gates it again on the lesson actually being tandem.
     """
     try:
         sub = decode_session_jwt(token)
@@ -358,9 +365,14 @@ async def ws_endpoint(
         await websocket.close(code=1013)
         return
     try:
+        n = int(exchanges)
+    except ValueError:
+        n = 0
+    exchanges_n = n if n in (5, 10, 15) else None
+    try:
         await websocket.accept()
         # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
-        await run_pipeline(websocket, sub, voice, lesson, topic=topic)
+        await run_pipeline(websocket, sub, voice, lesson, topic=topic, exchanges=exchanges_n)
     finally:
         learn_release(sub)
 
