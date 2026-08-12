@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -30,6 +30,17 @@ const REC_TARGETS: Record<
   flow: { href: "/flow", cta: "Enter the Flow" },
   tandem: { href: "/tandem", cta: "Open Tandem" },
 };
+
+// GAME-001: streak days are UTC in this app, so the meter's "seen" cache key
+// is scoped to the UTC calendar day — a stored value from a prior day simply
+// lives under a different key and is never read.
+function utcDateString(): string {
+  const now = new Date();
+  const y = now.getUTCFullYear();
+  const m = String(now.getUTCMonth() + 1).padStart(2, "0");
+  const d = String(now.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 
 export default function PracticeMenu() {
   const { token, user, ready } = useAuth();
@@ -66,6 +77,68 @@ export default function PracticeMenu() {
       cancelled = true;
     };
   }, [token]);
+
+  // GAME-001: the segmented meter animates from what the learner last saw to
+  // what's true now, rather than snapping cold into a state they didn't earn
+  // in front of them. meterBaseline is the count read back from localStorage
+  // (scoped to today's UTC day — a stale key from a prior day is never read,
+  // so it naturally defaults to 0); meterDisplay is what's actually rendered,
+  // starting at the baseline and jumping to the live count after a beat, with
+  // each segment's fill transition staggered so they read as filling one by
+  // one. meterCelebrate is a one-shot pulse fired only when that fill crosses
+  // into a full meter. meterRanRef makes sure this plays once per mount, not
+  // once per streak re-fetch.
+  const [meterDisplay, setMeterDisplay] = useState(0);
+  const [meterBaseline, setMeterBaseline] = useState(0);
+  const [meterCelebrate, setMeterCelebrate] = useState(false);
+  const meterRanRef = useRef(false);
+  useEffect(() => {
+    if (!streak || meterRanRef.current) return;
+    meterRanRef.current = true;
+
+    const key = `streakMeterSeen:${utcDateString()}`;
+    let seen = 0;
+    try {
+      const raw = window.localStorage.getItem(key);
+      const parsed = raw === null ? NaN : Number(raw);
+      if (Number.isFinite(parsed)) seen = parsed;
+    } catch {
+      // localStorage unavailable (private mode, etc.) — start from 0.
+    }
+
+    const target = streak.modesToday.length;
+
+    let beatId: ReturnType<typeof setTimeout>;
+    let celebrateId: ReturnType<typeof setTimeout>;
+    // All setState goes through the rAF callback rather than the effect body
+    // (react-hooks/set-state-in-effect) — one extra frame at zero segments
+    // before the baseline paints, invisible in practice.
+    const rafId = requestAnimationFrame(() => {
+      setMeterBaseline(seen);
+      setMeterDisplay(seen);
+      if (seen === target) return;
+      beatId = setTimeout(() => {
+        setMeterDisplay(target);
+        const becameFull =
+          seen < streak.modesRequired && target >= streak.modesRequired;
+        if (becameFull) {
+          const fillMs = 300 + Math.max(0, target - seen) * 90;
+          celebrateId = setTimeout(() => setMeterCelebrate(true), fillMs);
+        }
+        try {
+          window.localStorage.setItem(key, String(target));
+        } catch {
+          // Non-fatal — worst case the animation just replays next visit.
+        }
+      }, 300);
+    });
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(beatId);
+      clearTimeout(celebrateId);
+    };
+  }, [streak]);
 
   // Same guard the /learn route uses: once localStorage hydration settles, a
   // missing token bounces to the public landing page, where sign-in lives.
@@ -153,56 +226,34 @@ export default function PracticeMenu() {
           </div>
         )}
 
-        {/* GAME-001: silent progress toward today's 3-of-4 mode requirement.
-            No caption, no numbers, in any state — it sits under the streak
-            badge, not beside it, so it never competes for the eye. Same
-            non-fatal rule as the badge above: renders only once streak has
-            loaded. */}
+        {/* GAME-001: silent progress toward today's 3-of-4 mode requirement,
+            segmented so each mode's contribution reads as a discrete step
+            rather than a fraction of a bar. No caption, no numbers, in any
+            state — it sits under the streak badge, not beside it, so it
+            never competes for the eye. Same non-fatal rule as the badge
+            above: renders only once streak has loaded. The fill-on-return
+            animation (meterBaseline → meterDisplay) lives in the effect
+            above; this block just renders whatever it's told. */}
         {streak && (
           <div
-            className="rise-in mx-auto mt-3 h-[10px] w-full max-w-[200px] overflow-hidden rounded-full border-[3px] border-ink bg-white"
+            className="rise-in mx-auto mt-3 w-full max-w-[220px]"
             style={{ animationDelay: "50ms" }}
           >
             <div
-              className="h-full rounded-full bg-flag-gold transition-[width] duration-500 ease-out"
-              style={{
-                width: `${Math.min(streak.modesToday.length / streak.modesRequired, 1) * 100}%`,
-              }}
-            />
-          </div>
-        )}
-
-        {/* REC-001: after ~3 active days this week, the data may pick one
-            pillar to push today. Absent = no clear signal, and that's fine. */}
-        {rec && (
-          <div
-            className="rise-in mt-8 flex flex-col gap-4 rounded-[28px] border-[3px] border-flag-gold-deep bg-flag-gold-soft p-6 sm:flex-row sm:items-center sm:justify-between"
-            style={{ animationDelay: "80ms" }}
-          >
-            <div className="flex items-center gap-4">
-              <Image
-                src="/mascot/raven.png"
-                alt=""
-                width={44}
-                height={44}
-                className="h-11 w-11 shrink-0 select-none"
-              />
-              <div>
-                <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink">
-                  Today&apos;s recommendation
-                </p>
-                <p className="mt-1 max-w-xl font-body text-[15px] leading-snug text-ink-soft">
-                  {rec.reason}
-                </p>
-              </div>
-            </div>
-            <Link
-              href={REC_TARGETS[rec.pillar].href}
-              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
-              style={inkShadow}
+              className={`flex gap-2 ${meterCelebrate ? "meter-celebrate" : ""}`}
             >
-              {REC_TARGETS[rec.pillar].cta} →
-            </Link>
+              {Array.from({ length: streak.modesRequired }, (_, i) => (
+                <div
+                  key={i}
+                  className={`h-3 flex-1 rounded-full border-[3px] border-ink transition-colors duration-300 ease-out ${
+                    i < meterDisplay ? "bg-flag-gold" : "bg-white"
+                  }`}
+                  style={{
+                    transitionDelay: `${Math.max(0, i - meterBaseline) * 90}ms`,
+                  }}
+                />
+              ))}
+            </div>
           </div>
         )}
 
@@ -210,7 +261,7 @@ export default function PracticeMenu() {
             she isn't a drill, she's who you ask when a drill made no sense, so
             burying her among the modes hid the one thing that explains the
             others. Full width on purpose: this is the promotion, not a card. */}
-        <div className="rise-in mt-10" style={{ animationDelay: "100ms" }}>
+        <div className="rise-in mt-10" style={{ animationDelay: "80ms" }}>
           <ModeCard
             href="/teacher"
             accent="red"
@@ -231,7 +282,7 @@ export default function PracticeMenu() {
             than the first row of a longer list. */}
         <div
           className="rise-in mt-10 grid gap-6 sm:grid-cols-2"
-          style={{ animationDelay: "120ms" }}
+          style={{ animationDelay: "100ms" }}
         >
           <ModeCard
             href="/satzschmiede"
@@ -274,6 +325,43 @@ export default function PracticeMenu() {
             done={streak?.modesToday.includes("briefkasten")}
           />
         </div>
+
+        {/* REC-001: after ~3 active days this week, the data may pick one
+            pillar to push today. Absent = no clear signal, and that's fine.
+            Sits below the four pillars now rather than above them — a pick
+            among the modes reads better once the learner has already seen
+            what the modes are. */}
+        {rec && (
+          <div
+            className="rise-in mt-6 flex flex-col gap-4 rounded-[28px] border-[3px] border-flag-gold-deep bg-flag-gold-soft p-6 sm:flex-row sm:items-center sm:justify-between"
+            style={{ animationDelay: "140ms" }}
+          >
+            <div className="flex items-center gap-4">
+              <Image
+                src="/mascot/raven.png"
+                alt=""
+                width={44}
+                height={44}
+                className="h-11 w-11 shrink-0 select-none"
+              />
+              <div>
+                <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink">
+                  Today&apos;s recommendation
+                </p>
+                <p className="mt-1 max-w-xl font-body text-[15px] leading-snug text-ink-soft">
+                  {rec.reason}
+                </p>
+              </div>
+            </div>
+            <Link
+              href={REC_TARGETS[rec.pillar].href}
+              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+              style={inkShadow}
+            >
+              {REC_TARGETS[rec.pillar].cta} →
+            </Link>
+          </div>
+        )}
 
         <Link
           href="/development"
