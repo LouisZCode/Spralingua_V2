@@ -481,7 +481,11 @@ export default function BriefTrainer({
     ) : (
       <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-center">
         <p className="font-body text-[13px] leading-snug text-ink-soft">
-          Nothing to Germanize — this letter was German enough. Well done!
+          {feedbackResult.score >= 90
+            ? "Nothing to Germanize — this letter was German through and through. Perfect!"
+            : feedbackResult.score >= 70
+              ? "Nothing to Germanize — this letter was German enough. Well done!"
+              : "Nothing extra to Germanize — focus on the fixes above and keep working on it!"}
         </p>
       </div>
     );
