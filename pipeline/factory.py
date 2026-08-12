@@ -137,6 +137,12 @@ class _NoOpTurnTraceObserver:
 # ~5min ceiling even with jitter.
 RTVI_HEARTBEAT_INTERVAL_S = 25
 
+# GAME-001 v3: exchanges a tandem session must reach before it credits the
+# daily "tandem" mode — TAND-012's shortest session option (5), so a quick
+# hello-goodbye can't bank the day's slot. An agent-driven end also credits
+# regardless (see the gate in the disconnect path).
+TANDEM_STREAK_MIN_EXCHANGES = 5
+
 
 async def _rtvi_heartbeat(rtvi_processor: RTVIProcessor, wrapper: ClientWrapper, user_id: str):
     """Per-connection keepalive (BUG-009). Reuses `rtvi_processor.send_server_message` —
@@ -967,20 +973,26 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         error_eval=error_eval_dict,
                         passed=passed,
                     )
-                    # GAME-001 v2: only a real tandem conversation credits
-                    # the "tandem" mode slot — not the older "any finished
-                    # conversation" rule. Deliberately excluded: the demo
-                    # sentinel (no streak at all), Clara (`type: teacher`,
-                    # not a tandem lesson_id — she's exempt from every
-                    # evaluator, this included), the /learn lessons (not in
-                    # tandem_lesson_ids()), and a tandem session that never
-                    # actually exchanged anything (wrapper._transcript empty
-                    # — same truthiness finalize_session_row just used above
-                    # for "did anything happen").
+                    # GAME-001 v3: only a SUBSTANTIAL tandem conversation
+                    # credits the "tandem" mode slot. v2's rule (any non-empty
+                    # transcript) let a two-line drive-by count as the day's
+                    # tandem — now it takes at least TAND-012's shortest full
+                    # session (5 exchanges), or an agent-driven end, which
+                    # means the conversation ran to its planned close (a
+                    # 5-exchange session can legitimately close via goodbye
+                    # at exchange 4, and must still count). Deliberately
+                    # excluded, unchanged from v2: the demo sentinel (no
+                    # streak at all), Clara (`type: teacher`, not a tandem
+                    # lesson_id — she's exempt from every evaluator, this
+                    # included), and the /learn lessons (not in
+                    # tandem_lesson_ids()).
                     if (
                         db_user_id != "demo"
                         and lesson_id in tandem_lesson_ids()
-                        and wrapper._transcript
+                        and (
+                            wrapper._exchange_count >= TANDEM_STREAK_MIN_EXCHANGES
+                            or wrapper._end_pending
+                        )
                     ):
                         await complete_daily_mode(
                             db, user_id=db_user_id, mode="tandem"

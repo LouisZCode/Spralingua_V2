@@ -246,7 +246,11 @@ export default function PracticeMenu() {
                 <div
                   key={i}
                   className={`h-3 flex-1 rounded-full border-[3px] border-ink transition-colors duration-300 ease-out ${
-                    i < meterDisplay ? "bg-flag-gold" : "bg-white"
+                    i < meterDisplay
+                      ? meterDisplay >= streak.modesRequired
+                        ? "bg-success"
+                        : "bg-flag-gold"
+                      : "bg-white"
                   }`}
                   style={{
                     transitionDelay: `${Math.max(0, i - meterBaseline) * 90}ms`,
