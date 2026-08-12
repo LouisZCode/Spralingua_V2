@@ -11,7 +11,7 @@ so the Next.js origin needs no extra wiring here.
 import asyncio
 import re
 import time
-from datetime import date, datetime, time as dtime, timedelta
+from datetime import date, datetime, time as dtime
 from typing import Literal
 from uuid import uuid4
 
@@ -82,17 +82,11 @@ def _card_payload(c: VocabCard) -> dict:
 def _srs_payload(uc: UserCard, now: datetime) -> dict:
     """Per-user schedule state riding on each deck card (frontend ``CardSrs``).
     ``status`` is computed server-side so the client never compares clocks:
-    "new" = never practiced, "due" = practice today, "later" = scheduled ahead,
-    "benched" = leeched out of rotation (SATZ P2) — wins over every other
-    status regardless of what due_at/interval_days say, since a benched card
-    still carries its pre-bench schedule fields as-is for when it's revived.
-    Dealing (the standalone practice queue's buildQueue AND the Flow mixed-
-    practice cycle) both key off `status` alone, so a card leaving rotation
-    here needs no client-side filter changes — see satz P2 notes.
+    "new" = never practiced, "due" = practice today, "later" = scheduled
+    ahead. Dealing (the standalone practice queue's buildQueue AND the Flow
+    mixed-practice cycle) both key off `status` alone.
     """
-    if uc.benched_at is not None:
-        status = "benched"
-    elif uc.due_at is None:
+    if uc.due_at is None:
         status = "new"
     elif uc.due_at <= now:
         status = "due"
@@ -902,10 +896,10 @@ async def submit_attempt(
             user_card.due_at = due_at
             user_card.reps += 1
             user_card.last_score = 1 if judgement.word_ok else 0
-            # Leech benching (SATZ P2): a graded word-miss is a lapse — same
-            # signal that already quartered interval_days above.
+            # A graded word-miss is a lapse — same signal that already
+            # quartered interval_days above.
             if not judgement.word_ok:
-                _record_lapse(user_card, due_at)
+                _record_lapse(user_card)
             try:
                 await db.commit()
             except Exception:
@@ -973,48 +967,35 @@ async def submit_attempt(
         }
 
 
-# SATZ dosing P1: new cards started per day, server-side. Each new word costs
-# roughly 5-10 eventual reviews as it climbs the ladder — the Anki manual's
-# documented rule of thumb is ~20 new/day settling into ~200 reviews/day;
-# this caps at a fifth of that.
-NEW_PER_DAY = 5
+# SATZ dosing P2: today's deal is a fixed-size session, not a flat drip. The
+# old NEW_PER_DAY=5 rule (Anki manual rationale: each new word costs roughly
+# 5-10 eventual reviews as it climbs the ladder) plus an accuracy throttle
+# meant a heavy-review day could zero out new intake entirely — a learner
+# camped on their pool for a week and never saw a new word. This replaces
+# both: SESSION_TARGET cards a day, REVIEW_SHARE of them claimed by reviews
+# (due + already cleared today) at most, new words fill whatever's left — so
+# intake never drops below SESSION_TARGET - REVIEW_SHARE and grows toward
+# SESSION_TARGET as reviews clear. See get_deck for the allowance math.
+SESSION_TARGET = 20   # cards a learner should meet in a day
+REVIEW_SHARE = 15     # reviews' slice of the target; the rest is new words
 
-# Leech benching (SATZ P2): lifetime lapses (graded word-miss, reveal, or
-# gender-miss) before a card auto-benches out of rotation. Anki's own leech
-# threshold is 8 lapses on a mature deck; ours is stricter because the ladder
-# here is short (tops out at 35 days) and a churning card costs a daily
-# review slot indefinitely rather than fading into a long mature interval.
-LEECH_CAP = 6
-
-
-def _record_lapse(user_card: UserCard, now: datetime) -> None:
-    """Bump the lifetime lapse counter and auto-bench past LEECH_CAP.
+def _record_lapse(user_card: UserCard) -> None:
+    """Bump the lifetime lapse counter — telemetry only.
 
     Called from every place that already punishes the schedule for this
-    card (a graded word-miss, a reveal, a gender-miss) — same call sites,
-    one extra counter. Benching only ever happens once: ``benched_at is
-    None`` guards against a card that's already on the shelf getting its
-    bench timestamp bumped by further lapses (there aren't any — a benched
-    card is out of rotation — but the guard keeps this idempotent either way).
+    card (a graded word-miss, a reveal, a gender-miss). Used to also
+    auto-bench the card past a leech threshold (SATZ P2); benching was
+    removed (satz P3, 0020 migration cleared every bench), so this is now
+    just a counter nothing acts on — kept in case a future policy wants the
+    lifetime lapse history.
     """
     user_card.lapses += 1
-    if user_card.lapses >= LEECH_CAP and user_card.benched_at is None:
-        user_card.benched_at = now
 
-
-# SATZ dosing P3: the desirable-difficulty guard. Retrieval practice pays off
-# most above ~75-80% success (Rowland 2014) — below that, stop adding new
-# load until the existing reviews recover. Success here means WORD recall
-# (word_ok), the same signal the scheduler moves cards on — grammar slips
-# elsewhere in the sentence are this exercise's extra feedback, not a miss
-# of the practiced item, and must not freeze intake.
-THROTTLE_WINDOW = 20  # most recent graded satz attempts considered
-THROTTLE_MIN = 10  # need at least this many before the throttle can fire
-THROTTLE_FLOOR = 0.8
 
 # SATZ-013: the GLOSS popover's one-tap add is a casual-reading collector,
-# not a study decision — capped far below NEW_PER_DAY so a browsing session
-# can't silently balloon the pool. Manual add-word and pack adds are untouched.
+# not a study decision — capped far below the new-word allowance so a
+# browsing session can't silently balloon the pool. Manual add-word and pack
+# adds are untouched.
 GLOSS_ADDS_PER_DAY = 3
 
 
@@ -1022,7 +1003,7 @@ async def _gloss_adds_used_today(db: AsyncSession, user_id: str) -> int:
     """SATZ-013: how many of the caller's GLOSS_ADDS_PER_DAY slots are
     already spent today — rows in ``user_cards`` stamped ``source='gloss'``
     with ``added_at`` today. Same naive-TIMESTAMP/UTC day-boundary convention
-    already used by the ``started_at`` / NEW_PER_DAY allowance below."""
+    already used by the ``started_at`` / new-word allowance below."""
     today_midnight = datetime.combine(date.today(), dtime.min)
     return await db.scalar(
         select(func.count())
@@ -1045,9 +1026,11 @@ async def get_deck(
     today's practice queue from the due/new cards and keeps browse-all over
     the full list.
 
-    ``newAllowance`` / ``newThrottled`` (SATZ dosing P1/P3) tell the frontend
-    how many more NEW cards it may start today, independent of the due/review
-    queue — reviews are never capped, only fresh intake is.
+    ``newAllowance`` (SATZ dosing P2) tells the frontend how many more NEW
+    cards it may start today. Reviews are never capped by this — due cards
+    always show up — but they DO claim part of the fixed SESSION_TARGET, so
+    a heavy review day still leaves room for at least
+    ``SESSION_TARGET - REVIEW_SHARE`` new words rather than zeroing intake.
     """
     now = datetime.now()
     rows = (
@@ -1066,29 +1049,44 @@ async def get_deck(
         .where(UserCard.user_id == user_id, UserCard.started_at >= today_midnight)
     )
 
-    # Last THROTTLE_WINDOW graded satz attempts in the last 7 days, judged on
-    # word recall (word_ok) — the metric the scheduler itself uses. COALESCE
-    # falls back to the strict `correct` flag for rows written before the
-    # word_ok column existed, so the window stays meaningful while it rolls
-    # over onto post-migration data.
-    recent_correct = (
-        await db.execute(
-            select(func.coalesce(DrillAttempt.word_ok, DrillAttempt.correct))
-            .where(
-                DrillAttempt.user_id == user_id,
-                DrillAttempt.exercise == "satz",
-                DrillAttempt.correct.is_not(None),
-                DrillAttempt.created_at >= func.now() - timedelta(days=7),
-            )
-            .order_by(DrillAttempt.created_at.desc())
-            .limit(THROTTLE_WINDOW)
+    # Today's review load: cards due right now, plus cards already reviewed
+    # today (a review knocked out this morning doesn't free up a new-word
+    # slot it never actually vacated). "Reviewed" = a graded satz attempt on
+    # a card that was started BEFORE today — the join + started_at filter is
+    # what keeps a same-day new-word attempt from double-counting as a review,
+    # and the due_at > now filter keeps a review attempted-but-MISSED today
+    # (lapse ⇒ due again right now) from counting twice, once per query.
+    due_now = await db.scalar(
+        select(func.count())
+        .select_from(UserCard)
+        .where(
+            UserCard.user_id == user_id,
+            UserCard.due_at.is_not(None),
+            UserCard.due_at <= now,
         )
-    ).scalars().all()
-    new_throttled = (
-        len(recent_correct) >= THROTTLE_MIN
-        and (sum(recent_correct) / len(recent_correct)) < THROTTLE_FLOOR
     )
-    new_allowance = 0 if new_throttled else max(0, NEW_PER_DAY - started_today)
+    reviewed_today = await db.scalar(
+        select(func.count(func.distinct(DrillAttempt.item_ref)))
+        .select_from(DrillAttempt)
+        .join(
+            UserCard,
+            and_(
+                UserCard.user_id == DrillAttempt.user_id,
+                UserCard.card_id == DrillAttempt.item_ref,
+            ),
+        )
+        .where(
+            DrillAttempt.user_id == user_id,
+            DrillAttempt.exercise == "satz",
+            DrillAttempt.correct.is_not(None),
+            DrillAttempt.created_at >= today_midnight,
+            UserCard.started_at < today_midnight,
+            UserCard.due_at > now,
+        )
+    )
+    review_target = min(due_now + reviewed_today, REVIEW_SHARE)
+    new_budget = SESSION_TARGET - review_target
+    new_allowance = max(0, new_budget - started_today)
 
     # SATZ-017: quietly forge example pools for a couple of this user's cards
     # that predate the forge — off the critical path, non-fatal, so the whole
@@ -1103,7 +1101,6 @@ async def get_deck(
             {**_card_payload(c), "srs": _srs_payload(uc, now)} for c, uc in rows
         ],
         "newAllowance": new_allowance,
-        "newThrottled": new_throttled,
     }
 
 
@@ -1119,7 +1116,6 @@ async def reveal_card(
     can't silently keep a long interval alive, while the next green climbs
     back from that quarter rather than restarting the whole ladder.
     ``reps``/``last_score`` stay untouched: a reveal isn't a graded attempt.
-    Counts toward leech benching (SATZ P2) same as a graded miss.
     """
     user_card = await db.scalar(
         select(UserCard).where(
@@ -1135,7 +1131,7 @@ async def reveal_card(
     now = datetime.now()
     user_card.interval_days = lapse_interval(user_card.interval_days)
     user_card.due_at = now
-    _record_lapse(user_card, now)
+    _record_lapse(user_card)
     await db.commit()
     return {"dueInDays": 0}
 
@@ -1152,7 +1148,6 @@ async def gender_miss_card(
     the card drops to "due now" at a quarter of its old interval, and
     ``reps``/``last_score`` stay untouched. A separate endpoint (rather than
     reusing /reveal) so the two lapse causes stay distinguishable in logs.
-    Counts toward leech benching (SATZ P2) same as a graded miss.
     """
     user_card = await db.scalar(
         select(UserCard).where(
@@ -1166,41 +1161,9 @@ async def gender_miss_card(
     now = datetime.now()
     user_card.interval_days = lapse_interval(user_card.interval_days)
     user_card.due_at = now
-    _record_lapse(user_card, now)
+    _record_lapse(user_card)
     await db.commit()
     return {"dueInDays": 0}
-
-
-@router.post("/deck/{card_id}/unbench")
-async def unbench_card(
-    card_id: str,
-    user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Leech benching (SATZ P2) is reversible, but only by the learner's own
-    choice — this is the "Wieder üben" button on the Schwere Wörter shelf.
-
-    Clears the bench and drops the card back to the ladder bottom (due now,
-    interval 0, lapses reset) rather than restoring wherever it left off:
-    the whole point of benching was that the old interval/lapse history
-    wasn't working, so a conscious re-entry starts clean and the next green
-    climbs to 1 day via ``next_interval(0)``, same as any new card.
-    """
-    user_card = await db.scalar(
-        select(UserCard).where(
-            UserCard.user_id == user_id, UserCard.card_id == card_id
-        )
-    )
-    if user_card is None:
-        raise HTTPException(status_code=404, detail="Card not found")
-    if user_card.benched_at is None:
-        raise HTTPException(status_code=409, detail="Card is not benched")
-    user_card.benched_at = None
-    user_card.lapses = 0
-    user_card.interval_days = 0
-    user_card.due_at = datetime.now()
-    await db.commit()
-    return {"ok": True}
 
 
 class ExplainIn(BaseModel):

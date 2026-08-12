@@ -34,6 +34,7 @@ export default function GermanWay({
   onGloss,
   onAdd,
   exclude,
+  onRephrase,
 }: {
   // The learner's own line — a verdict card's transcript or a chat bubble.
   text: string;
@@ -49,6 +50,11 @@ export default function GermanWay({
   onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
   // UI-009: a word to skip glossing, forwarded to Glossable.
   exclude?: string;
+  // Fires once the judge call lands with an ACTUAL rewrite — never on the
+  // "already sounds German" (`natural: null`) case. Lets a host (e.g.
+  // VocabTrainer's blue "Try again") offer a rehearsal keyed to a genuine
+  // rephrase instead of every tap of the button.
+  onRephrase?: () => void;
 }) {
   const { token } = useAuth();
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
@@ -83,9 +89,13 @@ export default function GermanWay({
         body: JSON.stringify({ text, context: context ?? null }),
       });
       if (!res.ok) throw new Error(`rephrase failed (${res.status})`);
-      setResult((await res.json()) as Rephrase);
+      const data = (await res.json()) as Rephrase;
+      setResult(data);
       setState("done");
       setOpen(true);
+      // Only a genuine rewrite counts — the "already sounds German" null
+      // case has nothing to rehearse.
+      if (data.natural) onRephrase?.();
     } catch {
       // Advice is optional — a failed call degrades to a retryable button,
       // never an error screen.

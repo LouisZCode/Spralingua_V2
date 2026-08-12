@@ -24,19 +24,13 @@ export type Card = {
 // Per-user schedule state riding on each deck card (backend: _srs_payload).
 // `status` is computed server-side at fetch time so the client never compares
 // clocks: "new" = never practiced, "due" = practice today, "later" =
-// scheduled ahead, "benched" = leeched out of rotation (SATZ P2) — wins over
-// every other status. It's a snapshot — attempts made this session don't
+// scheduled ahead. It's a snapshot — attempts made this session don't
 // refresh it, so the trainer tracks session progress itself.
 export type CardSrs = {
-  status: "new" | "due" | "later" | "benched";
+  status: "new" | "due" | "later";
   dueAt: string | null; // ISO timestamp; null while status is "new"
   intervalDays: number | null;
   reps: number;
-  // SATZ P2: lifetime lapse count (graded word-miss, reveal, gender-miss) —
-  // the "Schwere Wörter" shelf shows this as "N× daneben". Optional because
-  // Verbformen's deck payload (its own _srs_payload copy) doesn't send it;
-  // only Satzschmiede's shelf reads it.
-  lapses?: number;
 };
 
 export type DeckCard = Card & { srs: CardSrs };

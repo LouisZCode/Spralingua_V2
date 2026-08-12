@@ -89,14 +89,13 @@ export async function addPack(
 }
 
 // GET /satz/deck's full response: the pool plus today's server-decided
-// new-word drip. `newAllowance` is final — the daily cap (5) AND the
-// accuracy-guard throttle are both already applied, so callers just use the
-// number as-is (0..5). `newThrottled` says whether the guard is why it's
-// low/zero, for a UI explanation rather than silence.
+// new-word drip. `newAllowance` is final — reviews (due + already cleared
+// today) have already claimed their share of the daily target, so callers
+// just use the number as-is (5..20, see satz/routes.py's SESSION_TARGET/
+// REVIEW_SHARE).
 export type DeckPayload = {
   cards: DeckCard[];
   newAllowance: number;
-  newThrottled: boolean;
 };
 
 export async function fetchDeck(token: string): Promise<DeckPayload> {
@@ -255,17 +254,6 @@ export async function removeCard(
 ): Promise<{ removed: number; poolSize: number }> {
   return request(`/satz/deck/${encodeURIComponent(cardId)}`, token, {
     method: "DELETE",
-  });
-}
-
-// SATZ P2: pull a benched card off the "Schwere Wörter" shelf and back into
-// rotation — the learner's own conscious re-entry, at the ladder bottom.
-export async function unbenchCard(
-  token: string,
-  cardId: string
-): Promise<{ ok: boolean }> {
-  return request(`/satz/deck/${encodeURIComponent(cardId)}/unbench`, token, {
-    method: "POST",
   });
 }
 

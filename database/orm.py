@@ -291,15 +291,17 @@ class UserCard(Base):
     # only signal POST /satz/cards needs to count "gloss adds today" against
     # the hard cap of 3/day without touching the uncapped manual/pack paths.
     source: Mapped[str | None] = mapped_column(String(16), nullable=True)
-    # Leech benching (SATZ P2): lifetime word-miss/reveal/gender-miss count —
-    # every call site that already quarters interval_days also bumps this.
-    # Crossing LEECH_CAP (satz/routes.py) auto-benches the card.
+    # Lifetime word-miss/reveal/gender-miss count — every call site that
+    # already quarters interval_days also bumps this. Telemetry only: it used
+    # to auto-bench a card past a leech threshold (SATZ P2), but that
+    # behavior was removed (satz P3) — nothing reads this column's crossing
+    # a threshold anymore.
     lapses: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
-    # Set = the card is on the "Schwere Wörter" shelf, out of rotation until
-    # the learner consciously re-enters it (POST /deck/{card_id}/unbench).
-    # NULL = normal rotation.
+    # Dead column (satz P3 removed leech benching and the "Schwere Wörter"
+    # shelf; the 0020 migration cleared every existing bench). Left in place
+    # rather than dropped — no code writes or reads it anymore, always NULL.
     benched_at: Mapped[datetime | None] = mapped_column(TIMESTAMP, nullable=True)
 
     # The deck query: "this user's cards that are due".
@@ -426,9 +428,9 @@ class DrillAttempt(Base):
     # totals, just not toward accuracy).
     correct: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # Item-recall verdict alone (satz: the target word was produced, grammar
-    # aside). Only satz writes it — the new-word throttle gates intake on
-    # this, matching the scheduler, while ``correct`` stays the strict
-    # word-AND-grammar read for accuracy stats. NULL everywhere else.
+    # aside). Only satz writes it, matching the scheduler's own word-only
+    # read, while ``correct`` stays the strict word-AND-grammar read for
+    # accuracy stats. NULL everywhere else.
     word_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     # "written" | "spoken"
     modality: Mapped[str] = mapped_column(Text, nullable=False)

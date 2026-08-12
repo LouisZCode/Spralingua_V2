@@ -17,7 +17,6 @@ import {
   removeCard,
   revealCard,
   submitAttempt,
-  unbenchCard,
   UnauthorizedError,
   type AttemptResult,
   type GlossInfo,
@@ -30,14 +29,13 @@ import SoundToggle from "./shared/SoundToggle";
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
 } as React.CSSProperties;
-const goldShadow = {
-  ["--shadow-color"]: "var(--color-flag-gold-deep)",
-} as React.CSSProperties;
 
 // The review-queue cap VocabTrainer's buildQueue applies, most-overdue
-// first — ≈25 reviews/day is the sustainable budget the 5-new/day drip
-// implies (a bigger backlog waits for tomorrow instead of burying today).
-const REVIEW_CAP = 25;
+// first — matches satz/routes.py's REVIEW_SHARE: reviews claim at most 15
+// of the 20-card daily target, so the cap here and the allowance the server
+// computed from it stay honest with each other (a bigger backlog waits for
+// tomorrow instead of burying today).
+const REVIEW_CAP = 15;
 
 // Vocabulary trainer ("Satzschmiede"). The deck is the user's own pool served
 // by GET /satz/deck. The trainer is the main surface; words and packs are
@@ -49,10 +47,9 @@ export default function Satzschmiede() {
   const router = useRouter();
 
   const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
-  // Server-decided daily new-word drip (cap + accuracy-guard throttle both
-  // already applied) — refreshed alongside `deck` on every refetch.
+  // Server-decided daily new-word drip — refreshed alongside `deck` on every
+  // refetch (SATZ dosing P2: guaranteed >=5, up to 20, see satz/routes.py).
   const [newAllowance, setNewAllowance] = useState(0);
-  const [newThrottled, setNewThrottled] = useState(false);
   const [error, setError] = useState(false);
   const [packsOpen, setPacksOpen] = useState(false); // the "Add Cards" popup
   // SATZ-012: true while VocabTrainer shows its post-round end screen.
@@ -70,7 +67,6 @@ export default function Satzschmiede() {
       .then((payload) => {
         setDeck(payload.cards);
         setNewAllowance(payload.newAllowance);
-        setNewThrottled(payload.newThrottled);
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
@@ -98,26 +94,6 @@ export default function Satzschmiede() {
           return;
         }
         // Non-fatal (e.g. already gone): the refetch below re-syncs the UI.
-      }
-      refreshDeck();
-    },
-    [token, signOut, refreshDeck]
-  );
-
-  // SATZ P2: pull a leeched card off the "Schwere Wörter" shelf — the
-  // learner's own conscious re-entry. Same shape as handleRemove: fire the
-  // call, sign out on an expired session, otherwise just re-sync via a
-  // refetch (a card that's somehow already unbenched is a non-issue).
-  const handleUnbench = useCallback(
-    async (cardId: string) => {
-      if (!token) return;
-      try {
-        await unbenchCard(token, cardId);
-      } catch (e) {
-        if (e instanceof UnauthorizedError) {
-          signOut();
-          return;
-        }
       }
       refreshDeck();
     },
@@ -314,10 +290,6 @@ export default function Satzschmiede() {
         ? "your pool"
         : `your pool · ${deck.length} words`;
 
-  // SATZ P2: leeched cards (server status "benched") — the "Schwere Wörter"
-  // shelf only exists while there's at least one.
-  const benchedCards = deck?.filter((c) => c.srs.status === "benched") ?? [];
-
   return (
     <div className="relative flex min-h-screen flex-col bg-white text-ink">
       <div
@@ -410,63 +382,12 @@ export default function Satzschmiede() {
             onFlag={handleFlag}
             newAllowance={newAllowance}
             reviewCap={REVIEW_CAP}
-            newThrottled={newThrottled}
             onDoneChange={setTrainerDone}
             onGenderMiss={handleGenderMiss}
             onGenderCues={handleGenderCues}
             onGloss={handleGloss}
             onAdd={handleAddWord}
           />
-        )}
-
-        {/* SATZ P2 — leech shelf: cards auto-benched after LEECH_CAP lifetime
-            lapses sit here instead of grinding the daily queue forever. A
-            clearly separate section below the trainer so it never competes
-            with today's practice for attention. */}
-        {!error && !emptyPool && benchedCards.length > 0 && (
-          <section className="mt-14 border-t-[3px] border-ink pt-8">
-            <h2 className="font-display text-[19px] font-black tracking-tight text-ink">
-              Schwere Wörter
-            </h2>
-            <p className="mt-1.5 max-w-[440px] font-body text-[13px] leading-relaxed text-ink-soft">
-              Diese Wörter machen gerade mehr Frust als Fortschritt — sie
-              pausieren. Hol sie zurück, wenn du bereit bist.
-            </p>
-            <ul className="mt-5 space-y-3">
-              {benchedCards.map((card) => (
-                <li
-                  key={card.id}
-                  className="flex items-start justify-between gap-4 rounded-[16px] border-[2px] border-ink bg-white px-4 py-3.5"
-                >
-                  <div className="min-w-0">
-                    <p className="font-display text-[15px] font-black leading-tight text-ink">
-                      {card.article ? `${card.article} ` : ""}
-                      {card.target}
-                    </p>
-                    <p className="mt-0.5 font-body text-[13px] font-semibold text-ink-soft">
-                      {card.gloss}
-                    </p>
-                    {(card.note || card.example) && (
-                      <p className="mt-1 font-body text-[12px] leading-snug text-ink-muted">
-                        {card.note || card.example}
-                      </p>
-                    )}
-                    <p className="mt-1.5 font-body text-[10px] font-black uppercase tracking-[0.2em] text-ink-faint">
-                      {card.srs.lapses}× daneben
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleUnbench(card.id)}
-                    className="btn-3d inline-flex shrink-0 items-center rounded-[12px] border-[3px] border-flag-gold-deep bg-flag-gold px-3.5 py-2 font-display text-[11px] font-black uppercase tracking-[0.16em] text-ink"
-                    style={goldShadow}
-                  >
-                    Wieder üben
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
         )}
 
         {packsOpen && deck !== null && (

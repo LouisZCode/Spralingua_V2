@@ -263,17 +263,12 @@ function nextCard(cycle: CardCycle): DeckCard | null {
 // deck — including cards already graded this sitting and not-yet-due
 // "later" cards, since nothing there can be hurt by an ungraded rep — so
 // Wortschatz stays in the rotation forever instead of re-grinding a rested
-// card's interval once the honest graded slice runs out. Cards benched
-// (leeched, SATZ P2) are excluded from both orders and from every rebuild.
+// card's interval once the honest graded slice runs out.
 type SatzCycle = {
   deck: DeckCard[];
   gradedOrder: string[];
   rehearsalOrder: string[];
 };
-
-function nonBenchedIds(deck: DeckCard[]): string[] {
-  return deck.filter((c) => c.srs.status !== "benched").map((c) => c.id);
-}
 
 // Due before new (not shuffled together like buildQueue) so an overdue
 // review can never lose its priority slot to a lucky shuffle — Flow deals
@@ -290,20 +285,20 @@ function buildGradedOrder(deck: DeckCard[], newAllowance: number): string[] {
 }
 
 function buildRehearsalOrder(deck: DeckCard[]): string[] {
-  return shuffle(nonBenchedIds(deck));
+  return shuffle(deck.map((c) => c.id));
 }
 
 // Returns the next satz card plus whether this deal is a write-free
 // rehearsal turn. Drains gradedOrder first; once empty, deals from (and
-// endlessly rebuilds) rehearsalOrder. A benched card can still be sitting in
-// a stale order entry (e.g. it got leeched mid-sitting) — skip it rather
-// than dealing it, per the "benched must never be dealt" invariant.
+// endlessly rebuilds) rehearsalOrder. An id can still be sitting in a stale
+// order entry after its card left the deck mid-sitting (handleSatzRemove) —
+// skip it rather than dealing a card that's gone.
 function nextSatzCard(cycle: SatzCycle): [DeckCard, boolean] | null {
   const byId = new Map(cycle.deck.map((c) => [c.id, c] as const));
   while (cycle.gradedOrder.length > 0) {
     const id = cycle.gradedOrder.shift() as string;
     const card = byId.get(id);
-    if (card && card.srs.status !== "benched") return [card, false];
+    if (card) return [card, false];
   }
   if (cycle.rehearsalOrder.length === 0) {
     cycle.rehearsalOrder = buildRehearsalOrder(cycle.deck);
@@ -311,7 +306,7 @@ function nextSatzCard(cycle: SatzCycle): [DeckCard, boolean] | null {
   while (cycle.rehearsalOrder.length > 0) {
     const id = cycle.rehearsalOrder.shift() as string;
     const card = byId.get(id);
-    if (card && card.srs.status !== "benched") return [card, true];
+    if (card) return [card, true];
   }
   return null;
 }
@@ -355,11 +350,7 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
   if (kind === "genus") return bag.genus.length;
   if (kind === "faelle") return bag.faelle.length;
   if (kind === "satzbau") return bag.satzbau.length;
-  // FLOW-003: benched cards can never be dealt, so a deck that's 100%
-  // benched must drop satz out of the rotation cleanly instead of stalling
-  // pickSource on a source that always deals null. Verbformen keeps its old
-  // unfiltered count (see the CardCycle comment above) — out of scope here.
-  if (kind === "satz") return nonBenchedIds(bag.satz.deck).length;
+  if (kind === "satz") return bag.satz.deck.length;
   return bag.verbformen.deck.length;
 }
 

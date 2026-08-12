@@ -65,6 +65,12 @@ const inkShadow = {
 const goldShadow = {
   ["--shadow-color"]: "var(--color-flag-gold-deep)",
 } as React.CSSProperties;
+// No blue design token in the palette (it's German-flag red/gold + a
+// universal success green) — same one-off #2563eb/#1e40af pair the gender
+// gate's `die` ball and GermanWay's own rewrite diff already wear.
+const blueShadow = {
+  ["--shadow-color"]: "#1e40af",
+} as React.CSSProperties;
 
 // One sentence is all we judge — auto-stop keeps a forgotten open mic from
 // uploading minutes of audio (the backend caps bytes for the same reason).
@@ -105,11 +111,12 @@ function shuffle<T>(arr: T[]): T[] {
 
 // Today's work: due cards (most-overdue first, capped at `reviewCap` so a
 // big backlog doesn't bury one session) plus a drip of new words. The drip
-// size is now server-decided for Satzschmiede — `newAllowance` is 5/day
-// minus whatever's already been started today, and drops to 0 while the
-// accuracy guard is tripped; a caller that doesn't pass it (Verbformen)
-// falls back to the old flat NEW_PER_SESSION, and a caller that doesn't pass
-// `reviewCap` (Verbformen again) stays uncapped, the old behaviour.
+// size is now server-decided for Satzschmiede — `newAllowance` guarantees at
+// least 5 new words a day even on a heavy-review day and grows toward 20 as
+// reviews clear (SATZ dosing P2, see satz/routes.py's SESSION_TARGET/
+// REVIEW_SHARE); a caller that doesn't pass it (Verbformen) falls back to
+// the old flat NEW_PER_SESSION, and a caller that doesn't pass `reviewCap`
+// (Verbformen again) stays uncapped, the old behaviour.
 // Selection is by overdueness/flatness only — presentation still gets a
 // final shuffle so packs don't replay in authoring order. `exclude` holds
 // cards already finished this session — the deck's srs is a fetch-time
@@ -147,7 +154,6 @@ export default function VocabTrainer({
   sessionId,
   newAllowance,
   reviewCap,
-  newThrottled,
   onDoneChange,
   onGenderMiss,
   onGenderCues,
@@ -198,16 +204,14 @@ export default function VocabTrainer({
   // OBS-007 override: the Flow page's one practice-session id for the whole
   // sitting — used in place of the ref-minted one below when present.
   sessionId?: string;
-  // Server-decided daily new-word drip for Satzschmiede (0..5 — the daily
-  // cap AND the accuracy-guard throttle are both already applied). Undefined
-  // (Verbformen's implicit default) falls back to the flat NEW_PER_SESSION.
+  // Server-decided daily new-word drip for Satzschmiede (5..20 — reviews
+  // claim up to REVIEW_SHARE of the daily SESSION_TARGET, new words fill
+  // whatever's left, so it never drops below 5). Undefined (Verbformen's
+  // implicit default) falls back to the flat NEW_PER_SESSION.
   newAllowance?: number;
   // Caps how many due cards one session's queue pulls in, most-overdue
   // first. Undefined (Verbformen's implicit default) stays uncapped.
   reviewCap?: number;
-  // True while the accuracy guard has zeroed (or shrunk) today's allowance —
-  // drives one calm reassurance line instead of new words just not showing up.
-  newThrottled?: boolean;
   // SATZ-012: fires true while the post-round clean end screen is up (queue
   // exhausted AFTER real work), so the shell can hide its pool/add-cards
   // chrome. The nothing-due-at-mount panel does NOT count as done.
@@ -253,6 +257,10 @@ export default function VocabTrainer({
   const [flagState, setFlagState] = useState<"idle" | "sending" | "sent">(
     "idle"
   );
+  // IDIOM-002: true once GermanWay's on-demand rephrase actually returned a
+  // rewrite for THIS attempt — arms the blue "Try again" below. Never set on
+  // the "already sounds German" case (see the onRephrase wiring downstream).
+  const [rephraseOffered, setRephraseOffered] = useState(false);
   // SATZ-010 gender gate. Keyed by card id, so it self-invalidates on every
   // card change (including the same card returning later in the round) and
   // deliberately survives resetScratch — a red spoken attempt's "Try again"
@@ -610,7 +618,9 @@ export default function VocabTrainer({
   // clears the rehearsal arming — a real advance (a different card, or this
   // one recycling around) must never inherit a stale rehearsal flag. The
   // one path that needs it to survive (tryAgain, on a failed rehearsal)
-  // re-arms it explicitly right after calling this.
+  // re-arms it explicitly right after calling this. IDIOM-002: rephraseOffered
+  // clears here too — a rephrase offered on the previous attempt must never
+  // carry the blue "Try again" into a new one.
   function resetScratch() {
     setRevealed(false);
     setFlipped(false);
@@ -618,6 +628,7 @@ export default function VocabTrainer({
     setExplanation(null);
     setFlagState("idle");
     setAttemptError(null);
+    setRephraseOffered(false);
     rehearsalRef.current = null;
   }
 
@@ -816,15 +827,9 @@ export default function VocabTrainer({
               : "Deine Wörter ruhen sich aus — sie kommen zurück, wenn es Zeit ist."}
         </p>
         {/* SATZ-012: the clean end keeps exactly two actions — one small
-            follow-up batch and the way back. The throttle note and the
-            browse link stay off the post-round screen; the nothing-due
-            panel keeps them, it's a landing state, not an ending. */}
-        {!finished && newThrottled && (
-          <p className="mx-auto mt-2 max-w-[380px] font-body text-[12px] font-semibold text-ink-faint">
-            Neue Wörter pausieren, bis sich deine Genauigkeit erholt hat —
-            erledigte Reviews bringen sie zurück.
-          </p>
-        )}
+            follow-up batch and the way back. The browse link stays off the
+            post-round screen; the nothing-due panel keeps it, it's a
+            landing state, not an ending. */}
         {dueRemaining > 0 ? (
           <button
             type="button"
@@ -931,15 +936,6 @@ export default function VocabTrainer({
           Next →
         </button>
       </div>
-
-      {/* Re-dosed drip: one calm line explaining why new words are thin
-          today, instead of the drip just silently not showing up. */}
-      {!browsing && newThrottled && (
-        <p className="mb-3 text-center font-body text-[11px] font-semibold text-ink-faint">
-          New words are paused while your accuracy recovers — clearing
-          reviews brings them back.
-        </p>
-      )}
 
       {/* Mode toggle — browse is the escape hatch, never the default. */}
       <div className="mb-4 text-center">
@@ -1124,6 +1120,7 @@ export default function VocabTrainer({
                         onGloss={onGloss}
                         onAdd={onAdd}
                         exclude={glossExclude}
+                        onRephrase={() => setRephraseOffered(true)}
                       />
                     )}
                     {/* SATZ-008: recourse for a verdict that feels wrong —
@@ -1201,6 +1198,27 @@ export default function VocabTrainer({
                   {"↻"} Try again
                 </button>
               )}
+              {/* IDIOM-002: a clean pass (no grammar note) where the agent
+                  also offered a Germanized rephrase — same rehearsal
+                  semantics as the gold retry above (the graded pass already
+                  stands, this is bonus practice), blue to match the rewrite
+                  it's rehearsing instead of borrowing grammar's gold. Mutually
+                  exclusive with the gold button: that one requires a grammar
+                  note, this one requires there being none. */}
+              {!browsing &&
+                sessionPrefix === "satz" &&
+                verdict === "correct" &&
+                !grammarNote &&
+                rephraseOffered && (
+                  <button
+                    type="button"
+                    onClick={startRehearsal}
+                    className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-[#1e40af] bg-[#2563eb] px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+                    style={blueShadow}
+                  >
+                    {"↻"} Try again
+                  </button>
+                )}
               <button
                 type="button"
                 onClick={handleNext}
