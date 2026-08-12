@@ -447,12 +447,15 @@ export default function BriefTrainer({
         )
       : undefined;
 
-    // IDIOM-002: renders nothing at all when null — no empty card, no
-    // placeholder. Present only when a native would genuinely phrase things
+    // IDIOM-002: present only when a native would genuinely phrase things
     // differently. Sits directly under "Corrected" (or its nothing-to-fix
     // stand-in) and above "What to fix" — the reveal is one more look at the
-    // letter's language, not a footnote after the error list.
-    const naturalToggle = feedbackResult.naturalVersion && (
+    // letter's language, not a footnote after the error list. When null, a
+    // small praise note takes this same spot instead of rendering nothing —
+    // reuses the nothingToCorrect card treatment (paper-warm rounded card,
+    // ink-soft text) so it reads as one more quiet confirmation, not a new
+    // visual language, and doesn't compete with the "Corrected" block above.
+    const naturalToggle = feedbackResult.naturalVersion ? (
       <div className="mt-6 text-center">
         <button
           type="button"
@@ -474,6 +477,12 @@ export default function BriefTrainer({
             </div>
           </div>
         )}
+      </div>
+    ) : (
+      <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-center">
+        <p className="font-body text-[13px] leading-snug text-ink-soft">
+          Nothing to Germanize — this letter was German enough. Well done!
+        </p>
       </div>
     );
 
