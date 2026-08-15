@@ -36,7 +36,7 @@ from satz.enricher import EnrichedCard, enrich_word
 from satz.example_forge import backfill_card_examples, forge_card_examples
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
-from satz.glosser import gloss_word
+from satz.glosser import function_word_gloss, gloss_word
 from satz.scheduler import lapse_interval, schedule
 from satz.verifier import verify_card
 from security import drill_try_admit, gloss_try_admit
@@ -1252,7 +1252,13 @@ async def gloss_word_route(
     a one-tap "add to deck" (the add itself is ``POST /satz/cards``,
     unchanged).
 
-    Three-tier lookup, cheapest first:
+    Four-tier lookup, cheapest first:
+    0. SATZ-026: a closed-class function-word table (articles, pronouns,
+       the commonest particles) — no DB, no LLM, and never wrong, so it
+       runs before the cache too: a cache row poisoned by the old bug
+       (e.g. "die" once wrongly cached as "Schuh") can never win again for
+       one of these words. Marked ``glossable=False`` — the frontend hides
+       "add to deck" for it.
     1. Shared Satzschmiede catalog — the hovered word IS a card's target as
        typed (no LLM).
     2. The ``word_glosses`` cache, keyed on the normalized surface form (no
@@ -1287,6 +1293,31 @@ async def gloss_word_route(
         if body.session_id:
             span.set_attribute("langfuse.session.id", body.session_id)
         span.set_attribute("langfuse.trace.input", word)
+
+        # 0) SATZ-026: closed-class function words (articles, pronouns, the
+        # commonest particles) are answered from a fixed table before ANY
+        # DB lookup — see the tier list in the docstring above for why this
+        # has to outrank even the cache.
+        function_result = function_word_gloss(word, context or word)
+        if function_result is not None:
+            span.set_attribute("langfuse.trace.output", function_result.lemma)
+            gloss_adds_remaining = max(
+                0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
+            )
+            return {
+                "lemma": function_result.lemma,
+                "article": function_result.article,
+                "gloss": function_result.gloss,
+                "example": function_result.example,
+                "cardId": None,
+                "inDeck": False,
+                "source": "function",
+                # Never offer "add to deck" for a function word — this is
+                # the guard that makes a wrong article/pronoun gloss
+                # harmless even if the table above were ever wrong.
+                "glossable": False,
+                "glossAddsRemaining": gloss_adds_remaining,
+            }
 
         # 1) Catalog hit — the hovered word is already a catalog card's
         # target exactly as typed (e.g. hovering a word already in base
@@ -1386,6 +1417,9 @@ async def gloss_word_route(
         "cardId": card_id,
         "inDeck": in_deck,
         "source": source,
+        # SATZ-026: catalog/cache/fresh hits are real content words — always
+        # glossable. Only the tier-0 function-word table above sets false.
+        "glossable": True,
         "glossAddsRemaining": gloss_adds_remaining,
     }
 

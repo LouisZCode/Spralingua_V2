@@ -266,7 +266,12 @@ export type GlossInfo = {
   example: string | null;
   cardId: string | null;
   inDeck: boolean;
-  source: "catalog" | "cache" | "fresh";
+  source: "catalog" | "cache" | "fresh" | "function";
+  // SATZ-026: false for the closed-class function-word table (articles,
+  // pronouns, particles) — an article or pronoun can never become a vocab
+  // card, so Glossable hides "add to deck" whenever this is false. Absent
+  // (older cached entries) is treated as true.
+  glossable?: boolean;
   // SATZ-013: remaining gloss-path adds allowed today (0..3), computed up
   // front so the popover can render the state before any add attempt.
   glossAddsRemaining?: number;

@@ -390,7 +390,7 @@ function GlossableInner({ text, onGloss, onAdd, className, exclude }: GlossableP
                     {glossData.example}
                   </span>
                 )}
-                {onAdd && (
+                {onAdd && glossData.glossable !== false && (
                   <span className="mt-2 block border-t-2 border-ink/10 pt-2">
                     {glossData.inDeck ? (
                       <span className="block text-[11px] font-semibold text-ink-muted">
