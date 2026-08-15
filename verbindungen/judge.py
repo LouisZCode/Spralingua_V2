@@ -106,11 +106,12 @@ class Diagnosis(BaseModel):
 
     correct: bool = Field(
         description=(
-            "True ONLY when the learner's words fill the gap fully correctly "
-            "and differ from the expected solution trivially (frame words "
-            "typed around it, punctuation, capitalization, typos OUTSIDE the "
-            "gap). Anything wrong, missing, or extra INSIDE the gap is NEVER "
-            "trivial, whatever the pattern being tested"
+            "True when the filled sentence is correct German AND the gap "
+            "words exercise the pattern being tested the way the reference "
+            "solution does. The reference is ONE correct answer, not the "
+            "only one — a different determiner or a contraction can be "
+            "equally right. False when the German is wrong, or when the "
+            "answer sidesteps the pattern instead of demonstrating it"
         )
     )
     note: Optional[str] = Field(
@@ -130,7 +131,7 @@ You diagnose one WRITTEN attempt in a German gap-fill drill ("Feste Verbindungen
 - pattern being tested: {pattern_id} — {label}. {description}
 - sentence: "{frame}"
 - the chunk/rule being tested: {chunk}
-- correct solution for the gap: "{expected}"
+- ONE correct solution for the gap (a reference, NOT the only right answer): "{expected}"
 
 # What the learner typed
 "{typed}"
@@ -146,9 +147,25 @@ A typo, a missing umlaut, or a wrong ending in a FRAME word is NOT an error in t
 - pattern reflexivpronomen · expected "mich auf" · typed "Ich freue mich auf das Wochenened." → **correct: true**. "Wochenened" is a typo in a given word; the gap holds "mich auf", which is right.
 - pattern nicht-vs-kein · expected "kein" · typed "Ich habe nicht Auto." → **correct: false**. THIS is a real error — the wrong negator landed IN the gap.
 
-# STEP 2 — grade
-- `correct` — true when the gap words are the expected form, allowing capitalization, stray punctuation, and typos OUTSIDE the gap. Whatever is wrong INSIDE the gap is never trivial.
-- `note` — REQUIRED whenever correct=false: ONE short English line (AT MOST 14 words) naming exactly what broke, scoped to the ONE decision this item's pattern tests (see below). The correct answer/chunk is shown to the learner separately — never restate the full fix. Null only when correct.
+# STEP 2 — the reference solution is not an answer key
+The solution above is ONE right answer. German usually allows several. Ask TWO questions, and mark correct=true only if BOTH pass:
+
+1. **Is the filled sentence correct German?** Read the frame with the learner's words in the gap and judge that sentence.
+2. **Does it exercise the pattern being tested?** The pattern names ONE decision — the reflexive pronoun, the fixed preposition, the case it governs, the negator, the verb ending. The learner must get THAT decision right. Everything the pattern does not pin is theirs to choose.
+
+## This is where graders go wrong — a different word is not a wrong word
+Whatever the pattern does not pin is free. A **possessive instead of a definite article** (or the reverse) is free unless the pattern is about article type. A **contraction** is free: "beim" IS "bei dem", "zum" IS "zu dem", "ins" IS "in das" — same grammar, same case, and the contraction is usually the more natural German. Rejecting a learner for these teaches them nothing and is simply wrong.
+
+- pattern verben-mit-praepositionen · reference "an die" · typed "an meine" (frame "Ich denke oft ___ Zeit in Spanien.") → **correct: true**. "denken an" is there and the case is still Akkusativ; definite vs. possessive is not what this pattern tests.
+- pattern verben-mit-praepositionen · reference "bei dem" · typed "beim" → **correct: true**. Same words, fused. Never fail a learner for writing the contraction.
+- pattern verben-mit-praepositionen · reference "an die" · typed "an der" → **correct: false**. CONTROL: dative where the chunk governs accusative — the case IS the pattern.
+- pattern verben-mit-praepositionen · reference "an die" · typed "über die" → **correct: false**. CONTROL: correct-looking German, but it swaps the fixed preposition, so it never demonstrates "denken an".
+- pattern nicht-vs-kein · reference "kein" · typed "ein" → **correct: false**. CONTROL: "Ich habe ein Auto." is fine German, but the item tests NEGATION and this answer sidesteps it. Prong 1 alone would wrongly pass this — prong 2 is what catches it.
+- pattern reflexivpronomen · reference "mich auf" · typed "auf" → **correct: false**. CONTROL: the missing reflexive pronoun IS the pattern.
+
+# STEP 3 — grade
+- `correct` — apply the two prongs above. Capitalization, stray punctuation, and typos OUTSIDE the gap never matter. A wrong ENDING, a wrong CASE, a wrong fixed PREPOSITION or a missing/extra REFLEXIVE PRONOUN inside the gap always matters.
+- `note` — REQUIRED whenever correct=false: ONE short English line (AT MOST 14 words) naming exactly what broke, scoped to the ONE decision this item's pattern tests (see below). Describe the learner's actual mistake, NOT the distance from the reference — "that's dative, the chunk needs accusative" teaches; "should be 'an die'" does not. The correct answer/chunk is shown to the learner separately — never restate the full fix. Null only when correct.
 
 ## How to diagnose — this pattern's decision
 {diagnosis_guidance}

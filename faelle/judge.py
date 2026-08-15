@@ -35,11 +35,13 @@ class CaseDiagnosis(BaseModel):
 
     correct: bool = Field(
         description=(
-            "True when the words FILLING THE GAP are the expected case "
-            "form. Judge the gap alone — typos, missing umlauts and wrong "
-            "endings anywhere ELSE in the typed sentence are irrelevant "
-            "and never make this false. A different case, wrong-gender "
-            "article, or wrong preposition IN THE GAP is never trivial"
+            "True when the words FILLING THE GAP carry the right CASE and "
+            "gender for this sentence. The reference answer is one correct "
+            "form, not the only one: any determiner in the correct case is "
+            "right unless the rule pins a specific one. Judge the gap alone "
+            "— typos and wrong endings elsewhere never make this false. A "
+            "different CASE, a wrong GENDER, or a wrong PREPOSITION in the "
+            "gap is never trivial"
         )
     )
     note: Optional[str] = Field(
@@ -68,7 +70,7 @@ You grade ONE gap in a German case drill ("Fälle"). The learner saw a full, cor
 
 # The item
 - sentence: "{frame}"
-- correct answer for the gap: "{expected}"
+- ONE correct answer for the gap (a reference, NOT the only right answer): "{expected}"
 - the rule being tested: {rule}
 
 # What the learner typed
@@ -85,9 +87,25 @@ A typo, a missing umlaut, or a wrong ending in a frame word is NOT a case error 
 - expected "meiner" · typed "Ich helfe meiner Muter im Haushalt." → **correct: true**. Same story: the gap is right.
 - expected "auf den" · typed "Ich stelle die Vase auf dem Tisch." → **correct: false**. THIS is a case error — it is in the gap.
 
-# STEP 2 — grade
-- `correct` — true when the gap words are the expected case form, allowing capitalization and stray punctuation. A different case, a wrong-gender article, or a wrong preposition IN THE GAP is never trivial.
-- `note` — REQUIRED whenever correct=false; never leave it null on a wrong verdict. ONE line, AT MOST 14 words, naming exactly which case decision broke ("that's dative, not accusative here" / "die Kinder is plural, not feminine dative"). The correct answer is shown separately — never restate it. Null only when correct.
+# STEP 2 — the reference answer is not an answer key
+This drill tests ONE thing: the CASE (and the gender that goes with it). The reference above is one correct filling; German usually allows several. Ask TWO questions, and mark correct=true only if BOTH pass:
+
+1. **Is the filled sentence correct German?**
+2. **Does the gap carry the case this sentence demands?** That is the decision being graded.
+
+## This is where graders go wrong — a different determiner is not a wrong case
+The TYPE of determiner is the learner's to choose unless the rule pins it. A **possessive** (mein/dein/sein/ihr/unser) in the correct case is exactly as right as the **definite article** in the correct case, and vice versa. This drill's own items go both ways — some expect "meiner", some expect "dem" — so the learner cannot possibly infer which type is wanted, and must never be failed for the choice. Judge the ENDING, not the stem. A **contraction** is likewise free: "beim" IS "bei dem", "ins" IS "in das" — same case, same grammar.
+
+- rule "kennen is a normal Akkusativ verb" · reference "den" · typed "deinen" → **correct: true**. "deinen" is accusative masculine — the case is right, which is the whole test. Definite vs. possessive is not.
+- rule "helfen is a Dativ verb" · reference "meiner" · typed "der" → **correct: true**. "der Mutter" is dative feminine. (Careful: "der" is dative feminine here, NOT nominative masculine — read the noun.)
+- rule "hängen (transitive) → Akkusativ" · reference "an die" · typed "an meine" → **correct: true**. Still accusative feminine.
+- rule "kennen is a normal Akkusativ verb" · reference "den" · typed "dem" → **correct: false**. CONTROL: dative — that is the exact trap the item is built around.
+- rule "kennen is a normal Akkusativ verb" · reference "den" · typed "deinem" → **correct: false**. CONTROL: possessive is fine, but the case is dative.
+- rule "hängen (transitive) → Akkusativ" · reference "an die" · typed "auf die" → **correct: false**. CONTROL: right case, wrong preposition.
+
+# STEP 3 — grade
+- `correct` — apply the two prongs above, allowing capitalization and stray punctuation. A different CASE, a wrong GENDER, or a wrong PREPOSITION in the gap is never trivial.
+- `note` — REQUIRED whenever correct=false; never leave it null on a wrong verdict. ONE line, AT MOST 14 words, naming exactly which case decision broke ("that's dative, not accusative here" / "die Kinder is plural, not feminine dative"). Name the learner's actual error, never the distance from the reference — "used a possessive instead of 'den'" is not a case diagnosis and must never be written. The correct answer is shown separately — never restate it. Null only when correct.
 - `means_instead` — the highest-value field. Set it ONLY when the typed answer is itself grammatical, well-formed German that a native speaker would read as meaning something DIFFERENT from the intended sentence — most often the OTHER case of the same preposition (dative instead of accusative on a two-way preposition, or vice versa), which flips location vs. direction. When that's true, write ONE short English line stating what the learner's version actually says. Leave it null whenever the typed answer is simply wrong or ungrammatical with no coherent alternate meaning, or when correct=true.
 """
 

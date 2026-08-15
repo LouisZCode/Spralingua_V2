@@ -362,7 +362,11 @@ items:
     frame: "Ich habe ___ Auto."
     answer: "kein"
     chunk: "kein + noun · nicht + verb or adjective"
-    hint: "Are you negating a thing, or an action?"
+    # The old hint ("Are you negating a thing, or an action?") presupposed
+    # negation without ever stating it, so "ein" was a perfectly valid
+    # answer and a learner picked it in production (2026-08-14). Every
+    # other nicht-vs-kein item names the task; this one now does too.
+    hint: "You don't own a car — negate the noun."
 
   - id: nvk-zeit
     pattern_id: nicht-vs-kein
