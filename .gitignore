@@ -22,6 +22,11 @@ logs/conversations/*.log
 # Environment variables / secrets
 .env
 *.env
+# SEC-004 (2026-08-15): any backup/variant of a secrets file must never be stageable.
+.env.*
+!.env.example
+.env.bak*
+*.env.bak
 
 # Dependency directories
 node_modules/
