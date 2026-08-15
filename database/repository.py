@@ -21,6 +21,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from config.settings import test_guard_enabled
 from grammar import load_taxonomy
 
 from .orm import (
@@ -32,6 +33,26 @@ from .orm import (
     UserError,
     VocabCard,
 )
+
+# TEST-001: prefix every isolated fixture account must use (scripts/test_user.py
+# enforces the same prefix on create/destroy).
+_TEST_USER_PREFIX = "test-"
+
+
+def _assert_test_user(user_id: str) -> None:
+    """TEST-001 guard rail: with SPRALINGUA_TEST_GUARD=1 (config.settings.
+    test_guard_enabled), every write helper below that takes a user_id calls
+    this FIRST, before any DB statement is built. Off by default — a normal
+    prod/dev run never sets the env var, so this is a no-op there. On, a
+    non-``test-*`` id raises before a single row is touched, which is what
+    would have caught the TEST-001 incident (a sim run silently retiring two
+    real ``user_errors`` rows on ``0001``) at the source instead of by hand
+    afterward. ``finalize_session_row`` is deliberately not guarded this way
+    — it takes only a ``session_id``, not a ``user_id``."""
+    if test_guard_enabled and not user_id.startswith(_TEST_USER_PREFIX):
+        raise RuntimeError(
+            f"test guard: refusing write for non-test user {user_id!r}"
+        )
 
 
 async def create_session_row(
@@ -54,6 +75,7 @@ async def create_session_row(
     written — they were the runtime knobs we removed in favor of YAML
     ``default_level``. Migration to drop them can come with the next batch.
     """
+    _assert_test_user(user_id)
     try:
         # Idempotent user upsert — repeat connects with same user_id are a no-op.
         await db.execute(
@@ -140,6 +162,7 @@ async def upsert_user(
     uniqueness — Google itself is case-insensitive on the local part, so two
     sign-ins that differ only in case must land on the same row.
     """
+    _assert_test_user(user_id)
     try:
         stmt = pg_insert(User).values(
             id=user_id,
@@ -197,6 +220,7 @@ async def record_grammar_error(
     express cleanly in SQL, and one user's attempts are sequential — there
     is no concurrent writer for a given (user, pattern) in practice.
     """
+    _assert_test_user(user_id)
     now = datetime.now()
     example: dict = {
         "sentence": sentence,
@@ -263,6 +287,7 @@ async def record_drill_attempt(
     Sparring's structure judge never emits a binary pass/fail, so its rows
     record NULL and still count toward attempt totals, just not accuracy.
     """
+    _assert_test_user(user_id)
     try:
         db.add(
             DrillAttempt(
@@ -300,6 +325,7 @@ async def credit_streak_day(db: AsyncSession, *, user_id: str) -> None:
     Same contract as the other ledger ops: re-raises on ``SQLAlchemyError``,
     caller owns the non-fatal wrapping.
     """
+    _assert_test_user(user_id)
     today = datetime.now(timezone.utc).date()
     try:
         user = await db.get(User, user_id)
@@ -366,6 +392,7 @@ async def complete_daily_mode(db: AsyncSession, *, user_id: str, mode: str) -> N
     Same contract as the other ledger ops: re-raises on ``SQLAlchemyError``,
     caller owns the non-fatal wrapping.
     """
+    _assert_test_user(user_id)
     if mode not in STREAK_MODES:
         raise ValueError(f"Unknown streak mode: {mode!r}")
     today = datetime.now(timezone.utc).date()
@@ -489,6 +516,7 @@ async def credit_pattern_success(
     the sibling ledger ops: re-raises on ``SQLAlchemyError``, caller owns the
     non-fatal wrapping.
     """
+    _assert_test_user(user_id)
     try:
         # SELECT ... FOR UPDATE: locks the row for this transaction so a
         # concurrent writer to the same (user_id, pattern_id) re-reads after
@@ -1182,6 +1210,7 @@ async def load_user_level(db: AsyncSession, *, user_id: str) -> str | None:
 async def set_user_level(db: AsyncSession, *, user_id: str, level: str | None) -> None:
     """Write the learner's CEFR bucket. ``None`` clears it (back to
     "serve everything"), which is what the UI's "not sure" escape does."""
+    _assert_test_user(user_id)
     await db.execute(update(User).where(User.id == user_id).values(level=level))
     await db.commit()
 

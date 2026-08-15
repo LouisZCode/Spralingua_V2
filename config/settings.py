@@ -46,6 +46,16 @@ if _raw_db_url:
             break
 database_url = _raw_db_url
 
+# --- Test isolation guard rail (TEST-001) ---
+# When set, every write helper in database/repository.py that takes a
+# user_id refuses to run unless that id starts with "test-" (see
+# database.repository._assert_test_user and CLAUDE.md's sim-harness
+# section). Off by default: prod and any ordinary dev run are unaffected.
+# Opt in for a sim/test session so a stray write to a real account (e.g.
+# 0001) crashes loudly instead of silently mutating real learning data —
+# that's how the TEST-001 incident happened.
+test_guard_enabled = os.getenv("SPRALINGUA_TEST_GUARD", "0") == "1"
+
 # --- Front-page demo agent hardening (SEC-001) ---
 # The "/ws/demo/{id}" + "/say" surface is world-facing and unauthenticated, so
 # it gets its own guardrails (see security.py). Everything is env-overridable so
