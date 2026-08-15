@@ -11,6 +11,7 @@ the whole Pipecat/LangChain conversation stack.
 """
 
 from .contractions import expand_contractions
+from .ledger_guard import ledger_guard_reason, repair_quote
 from .levels import (
     BUCKETS,
     DEFAULT_BUCKET,
@@ -27,6 +28,8 @@ __all__ = [
     "allows",
     "bucket_of",
     "expand_contractions",
+    "ledger_guard_reason",
+    "repair_quote",
     "level_for_pattern",
     "load_taxonomy",
     "select",

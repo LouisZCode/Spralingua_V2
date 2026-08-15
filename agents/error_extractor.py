@@ -24,6 +24,7 @@ reason as the evaluator: the prompt body carries literal JSON braces.
 """
 
 from agents.openrouter_llm import structured_judge_llm
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -31,7 +32,7 @@ from agents.observability import (
     record_generation_output,
     unwrap_structured_output,
 )
-from grammar import load_taxonomy, taxonomy_brief
+from grammar import ledger_guard_reason, load_taxonomy, repair_quote, taxonomy_brief
 
 EXTRACTOR_MODEL = "openai/gpt-oss-120b"
 
@@ -78,6 +79,12 @@ Two things in the transcript are NEVER the learner's mistake and must never beco
 - User: "Ich glaube, dass er... äh... heute kommt." → nothing to classify. "äh" is a filler the recognizer kept; "dass er heute kommt" already has the verb last.
 - User: "Ich glaube das er heute kommt." → nothing to classify. Deepgram wrote "das" for "dass" — they're homophones, a transcription spelling, not a wrong connector — and the verb is still last.
 - User: "Ich bleibe zuhause, weil ich bin krank." → **classify** as nebensatz-verbende. This is a real word-order break in the learner's own line, not noise.
+
+## More cases graders get wrong — three non-errors and one real one
+- User: "In September bin ich total frei, und werde gerne dazu teilnehmen." → NOT v2-wortstellung. Dropping the repeated subject after "und" when it's the same subject as the clause before is normal, legal German ellipsis — the verb is still second in its own clause.
+- User: "Ich komm heute zum Arzt, weil ich schwanger bin." → NOT subjekt-verb-endung. First-person schwa-drop in speech ("ich komm", "ich mach", "ich hab") is how German is actually spoken, not a wrong verb ending — never classify it.
+- User: "Ich habe auch kein Zeit." → akkusativ-artikel. The learner chose kein correctly over nicht — what is off is the ENDING on the determiner of the direct object ("keine Zeit", "keinen Hunger", "keine Unverträglichkeiten"), which is exactly what akkusativ-artikel covers. NOT nicht-vs-kein — that pattern is only for choosing the wrong negator.
+- User: "Ich habe gestern gegangen." → **classify** as perfekt-aux-sein. This IS a real break — gehen is a movement verb and takes sein, not haben, even though "gegangen" itself is formed correctly.
 
 # What to classify
 - Look ONLY at the `User:` lines, after STEP 1. Find grammar mistakes the learner made **in German**, and map each to the ONE catalog pattern whose wrong→right pair matches it. Use ids from the catalog only — never invent one.
@@ -189,5 +196,41 @@ async def extract_errors(
             continue
         seen.add(err.pattern_id)
         deduped.append(err)
-    result.errors = deduped
+
+    # LEDGER-001: deterministic guards at the ledger write boundary — a
+    # spoken-German schwa-drop the judge misfiled as a real subjekt-verb-
+    # endung break, a quote that isn't actually in the transcript/letter, or
+    # a "correction" that doesn't correct anything. `check_das_dass` stays
+    # off here: this harvest's `transcript` is typed (Briefkasten) for one
+    # caller and spoken (a lesson or Szenario transcript) for the others,
+    # and the guard can't tell which from inside this function — see
+    # agents/debrief.py, whose source is always voice, for that check.
+    # Nothing filters between this and the `record_grammar_error` calls in
+    # pipeline/factory.py, briefkasten/routes.py and szenario/routes.py.
+    guarded: list[ExtractedError] = []
+    for err in deduped:
+        # Re-anchor the quote to the learner's own text first (BRIEF-003:
+        # the model "fixes" a word inside the quote — keep the row, store
+        # what the learner actually wrote). Beyond repair → the guard below
+        # drops it as a misquote.
+        repaired = repair_quote(err.sentence, transcript)
+        if repaired:
+            err.sentence = repaired
+        reason = ledger_guard_reason(
+            pattern_id=err.pattern_id,
+            quote=err.sentence,
+            corrected=err.corrected,
+            source_text=transcript,
+            # Punctuation-insensitive substring check: the model normalises
+            # curly quotes / dashes / line breaks when it copies, and a real
+            # error row must not be dropped for an apostrophe glyph. Word
+            # substitutions ("also"→"auch") are still caught.
+            strip_punctuation=True,
+        )
+        if reason:
+            logger.info(f"Ledger guard dropped harvested row: pattern={err.pattern_id} reason={reason}")
+            continue
+        guarded.append(err)
+    result.errors = guarded
+
     return result

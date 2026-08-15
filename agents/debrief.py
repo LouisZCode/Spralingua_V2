@@ -29,6 +29,7 @@ body carries literal JSON braces, same as the sibling evaluators.
 """
 
 from agents.openrouter_llm import structured_judge_llm
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -36,7 +37,7 @@ from agents.observability import (
     record_generation_output,
     unwrap_structured_output,
 )
-from grammar import load_taxonomy, taxonomy_brief
+from grammar import ledger_guard_reason, load_taxonomy, repair_quote, taxonomy_brief
 
 DEBRIEF_MODEL = "openai/gpt-oss-120b"
 
@@ -117,6 +118,12 @@ Two things in the transcript are NEVER the learner's mistake:
 - target: nebensatz-verbende · User: "ich bleibe heute zuhause weil ich mich nicht gut fühle ähm" → produced_correctly: true. "ähm" is a kept filler; the clause already has the verb last.
 - target: nebensatz-verbende · User: "ich glaube das er heute kommt" → judge the word order only. Deepgram wrote "das" for "dass" (homophones) — not a wrong connector — and the verb is still last.
 - target: nebensatz-verbende · User: "ich bleibe zuhause weil ich bin müde" → produced_correctly: false. THIS is a real break — the verb sits in position 2, not a transcription artifact.
+
+## Also not a break, on a target or as a new error — and one that is
+- User: "In September bin ich total frei, und werde gerne dazu teilnehmen." → NOT v2-wortstellung. Dropping the repeated subject after "und" when it's the same subject as the clause before is normal, legal German ellipsis — the verb is still second in its own clause.
+- User: "Ich komm heute zum Arzt, weil ich schwanger bin." → NOT subjekt-verb-endung. First-person schwa-drop in speech ("ich komm", "ich mach", "ich hab") is how German is actually spoken, not a wrong verb ending — never file it, as a target outcome or a new error.
+- User: "Ich habe auch kein Zeit." → akkusativ-artikel. The learner chose kein correctly over nicht — what is off is the ENDING on the determiner of the direct object ("keine Zeit", "keinen Hunger", "keine Unverträglichkeiten"), which is exactly what akkusativ-artikel covers. NOT nicht-vs-kein — that pattern is only for choosing the wrong negator.
+- User: "Ich habe gestern gegangen." → classify as perfekt-aux-sein. THIS is a real break — gehen is a movement verb and takes sein, not haben, even though "gegangen" itself is formed correctly.
 
 # 1. Target patterns
 For EACH target, in the same order, decide:
@@ -288,5 +295,58 @@ async def debrief(
             continue
         seen_new.add(e.pattern_id)
         kept_new.append(e)
-    result.new_errors = kept_new
+
+    # LEDGER-001: deterministic guards at the ledger write boundary — a
+    # spoken-German schwa-drop or das/dass homophone the judge misfiled as a
+    # real break, a quote that isn't actually in the transcript, or a
+    # "correction" that doesn't correct anything. `strip_punctuation=True`
+    # because this is a Deepgram transcript, not something the learner
+    # typed; `check_das_dass=True` because a tandem session is always voice
+    # (the harvest's source varies by caller, so it keeps this off — see
+    # error_extractor.py). Nothing filters between this and the disconnect
+    # handler's `record_grammar_error` calls in pipeline/factory.py.
+    guarded_patterns: list[PatternOutcome] = []
+    for p in kept_patterns:
+        # Only a wrong, elicited production ever reaches record_grammar_error
+        # — a correct one is credited via credit_pattern_success instead, a
+        # different write this guard doesn't police.
+        if p.produced_correctly or not p.evidence or p.evidence.strip().lower() == "none":
+            guarded_patterns.append(p)
+            continue
+        repaired = repair_quote(p.evidence, transcript)
+        if repaired:
+            p.evidence = repaired
+        reason = ledger_guard_reason(
+            pattern_id=p.pattern_id,
+            quote=p.evidence,
+            corrected=p.corrected,
+            source_text=transcript,
+            check_das_dass=True,
+            strip_punctuation=True,
+        )
+        if reason:
+            logger.info(f"Ledger guard dropped target row: pattern={p.pattern_id} reason={reason}")
+            continue
+        guarded_patterns.append(p)
+    result.patterns = guarded_patterns
+
+    guarded_new: list[NewError] = []
+    for e in kept_new:
+        repaired = repair_quote(e.sentence, transcript)
+        if repaired:
+            e.sentence = repaired
+        reason = ledger_guard_reason(
+            pattern_id=e.pattern_id,
+            quote=e.sentence,
+            corrected=e.corrected,
+            source_text=transcript,
+            check_das_dass=True,
+            strip_punctuation=True,
+        )
+        if reason:
+            logger.info(f"Ledger guard dropped new-error row: pattern={e.pattern_id} reason={reason}")
+            continue
+        guarded_new.append(e)
+    result.new_errors = guarded_new
+
     return result
