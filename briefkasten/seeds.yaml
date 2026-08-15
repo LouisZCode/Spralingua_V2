@@ -135,6 +135,147 @@ seeds:
       - Ask how to reach her while she is away
       - Wish her a good trip
 
+
+  # ---- LEVEL-001 additions (2026-08-15): the level filter draws only from
+  # the learner's own bucket, and A1 had ONE seed. Every bucket now has
+  # several situations in both registers.
+
+  - id: lisa-kino
+    register: informal
+    level: a1
+    sender:
+      name: Lisa
+      relation: a friend from your German course
+    situation: >
+      She wants to go to the cinema on Friday evening and would like you to
+      come along. She has not decided on a film or a time yet and is happy
+      to go with whatever you prefer.
+    points:
+      - Say whether you want to come
+      - Say which film you would like to see
+      - Suggest a time
+      - Ask where you should meet
+
+  - id: markus-kurs
+    register: informal
+    level: a1
+    sender:
+      name: Markus
+      relation: a classmate from your German course
+    situation: >
+      He was in class as usual this week, but the reader was not, and he
+      noticed the empty seat. He hopes the reader is not ill. The teacher
+      gave homework for Monday, and he offers to send it over if the reader
+      wants it.
+    points:
+      - Explain why you were not in class
+      - Say how you are now
+      - Ask him to send you the homework
+      - Thank him for his help
+
+  - id: sabine-fahrrad
+    register: informal
+    level: a1
+    sender:
+      name: Sabine
+      relation: a friend who is clearing out her cellar
+    situation: >
+      She has bought a new bicycle, so her old one is still standing in the
+      cellar and she wants to sell it. It is in good condition, and she would
+      rather offer it to a friend at a good price than to a stranger. She
+      remembers you said you were looking for a bike and asks if you want it.
+    points:
+      - Say whether you are interested in the bike
+      - Ask how much it costs
+      - Ask when you can come and see it
+      - Ask a question about the bike itself
+
+  - id: paula-neue-nachbarin
+    register: informal
+    level: a1
+    sender:
+      name: Paula
+      relation: your new neighbour, who moved in next door last week
+    situation: >
+      She is new to the building and to the city, and does not know anyone
+      yet. She wants to introduce herself, is friendly and a little shy, and
+      would like to know a bit about the neighbourhood.
+    points:
+      - Welcome her to the building
+      - Say how long you have lived here
+      - Recommend a shop or café nearby
+      - Ask where she comes from
+
+  - id: lena-praktikum
+    register: informal
+    level: a2
+    sender:
+      name: Lena
+      relation: a friend who has just started an internship in Munich
+    situation: >
+      Her first week at the internship was long and stressful, but the team
+      is nice and she is learning a lot. She has been too busy to write until
+      now. She would love to visit you in autumn and wants to know how things
+      are going on your side.
+    points:
+      - React to her news
+      - Tell her about your own work or studies
+      - Say when a visit in autumn would suit you
+      - Ask what exactly she does at the internship
+
+  - id: mehmet-umzug
+    register: informal
+    level: a2
+    sender:
+      name: Mehmet
+      relation: a friend who is moving flat in two weeks
+    situation: >
+      He is moving to a flat across town on a Saturday and needs help
+      carrying boxes. He is not sure yet how many friends can make it. He
+      also has a bookshelf that will not fit into the new flat and would
+      rather give it to a friend than throw it away.
+    points:
+      - Say whether you can help on Saturday
+      - Say from what time you can be there
+      - Say whether you would like the bookshelf
+      - Ask how many people are helping
+
+  - id: julia-hochzeit
+    register: informal
+    level: b1
+    sender:
+      name: Julia
+      relation: a close friend who is getting married in June
+    situation: >
+      She and her partner are getting married in June, a small celebration
+      in a garden restaurant near the lake. She really wants you there and
+      would love it if you said a few words at the dinner, but she will
+      understand if that is not your thing. She is still working out the
+      details.
+    points:
+      - Congratulate her
+      - Say whether you will come, and whether you will bring someone
+      - Say whether you would give a short speech
+      - Ask about the dress code or the venue
+
+  - id: sarah-kanada
+    register: informal
+    level: b2
+    sender:
+      name: Sarah
+      relation: a close friend at a crossroads
+    situation: >
+      She has been offered a two-year job in Canada — better pay, more
+      responsibility, a city she has always wanted to live in. But her
+      partner is hesitant, her mother is getting older, and she has never
+      lived abroad. She keeps changing her mind and wants your honest
+      opinion, not just encouragement.
+    points:
+      - Give your honest opinion on whether she should go
+      - Name one advantage and one risk of going
+      - Tell her about a big decision you once had to make
+      - Ask when she has to decide
+
   # ------------------------------------------------------------------ formal
   - id: vermieter-termin
     register: formal
@@ -186,3 +327,55 @@ seeds:
       - Explain how the wrong date came about
       - Say when you will send the missing documents
       - Ask what happens if the deadline cannot be met
+
+  # ---- LEVEL-001 additions (2026-08-15), formal register.
+
+  - id: arztpraxis-termin
+    register: formal
+    level: a1
+    sender:
+      name: Frau Berger
+      relation: the receptionist at your doctor's practice
+    situation: >
+      Your appointment on Thursday at 9 o'clock has to be moved because the
+      doctor will not be in that day. The practice offers you two new times
+      — Tuesday at 10 o'clock or Friday at 3 o'clock — and asks you to say
+      which one you would like.
+    points:
+      - Thank her for the letter
+      - Say which of the two new times you take
+      - Ask what you need to bring
+      - Ask how long the appointment will take
+
+  - id: bibliothek-mahnung
+    register: formal
+    level: a2
+    sender:
+      name: Frau Krüger
+      relation: a librarian at the city library
+    situation: >
+      A book you borrowed is two weeks overdue and someone else has reserved
+      it. The library asks you to return it as soon as possible. There is a
+      late fee, and the book cannot be extended because of the reservation.
+    points:
+      - Apologise for the delay
+      - Explain why you could not return the book on time
+      - Say when you will bring it back
+      - Ask how much the fee is
+
+  - id: nachbar-laerm
+    register: formal
+    level: b1
+    sender:
+      name: Herr Schulz
+      relation: the neighbour in the flat above yours
+    situation: >
+      There was loud music and voices from your flat late on Saturday night,
+      and he has small children who could not sleep. He is polite but
+      clearly annoyed — this is not the first time — and would like it not
+      to happen again. He suggests you talk about how to handle it.
+    points:
+      - Apologise and say what happened on Saturday
+      - Explain what you will do differently
+      - Propose a way to handle it next time
+      - Ask him to speak to you directly if it happens again
