@@ -13,10 +13,27 @@ from pathlib import Path
 
 import yaml
 
+from grammar.levels import bucket_of
+
 _SEEDS_PATH = Path(__file__).parent / "seeds.yaml"
 
 REGISTERS = ("informal", "formal")
 LEVELS = ("a1", "a2", "b1", "b2")
+
+# LEVEL-001: the learner's self-declared bucket (grammar/levels.py::BUCKETS)
+# -> the seed levels it may draw from. Strict, not a ceiling: a learner who
+# said "A2" gets A2 situations only — the letter, its word target and the
+# judge's expectations all follow the seed level, so an A1 seed for a B1+
+# learner was a 30-50-word letter graded to A1, which is what prompted this.
+# B1 and B2 share the top bucket because the picker has no B2 rung.
+# Pool sizes today: A1 -> 1 seed, A2 -> 4, B1+ -> 5. The A1 pool is thin
+# enough that an A1 learner sees the same situation every time — a content
+# gap to fill in seeds.yaml, not a reason to soften the rule here.
+BUCKET_SEED_LEVELS: dict[str, tuple[str, ...]] = {
+    "A1": ("a1",),
+    "A2": ("a2",),
+    "B1+": ("b1", "b2"),
+}
 
 # How much the learner is asked to write, by seed level — carried over from
 # Spralingua v1's email exercise, where these ranges were tuned in practice.
@@ -75,6 +92,26 @@ def load_seeds() -> dict[str, dict]:
             raise ValueError(f"{where}: duplicate seed id")
         catalog[seed["id"]] = seed
     return catalog
+
+
+def seeds_for_level(seeds: list[dict], user_level: str | None) -> list[dict]:
+    """Narrow ``seeds`` to the learner's level bucket (LEVEL-001).
+
+    ``None`` — the learner hasn't answered the level question, or picked
+    "not sure" — returns the pool untouched: they draw from every level,
+    exactly as before. Unknown level strings behave the same. If the bucket
+    has no seeds at all (cannot happen with today's pool, every bucket has
+    at least one) the pool is returned untouched rather than starving the
+    exercise: a slightly-off letter beats no letter.
+    """
+    bucket = bucket_of(user_level)
+    if bucket is None:
+        return seeds
+    wanted = BUCKET_SEED_LEVELS.get(bucket)
+    if not wanted:
+        return seeds
+    narrowed = [s for s in seeds if s["level"] in wanted]
+    return narrowed or seeds
 
 
 def word_target(level: str) -> tuple[int, int]:

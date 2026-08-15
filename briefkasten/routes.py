@@ -29,11 +29,12 @@ from database.connection import get_db, get_sessionmaker
 from database.orm import User
 from database.repository import (
     complete_daily_mode,
+    load_user_level,
     load_vocab_words,
     record_drill_attempt,
     record_grammar_error,
 )
-from briefkasten.content import POINT_COUNT, load_seeds, word_target
+from briefkasten.content import POINT_COUNT, load_seeds, seeds_for_level, word_target
 from briefkasten.judge import feedback_pass, hint_pass
 from briefkasten.writer import VOCAB_LIMIT, write_letter
 from security import drill_try_admit
@@ -135,9 +136,28 @@ async def get_letter(
         )
 
     seeds = list(load_seeds().values())
+
+    # LEVEL-001: a learner who declared a level draws only from that level's
+    # seeds; no level (NULL / "not sure") keeps the whole pool. Never fatal —
+    # a level read that fails serves the unfiltered pool and logs, the same
+    # contract drills/leveling.py gives the grammar drills.
+    try:
+        level = await load_user_level(db, user_id=user_id)
+    except Exception:
+        logger.exception("Briefkasten level read failed — serving every level")
+        level = None
+    seeds = seeds_for_level(seeds, level)
+
     if register in ("informal", "formal"):
-        seeds = [s for s in seeds if s["register"] == register]
+        # The register is a client hint layered on top of the level, never
+        # instead of it: if the level's pool has no seed in that register
+        # (A1 has no formal seed today) the register drops, the level stays.
+        by_register = [s for s in seeds if s["register"] == register]
+        seeds = by_register or seeds
     seed, cycle_reset = _pick_seed(seeds, seen.split(",") if seen else [])
+    logger.info(
+        "Briefkasten letter: level={} pool={} seed={}", level, len(seeds), seed["id"]
+    )
 
     try:
         vocab = await load_vocab_words(db, user_id=user_id, limit=VOCAB_LIMIT)
@@ -161,6 +181,7 @@ async def get_letter(
         span.set_attribute("user.id", user_id)
         span.set_attribute("seed_id", seed["id"])
         span.set_attribute("register", seed["register"])
+        span.set_attribute("user.level", level or "")
         try:
             draft = await write_letter(seed, vocab, reader_name, user_id=user_id)
         except Exception as exc:
