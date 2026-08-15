@@ -38,6 +38,11 @@ class RephraseIn(BaseModel):
     # the judge is told it is not theirs to grade.
     context: str | None = None
     register_: Literal["informal", "formal"] = Field("informal", alias="register")
+    # IDIOM-004 P1: the card/vocab word this line was supposed to practise,
+    # when the caller knows it (Satzschmiede does). Optional — surfaces
+    # without a single target word (tandem, Sprechen) omit it and the judge
+    # skips that guard, same as before.
+    target: str | None = Field(None, max_length=100)
     # OBS-007 practice-sitting id — same contract as the sibling drills.
     session_id: str | None = Field(None, max_length=64)
 
@@ -67,13 +72,14 @@ async def rephrase(
     context = " ".join(body.context.split()) if body.context else None
     if context and len(context) > _MAX_CONTEXT_CHARS:
         context = context[:_MAX_CONTEXT_CHARS]
+    target = " ".join(body.target.split()) if body.target else None
 
     with tracer.start_as_current_span("idiom-rephrase") as span:
         span.set_attribute("user.id", user_id)
         if body.session_id:
             span.set_attribute("session.id", body.session_id)
         try:
-            result = await germanize(text, context, body.register_)
+            result = await germanize(text, context, body.register_, target=target)
         except Exception:
             # Both judge legs down (or a schema mismatch survived retries) —
             # advice is optional, so fail soft with a retryable status

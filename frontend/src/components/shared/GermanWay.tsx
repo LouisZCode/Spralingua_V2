@@ -30,6 +30,7 @@ const inkShadow = {
 export default function GermanWay({
   text,
   context,
+  target,
   variant = "card",
   onGloss,
   onAdd,
@@ -41,6 +42,11 @@ export default function GermanWay({
   // What the line answered (task prompt / partner's turn) — judge context
   // only, never graded.
   context?: string;
+  // IDIOM-004 P1: the card/vocab word this line was supposed to practise,
+  // when the host knows it (VocabTrainer does — the other hosts don't have
+  // a single target word and simply omit this). Lets the judge discard a
+  // rewrite that drops the very word the learner came here to use.
+  target?: string;
   variant?: "card" | "inline";
   // UI-007/SATZ-018: same optional gloss wiring as VocabTrainer's corrected-
   // sentence diff — hover/tap a word in the Germanized rewrite for a
@@ -86,7 +92,7 @@ export default function GermanWay({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ text, context: context ?? null }),
+        body: JSON.stringify({ text, context: context ?? null, target: target ?? null }),
       });
       if (!res.ok) throw new Error(`rephrase failed (${res.status})`);
       const data = (await res.json()) as Rephrase;

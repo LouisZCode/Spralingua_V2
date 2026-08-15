@@ -1117,6 +1117,7 @@ export default function VocabTrainer({
                       <GermanWay
                         text={result.transcript}
                         context={`They were asked to use the German word "${card.target}" in one spoken sentence.`}
+                        target={card.target}
                         onGloss={onGloss}
                         onAdd={onAdd}
                         exclude={glossExclude}

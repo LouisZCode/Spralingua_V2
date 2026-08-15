@@ -11,6 +11,7 @@ natural phrasing (the drill judges and the debrief own those). Same Cerebras
 ``gpt-oss-120b`` wiring as every sibling judge.
 """
 
+from types import SimpleNamespace
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -21,6 +22,11 @@ from agents.observability import (
     unwrap_structured_output,
 )
 from agents.openrouter_llm import structured_judge_llm
+# IDIOM-004 P1: the same conservative stem scan the Satzschmiede examiner
+# uses to decide whether a spoken attempt used the card's word — reused here
+# so "did the rewrite drop the practised word" is answered by ONE piece of
+# inflection logic, not a second one that could disagree with the first.
+from satz.examiner import _target_evidence
 
 JUDGE_MODEL = "openai/gpt-oss-120b"
 
@@ -37,6 +43,20 @@ class IdiomRephrase(BaseModel):
             "it differently — plain, simple German that a native would "
             "also produce gets null, not a polish"
         ),
+    )
+    # IDIOM-004 P2: a rewrite that says something different is not a
+    # phrasing fix, it is a wrong answer with correct grammar. This is the
+    # model's own self-check; `germanize` also runs a deterministic negation
+    # scan afterward that does not depend on the model getting this right
+    # (the *gilt -> gilt nicht* fixture).
+    changes_meaning: bool = Field(
+        description=(
+            "True if the rewrite in `natural` adds, removes or negates any "
+            "proposition, changes a tense, a person, or a quantity relative "
+            "to their line — even a small one. False when `natural` is null, "
+            "or when it says exactly the same thing, only phrased the way a "
+            "German actually would"
+        )
     )
 
 
@@ -80,6 +100,14 @@ Worked examples:
 
 When you rewrite, your German will naturally come out with correct endings even where theirs slipped — that is unavoidable and fine. The rewrite is ALL you return: it speaks for itself, side by side with their line. No commentary of any kind.
 
+# STEP 4 — two things you may never do, no matter how much more German they'd sound
+**Never change what was said.** Adding, dropping or flipping a negation, a tense, a person, a quantity — anything that makes the rewrite a different fact than the one they stated — is not a rephrase, it is a different sentence wearing their words.
+- "Nee, mein Pass gilt." (their passport IS valid) is not "Nee, mein Pass gilt nicht." (it is NOT valid). If your first instinct produces something like this, that is `changes_meaning: true` and `natural` goes back to null — do not return the changed version.
+
+**Never replace the word they were sent here to practise with a synonym you like better.** Two real lines about the same fact, seconds apart: "Meine Laufbahn läuft gut" and "meine Laufbahn verläuft gut" are BOTH already natural German — läuft and verläuft are equally correct here. Rewriting one into the other is not fixing phrasing, it is swapping their word for yours. Both get `natural: null`. Whatever word the learner reached for, right or not, stays in the rewrite unchanged — you may fix what is around it, never the word itself.
+
+CONTROL — "Ich habe 30 Jahre" → natural: "Ich bin 30 Jahre alt." This one DOES get rewritten: stating age with "haben" is the English "I have 30 years" wearing German words, and a German always uses "sein" for age. Same fact, same size, genuinely a phrasing fix — STEP 4 is not blocking this one.
+
 # `natural` — read this twice
 Write one when the line is German that no native would produce — most often English translated word for word. These are exactly the cases to catch:
 - "Ich bin glücklich zu hören, dass..." → a German says "Schön, dass..." or "Das freut mich."
@@ -113,10 +141,35 @@ def _token_multiset(s: str) -> list[str]:
     )
 
 
+# IDIOM-004 P2: negation markers, order-blind. A rewrite that adds or drops
+# one of these relative to the input has flipped what was asserted — this
+# check does not trust the model's own `changes_meaning` flag (the *gilt ->
+# gilt nicht* fixture: the model returned the flip AND said nothing about
+# it). `kein` is matched by prefix so keine/keinen/keinem/keiner/keines all
+# count without listing every inflection.
+_NEGATION_WORDS = {"nicht", "nie", "niemand", "niemanden", "niemandem", "nichts"}
+
+
+def _negation_tokens(s: str) -> list[str]:
+    tokens = "".join(ch if ch.isalnum() else " " for ch in s.casefold()).split()
+    return sorted(t for t in tokens if t in _NEGATION_WORDS or t.startswith("kein"))
+
+
 async def germanize(
-    text: str, context: str | None, register: str = "informal"
+    text: str,
+    context: str | None,
+    register: str = "informal",
+    target: str | None = None,
 ) -> IdiomRephrase:
-    """One structured-output rephrase call over the learner's line."""
+    """One structured-output rephrase call over the learner's line.
+
+    ``target`` (IDIOM-004 P1) is the card/vocab word this line was supposed
+    to practise, when the caller knows it (Satzschmiede does; a tandem
+    bubble or Sprechen task does not). When given, a rewrite that drops
+    every inflected/separated form of it is discarded — telling a learner
+    the German way is to not use the word they came here to practise is
+    worse than staying silent.
+    """
     # temperature=0: the null/not-null decision is a verdict — the same line
     # must always get the same silence (see structured_judge_llm).
     llm = structured_judge_llm(IdiomRephrase, temperature=0)
@@ -133,15 +186,44 @@ async def germanize(
             await llm.ainvoke(prompt)
         )
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
-    # A whitespace-only rewrite, one identical to the input modulo
-    # casing/punctuation, or one that merely REORDERS the learner's own
-    # words IS the null case — enforced as code, not left to the prompt.
     if result.natural is not None:
         candidate = result.natural.strip()
-        if (
+        # A whitespace-only rewrite, one identical to the input modulo
+        # casing/punctuation, or one that merely REORDERS the learner's own
+        # words IS the null case — enforced as code, not left to the prompt.
+        discard = (
             not candidate
             or _normalized(candidate) == _normalized(text)
             or _token_multiset(candidate) == _token_multiset(text)
-        ):
+            # IDIOM-004 P2: the model flagged its own rewrite as a meaning
+            # change — trust that over whatever the rewrite text looks like.
+            or result.changes_meaning
+            # IDIOM-004 P2: deterministic backstop, independent of the flag
+            # above — a negation added or dropped is a different sentence.
+            or _negation_tokens(candidate) != _negation_tokens(text)
+        )
+        if not discard and target:
+            # IDIOM-004 P1: same stem scan the Satzschmiede examiner runs on
+            # a spoken attempt, pointed at the rewrite instead. `card` only
+            # needs the two attributes `_target_evidence` reads.
+            #
+            # Checked as a TRANSITION (present in their line, absent from
+            # the rewrite) rather than a bare "absent from the rewrite":
+            # the scan is built around present-tense/weak-verb stems and is
+            # blind to ge-...-t/en participles ("abgeschlossen",
+            # "beigetreten", "gelöscht" all read as "target absent" even
+            # though the word IS there). Checking the transition means that
+            # blind spot cancels out — it fires the same way on both sides
+            # — and the guard only trips on a REAL drop, where the word was
+            # detected going in and isn't coming out. Verified against the
+            # 2026-08-15 trace dump: 4 of the day's genuine matches
+            # (abschließen/vorziehen/löschen/beitreten, all participles)
+            # were false-discarded by the bare check and are kept by this
+            # one; the true drops (adj-aufregend -> spannend, überlegen ->
+            # nachgedacht) still discard correctly.
+            card = SimpleNamespace(target=target, tense_form=None)
+            if _target_evidence(card, text) and not _target_evidence(card, candidate):
+                discard = True
+        if discard:
             result.natural = None
     return result
