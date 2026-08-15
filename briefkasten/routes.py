@@ -287,6 +287,7 @@ async def submit_attempt(
                     response=response,
                     register=seed["register"],
                     level=seed["level"],
+                    sender_name=seed["sender"]["name"],
                     user_id=user_id,
                 )
             else:
@@ -297,6 +298,7 @@ async def submit_attempt(
                     second_attempt=response,
                     register=seed["register"],
                     level=seed["level"],
+                    sender_name=seed["sender"]["name"],
                     user_id=user_id,
                 )
         except Exception as exc:

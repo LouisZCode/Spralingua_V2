@@ -19,8 +19,11 @@ ON PURPOSE and the null case is the common one — see the prompt.
 Same ``structured_judge_llm`` wiring as every other judge in the repo.
 """
 
+import re
+from dataclasses import dataclass
 from typing import Literal, Optional
 
+from loguru import logger
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
 
@@ -143,6 +146,161 @@ After a salutation that ends in a comma ("Hallo Anna," / "Liebe Frau Meier," / "
 - CONTROL — the exception covers only the single word touching the salutation comma. Every later sentence start is graded normally: "...spannend! wo gehst du hin?" — "wo" opens a NEW sentence after "!", well past the salutation, and must still become "Wo". Flag it."""
 
 
+# BRIEF-004 P2: register is a hard check, not something left for the LLM to
+# weigh alongside everything else. A formal seed's opening line and address
+# pronoun are a binary fact the code can check before the LLM ever sees the
+# letter — "Hallo Thomas" to a landlord is wrong regardless of how good the
+# rest of the letter is. Every pattern below is deliberately NARROW: a false
+# register accusation (flagging "sie" that means "she") teaches the learner
+# to distrust the grader, which is worse than one miss. When in doubt, the
+# rule below does not fire — see the BRIEF-004 replay pack for the specific
+# controls each pattern was built and checked against.
+_INFORMAL_GREETING_RE = re.compile(r"^\s*((?:Hallo|Hi)\b[^\n,]*)", re.IGNORECASE)
+# "Liebe/r <first name>," is informal — but "Liebe Frau Meier," is a seed
+# with a surname attached and is NOT what this flags (see BRIEF-004 brief).
+_LIEBE_FIRSTNAME_RE = re.compile(
+    r"^\s*(Lieber?\b(?!\s+(?:Herr|Frau)\b)[^\n,]*)", re.IGNORECASE
+)
+# Lowercase "sie"/"ihnen"/"ihr" immediately after a request-shaped modal verb
+# ("können sie", "würden sie") is almost always the address pronoun written
+# without its required capital — not "she"/"they". The verb is matched
+# case-insensitively (a capitalized "Können sie" still counts); the pronoun
+# group is NOT — this only fires on the literal lowercase spelling, which is
+# the actual mistake. Deliberately NOT "any sie after a comma" — a control in
+# the BRIEF-004 brief ("...sagt, sie kommt auch") is exactly why: a comma
+# alone says nothing about who "sie" refers to.
+_LOWERCASE_ADDRESS_RE = re.compile(
+    r"(?i:können|habt|haben|würden|hätten|möchten|sollten|dürften|wären|könnten|geben)"
+    r"\s+(sie|ihnen|ihr)\b"
+)
+_INFORMAL_CLOSING_RE = re.compile(
+    r"\b(Viele Grüße|Liebe Grüße|Bis bald|Tschüss)\b", re.IGNORECASE
+)
+_FORMAL_GREETING_RE = re.compile(r"(Sehr geehrter?\b[^\n,]*)", re.IGNORECASE)
+_FORMAL_CLOSING_RE = re.compile(r"\bMit freundlichen Grüßen\b", re.IGNORECASE)
+# Capitalized "Sie"/"Ihnen"/"Ihre..." NOT at the very start of a sentence is
+# unambiguous in correct German — ordinary words don't capitalize mid-clause,
+# so seeing one there means it is the formal address form, not "she"/"they"
+# (which only capitalizes when it happens to open a sentence — the genuinely
+# ambiguous case, which this deliberately skips).
+_SIE_WORD_RE = re.compile(r"\b(Sie|Ihnen|Ihre[nrs]?|Ihres)\b")
+
+
+def _find_midsentence_sie(text: str) -> str | None:
+    for m in _SIE_WORD_RE.finditer(text):
+        j = m.start() - 1
+        while j >= 0 and text[j] in " \t\n":
+            j -= 1
+        if j < 0:
+            continue  # start of the letter — sentence-initial, skip
+        prev = text[j]
+        if prev in ".!?":
+            continue  # sentence-initial — ambiguous, skip (conservative)
+        if prev == "," and "\n" in text[j : m.start()]:
+            # The comma closes the greeting line ("Hallo Jonas,\n") — the
+            # word after it opens the letter's first sentence, so its capital
+            # says nothing about register (T5 tester: "Hallo Jonas,\nSie kommt
+            # auch" was flagged and score-capped on a correct informal letter).
+            continue
+        if prev == "," or (prev.isalpha() and prev.islower()):
+            return m.group(0)
+    return None
+
+
+@dataclass
+class _RegisterFinding:
+    quote: str  # the learner's own phrase that tripped the scan, verbatim
+    fixed_greeting: str  # the register-correct greeting for this sender
+    pronoun: str  # "him" / "her" / "them" — used in the formal-seed notice
+
+
+def _formal_greeting(sender_name: str) -> str:
+    if sender_name.startswith("Herr"):
+        return f"Sehr geehrter {sender_name},"
+    if sender_name.startswith("Frau"):
+        return f"Sehr geehrte {sender_name},"
+    return f"Sehr geehrte(r) {sender_name},"  # no formal seed lacks Herr/Frau today
+
+
+def _formal_pronoun(sender_name: str) -> str:
+    if sender_name.startswith("Herr"):
+        return "him"
+    if sender_name.startswith("Frau"):
+        return "her"
+    return "them"
+
+
+def _register_scan(text: str, register: str, sender_name: str) -> Optional[_RegisterFinding]:
+    """Deterministic pre-LLM register check (BRIEF-004 P2). ``None`` when
+    nothing fires — the common case, and the only signal `hint_pass` /
+    `feedback_pass` act on."""
+    stripped = text.strip()
+    if register == "formal":
+        quote = None
+        if m := _INFORMAL_GREETING_RE.match(stripped):
+            quote = m.group(1).strip()
+        elif m := _LIEBE_FIRSTNAME_RE.match(stripped):
+            quote = m.group(1).strip()
+        if quote is None and (m := _LOWERCASE_ADDRESS_RE.search(stripped)):
+            quote = m.group(0)
+        if quote is None and (m := _INFORMAL_CLOSING_RE.search(stripped)):
+            quote = m.group(0)
+        if quote is None:
+            return None
+        return _RegisterFinding(
+            quote=quote,
+            fixed_greeting=_formal_greeting(sender_name),
+            pronoun=_formal_pronoun(sender_name),
+        )
+    if register == "informal":
+        quote = None
+        if m := _FORMAL_GREETING_RE.search(stripped):
+            quote = m.group(1).strip()
+        if quote is None and _FORMAL_CLOSING_RE.search(stripped):
+            quote = "Mit freundlichen Grüßen"
+        if quote is None:
+            quote = _find_midsentence_sie(stripped)
+        if quote is None:
+            return None
+        return _RegisterFinding(
+            quote=quote, fixed_greeting=f"Hallo {sender_name},", pronoun=""
+        )
+    return None
+
+
+def _register_notice(finding: _RegisterFinding, register: str, sender_name: str) -> str:
+    """English line telling both the learner (via the fixed item) and the LLM
+    (via the prompt) what the scan already established, so neither has to
+    rediscover it and the LLM cannot contradict it."""
+    if register == "formal":
+        return (
+            f"This is a formal letter to {sender_name} — open with "
+            f"'{finding.fixed_greeting}' and address {finding.pronoun} as "
+            f"'Sie' throughout, then close with 'Mit freundlichen Grüßen'."
+        )
+    return (
+        f"This is an informal letter to {sender_name} — open with "
+        f"'{finding.fixed_greeting}' and use 'du' throughout, not the formal "
+        f"'Sie'."
+    )
+
+
+def _fixed_hint_item(finding: _RegisterFinding, register: str, sender_name: str) -> "HintItem":
+    return HintItem(
+        category="grammatik",
+        text=finding.quote,
+        hint=_register_notice(finding, register, sender_name),
+    )
+
+
+def _fixed_correction(finding: _RegisterFinding, register: str, sender_name: str) -> "Correction":
+    return Correction(
+        error=finding.quote,
+        correction=finding.fixed_greeting,
+        why="Register consistency: " + _register_notice(finding, register, sender_name),
+    )
+
+
 HINT_PROMPT = """# Role
 You are reading a German learner's first draft of a letter. Your job is to point at what needs another look — and NOT to fix it. They are about to revise this same letter, and the whole value of the exercise is that THEY find the fix.
 
@@ -157,6 +315,7 @@ You are reading a German learner's first draft of a letter. Your job is to point
 
 # Level and register
 They are writing at level {level}, in {register} register ({address_form}), aiming for {min_words}-{max_words} words.
+{register_notice}
 
 # The rule that defines this task
 A hint says WHERE the problem is and WHICH rule to check. It never contains the answer.
@@ -216,6 +375,7 @@ You are giving a German learner the full read on the letter they just revised. T
 
 # Level and register
 Level {level}, {register} register ({address_form}), target {min_words}-{max_words} words.
+{register_notice}
 
 # `corrected_text`
 Their revised letter with the errors repaired. Keep their ideas, their content, their voice — repair what is wrong and change nothing else. Do not make it more sophisticated, do not add content they did not write, do not shorten it.
@@ -234,11 +394,19 @@ The first draft above exists so you can judge `improvements_from_first`. It is N
 - CONTROL — First draft: "Ich freue mich auf dich sehen." Revised: "Ich freue mich auf dich sehen." (unchanged) — the same infinitive-clause error is STILL there in the revised letter, so it MUST be flagged, quoting it from the revised letter exactly as it stands.
 - CONTROL — First draft: "der Wetter ist schön." Revised: "das Wetter ist schön, aber ich mag der Regen nicht." — "der Wetter" was fixed to "das Wetter" (do not flag it), but "der Regen" is a new, still-uncorrected error that only exists in the revised letter — flag that one.
 
+## Get the grammar fact right, not just the correction (BRIEF-004 P3)
+A correct fix next to a WRONG reason teaches wrong grammar with a right answer standing beside it — that is worse than no explanation. These two are specific facts learners are told wrong often enough to need spelling out:
+- "bis der/die Party" → "bis zur Party" — the case here is DATIVE, not accusative. "bis" is combining with "zu" (bis zu + Dativ, reaching an event/destination: zu + der → zur, zu + dem → zum). The `why` MUST say "bis zu + Dativ" (or "zu governs dative, zur = zu + der") — NEVER "bis requires accusative" or "bis takes the accusative".
+- "bis zum Wochenende" — same rule, masculine/neuter: zu + dem → zum, still dative, never accusative.
+- "ich kann also etwas mitbringen" (meaning "I can also bring something") → "ich kann auch etwas mitbringen". German "also" means "so"/"therefore", not English "also" — it is a false friend, not a case or word-order issue. Fix it in `corrected_text` and, if you explain it, the `why` is "'also' is a false friend — it means 'so/therefore' in German; 'also' in the English sense is 'auch'", never a grammar-rule wording that leaves "also" looking merely stylistic.
+- CONTROL — "bis nächsten Montag" (a plain time expression, "bis" alone with no "zu") stays genuinely accusative — "bis" by itself governs the accusative. Do NOT apply the "bis zu + Dativ" rule here; this is correct German as written and must not be flagged or rewritten.
+
 # `score`
 0-100, against what is expected AT LEVEL {level} — not against a native. A letter that addresses all four points in correct, simple, level-appropriate German scores high even if it is plain. Weigh: did it address the four points, is the register consistent, is the grammar sound for this level, is it roughly the right length. Do not deduct for simplicity.
 
 # `improvements_from_first`
 One honest English line comparing the two drafts. If nothing improved, say that kindly. Never invent progress.
+{identical_notice}
 
 # `natural_version` — read this twice
 This is NOT "their letter with errors fixed" (that is `corrected_text`). It is how a German would ACTUALLY have written this letter — the phrasings a native reaches for that a learner never would.
@@ -304,13 +472,26 @@ async def hint_pass(
     response: str,
     register: str,
     level: str,
+    sender_name: str,
     user_id: str | None = None,
 ) -> HintVerdict:
     """Attempt 1: point at the problems, never hand over the fixes."""
+    # BRIEF-004 P2: run before the LLM so the notice can be handed to it.
+    finding = _register_scan(response, register, sender_name)
+    register_notice = (
+        "REGISTER ALREADY CHECKED — a deterministic scanner already found: "
+        + _register_notice(finding, register, sender_name)
+        + " This is being shown to the learner directly as the first item. "
+        "Do not repeat it as your own item and do not describe the letter's "
+        "register as fine."
+        if finding
+        else ""
+    )
     mapping = _common(level, register) | {
         "{letter}": letter,
         "{points}": "\n".join(f"{i + 1}. {p}" for i, p in enumerate(points)),
         "{response}": response,
+        "{register_notice}": register_notice,
     }
     prompt = _render(HINT_PROMPT, mapping)
     llm = structured_judge_llm(HintVerdict)
@@ -319,7 +500,17 @@ async def hint_pass(
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
+    if finding:
+        fixed = _fixed_hint_item(finding, register, sender_name)
+        result.items = ([fixed] + [i for i in result.items if i.text != fixed.text])[:6]
     return result
+
+
+def _normalize_ws(text: str) -> str:
+    """Whitespace-only normalisation for the identical-resubmit check
+    (BRIEF-004 P1) — a re-wrapped but otherwise unchanged letter still counts
+    as identical."""
+    return " ".join(text.split())
 
 
 async def feedback_pass(
@@ -330,9 +521,29 @@ async def feedback_pass(
     second_attempt: str,
     register: str,
     level: str,
+    sender_name: str,
     user_id: str | None = None,
 ) -> FeedbackVerdict:
     """Attempt 2: corrections, reasons, score, and the natural-German read."""
+    # BRIEF-004 P1: decided in code, not narrated by the LLM. The client
+    # echoes attempt 1's text back on attempt 2 (see routes.py) — nothing
+    # stops a learner resubmitting unchanged, and an LLM asked to compare two
+    # identical drafts will still invent a diff rather than say so.
+    identical = _normalize_ws(first_attempt) == _normalize_ws(second_attempt)
+    # BRIEF-004 P2: run before the LLM so the notice can be handed to it and
+    # the fixed correction is available regardless of what the LLM returns.
+    finding = _register_scan(second_attempt, register, sender_name)
+    register_notice = (
+        "REGISTER ALREADY CHECKED — a deterministic scanner already found: "
+        + _register_notice(finding, register, sender_name)
+        + " This is being shown to the learner directly as the first "
+        "explanation and the score is already capped for it. Your "
+        "`corrected_text` MUST fix this — do not leave the flagged "
+        "greeting, pronoun, or closing in place — and do not contradict "
+        "this finding elsewhere in your output."
+        if finding
+        else ""
+    )
     mapping = _common(level, register) | {
         "{letter}": letter,
         "{points}": "\n".join(f"{i + 1}. {p}" for i, p in enumerate(points)),
@@ -340,6 +551,14 @@ async def feedback_pass(
         "{second_attempt}": second_attempt,
         "{register_guidance}": _REGISTER_GUIDANCE.get(
             register, _REGISTER_GUIDANCE["informal"]
+        ),
+        "{register_notice}": register_notice,
+        "{identical_notice}": (
+            "NOTE: attempt 1 and attempt 2 are IDENTICAL (whitespace aside) "
+            "— nothing changed. Do not invent or imply any improvement here; "
+            "say plainly that nothing changed."
+            if identical
+            else ""
         ),
     }
     prompt = _render(FEEDBACK_PROMPT, mapping)
@@ -358,4 +577,33 @@ async def feedback_pass(
     # instead of null would render an empty card in the UI.
     if result.natural_version is not None and not result.natural_version.strip():
         result.natural_version = None
+
+    # BRIEF-004 P1: the LLM's own line is discarded outright when the drafts
+    # are identical — the prompt note above is defense in depth, this is the
+    # guarantee. A fabricated "you improved X" must never reach the learner.
+    if identical:
+        result.improvements_from_first = (
+            "Same text as your first attempt — nothing new to compare."
+        )
+
+    # BRIEF-004 P2: the fixed correction always leads, score is capped
+    # regardless of what the LLM decided on its own, and we log (never
+    # block) if the corrected letter still carries the flagged phrase.
+    if finding:
+        fixed = _fixed_correction(finding, register, sender_name)
+        result.explanations = (
+            [fixed] + [e for e in result.explanations if e.error != fixed.error]
+        )[:5]
+        # Score is expected 0-100 against the letter's level (see the
+        # `score` prompt section); 60 keeps a register-broken letter out of
+        # "good" territory (>=70 in the UI's own praise copy) without
+        # zeroing out otherwise-solid grammar underneath it.
+        result.score = min(result.score, 60)
+        if finding.quote.lower() in result.corrected_text.lower():
+            logger.info(
+                "Briefkasten feedback: corrected_text still contains the "
+                "flagged register phrase {!r} (sender {!r})",
+                finding.quote,
+                sender_name,
+            )
     return result
