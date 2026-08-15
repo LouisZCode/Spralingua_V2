@@ -31,6 +31,7 @@ tasks:
       come IMMEDIATELY after that opener (position two) with the subject
       after the verb. A sentence that starts with the subject does not count
       toward the three.
+    min_elements: 3
     keyterms: [Montag, Dienstag, heute, dann, leider]
 
   - id: v2-drei-tage
@@ -44,6 +45,7 @@ tasks:
       Morgen.
       After the fronted time word the conjugated verb must stand in position
       two, subject after it ("Gestern habe ich …", never "Gestern ich habe").
+    min_elements: 3
     keyterms: [gestern, heute, morgen]
 
   # ── nebensatz-verbende ──────────────────────────────────────────────────
@@ -57,6 +59,7 @@ tasks:
       Constraint: "weil" appears at least twice. In EVERY weil-clause the
       conjugated verb must stand at the very end ("weil ich in Deutschland
       arbeite", never "weil ich arbeite in Deutschland").
+    min_elements: 2
     keyterms: [weil]
 
   - id: dass-meinung
@@ -68,6 +71,7 @@ tasks:
     forces: >-
       Constraint: two dass-clauses. In each dass-clause the conjugated verb
       must stand at the very end.
+    min_elements: 2
     keyterms: [dass]
 
   # ── perfekt-satzklammer ─────────────────────────────────────────────────
@@ -83,6 +87,7 @@ tasks:
       END, with objects/places inside the bracket ("Ich habe ein Buch
       gekauft", never "Ich habe gekauft ein Buch"). Präteritum war/hatte/
       wollte counts as a valid past sentence too (Germans speak both).
+    min_elements: 3
     keyterms: [gestern]
 
   - id: perfekt-wochenende
@@ -98,6 +103,7 @@ tasks:
       least an object or place phrase between them. An empty bracket
       (auxiliary immediately followed by the participle) does not count
       toward the three.
+    min_elements: 3
     keyterms: [Wochenende]
 
   # ── modalverb-infinitiv-ende ────────────────────────────────────────────
@@ -112,6 +118,8 @@ tasks:
       möchten, müssen, können). In each, the modal stands in position two and
       the full verb goes to the very END as an infinitive ("Ich will ins Kino
       gehen", never "Ich will gehen ins Kino").
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [möchte, muss, kann]
 
   - id: modal-wg-regeln
@@ -123,6 +131,8 @@ tasks:
     forces: >-
       Constraint: two rules, one with "man muss", one with "man darf nicht".
       Modal in position two, the infinitive at the very END of each rule.
+    min_elements: 2
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [muss, darf]
 
   # ── trennbare-verben ────────────────────────────────────────────────────
@@ -139,6 +149,8 @@ tasks:
       clause ("Ich stehe um sieben auf", never "Ich aufstehe um sieben").
       A verb hidden behind a modal (infinitive, prefix unsplit) does not
       count toward the three.
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [aufstehen, anfangen, einkaufen, anrufen, mitnehmen]
 
   - id: trenn-abend
@@ -152,6 +164,8 @@ tasks:
       present-tense MAIN clause with its prefix split to the clause END
       ("Ich kaufe nach der Arbeit ein"). Modal + infinitive constructions
       (prefix unsplit) do not satisfy the constraint — the task forbids them.
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [einkaufen, anrufen, fernsehen]
 
   # ── v2-wortstellung ─────────────────────────────────────────────────────
@@ -168,6 +182,7 @@ tasks:
       must come IMMEDIATELY after that opener (position two) with the
       subject after the verb. A sentence that starts with the subject does
       not count toward the three.
+    min_elements: 3
     keyterms: [abends, Wochenende, manchmal, liebsten]
 
   - id: v2-reise
@@ -182,6 +197,7 @@ tasks:
       place or a sequence word). After the fronted element the conjugated
       verb must stand in position two, subject after it ("Zuerst sind wir
       …", never "Zuerst wir sind …").
+    min_elements: 3
     keyterms: [zuerst, dann, Urlaub, Strand]
 
   # ── nebensatz-verbende ──────────────────────────────────────────────────
@@ -195,6 +211,7 @@ tasks:
       Constraint: "weil" appears at least twice. In EVERY weil-clause the
       conjugated verb must stand at the very end ("weil es dann wärmer
       ist", never "weil es ist dann wärmer").
+    min_elements: 2
     keyterms: [weil]
 
   - id: dass-technik
@@ -206,6 +223,7 @@ tasks:
     forces: >-
       Constraint: two dass-clauses. In each dass-clause the conjugated verb
       must stand at the very end.
+    min_elements: 2
     keyterms: [dass]
 
   # ── perfekt-satzklammer ─────────────────────────────────────────────────
@@ -222,6 +240,7 @@ tasks:
       objects/places inside the bracket ("Ich habe einen Kuchen gebacken",
       never "Ich habe gebacken einen Kuchen"). Präteritum war/hatte/wollte
       counts as a valid past sentence too.
+    min_elements: 3
     keyterms: [Geburtstag]
 
   - id: perfekt-ausflug
@@ -237,6 +256,7 @@ tasks:
       least an object or place phrase between them. An empty bracket
       (auxiliary immediately followed by the participle) does not count
       toward the three.
+    min_elements: 3
     keyterms: [Ausflug]
 
   # ── modalverb-infinitiv-ende ────────────────────────────────────────────
@@ -252,6 +272,8 @@ tasks:
       möchten, müssen, können). In each, the modal stands in position two
       and the full verb goes to the very END as an infinitive ("Ich möchte
       dort tauchen gehen", never "Ich möchte gehen dort tauchen").
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [möchte, muss, kann]
 
   - id: modal-buero-regeln
@@ -263,6 +285,8 @@ tasks:
     forces: >-
       Constraint: two rules, one with "man muss", one with "man darf nicht".
       Modal in position two, the infinitive at the very END of each rule.
+    min_elements: 2
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [muss, darf]
 
   # ── trennbare-verben ────────────────────────────────────────────────────
@@ -279,6 +303,8 @@ tasks:
       clause ("Ich räume samstags auf", never "Ich aufräume samstags"). A
       verb hidden behind a modal (infinitive, prefix unsplit) does not
       count toward the three.
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [aufräumen, ausschlafen, einladen, mitkommen, vorbereiten]
 
   - id: trenn-arbeitstag
@@ -294,6 +320,8 @@ tasks:
       sechzehn Uhr auf", never "Ich aufhöre um sechzehn Uhr"). Modal +
       infinitive constructions (prefix unsplit) do not satisfy the
       constraint.
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [aufhören, zurückrufen, weitermachen, vorbeikommen, abgeben]
 
   # ── CONT-001 growth batch (2026-07-19) — food/friends/weather/home lens ──
@@ -311,6 +339,7 @@ tasks:
       must come IMMEDIATELY after that opener (position two), subject after
       the verb. A sentence that starts with the subject does not count toward
       the three.
+    min_elements: 3
     keyterms: [Pfanne, Ofen, Zutaten, zuerst]
 
   - id: v2-freunde
@@ -326,6 +355,7 @@ tasks:
       come IMMEDIATELY after that opener (position two), subject after the
       verb. A sentence that starts with the subject does not count toward the
       three.
+    min_elements: 3
     keyterms: [damals, heute, neulich]
 
   - id: wenn-wetter
@@ -338,6 +368,7 @@ tasks:
       Constraint: "wenn" appears at least twice. In EVERY wenn-clause the
       conjugated verb must stand at the very end ("wenn das Wetter schön
       ist", never "wenn ist das Wetter schön").
+    min_elements: 2
     keyterms: [wenn, Wetter, regnet]
 
   - id: obwohl-freundschaft
@@ -351,6 +382,7 @@ tasks:
       Constraint: "obwohl" appears at least twice. In EVERY obwohl-clause the
       conjugated verb must stand at the very end ("obwohl wir uns selten
       sehen", never "obwohl wir sehen uns selten").
+    min_elements: 2
     keyterms: [obwohl]
 
   - id: perfekt-regentag
@@ -366,6 +398,7 @@ tasks:
       objects/places inside the bracket ("Ich habe einen Film geschaut",
       never "Ich habe geschaut einen Film"). Präteritum war/hatte/wollte
       counts as a valid past sentence too.
+    min_elements: 3
     keyterms: [Regen, Film, Tee]
 
   - id: perfekt-hobby
@@ -382,6 +415,7 @@ tasks:
       least an object or place phrase between them. An empty bracket
       (auxiliary immediately followed by the participle) does not count
       toward the three.
+    min_elements: 3
     keyterms: [Hobby, ausprobiert, Kurs]
 
   - id: modal-abendessen
@@ -396,6 +430,8 @@ tasks:
       möchten, müssen, können). In each, the modal stands in position two and
       the full verb goes to the very END as an infinitive ("Ich möchte eine
       Suppe kochen", never "Ich möchte kochen eine Suppe").
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [möchte, muss, kann]
 
   - id: trenn-kochabend
@@ -411,6 +447,8 @@ tasks:
       clause ("Jeder bringt etwas mit", never "Jeder mitbringt etwas"). A verb
       hidden behind a modal (infinitive, prefix unsplit) does not count
       toward the three.
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [mitbringen, ausprobieren, abwaschen, aufwärmen]
 
   # ── CONT-001 growth batch (2026-07-19) — work/travel/money/living lens ──
@@ -428,6 +466,7 @@ tasks:
       come IMMEDIATELY after that opener (position two) with the subject
       after the verb. A sentence that starts with the subject does not count
       toward the three.
+    min_elements: 3
     keyterms: [morgens, danach, Feierabend, Büro]
 
   - id: v2-budget
@@ -444,6 +483,7 @@ tasks:
       IMMEDIATELY after that opener (position two), subject after the verb.
       A sentence that starts with the subject does not count toward the
       three.
+    min_elements: 3
     keyterms: [Geld, Geschäft, online, leider]
 
   - id: wenn-zukunft
@@ -459,6 +499,7 @@ tasks:
       very end ("wenn ich befördert werde", never "wenn ich werde
       befördert"). Only the wenn-clause verb position is checked, not the
       dann-clause.
+    min_elements: 2
     keyterms: [wenn, Zukunft, Geld]
 
   - id: obwohl-job
@@ -472,6 +513,7 @@ tasks:
       Constraint: "obwohl" appears at least twice. In EVERY obwohl-clause
       the conjugated verb must stand at the very end ("obwohl die Arbeit
       stressig ist", never "obwohl die Arbeit ist stressig").
+    min_elements: 2
     keyterms: [obwohl, Arbeit]
 
   - id: perfekt-anschaffung
@@ -489,6 +531,7 @@ tasks:
       gespart", never "Ich habe gespart drei Monate"). An empty bracket does
       not count toward the three. Präteritum war/hatte/musste counts as a
       valid past sentence too.
+    min_elements: 3
     keyterms: [gekauft, gespart, Geld]
 
   - id: modal-flugregeln
@@ -505,6 +548,8 @@ tasks:
       position two and the full verb goes to the very END as an infinitive
       ("Ich muss meinen Reisepass zeigen", never "Ich muss zeigen meinen
       Reisepass").
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [muss, kann, möchte, Reisepass]
 
   - id: trenn-wohnungssuche
@@ -520,6 +565,8 @@ tasks:
       clause ("Ich rufe den Vermieter an", never "Ich anrufe den
       Vermieter"). A verb hidden behind a modal (infinitive, prefix
       unsplit) does not count toward the three.
+    min_elements: 3
+    distinct: true   # GRAM-008: N *different* elements — the count override may not rescue this task
     keyterms: [anrufen, ausfüllen, abgeben, umziehen, einziehen]
 
   # ── nebensatz-verbende · Konditional-Absprung (real/present) ─────────────
@@ -539,6 +586,7 @@ tasks:
       bleibe ich zu Hause" / "Wenn es regnet, dann bleibe ich zu Hause",
       never "Wenn es regnet, ich bleibe zu Hause"). Count the fronted
       wenn-clauses, not sentences.
+    min_elements: 3
     keyterms: [wenn, dann]
 
   - id: kond-real-plaene
@@ -558,6 +606,7 @@ tasks:
       still follows it ("Wenn ich morgen Zeit habe, gehe ich schwimmen" /
       "…, dann gehe ich schwimmen", never "…, ich gehe schwimmen"). Count
       the fronted wenn-clauses, not sentences.
+    min_elements: 2
     keyterms: [wenn, dann, morgen]
 
   # ── als-vs-wenn · Konditional-Absprung (habitual past) ───────────────────
@@ -581,6 +630,7 @@ tasks:
       wir sind umgezogen") — "dann" (or "da" after als) may come first and
       the verb still follows it. Count the fronted als/wenn-clauses, not
       sentences.
+    min_elements: 3
     keyterms: [als, wenn, damals, immer]
 
   - id: kond-damals-routine
@@ -605,6 +655,7 @@ tasks:
       never "…, ich habe gelesen") — "dann" (or "da" after als) may come
       first and the verb still follows it. Count the fronted
       wenn/als-clauses, not sentences.
+    min_elements: 3
     keyterms: [als, wenn, früher]
 
   # ── konjunktiv2-hypothese · Konditional-Absprung (unreal) ────────────────
@@ -629,6 +680,7 @@ tasks:
       sein"/"würde haben" — "würde ich glücklich sein" → "wäre ich
       glücklich" is a form slip, not a mood or order slip. Count the
       fronted wenn-clauses, not sentences.
+    min_elements: 2
     keyterms: [wenn, wäre, hätte, würde]
 
   - id: kond-irreal-anders
@@ -649,6 +701,7 @@ tasks:
       over "würde
       sein"/"würde haben" — "würde ich reicher sein" → "wäre ich reicher" is
       a form slip. Count the fronted wenn-clauses, not sentences.
+    min_elements: 2
     keyterms: [wenn, wäre, hätte, würde]
 
   - id: kond-irreal-rueckblick
@@ -671,6 +724,7 @@ tasks:
       (e.g. "Wenn ich früher gegangen hätte" → "Wenn ich früher gegangen
       wäre" is an auxiliary slip). Count the fronted wenn-clauses, not
       sentences.
+    min_elements: 2
     keyterms: [wenn, hätte, wäre, gewesen]
 
   - id: kond-irreal-reise
@@ -694,4 +748,5 @@ tasks:
       hätten otherwise (e.g. "Wir hätten nach Italien gefahren" → "Wir wären
       nach Italien gefahren" is an auxiliary slip). Count the fronted
       wenn-clauses, not sentences.
+    min_elements: 2
     keyterms: [wenn, hätte, wären, gefahren]

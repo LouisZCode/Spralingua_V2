@@ -27,7 +27,7 @@ TARGET_PATTERNS = (
     "als-vs-wenn",
 )
 
-_REQUIRED = ("id", "pattern_id", "title", "prompt", "forces")
+_REQUIRED = ("id", "pattern_id", "title", "prompt", "forces", "min_elements")
 
 
 @lru_cache(maxsize=1)
@@ -50,6 +50,18 @@ def load_tasks() -> dict[str, dict]:
             raise ValueError(f"{where}: pattern_id must be one of {TARGET_PATTERNS}")
         if task["pattern_id"] not in taxonomy:
             raise ValueError(f"{where}: pattern_id not in grammar/taxonomy.yaml")
+        # GRAM-008: the count `forces` requires ("at least 3 main clauses",
+        # "weil" twice, …) in a form the judge's constraint_met override can
+        # compare against — see sprechen/judge.py::judge_spoken.
+        min_elements = task.get("min_elements")
+        if (
+            not isinstance(min_elements, int)
+            or isinstance(min_elements, bool)
+            or min_elements < 1
+        ):
+            raise ValueError(f"{where}: min_elements must be a positive int")
+        if "distinct" in task and not isinstance(task["distinct"], bool):
+            raise ValueError(f"{where}: distinct must be a bool")
         keyterms = task.get("keyterms")
         if keyterms is not None and (
             not isinstance(keyterms, list)

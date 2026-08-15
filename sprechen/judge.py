@@ -10,6 +10,7 @@ the rule is the objective; other drills own the rest). Same Cerebras
 
 from typing import Optional
 
+from loguru import logger
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
 
@@ -109,6 +110,7 @@ This is speech recognition, not something the learner typed — they never saw t
 - The transcript comes from speech recognition: IGNORE punctuation and capitalization, forgive obviously misheard small words and fillers ("ähm"), and judge the sentences the learner most plausibly said. Sentence boundaries may be missing — infer them.
 - `constraint_met` — did the learner ATTEMPT the task in the required quantity? Count attempts, not quality: an element with broken word order still counts toward the constraint (its break is recorded as a slip instead). constraint_met=false ONLY when the elements the forces section names are missing or too few (said "weil" once when two were asked, skipped a required verb). Count ONLY the named elements — clauses, conjunctions, openers, verbs. NEVER count "sentences": speech recognition strips the boundaries, so two spoken sentences often arrive joined as one.
 - `constraint_note` — when constraint_met=false: one short English line naming what's MISSING (never a grammar comment). null when met.
+- CONSISTENCY — `constraint_met`/`constraint_note` must agree with the `hits`/`slips` you are about to report for the SAME attempt; never recount differently for the note than you counted for the hits. Worked example: task "start every sentence with something other than the subject... At least 3 sentences" (forces: at least 3 fronted-opener main clauses) · transcript "Leider habe ich nicht viel Zeit für meine Hobbys. Am Alltag arbeite ich und lerne ich Deutsch. Am Wochenende versuche ich mehr Zeit mit meiner Frau verbringen." → three opener clauses attempted, verb in position two in each → hits=3, slips=0 → constraint_met=**true**, constraint_note=null. Reporting hits=3 (three hit_quotes) and THEN writing constraint_note "only two required opener clauses, need three" is the exact contradiction to avoid — you already counted three when you listed the hit_quotes.
 - `hits` — how many of the attempted elements produced the TARGET structure correctly. When the forces section names SEVERAL checks for one element (e.g. clause-internal verb position AND verb mood/form AND the word order of the following main clause), that element counts as a hit only when EVERY named check passes.
 - `hit_quotes` — one entry per counted hit, in the order they occurred: the learner's own words, copied VERBATIM from the transcript — never paraphrase, trim, or fix them; the UI locates this exact span in the transcript to highlight it. Produce EXACTLY `hits` entries — no more, no fewer — and never quote a span that overlaps a `slips` quote (a span is either a hit or a slip, never both).
 - `slips` — every ATTEMPTED element where the target structure broke: `quote` (the learner's own words, copied VERBATIM from the transcript — never paraphrase, trim, or fix them; the UI locates this exact span in the transcript to highlight it), `corrected` (the minimal repair, in German, keeping their words), `note` (ONE English line, AT MOST 10 words, naming the broken rule — the correction sits next to it, so name the WHY, never restate the fix). One element can therefore yield several slips when several named checks break — record each separately, and each note must name WHICH check broke (a correct word order with a wrong verb form is a form slip, not an order slip, and vice versa).
@@ -134,6 +136,42 @@ async def judge_spoken(task: dict, transcript: str) -> SpokenVerdict:
     with generation_span("sprechen-judge", model=JUDGE_MODEL, input_text=prompt) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
+
+    # GRAM-008: the LLM's own constraint_met/constraint_note can contradict
+    # the hits/slips it just reported for the SAME attempt (hits=3, three
+    # hit_quotes, then constraint_note "only two required opener clauses,
+    # need three" — trace 7745ca97, task v2-freizeit). The prompt's own STEP
+    # 2 rule already says an attempted element with broken structure still
+    # counts toward the constraint ("count attempts, not quality"), so derive
+    # constraint_met from the counts it already produced whenever that would
+    # flip a false verdict true. Deliberately asymmetric: if the LLM said
+    # constraint_met=True but attempted < min_elements, its verdict is kept
+    # as-is — this only rescues false negatives, never manufactures a false
+    # positive on top of one the model already gave.
+    # Tasks that require N *different* elements (three different modals, three
+    # named separable verbs — `distinct: true` in tasks.yaml) are exempt: the
+    # counts can't tell "kann ×3" from "will/muss/kann", and the T3 tester
+    # produced exactly that false pass on modal-drei before this exemption.
+    min_elements = task.get("min_elements")
+    attempted = result.hits + len(result.slips)
+    if (
+        min_elements is not None
+        and not task.get("distinct")
+        and not result.constraint_met
+        and attempted >= min_elements
+    ):
+        logger.info(
+            "sprechen.constraint_override task={} min_elements={} attempted={} "
+            "(hits={} slips={}) — LLM said constraint_met=False, note={!r}",
+            task.get("id"),
+            min_elements,
+            attempted,
+            result.hits,
+            len(result.slips),
+            result.constraint_note,
+        )
+        result.constraint_met = True
+
     if result.constraint_met:
         result.constraint_note = None
     return result
