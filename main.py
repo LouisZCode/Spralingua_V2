@@ -144,9 +144,12 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
-    # CHORE-001: enumerated from the actual route decorators (GET/POST/DELETE
-    # across main.py + every routers/*.py) instead of "*".
-    allow_methods=["GET", "POST", "DELETE"],
+    # CHORE-001: enumerated from the actual route decorators across main.py +
+    # every router instead of "*". PUT joined with LEVEL-001 (PUT /auth/level);
+    # a verb missing here fails the browser's preflight with a 400 and the
+    # frontend only sees a thrown fetch — the modal read "Couldn't save that"
+    # in prod 2026-08-15 while the DB and the route were both fine.
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
