@@ -266,13 +266,53 @@ def _card_brief(card) -> str:
 _UMLAUT_TABLE = str.maketrans({"ä": "a", "ö": "o", "ü": "u", "ß": "ss"})
 _PUNCT_RE = re.compile(r"[^\w\s]", re.UNICODE)
 
+
+def _normalize_de(text: str) -> str:
+    """casefold + ä/ö/ü→a/o/u, ß→ss + punctuation stripped — a forgiving
+    normalization so a stem match survives ASR spelling noise.
+
+    Defined up here (above the constants that follow) because
+    ``_SEPARABLE_PREFIXES`` folds itself through it at import time.
+    """
+    return _PUNCT_RE.sub("", text.casefold().translate(_UMLAUT_TABLE))
+
 # Longest-first so e.g. "zurück" is matched before the shorter "zu" would
 # otherwise wrongly match its first two letters.
+#
+# NOTE the `_normalize_de` wrapper: these are matched against words that have
+# already been umlaut-folded, so a prefix spelled with an umlaut here would
+# never fire. "zurück" was in this list from the start and had NEVER matched
+# anything — `_normalize_de("zurückkommen")` is "zuruckkommen", which does not
+# start with "zurück" — so every separated "… kommt … zurück" was scanning as
+# "target absent" exactly like the auseinandersetzen case below. Folding the
+# list through the same normalizer is what actually makes it work.
+#
+# SATZ-021 — the long prefixes below were missing, and their absence silently
+# failed learners. "auseinandersetzen" matched the shorter "aus", giving the
+# nonsense remainder stem "einandersetz"; the real remainder "setz" was never
+# a candidate, so a correctly separated "Wir setzen uns … auseinander" scanned
+# as "target absent" and the guard OVERRODE a judge that had just called the
+# sentence perfect. Seen in production 2026-08-14: one learner hit it three
+# times on the same card, the third attempt flawless, and left the drill.
+#
+# Adding a prefix can only ever ADD stems (see the module note above:
+# over-generating turns false negatives into matches and cannot erase the
+# "clearly absent" signal), and a longer match displacing a shorter wrong one
+# strictly improves the remainder — "setz" instead of "einandersetz".
 _SEPARABLE_PREFIXES = sorted(
-    [
-        "ab", "an", "auf", "aus", "bei", "ein", "mit", "nach", "vor", "zu",
-        "zurück", "weg", "her", "hin", "um", "los",
-    ],
+    {
+        _normalize_de(p)
+        for p in (
+            "ab", "an", "auf", "aus", "bei", "ein", "mit", "nach", "vor", "zu",
+            "zurück", "weg", "her", "hin", "um", "los",
+            # SATZ-021 additions.
+            "auseinander", "zusammen", "entgegen", "gegenüber", "entlang",
+            "voraus", "voran", "vorbei", "vorüber", "hervor",
+            "heraus", "herein", "herum", "herunter", "hinauf", "hinaus",
+            "hinein", "hinunter", "teil", "fest", "fern", "frei", "statt",
+            "wieder", "weiter", "fort", "heim", "nieder", "davon", "dabei",
+        )
+    },
     key=len,
     reverse=True,
 )
@@ -290,12 +330,6 @@ _SKIP_WORDS = {
     "gegenuber", "wegen", "trotz", "wahrend", "statt", "anstatt",
     "und", "oder",
 }
-
-
-def _normalize_de(text: str) -> str:
-    """casefold + ä/ö/ü→a/o/u, ß→ss + punctuation stripped — a forgiving
-    normalization so a stem match survives ASR spelling noise."""
-    return _PUNCT_RE.sub("", text.casefold().translate(_UMLAUT_TABLE))
 
 
 def _stem(word: str) -> str:
