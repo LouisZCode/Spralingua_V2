@@ -236,21 +236,26 @@ def structured_judge_llm(
     include_raw: bool = True,
     strict: bool | None = True,
     deadline_s: float = 12.0,
-    temperature: float | None = None,
+    temperature: float | None = 0,
 ) -> Runnable:
     """Cerebras-direct primary + OpenRouter-fallback structured-output judge.
 
-    TEMPERATURE (2026-08-07): defaults to ``None`` = don't send the field at
-    all, which is what every judge did before this parameter existed, i.e.
-    the provider default of 1.0. That is sampling, and it means a judge can
-    return DIFFERENT verdicts for byte-identical input — measured on the
-    Satzbau clause judge, which accepted a valid German word order twice and
-    rejected it once out of three identical calls, the rejection asserting a
-    grammar rule that was backwards. A learner resubmitting the same correct
-    sentence being told they are wrong is corrosive in a way a consistently
-    strict judge is not. Pass ``temperature=0`` for any judge whose job is a
-    verdict rather than prose. Left opt-in rather than defaulted so this
-    doesn't silently change the behaviour of the judges that predate it.
+    TEMPERATURE (JUDGE-001, flipped 2026-08-15): defaults to ``0`` — every
+    judge that returns a verdict is deterministic unless a call site opts
+    out. Proposal-2's measurement (2026-08-07, 110 live calls: 11 judges x 2
+    fixtures x 5 byte-identical runs) is why: unpinned judges (provider
+    default ~1.0) flipped their verdict on 2 of 16 control fixtures (12.5%),
+    while judges already pinned at ``temperature=0`` (faelle, satzbau,
+    verbindungen) were 0 of 6 (0%) — 30/30 runs stable and correct. A judge
+    that can return DIFFERENT verdicts for byte-identical input is corrosive
+    in a way a consistently strict judge is not: it teaches the learner the
+    grader is arbitrary. Call sites that generate CONTENT rather than a
+    verdict (a letter, a card, a drill draft, a nudge phrase) and genuinely
+    want variety pass ``temperature=None`` explicitly — see the WHY comment
+    at each such call site — which restores the old behaviour of not sending
+    the field at all (provider default, 1.0 on Cerebras gpt-oss-120b).
+    Everything else needs no change: the new default already makes it a
+    deterministic verdict.
 
     Drop-in replacement for the old
     ``ProviderChatOpenAI(...).with_structured_output(schema, include_raw=True)``

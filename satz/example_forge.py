@@ -111,7 +111,11 @@ async def _draft_and_verify(card: VocabCard, user_id: Optional[str]) -> Optional
     facts = _facts(card)
     prompt = DRAFT_PROMPT.replace("{facts}", facts)
 
-    llm = structured_judge_llm(ExampleDraft)
+    # JUDGE-001 (2026-08-15): drafts three example sentences, not a verdict —
+    # temperature=None keeps provider-default sampling so the three drafts
+    # (and repeat runs for the same card) aren't identical. The verify LLM
+    # below is a verdict and keeps the new temperature=0 default.
+    llm = structured_judge_llm(ExampleDraft, temperature=None)
     with generation_span(
         "satz-example-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id
     ) as span:

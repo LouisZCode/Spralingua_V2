@@ -201,7 +201,10 @@ async def enrich_word(
     """
     # Cerebras-direct primary + OpenRouter fallback with 12s/leg deadline —
     # see agents/openrouter_llm.structured_judge_llm.
-    llm = structured_judge_llm(EnrichedCard)
+    # JUDGE-001 (2026-08-15): this generates card content (example sentence,
+    # note), not a verdict — temperature=None keeps provider-default
+    # sampling so re-enriching doesn't produce the identical card every time.
+    llm = structured_judge_llm(EnrichedCard, temperature=None)
     prompt = PROMPT.replace("{word}", word)
     if feedback:
         prompt += FEEDBACK_BLOCK.replace("{feedback}", feedback)

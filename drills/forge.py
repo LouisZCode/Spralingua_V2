@@ -253,7 +253,10 @@ async def _forge_bauteil_item(row_id: str, card: VocabCard, user_id: str) -> Opt
     if gender is None:
         return None
 
-    llm = structured_judge_llm(BauteilForgeDraft)
+    # JUDGE-001 (2026-08-15): drafts a Bauteil item, not a verdict —
+    # temperature=None keeps provider-default sampling so the forged
+    # sentence varies across items instead of resampling the same one.
+    llm = structured_judge_llm(BauteilForgeDraft, temperature=None)
     prompt = (
         BAUTEIL_PROMPT.replace("{noun}", card.target)
         .replace("{article}", card.article)
@@ -335,7 +338,10 @@ async def _forge_verbindungen_item(row_id: str, card: VocabCard, user_id: str) -
     for attempt in (1, 2):
         retrying = " — retrying with a fresh draft" if attempt == 1 else ""
 
-        llm = structured_judge_llm(VerbindungenForgeDraft)
+        # JUDGE-001 (2026-08-15): drafts a Verbindungen item, not a verdict —
+        # temperature=None keeps provider-default sampling. The verify LLM
+        # below is a verdict and keeps the new temperature=0 default.
+        llm = structured_judge_llm(VerbindungenForgeDraft, temperature=None)
         with generation_span(
             "verbindungen-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id
         ) as span:

@@ -99,7 +99,10 @@ async def suggest_vocab(
         .replace("{hint_rule}", hint_rule)
         .replace("{deck}", "\n".join(lines))
     )
-    llm = structured_judge_llm(VocabNudge)
+    # JUDGE-001 (2026-08-15): picks a nudge word and phrases the hint, not a
+    # verdict — temperature=None keeps provider-default sampling so the
+    # phrasing (and pick, among ties) varies across nudges.
+    llm = structured_judge_llm(VocabNudge, temperature=None)
     # OBS-007: the nudge span is the child of the route's own trace.
     with generation_span(span_name, model=NUDGE_MODEL, input_text=prompt) as span:
         result, usage, response_metadata = unwrap_structured_output(

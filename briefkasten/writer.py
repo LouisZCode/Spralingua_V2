@@ -226,7 +226,10 @@ async def write_letter(
     # other judge in the repo rules on one sentence. A too-tight deadline here
     # doesn't fail — it silently burns the Cerebras leg and pays for the
     # OpenRouter fallback on every single request.
-    llm = structured_judge_llm(LetterDraft, deadline_s=20.0)
+    # JUDGE-001 (2026-08-15): this generates a whole letter, not a verdict —
+    # temperature=None keeps provider-default sampling so the same seed
+    # doesn't produce the identical letter every time.
+    llm = structured_judge_llm(LetterDraft, deadline_s=20.0, temperature=None)
     with generation_span(
         "briefkasten-writer",
         model=WRITER_MODEL,
