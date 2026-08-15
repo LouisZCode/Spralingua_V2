@@ -40,6 +40,7 @@ from agents.observability import (
 from agents.openrouter_llm import structured_judge_llm
 from database.connection import get_sessionmaker
 from database.orm import UserCard, UserDrillItem, VocabCard
+from database.repository import _assert_test_user
 
 FORGE_MODEL = "openai/gpt-oss-120b"
 
@@ -443,6 +444,7 @@ async def forge_items_for_card(user_id: str, card_id: str) -> None:
             else:
                 item = await _forge_verbindungen_item(row_id, card, user_id)
 
+            _assert_test_user(user_id)  # TEST-001: direct write, not via repository
             await db.execute(
                 pg_insert(UserDrillItem)
                 .values(

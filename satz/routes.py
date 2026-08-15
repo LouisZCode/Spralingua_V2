@@ -29,7 +29,7 @@ from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
 from database.orm import DrillAttempt, Pack, PackCard, User, UserCard, VocabCard, WordGloss
-from database.repository import record_drill_attempt, record_grammar_error
+from database.repository import _assert_test_user, record_drill_attempt, record_grammar_error
 from drills import forge_items_for_card
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
@@ -159,6 +159,7 @@ async def add_pack(
     if await db.get(Pack, pack_id) is None:
         raise HTTPException(status_code=404, detail="unknown pack")
 
+    _assert_test_user(user_id)  # TEST-001: direct write, not via repository
     # A valid JWT implies /auth/google upserted the user, but a dev DB wipe
     # can outlive a token — the same idempotent no-op guard as session rows.
     await db.execute(
@@ -399,6 +400,7 @@ async def _forge_card(
             detail="The forge produced a malformed card — try that word again.",
         )
 
+    _assert_test_user(user_id)  # TEST-001: direct write, not via repository
     db.add(card)
     try:
         await db.flush()
@@ -594,6 +596,7 @@ async def add_word(
             detail="That looks like a whole sentence — cards are for a single word or short phrase.",
         )
 
+    _assert_test_user(user_id)  # TEST-001: direct write, not via repository
     # Same dev-DB-wipe guard as add_pack: a valid JWT implies the user row
     # exists, but tokens can outlive a wiped local DB.
     await db.execute(
@@ -707,6 +710,7 @@ async def remove_card(
     """Remove a card from the caller's pool. Only the ``user_cards`` link dies
     — the canonical card stays (other users may own it), and the owning pack
     naturally reverts from "Added ✓" to "Add the rest"."""
+    _assert_test_user(user_id)  # TEST-001: direct write, not via repository
     result = await db.execute(
         delete(UserCard).where(UserCard.user_id == user_id, UserCard.card_id == card_id)
     )

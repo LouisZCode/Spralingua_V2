@@ -26,7 +26,7 @@ from agents.observability import tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import UserCard, UserVerbformen, VocabCard
-from database.repository import record_drill_attempt, record_grammar_error
+from database.repository import _assert_test_user, record_drill_attempt, record_grammar_error
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.scheduler import lapse_interval, schedule
 from security import drill_try_admit
@@ -234,6 +234,7 @@ async def submit_attempt(
         interval, due_at = schedule(
             judgement.word_ok, uvf.interval_days if uvf else None, datetime.now()
         )
+        _assert_test_user(user_id)  # TEST-001: direct overlay write, not via repository
         await db.execute(
             pg_insert(UserVerbformen)
             .values(
@@ -325,6 +326,7 @@ async def remove_card(
         raise HTTPException(
             status_code=404, detail="That verb isn't in your Verbformen deck."
         )
+    _assert_test_user(user_id)  # TEST-001: direct overlay write, not via repository
     await db.execute(
         pg_insert(UserVerbformen)
         .values(user_id=user_id, card_id=card_id, hidden=True)
@@ -356,6 +358,7 @@ async def reveal_card(
     _card, uvf = row
     now = datetime.now()
     lapsed = lapse_interval(uvf.interval_days if uvf else None)
+    _assert_test_user(user_id)  # TEST-001: direct overlay write, not via repository
     await db.execute(
         pg_insert(UserVerbformen)
         .values(user_id=user_id, card_id=card_id, interval_days=lapsed, due_at=now)
