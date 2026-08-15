@@ -27,6 +27,7 @@ from database.repository import (
     record_drill_attempt,
     record_grammar_error,
 )
+from drills import apply_level
 from satzbau.content import TARGET_PATTERNS, load_items
 from satzbau.judge import judge_clause
 from security import drill_try_admit
@@ -184,7 +185,10 @@ async def get_round(
     server-side (the rule line would answer the item, so it only ships with
     the verdict).
     """
-    items = list(load_items().values())
+    # LEVEL-001: narrow before the ledger weighting below.
+    items = await apply_level(
+        db, user_id=user_id, items=list(load_items().values()), drill="satzbau"
+    )
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
         hot = {f["pattern_id"] for f in focus} & set(TARGET_PATTERNS)

@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import LevelPickerModal from "./LevelPickerModal";
 import {
   fetchRecommendation,
   fetchStats,
@@ -31,6 +32,11 @@ const REC_TARGETS: Record<
   tandem: { href: "/tandem", cta: "Open Tandem" },
 };
 
+// LEVEL-001: records that the level question has been PUT to this learner on
+// this device, so declining it ("Not sure", which stores null) doesn't make
+// the modal reappear on every visit.
+const LEVEL_ASKED_KEY = "spralingua_level_asked";
+
 // GAME-001: streak days are UTC in this app, so the meter's "seen" cache key
 // is scoped to the UTC calendar day — a stored value from a prior day simply
 // lives under a different key and is never read.
@@ -43,7 +49,9 @@ function utcDateString(): string {
 }
 
 export default function PracticeMenu() {
-  const { token, user, ready } = useAuth();
+  const { token, user, ready, setLevel } = useAuth();
+  // LEVEL-001: the one-time level question (see the effect below).
+  const [askLevel, setAskLevel] = useState(false);
   const router = useRouter();
 
   // REC-001: today's data-driven pick, shown as a banner above the modes.
@@ -148,6 +156,23 @@ export default function PracticeMenu() {
     }
   }, [ready, token, router]);
 
+  // LEVEL-001: ask once, here, because /practice is the hub every signed-in
+  // learner passes through. `user.level === null` alone can't gate this —
+  // "Not sure" also stores null, and re-asking someone who declined on every
+  // visit would be nagging. The local flag records that the question was PUT
+  // to them; a new device asks once more, which is cheap and harmless.
+  useEffect(() => {
+    if (!ready || !token || !user) return;
+    if (user.level) return;
+    try {
+      if (window.localStorage.getItem(LEVEL_ASKED_KEY) === "1") return;
+    } catch {
+      // localStorage unavailable (private mode) — ask, it's one modal.
+    }
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAskLevel(true);
+  }, [ready, token, user]);
+
   // Don't flash the menu before auth is known, nor render it for a signed-out
   // visitor mid-redirect.
   if (!ready || !token) {
@@ -158,6 +183,24 @@ export default function PracticeMenu() {
 
   return (
     <div className="relative flex min-h-screen flex-col bg-white text-ink">
+      {/* LEVEL-001: the one-time level question. Marking it asked BEFORE the
+          PUT resolves is deliberate — a failed save shouldn't strand the
+          learner behind a modal they can't dismiss; they can set it from the
+          header chip below whenever they like. */}
+      {askLevel && (
+        <LevelPickerModal
+          onDone={async (level) => {
+            try {
+              window.localStorage.setItem(LEVEL_ASKED_KEY, "1");
+            } catch {
+              // Private mode — they'll be asked again next visit.
+            }
+            await setLevel(level);
+            setAskLevel(false);
+          }}
+        />
+      )}
+
       {/* Paper grain — same surface as the landing page */}
       <div
         aria-hidden
@@ -180,6 +223,18 @@ export default function PracticeMenu() {
               Spralingua
             </span>
           </Link>
+
+          {/* LEVEL-001: the level is always visible and always changeable —
+              a self-declared level goes stale as the learner improves, and
+              one that can't be corrected is worse than none. */}
+          <button
+            type="button"
+            onClick={() => setAskLevel(true)}
+            className="rounded-full border-[3px] border-ink bg-paper-warm px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink"
+            title="Change your level"
+          >
+            {user?.level ?? "Set level"}
+          </button>
         </div>
       </header>
 

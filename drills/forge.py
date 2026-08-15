@@ -225,6 +225,7 @@ Decide honestly: does this verb have ONE standard, dictionary-listed fixed prepo
 - The answer must slot in perfectly — the filled sentence must read as completely natural German.
 - The frame and answer must not overlap: the words that fill the gap appear ONLY in the answer, never also in the frame — re-read the filled sentence before returning.
 - Only claim has_chunk=true for pairings a German dictionary would actually list, not just any verb that CAN take a preposition.
+- When preposition + article fuse, write the CONTRACTION a German would actually write: "beim Umzug", not "bei dem Umzug"; likewise am/ans, im/ins, zum/zur, vom, aufs, fürs. Spelling the fusion out makes the answer read as textbook German the learner is then graded against. (Both spellings are accepted at grading time, so this is about the item reading naturally — see grammar/contractions.py.)
 """
 
 VERIFY_PROMPT = """# Role

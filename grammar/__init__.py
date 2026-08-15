@@ -10,6 +10,25 @@ anything under ``agents.*`` executes ``agents/__init__.py``, which drags in
 the whole Pipecat/LangChain conversation stack.
 """
 
+from .contractions import expand_contractions
+from .levels import (
+    BUCKETS,
+    DEFAULT_BUCKET,
+    allows,
+    bucket_of,
+    level_for_pattern,
+    select,
+)
 from .loader import load_taxonomy, taxonomy_brief
 
-__all__ = ["load_taxonomy", "taxonomy_brief"]
+__all__ = [
+    "BUCKETS",
+    "DEFAULT_BUCKET",
+    "allows",
+    "bucket_of",
+    "expand_contractions",
+    "level_for_pattern",
+    "load_taxonomy",
+    "select",
+    "taxonomy_brief",
+]

@@ -67,6 +67,12 @@ class User(Base):
     role: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'normal'")
     )
+    # LEVEL-001: self-declared CEFR bucket — "A1" | "A2" | "B1+", or NULL for
+    # "not asked yet". Drives the round serving rule (grammar/levels.py): the
+    # level caps what a learner is served, the user_errors ledger decides
+    # which below-level patterns still come back. NULL serves everything, so
+    # an account that never answers the question keeps today's behaviour.
+    level: Mapped[str | None] = mapped_column(Text, nullable=True)
     # GAME-001: denormalized streak cache, updated on write (repository.
     # credit_streak_day) — O(1) read and write, no hot-path scan. Days bucket
     # by UTC calendar day; for users west of UTC the day rolls over mid-evening

@@ -13,12 +13,19 @@ import { HTTP_BASE } from "@/lib/api";
 // WS handshake (?token=) and on /say (Authorization: Bearer) — see AUTH-001.
 const STORAGE_KEY = "spralingua_auth";
 
+// LEVEL-001: three buckets, not six — a self-declared level is only accurate
+// to about this resolution, and the grammar taxonomy tops out at B1.
+export type Level = "A1" | "A2" | "B1+";
+
 export type AuthUser = {
   id: string;
   email: string | null;
   name: string | null;
   picture: string | null;
   role: string;
+  // null = never asked. The picker shows on /practice until it's answered,
+  // and until then the learner is served every item, as before LEVEL-001.
+  level: Level | null;
 };
 
 type AuthState = {
@@ -30,6 +37,7 @@ type AuthState = {
   ready: boolean;
   signInWithGoogle: (credential: string) => Promise<void>;
   signOut: () => void;
+  setLevel: (level: Level | null) => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -76,6 +84,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  async function setLevel(level: Level | null) {
+    if (!token) return;
+    const res = await fetch(`${HTTP_BASE}/auth/level`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ level }),
+    });
+    if (!res.ok) {
+      throw new Error(`Could not save your level (${res.status})`);
+    }
+    const updated = (await res.json()) as AuthUser;
+    setUser(updated);
+    // Mirror into localStorage so a refresh doesn't re-ask a question the
+    // learner already answered.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({ token, user: updated })
+    );
+  }
+
   function signOut() {
     setToken(null);
     setUser(null);
@@ -87,7 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, user, ready, signInWithGoogle, signOut }}
+      value={{ token, user, ready, signInWithGoogle, signOut, setLevel }}
     >
       {children}
     </AuthContext.Provider>

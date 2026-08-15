@@ -28,7 +28,9 @@ from database.repository import (
     record_drill_attempt,
     record_grammar_error,
 )
+from drills import apply_level
 from drills.forge import backfill_missing
+from grammar import expand_contractions
 from security import drill_try_admit
 from verbindungen.content import TARGET_PATTERNS, load_items
 from verbindungen.judge import judge_chunk
@@ -188,8 +190,18 @@ async def get_round(
         logger.exception("Verbindungen personal-item read failed — serving a generic-only round")
         personal = []
 
+    # LEVEL-001: narrow to what this learner's level warrants BEFORE the
+    # ledger weighting below — weighting a pool that shouldn't be served in
+    # the first place just picks the least-bad wrong item. Personal (forged)
+    # items get the same ceiling: they're built from the learner's own gaps,
+    # but a gap in a B1 pattern still isn't A1 practice.
+    items = await apply_level(
+        db, user_id=user_id, items=list(load_items().values()), drill="verbindungen"
+    )
+    personal = await apply_level(
+        db, user_id=user_id, items=personal, drill="verbindungen/personal"
+    )
     generic_size = ROUND_SIZE - len(personal)
-    items = list(load_items().values())
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
         hot = {f["pattern_id"] for f in focus} & set(TARGET_PATTERNS)
@@ -236,7 +248,10 @@ _EDGE_PUNCT = " .,!?;:…\"'"
 
 
 def _normalize(s: str) -> str:
-    return " ".join(s.split()).strip(_EDGE_PUNCT).lower()
+    # BUG-011: contractions expand to their two-word form, so "beim" and
+    # "bei dem" compare equal. The case distinction survives (im -> in dem
+    # vs. ins -> in das), so this cannot green a wrong case.
+    return expand_contractions(" ".join(s.split()).strip(_EDGE_PUNCT).lower())
 
 
 def _matches(typed: str, expected: str, frame: str) -> bool:

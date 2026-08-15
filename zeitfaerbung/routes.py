@@ -27,6 +27,7 @@ from database.repository import (
     record_drill_attempt,
     record_grammar_error,
 )
+from drills import apply_level
 from zeitfaerbung.content import (
     ALL_FORMS,
     DOPPELDEUTIG_GROUPS,
@@ -45,16 +46,24 @@ _DOPPEL_QUOTA = 3
 
 
 @router.get("/round")
-async def get_round(user_id: str = Depends(get_current_user_id)):
+async def get_round(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
     """One practice round; answers/hints/why/readings stay server-side until
     the verdict — only ``{id, frame, hint}`` ships, and ``hint`` is omitted
     entirely for doppeldeutig items (an English hint would force one reading
     and spoil the ambiguity that's the point of that group).
 
-    ``user_id`` is unused beyond gating the route to a signed-in caller —
-    there is no personalisation in v1.
+    LEVEL-001 is the only personalisation here: the quota selection below is
+    otherwise identical for every learner. Note this drill is entirely A2/B1
+    content, so an A1 learner is served NOTHING from it — deliberately. A
+    beginner has no business on tense-aspect colouring, and the Flow simply
+    deals them items from the drills that do have A1 content.
     """
-    items = list(load_items().values())
+    items = await apply_level(
+        db, user_id=user_id, items=list(load_items().values()), drill="zeitfaerbung"
+    )
 
     chosen: list[dict] = []
     used_ids: set[str] = set()

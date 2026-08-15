@@ -27,8 +27,10 @@ from database.repository import (
     record_drill_attempt,
     record_grammar_error,
 )
+from drills import apply_level
 from faelle.content import TARGET_PATTERNS, load_items
 from faelle.judge import judge_case
+from grammar import expand_contractions
 from security import drill_try_admit
 
 router = APIRouter(prefix="/faelle", tags=["faelle"])
@@ -165,7 +167,10 @@ async def get_round(
     Answers/rules stay server-side (the rule line would answer the item, so
     it only ships with the verdict).
     """
-    items = list(load_items().values())
+    # LEVEL-001: narrow before the ledger weighting below.
+    items = await apply_level(
+        db, user_id=user_id, items=list(load_items().values()), drill="faelle"
+    )
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
         hot = {f["pattern_id"] for f in focus} & set(TARGET_PATTERNS)
@@ -196,7 +201,11 @@ _EDGE_PUNCT = " .,!?;:…\"'"
 
 
 def _normalize(s: str) -> str:
-    return " ".join(s.split()).strip(_EDGE_PUNCT).lower()
+    # BUG-011: contractions expand to their two-word form, so "beim" and
+    # "bei dem" compare equal. Expansion keeps dative and accusative apart
+    # (im -> in dem vs. ins -> in das), so the wechselpraepositionen pairs
+    # warned about below are still safe — a genuine case swap stays red.
+    return expand_contractions(" ".join(s.split()).strip(_EDGE_PUNCT).lower())
 
 
 def _matches(typed: str, expected: str, frame: str) -> bool:

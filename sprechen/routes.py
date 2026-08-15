@@ -30,6 +30,7 @@ from database.repository import (
     record_grammar_error,
 )
 from satz.examiner import transcribe_attempt
+from drills import apply_level
 from security import drill_try_admit
 from sprechen.content import TARGET_PATTERNS, load_tasks
 from sprechen.judge import judge_spoken
@@ -115,7 +116,10 @@ async def get_round(
     hasn't seen this pool cycle (VARY-001) and the learner's hot ledger
     patterns. The `forces` field stays server-side — the learner sees the
     task, the judge sees the rubric."""
-    tasks = list(load_tasks().values())
+    # LEVEL-001: narrow before the ledger weighting below.
+    tasks = await apply_level(
+        db, user_id=user_id, items=list(load_tasks().values()), drill="sprechen"
+    )
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
         hot = {f["pattern_id"] for f in focus} & set(TARGET_PATTERNS)

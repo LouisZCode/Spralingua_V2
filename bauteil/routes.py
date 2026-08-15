@@ -36,7 +36,9 @@ from database.repository import (
     record_drill_attempt,
     record_grammar_error,
 )
+from drills import apply_level
 from drills.forge import backfill_missing
+from grammar import expand_contractions
 from security import drill_try_admit
 
 router = APIRouter(prefix="/bauteil", tags=["bauteil"])
@@ -82,8 +84,15 @@ async def get_round(
         logger.exception("Bauteil personal-item read failed — serving a generic-only round")
         personal = []
 
+    # LEVEL-001: narrow before the ledger weighting below; the personal
+    # (forged) items get the same ceiling.
+    items = await apply_level(
+        db, user_id=user_id, items=list(load_items().values()), drill="bauteil"
+    )
+    personal = await apply_level(
+        db, user_id=user_id, items=personal, drill="bauteil/personal"
+    )
     generic_size = ROUND_SIZE - len(personal)
-    items = list(load_items().values())
     try:
         focus = await load_grammar_focus(db, user_id=user_id, limit=10)
         hot = {f["pattern_id"] for f in focus} & set(TARGET_PATTERNS)
@@ -128,7 +137,10 @@ _EDGE_PUNCT = " .,!?;:…\"'"
 
 
 def _normalize(s: str) -> str:
-    return " ".join(s.split()).strip(_EDGE_PUNCT).lower()
+    # BUG-011: contractions expand to their two-word form, so "beim" and
+    # "bei dem" compare equal. The case distinction survives (im -> in dem
+    # vs. ins -> in das), so this cannot green a wrong declension.
+    return expand_contractions(" ".join(s.split()).strip(_EDGE_PUNCT).lower())
 
 
 def _matches(typed: str, expected: str, frame: str) -> bool:

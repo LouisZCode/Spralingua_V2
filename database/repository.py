@@ -1169,6 +1169,42 @@ async def load_focus_with_recency(
     ]
 
 
+async def load_user_level(db: AsyncSession, *, user_id: str) -> str | None:
+    """The learner's CEFR bucket, or None when they haven't been asked.
+
+    None is a real answer, not a failure: ``grammar.levels.select()`` serves
+    a None-level learner everything, which is exactly the pre-LEVEL-001
+    behaviour every existing account should keep until it opts in.
+    """
+    return await db.scalar(select(User.level).where(User.id == user_id))
+
+
+async def set_user_level(db: AsyncSession, *, user_id: str, level: str | None) -> None:
+    """Write the learner's CEFR bucket. ``None`` clears it (back to
+    "serve everything"), which is what the UI's "not sure" escape does."""
+    await db.execute(update(User).where(User.id == user_id).values(level=level))
+    await db.commit()
+
+
+async def load_weak_patterns(db: AsyncSession, *, user_id: str) -> set[str]:
+    """Pattern ids the learner demonstrably still gets wrong.
+
+    This is the FLOOR half of the serving rule (grammar/levels.py): a
+    below-level pattern comes back only if it is in here. ``status ==
+    "open"`` is what makes that work — a pattern the learner has since
+    answered correctly is retired by ``credit_pattern_success`` and stops
+    being served, which is the drill quietly getting out of their way.
+    """
+    rows = (
+        await db.execute(
+            select(UserError.pattern_id).where(
+                UserError.user_id == user_id, UserError.status == "open"
+            )
+        )
+    ).scalars().all()
+    return set(rows)
+
+
 async def load_retired_patterns(
     db: AsyncSession, *, user_id: str, limit: int = 10
 ) -> list[dict]:
