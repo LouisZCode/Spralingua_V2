@@ -5,7 +5,9 @@ pedagogy depends on (see ``.claude/skills/satz-cards/SKILL.md``): nouns carry
 their article + gender/plural note, verbs carry NO grammar note (the learner
 recalls case/reflexivity unaided), phrases carry a register note, adjectives
 carry a comparison note (comparative · superlative), prepositions carry a
-case note (the case they govern).
+case note (the case they govern), adverbs carry an OPTIONAL note (their kind
+and where they sit — a genuine comparative when one exists, nothing invented
+otherwise).
 
 Fail-loud by design: a malformed pack raises ``ValueError`` at import of the
 content, which aborts startup — same philosophy as ``init_engine``. Broken
@@ -18,7 +20,7 @@ import yaml
 
 PACKS_DIR = Path(__file__).parent / "packs"
 
-CARD_TYPES = {"noun", "verb", "phrase", "adjective", "preposition"}
+CARD_TYPES = {"noun", "verb", "phrase", "adjective", "preposition", "adverb"}
 PACK_KINDS = {"level", "situation"}
 
 
@@ -67,6 +69,14 @@ def _validate_card(card: dict, pack_id: str) -> None:
     # adjective's note carries its comparison forms.
     if card["type"] == "preposition" and not card.get("note"):
         raise ValueError(f"{where}: prepositions need a case note (e.g. '+ dative')")
+
+    # SATZ-023: unlike adjectives/prepositions, an adverb's note is OPTIONAL
+    # — most adverbs (leider, sehr, doch) have no hidden grammar at all; a
+    # note is only worth carrying when the adverb genuinely compares (gern
+    # -> "comparison: lieber · am liebsten") or its position is worth a
+    # reminder. No extra check needed here: article/reflexive/tense are
+    # already forbidden on non-noun/non-verb cards by the generic branches
+    # above.
 
 
 def load_packs() -> tuple[list[dict], dict[str, dict]]:

@@ -72,8 +72,10 @@ class CardVerdict(BaseModel):
         description=(
             "Are the stated grammar facts real? The noun's gender and "
             "plural, the adjective's comparison forms, the preposition's "
-            "case, and for verbs the past form with the auxiliary that verb "
-            "actually takes. True when the card states no such facts"
+            "case, an adverb's note (only real when it states a genuine "
+            "comparison — never an invented one), and for verbs the past "
+            "form with the auxiliary that verb actually takes. True when "
+            "the card states no such facts"
         )
     )
     example_ok: bool = Field(
@@ -107,7 +109,7 @@ You fact-check ONE German vocabulary flashcard before it reaches a learner ("Sat
 {facts}
 
 # STEP 1 — isolate what you are checking
-Read every field as one connected claim about ONE word: the gloss claims a meaning, the example must SHOW that same meaning, the note (nouns: plural; adjectives: comparison; prepositions: case) must be the real grammatical fact, and — for a verb — the past form's auxiliary must be the one that verb actually takes. A card is wrong if ANY of these disagree with real German, even when every field looks fine read on its own.
+Read every field as one connected claim about ONE word: the gloss claims a meaning, the example must SHOW that same meaning, the note (nouns: plural; adjectives: comparison; prepositions: case; adverbs: none, or a real comparison (gern → lieber)) must be the real grammatical fact, and — for a verb — the past form's auxiliary must be the one that verb actually takes. A card is wrong if ANY of these disagree with real German, even when every field looks fine read on its own.
 
 # What breaks a card — check every one
 (a) Gloss vs. example, same sense. The gloss names ONE meaning; the example must use the word in THAT meaning, not a different sense and not a different (e.g. separable-prefix) verb that merely looks related. A false friend or a homograph glossed with the wrong sense is the single most common failure.

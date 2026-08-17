@@ -11,6 +11,13 @@ canonical-catalog miss, so a word is only ever enriched once; every later
 learner who adds it gets the existing card for free. Adjectives carry a
 comparison note (comparative · superlative) — the forms are the card's
 hidden grammar, and irregulars (gut/besser) get flagged for free.
+
+SATZ-023: adverbs (leider, oft, gern, deshalb, eher, insbesondere, …) are
+their own type — before this they had nowhere to go: rejected ("we don't
+make cards for adverbs yet"), misfiled as ``phrase``, or misfiled as
+``adjective`` with an invented comparative note. An adverb card's note is
+optional and only ever states a real fact (its kind/position, or a genuine
+comparison when one exists) — never an invented one.
 """
 
 from typing import Literal, Optional
@@ -54,7 +61,7 @@ class EnrichedCard(BaseModel):
             "types bare). The learner confirms before we build its card. Null otherwise"
         ),
     )
-    type: Optional[Literal["noun", "verb", "phrase", "adjective", "preposition"]] = Field(
+    type: Optional[Literal["noun", "verb", "phrase", "adjective", "preposition", "adverb"]] = Field(
         default=None, description="Card type; null when valid=false"
     )
     target: Optional[str] = Field(
@@ -74,7 +81,12 @@ class EnrichedCard(BaseModel):
         default=None,
         description=(
             "Nouns: gender·plural note. Phrases: register hint. Adjectives: "
-            "comparison note. Prepositions: the case it governs. Verbs: MUST be null"
+            "comparison note. Prepositions: the case it governs. Adverbs: "
+            "OPTIONAL — its kind and where it sits (e.g. 'sentence adverb "
+            "· usually first or after the verb'), or a genuine comparison "
+            "when one exists (gern -> 'comparison: lieber · am liebsten'); "
+            "null when there's nothing worth noting, and NEVER an invented "
+            "comparison. Verbs: MUST be null"
         ),
     )
     past_form: Optional[str] = Field(
@@ -110,7 +122,7 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
 # Normalize the input first
 - Strip a leading article (der/die/das/ein/eine) — it tells you the noun's gender but never belongs in `target`.
 - Strip a leading "sich" — it tells you the verb is reflexive (set reflexive=true) but never belongs in `target`.
-- Fix casing: German nouns are capitalized; verbs, adjectives, prepositions and phrases are lowercase.
+- Fix casing: German nouns are capitalized; verbs, adjectives, prepositions, adverbs and phrases are lowercase.
 - If the learner typed an inflected form (plural noun, conjugated verb), build the card for the base form (singular noun, infinitive verb).
 
 # Card rules (strict)
@@ -120,6 +132,7 @@ You build one flashcard for a German vocabulary trainer ("Satzschmiede"). A lear
   - `past_form`: the past as Germans actually SPEAK it, third person singular. Default is the Perfekt with its auxiliary: "ist geflogen", "hat gedacht". When the Präteritum is also everyday speech for this verb (denken → dachte, wissen → wusste, geben → gab, finden → fand), give both spoken-first: "dachte · hat gedacht". When the Perfekt is unnatural in speech (sein, haben, werden, the modals), give ONLY the Präteritum: "war", "hatte", "wollte". Reflexive verbs include the pronoun: "hat sich gefreut".
   - `past_example`: one natural German sentence using the verb in that spoken past.
 - type "preposition": `target` = the preposition, lowercase, bare. `note` = the case it forces on its object, written as a short tag: "+ accusative" (durch, für, gegen, ohne, um), "+ dative" (aus, bei, mit, nach, seit, von, zu, gegenüber), or "+ genitive" (wegen, trotz, während, (an)statt). For a TWO-WAY preposition (an, auf, in, über, unter, vor, hinter, neben, zwischen): `note` = "two-way · accusative (Wohin?) · dative (Wo?)". `gloss` = its core spatial or logical meaning. Also use this type for a word that works as a prepositional adverb (e.g. gegenüber) — pick its prepositional case.
+- type "adverb": ONLY for words that never take an ending — sentence adverbs (leider, wahrscheinlich, deshalb, trotzdem), temporal/frequency (oft, immer, bald, manchmal), degree (sehr, ziemlich, fast, eher), focus (sogar, insbesondere, nur), modal particles (doch, mal, ja, halt). `target` = bare, lowercase. `note` = the one thing worth knowing — its kind and where it sits, in AT MOST 8 words (e.g. "sentence adverb · first or after the verb", "modal particle · mid-field only", "degree adverb · before the adjective") — or null when there's nothing worth flagging. Comparison ONLY when it genuinely exists: gern → "comparison: lieber · am liebsten", oft → "comparison: öfter · am häufigsten", bald → "comparison: eher · am ehesten"; otherwise NO comparison, and NEVER invent one. A word that ALSO declines attributively before a noun ("ein schnelles Auto") stays type "adjective" even when it's used adverbially too — e.g. schnell ("Er läuft schnell") stays "adjective", not "adverb". A prepositional adverb (gegenüber) stays "preposition" per the rule above. Worked examples: "leider" → adverb, note "sentence adverb · usually first or after the verb"; "schnell" → adjective (not adverb), note "comparative: schneller · superlative: am schnellsten" — it takes an ending before a noun, an adverb never does.
 - type "phrase": `target` = the phrase as naturally written. `note` = one short register/usage hint (e.g. "polite register · when ordering").
 - type "adjective": `target` = the base (positive) form, lowercase. `note` = "comparative: <form> · superlative: am <form>" (e.g. "comparative: schneller · superlative: am schnellsten") — watch for irregulars (gut → besser → am besten, hoch → höher, teuer → teurer). For absolute adjectives that aren't normally compared (schwanger, tot): `note` = "not usually compared".
 - `gloss`: concise English meaning, ONE sense only — the most common everyday sense. If the word is hopelessly ambiguous without context, pick the dominant sense.
@@ -163,8 +176,8 @@ def _normalize(e: EnrichedCard) -> EnrichedCard:
             t = t[5:]
             e.reflexive = True
         e.note = None  # the Verbs Rule, non-negotiable
-    if e.type == "preposition":
-        t = t.lower()  # prepositions are always lowercase
+    if e.type in ("preposition", "adverb"):
+        t = t.lower()  # prepositions and adverbs are always lowercase
     if e.type != "noun":
         e.article = None
     if e.type != "verb":

@@ -244,6 +244,15 @@ def _card_brief(card) -> str:
             "on ITS OBJECT is grammar_ok=false, never word_ok=false (SATZ-024 — "
             "case is a grammar_ok matter even when the target itself governs it)"
         )
+    if card.type == "adverb":
+        lines.append(
+            "- it is an adverb: it never takes an ending, so word_ok=false only "
+            "if it is missing, used as a predicate adjective, or replaced by a "
+            "synonym/antonym — a genuine comparative (lieber, öfter) counts as "
+            "using the word; if it opens the sentence the finite verb must come "
+            "right after it, and a broken V2 there is grammar_ok=false, NEVER "
+            "word_ok=false (SATZ-023, same axis split as SATZ-024)"
+        )
     if card.tense == "past":
         lines.append(
             "- this card tests the SPOKEN PAST: the sentence must use the verb "
@@ -412,6 +421,37 @@ def _candidate_stems(word: str) -> set[str]:
     return stems
 
 
+# SATZ-023: an adverb's note may name a genuine, often IRREGULAR comparative
+# ("comparison: lieber · am liebsten" for gern, "comparison: öfter · am
+# häufigsten" for oft) that shares NO stem with the base word — "lieber"
+# doesn't start with any prefix of "gern". The examiner prompt already tells
+# the model a comparative counts as using the word (see the adverb block in
+# _card_brief), but without this the deterministic scan below still vetoes
+# it as "target word not heard", overriding a model that got it right. Same
+# class of fix as the tense_form/extra_forms handling just above: teach the
+# guard about the sibling form instead of leaving it to prompt compliance.
+_ADVERB_COMPARISON_RE = re.compile(r"comparison:\s*(.+)$", re.IGNORECASE)
+
+
+def _adverb_comparison_forms(note: str | None) -> list[str]:
+    """Pull the comparative/superlative word(s) out of an adverb card's
+    ``note`` (e.g. "comparison: lieber · am liebsten" -> ["lieber",
+    "liebsten"]), or [] when the note states no comparison."""
+    if not note:
+        return []
+    m = _ADVERB_COMPARISON_RE.search(note)
+    if not m:
+        return []
+    forms = []
+    for chunk in re.split(r"[·,]", m.group(1)):
+        chunk = chunk.strip()
+        if chunk[:3].lower() == "am ":
+            chunk = chunk[3:].strip()
+        if chunk:
+            forms.append(chunk)
+    return forms
+
+
 def _target_evidence(card, transcript: str, extra_forms: list[str] | None = None) -> bool:
     """Deterministic, conservative scan: does ANY transcript token plausibly
     carry an inflected or separated form of the card's target word?
@@ -432,6 +472,10 @@ def _target_evidence(card, transcript: str, extra_forms: list[str] | None = None
     tense_form = getattr(card, "tense_form", None)
     if tense_form:
         candidate_words += _normalize_de(tense_form).split()
+    if getattr(card, "type", None) == "adverb":
+        candidate_words += _normalize_de(
+            " ".join(_adverb_comparison_forms(getattr(card, "note", None)))
+        ).split()
     for form in extra_forms or []:
         candidate_words += _normalize_de(form).split()
 

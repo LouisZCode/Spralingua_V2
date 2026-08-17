@@ -98,6 +98,12 @@ def _facts(card: VocabCard) -> str:
         )
         if card.tense_form:
             lines.append(f"- its natural spoken past: {card.tense_form}")
+    if card.type == "adverb":
+        lines.append(
+            "- it is an adverb: show it in three DIFFERENT positions across "
+            "the three sentences (front field, mid-field, right after the "
+            "verb), never as a predicate adjective"
+        )
     if card.note:
         lines.append(f"- grammar note: {card.note}")
     if card.example:

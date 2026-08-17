@@ -190,13 +190,16 @@ async def add_pack(
 _LEADS = ("der ", "die ", "das ", "ein ", "eine ", "sich ")
 
 _TRANSLIT = (("ä", "ae"), ("ö", "oe"), ("ü", "ue"), ("ß", "ss"))
-_ID_PREFIX = {"noun": "n", "verb": "v", "phrase": "p", "adjective": "adj", "preposition": "prep"}
+_ID_PREFIX = {
+    "noun": "n", "verb": "v", "phrase": "p", "adjective": "adj",
+    "preposition": "prep", "adverb": "adv",
+}
 
 
 def _type_hint(word: str) -> str | None:
     """Best-effort card-type hint from the RAW input, to tell homographs apart
     (verb ``unternehmen`` vs. noun ``Unternehmen``). Returns ``"noun"``,
-    ``"not-noun"`` (verb/adjective/preposition/phrase), or ``None`` when the
+    ``"not-noun"`` (verb/adjective/preposition/adverb/phrase), or ``None`` when the
     input gives no signal — so an article-led or capitalized single word never
     dedups against a card of the wrong type (SATZ homograph fix)."""
     w = word.strip()
