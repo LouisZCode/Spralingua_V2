@@ -273,17 +273,32 @@ function LetterPanel({
   );
 }
 
-function Footer({ onNewLetter }: { onNewLetter: () => void }) {
+// `newLetter` — the red "New letter" button. Hidden between attempt 1 and
+// attempt 2 (user request, 2026-08-17): with the hints on screen the only next
+// step is to revise the draft ABOVE and send it again; a fresh-letter button
+// at the foot of that page read as "the next thing to click" and threw the
+// draft away. It stays on the untouched writing screen (a reroll of a letter
+// you don't want to answer) and on the final feedback screen (the natural
+// next action).
+function Footer({
+  onNewLetter,
+  newLetter = true,
+}: {
+  onNewLetter: () => void;
+  newLetter?: boolean;
+}) {
   return (
     <div className="mt-8 flex items-center justify-center gap-5">
-      <button
-        type="button"
-        onClick={onNewLetter}
-        className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
-        style={redShadow}
-      >
-        New letter
-      </button>
+      {newLetter && (
+        <button
+          type="button"
+          onClick={onNewLetter}
+          className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+          style={redShadow}
+        >
+          New letter
+        </button>
+      )}
       <Link
         href="/practice"
         className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
@@ -732,7 +747,7 @@ export default function BriefTrainer({
         </div>
       )}
 
-      <Footer onNewLetter={onNewLetter} />
+      <Footer onNewLetter={onNewLetter} newLetter={phase === "writing"} />
     </div>
   );
 }
