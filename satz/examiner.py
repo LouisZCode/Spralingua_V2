@@ -697,14 +697,41 @@ async def examine_attempt(
     # is an article/case/ending problem — that is a grammar_ok mistake filed
     # on the wrong axis. Flip it rather than fail the learner on "word not
     # used" for a word they demonstrably used.
-    if (
-        not result.word_ok
-        and evidence
-        and (
-            _AXIS_OVERRIDE_RE.search(f"{result.error or ''} {result.corrected or ''}")
-            or (result.corrected and _article_only_diff(transcript, result.corrected))
-        )
-    ):
+    # SATZ-027 (2026-08-17), trace b6b668fc2ef7fb801bc2a6351bb4e583: on a
+    # `-past` card the override above must not fire when `corrected` also
+    # rewrote the target verb's OWN token (verschieben -> verschoben) — that
+    # is the model saying the past form was never produced, and the
+    # article/case wording it also used names a SECOND, separate problem,
+    # not the reason word_ok was false. Reuses the same `_target_token_in`
+    # helper the SATZ-020 P2 veto below already relies on.
+    past_form_touched = False
+    infinitive_only = False
+    if getattr(card, "tense", None) == "past" and not result.word_ok and result.corrected:
+        orig_tok = _target_token_in(card, transcript)
+        fixed_tok = _target_token_in(card, result.corrected)
+        past_form_touched = bool(orig_tok and fixed_tok and orig_tok != fixed_tok)
+        # SATZ-027 tester case (2026-08-17), "Ich muss das Termin
+        # verschieben." -> corrected "Ich musste den Termin verschieben.":
+        # the token-diff check above misses this one, because a modal in
+        # Präteritum + bare infinitive doesn't touch the main verb's token
+        # at all — `corrected` fixes the MODAL (muss -> musste), not
+        # `verschieben`. But the card's `target` on a `-past` card IS the
+        # bare infinitive, so if that's the exact token the learner said,
+        # they never produced a past form of anything — same underlying bug
+        # as the token-diff case, caught a different way.
+        if (
+            not past_form_touched
+            and orig_tok
+            and orig_tok == _normalize_de(getattr(card, "target", "") or "")
+        ):
+            infinitive_only = True
+
+    skip_override = past_form_touched or infinitive_only
+    _axis_override_matches = not result.word_ok and evidence and (
+        _AXIS_OVERRIDE_RE.search(f"{result.error or ''} {result.corrected or ''}")
+        or (result.corrected and _article_only_diff(transcript, result.corrected))
+    )
+    if _axis_override_matches and not skip_override:
         logger.info(
             "satz.axis_override: word_ok false->true, grammar_ok forced false "
             "(card {}, {!r} -> {!r})",
@@ -714,6 +741,17 @@ async def examine_attempt(
         result.grammar_ok = False
         if not result.error:
             result.error = "article/case on the target word"
+    elif _axis_override_matches and infinitive_only:
+        logger.info(
+            "satz.axis_override_skipped: infinitive, no past form (card {})",
+            getattr(card, "id", "?"),
+        )
+    elif _axis_override_matches and skip_override:
+        logger.info(
+            "satz.axis_override_skipped: past form changed {!r}->{!r} (card {})",
+            _target_token_in(card, transcript), _target_token_in(card, result.corrected),
+            getattr(card, "id", "?"),
+        )
 
     # SATZ-020 P2: for a `-past` card, word_ok=true but the model's own
     # `error` names the participle/auxiliary/form AND `corrected` changed
