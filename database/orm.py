@@ -26,6 +26,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     ForeignKeyConstraint,
     Identity,
@@ -508,4 +509,90 @@ class WordGloss(Base):
     example: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+
+
+# ── Personal audio pool (INTV-003 slice 1) ───────────────────────────────
+# The interview workbench (``interview_local/``, git-excluded, local-only)
+# is where curated interview audio gets segmented, reviewed and
+# brief-annotated by hand. This is the first content type registered into
+# Postgres from that workbench: one row per interview recording
+# (``audio_items``) and one row per approved, edit-applied chunk within it
+# (``audio_chunks``) — imported by ``scripts/import_interviews.py``, never
+# hand-written. The mp3s themselves are not touched by the importer; they
+# already live in the Railway bucket at ``storage_key``, and this schema
+# only registers metadata pointing at them.
+#
+# ``owner_user_id`` is nullable because a NULL row is reserved for a future
+# shared catalog (every learner sees it, not just its owner) — the importer
+# always sets it today, so every row minted by slice 1 is one learner's
+# personal pool. Rejected chunks (per the workbench's review.json) are never
+# imported; a chunk's ``transcript``/``segments`` are the POST-edit result of
+# applying ``edits.json``'s segment overrides exactly as
+# ``interview_local/app.py``'s ``_merge_chunk_edits`` does, except a deleted
+# segment (an override of ``""``) is dropped from the stored list entirely
+# rather than kept with a ``hidden`` flag — there is no in-app un-delete flow
+# on the Postgres side, so there is nothing to preserve it for.
+
+
+class AudioItem(Base):
+    __tablename__ = "audio_items"
+
+    # uuid4().hex, minted by the importer.
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    # NULL reserved for a future shared catalog; every importer-written row
+    # sets this. CASCADE like the other per-user learning-state tables —
+    # a personal pool item is disposable, not audit-of-record.
+    owner_user_id: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    # CEFR bucket from the workbench's meta.json ("A1"/"A2"/"B1+"), or NULL
+    # if that dir never got one.
+    level: Mapped[str | None] = mapped_column(String, nullable=True)
+    language: Mapped[str] = mapped_column(String, nullable=False)
+    # e.g. "interviews/<workbench dir name>" — the bucket key prefix every
+    # chunk's storage_key is built from. Unique: one item per source dir.
+    storage_prefix: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    # "workbench" for everything the importer writes today; room for a
+    # different value if a second content pipeline ever feeds this table.
+    source: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+
+
+class AudioChunk(Base):
+    __tablename__ = "audio_chunks"
+
+    # uuid4().hex, minted by the importer.
+    id: Mapped[str] = mapped_column(String, primary_key=True)
+    item_id: Mapped[str] = mapped_column(
+        ForeignKey("audio_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # 1-based order among the IMPORTED (approved-only) chunks, in
+    # chunks.json's original order — not the same as the gaps left by
+    # rejected chunks.
+    position: Mapped[int] = mapped_column(Integer, nullable=False)
+    # The workbench's own chunk id within its dir, e.g. "chunk_001".
+    source_chunk_id: Mapped[str] = mapped_column(String, nullable=False)
+    # "<storage_prefix>/<source_chunk_id>.mp3" — the bucket key; these files
+    # already exist in the Railway bucket, the importer only registers them.
+    storage_key: Mapped[str] = mapped_column(String, nullable=False)
+    # POST-edit: edits.json's segment overrides already applied.
+    transcript: Mapped[str] = mapped_column(Text, nullable=False)
+    # POST-edit list of {t0, t1, text}; a deleted segment (edits.json
+    # override "") is dropped, not kept with a hidden flag.
+    segments: Mapped[list] = mapped_column(JSONB, nullable=False)
+    # briefs.json's entry verbatim ({shape, summary, question, goals,
+    # reviewed, generated_at}), or NULL when the chunk was never brief'd.
+    brief: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    duration_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+
+    # One chunk id per item — the importer's idempotency check (does this
+    # item's storage_prefix already exist) relies on never violating this.
+    __table_args__ = (
+        UniqueConstraint(
+            "item_id", "source_chunk_id", name="uq_audio_chunks_item_source_chunk"
+        ),
     )
