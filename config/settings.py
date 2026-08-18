@@ -113,3 +113,15 @@ google_client_id = os.getenv("GOOGLE_CLIENT_ID")
 # shared/deployed environment.
 jwt_secret = os.getenv("JWT_SECRET")
 jwt_expiry_days = int(os.getenv("JWT_EXPIRY_DAYS", "7"))
+
+# --- Interview audio bucket (INTV-003 slice 2) ---
+# Railway Bucket "audio" (S3-compatible, Tigris-backed) credentials for
+# presigning GET URLs to interview chunk mp3s (interview/bucket.py). All
+# optional: absent/incomplete -> GET /interview/audio/{chunk_id} 503s with a
+# clear detail (interview/bucket.py logs one warning) instead of crashing;
+# nothing else at startup depends on these being set.
+bucket_endpoint = os.getenv("BUCKET_ENDPOINT")
+bucket_region = os.getenv("BUCKET_REGION")
+bucket_name = os.getenv("BUCKET_NAME")
+bucket_access_key_id = os.getenv("BUCKET_ACCESS_KEY_ID")
+bucket_secret_access_key = os.getenv("BUCKET_SECRET_ACCESS_KEY")

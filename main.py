@@ -28,6 +28,7 @@ from genus import (
     router as genus_router,
 )
 from idiom import router as idiom_router
+from interview import router as interview_router
 from satzbau import load_items as load_satzbau_items, router as satzbau_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
 from stats import router as stats_router
@@ -188,6 +189,11 @@ app.include_router(briefkasten_router)
 # rephrase — one judge call per tap, null when their German already sounds
 # German. Writes nothing; every surface's own verdict stays untouched.
 app.include_router(idiom_router)
+# Interview (INTV-003 slice 2): the personal audio-pool viewer + two-round
+# "listen & retell" / "read & answer" exercise, ported from the local-only
+# workbench (interview_local/). The one persistence it does is a grammar-
+# ledger write from round 2's answer, via the shared harvester.
+app.include_router(interview_router)
 # Cross-drill practice stats (DATA-004): GET /me/stats.
 app.include_router(stats_router)
 

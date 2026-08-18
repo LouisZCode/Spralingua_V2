@@ -9,6 +9,7 @@ dependencies = [
     "alembic>=1.13",
     "asyncpg>=0.30",
     "azure-cognitiveservices-speech>=1.50.0",
+    "boto3>=1.43.73",
     "fastapi>=0.128.0",
     "google-auth>=2.53.0",
     "greenlet>=3.0",
