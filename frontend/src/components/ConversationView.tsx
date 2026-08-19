@@ -80,6 +80,9 @@ export default function ConversationView({
   practiceMode,
   typedInput,
   agentOpens,
+  onExerciseRequest,
+  onBotReply,
+  onSessionEnded,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -107,6 +110,25 @@ export default function ConversationView({
   // orb must not read "ready") until that opening line finishes playing.
   // Absent/false (every existing caller but Clara) is byte-identical.
   agentOpens?: boolean;
+  // AGENT-00X: Clara's interactive-exercise loop, teacher lessons only.
+  // Fires once per `[[ÜBUNG: <id>]]`-terminated reply, but not until that
+  // reply's bubble has actually revealed (see flushPendingBot) — the card
+  // must never appear while she's still mid-sentence. Optional/absent for
+  // VoiceChat and TandemChat, which never pass it — zero behavior change
+  // there.
+  onExerciseRequest?: (patternId: string) => void;
+  // AGENT-00X: fires every time ANY bot reply lands visually, marker or not
+  // — same reveal point as onExerciseRequest, just unconditional. The
+  // teacher room uses this to auto-dismiss a graded exercise card once
+  // Clara's follow-up to the ÜBUNGSERGEBNIS report arrives (TeacherChat.tsx).
+  // Optional/absent for VoiceChat and TandemChat.
+  onBotReply?: () => void;
+  // AGENT-00X: fires exactly once, the instant a session winds down (WS
+  // closed or Finish confirmed) — before the summary/debrief modal even
+  // renders. The teacher room uses this to drop a still-open exercise card
+  // without sending anything (see TeacherChat.tsx). Optional/absent for
+  // VoiceChat and TandemChat.
+  onSessionEnded?: () => void;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -132,6 +154,11 @@ export default function ConversationView({
   const sendingRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const pendingBotTextRef = useRef<string | null>(null);
+  // AGENT-00X: set by onServerMessage when an "exercise_request" RTVI
+  // message arrives (always strictly before this turn's bot-output message —
+  // see agents/pipecat_wrapper.py). Consumed — and cleared — by
+  // flushPendingBot once this turn's reply actually reveals.
+  const pendingExercisePatternRef = useRef<string | null>(null);
   const botStartedTimeRef = useRef<number | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const REVEAL_SAFETY_MS = 300;
@@ -229,11 +256,29 @@ export default function ConversationView({
       revealTimerRef.current = null;
     }
     setMessages((prev) => [...prev, { speaker: "bot", text }]);
+    // AGENT-00X: this is the single place a turn's reply becomes visible to
+    // the learner (the timer above, or onBotStoppedSpeaking's fallback,
+    // both funnel through here) — so it's the right place to fire both
+    // exercise-loop hooks, guaranteeing neither can land mid-sentence.
+    // onBotReply is unconditional (every turn); onExerciseRequest only
+    // fires when THIS turn ended in a marker, and the ref is already
+    // populated by now — see the ref's own comment for why the ordering is
+    // safe.
+    onBotReply?.();
+    if (pendingExercisePatternRef.current) {
+      const patternId = pendingExercisePatternRef.current;
+      pendingExercisePatternRef.current = null;
+      onExerciseRequest?.(patternId);
+    }
   };
 
   const handleFinish = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
+    // AGENT-00X: fire before either branch below — a still-open exercise
+    // card must disappear the instant the session winds down, whether it
+    // ends up showing the summary modal or going straight back to /practice.
+    onSessionEnded?.();
     if (revealTimerRef.current) {
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
@@ -408,6 +453,20 @@ export default function ConversationView({
               const sid = (data as { session_id?: unknown }).session_id;
               if (typeof sid === "string") {
                 setSessionId(sid);
+              }
+            } else if (
+              data &&
+              typeof data === "object" &&
+              (data as { type?: unknown }).type === "exercise_request"
+            ) {
+              // AGENT-00X: Clara ended her reply with a `[[ÜBUNG: <id>]]`
+              // marker (agents/pipecat_wrapper.py). This arrives while her
+              // audio for that reply is still playing — stash the id and let
+              // flushPendingBot surface it once the reply's bubble actually
+              // reveals, so the card can never pop up mid-sentence.
+              const patternId = (data as { pattern_id?: unknown }).pattern_id;
+              if (typeof patternId === "string" && patternId) {
+                pendingExercisePatternRef.current = patternId;
               }
             }
           },
