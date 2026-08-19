@@ -341,10 +341,15 @@ def _format_teacher_focus(focus: list) -> str:
 
     Same enriched dicts as ``_format_grammar_focus``, but without the tandem's
     ``elicit`` line — the teacher explains openly, she doesn't steer covertly.
+
+    AGENT-00X: each entry's first line also carries the taxonomy id in a
+    ``(id: ...)`` parenthetical — the ONLY ids the "Practice items" section of
+    ``teacher.yaml`` gives Clara to build a valid `[[ÜBUNG: <id>]]` marker
+    from. Without this she has no legal id to hand back at all.
     """
     blocks: list[str] = []
     for p in focus:
-        lines = [f"- {p['label']}: {p['description']}"]
+        lines = [f"- {p['label']} (id: {p['pattern_id']}): {p['description']}"]
         for ex in p.get("examples", []):
             sentence, corrected = ex.get("sentence"), ex.get("corrected")
             if sentence and corrected:

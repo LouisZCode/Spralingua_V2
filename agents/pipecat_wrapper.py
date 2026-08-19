@@ -84,6 +84,105 @@ def _contains_goodbye(text: str) -> bool:
     return bool(_GOODBYE_RE.search(text.lower()))
 
 
+# AGENT-00X: Clara's interactive-exercise loop. `teacher.yaml`'s "Practice
+# items" section teaches the model to end a reply with this exact marker —
+# see teacher/routes.py for what happens once the pattern id reaches the
+# frontend. `ExerciseMarkerFilter` below is the ONLY thing standing between
+# the raw token stream and TTS/transcript/pending bot text, so no fragment of
+# the marker — not even a lone "[" — is ever spoken, stored, or shown.
+EXERCISE_MARKER_PREFIX = "[[ÜBUNG:"
+EXERCISE_MARKER_CLOSE = "]]"
+# Taxonomy ids are lowercase-hyphenated slugs (grammar/taxonomy.yaml); a
+# marker id that doesn't look like one is dropped rather than pushed —
+# never trust free-form model output as a value going straight to the client.
+_EXERCISE_MARKER_ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
+
+# Sentinel-IN: the frontend hardcodes this exact literal on a synthetic
+# "here's how that exercise went" turn it sends through the existing POST
+# /say path (see astream's `is_exercise_result` branch below) — keep the two
+# in sync if this literal ever changes.
+EXERCISE_RESULT_PREFIX = "⟦ÜBUNGSERGEBNIS⟧"
+
+
+class ExerciseMarkerFilter:
+    """Streaming character-level filter that withholds Clara's trailing
+    ``[[ÜBUNG: <id>]]`` marker from a teacher-lesson token stream, however
+    the tokenizer happens to split it.
+
+    Feed raw token text to :meth:`feed`; it returns the text (possibly
+    empty) that is safe to release right now — append/yield that, never the
+    raw token. Call :meth:`finalize` once the stream ends.
+
+    Once the fixed prefix ``"[[ÜBUNG:"`` fully matches, the filter commits:
+    everything from that point to the end of the stream is withheld
+    permanently (this is the "tolerate a marker outside the very end of a
+    reply" rule — the contract asks the model to put it only at the true
+    end, but if it doesn't, silently dropping the tail is safer than trying
+    to resume mid-reply parsing). ``marker_id`` is set once a closing
+    ``"]]"`` is seen; a marker that starts but never closes before the
+    stream ends leaves ``marker_id`` as ``None`` and nothing is pushed.
+
+    A candidate that turns out NOT to be the marker (an early mismatch, or
+    running out of stream mid-candidate) is released as ordinary text —
+    either immediately (mismatch) or via :meth:`finalize` (stream ended
+    while still a valid partial prefix, e.g. a lone stray "[[").
+    """
+
+    _PREFIX = EXERCISE_MARKER_PREFIX
+    _CLOSE = EXERCISE_MARKER_CLOSE
+
+    def __init__(self) -> None:
+        self._held = ""
+        self._swallowing = False  # True once `_PREFIX` has fully matched
+        self._marker_closed = False
+        self.marker_id: str | None = None
+
+    def feed(self, token: str) -> str:
+        """Consume one streamed token; return the text now safe to release."""
+        return "".join(self._feed_char(ch) for ch in token)
+
+    def _feed_char(self, ch: str) -> str:
+        if self._swallowing:
+            if self._marker_closed:
+                return ""  # everything after a confirmed marker is dropped
+            self._held += ch
+            if self._held.endswith(self._CLOSE):
+                inner = self._held[len(self._PREFIX): -len(self._CLOSE)].strip()
+                self.marker_id = inner
+                self._marker_closed = True
+                self._held = ""
+            return ""
+
+        candidate = self._held + ch
+        if self._PREFIX.startswith(candidate):
+            self._held = candidate
+            if candidate == self._PREFIX:
+                self._swallowing = True
+            return ""
+
+        # Mismatch: `self._held` was never going to become the marker —
+        # release it, then check whether `ch` alone starts a fresh candidate
+        # (covers e.g. a stray "x[[[ÜBUNG: ..." where the real marker starts
+        # one character later).
+        flushed, self._held = self._held, ""
+        if self._PREFIX.startswith(ch):
+            self._held = ch
+            return flushed
+        return flushed + ch
+
+    def finalize(self) -> str:
+        """Call once the token stream ends. Returns text that was held but
+        never resolved into a confirmed marker start — a stray "[[" that ran
+        out of stream instead of diverging mid-way. A confirmed-but-unclosed
+        marker (the model got cut off mid-marker) is dropped, not flushed —
+        see the class docstring."""
+        if self._swallowing:
+            self._held = ""
+            return ""
+        flushed, self._held = self._held, ""
+        return flushed
+
+
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
@@ -117,6 +216,11 @@ class ClientWrapper:
         self._end_pending: bool = False
 
         lesson = load_prompts(lesson_id)
+        # AGENT-00X: gates the exercise-marker hold-back below. Read from the
+        # loaded lesson's own `type`, not `lesson_id == "teacher"` — there is
+        # only one teacher lesson today, but the marker contract belongs to
+        # the `type: teacher` middleware branch, not to one specific id.
+        self._is_teacher_lesson = lesson.get("type") == "teacher"
         # TAND-012: per-session exchange cap (5/10/15), whitelisted in main.py
         # and re-gated to tandem-only in pipeline/factory.py. This wrapper
         # re-loads the YAML itself (the factory's `lesson_snapshot` mutation for
@@ -195,6 +299,13 @@ class ClientWrapper:
         ``LangchainProcessor`` itself is uninstrumented (it's a
         ``FrameProcessor``, not an ``LLMService``), so this is the only LLM
         span on the trace.
+
+        AGENT-00X, teacher lessons only: tokens are routed through an
+        ``ExerciseMarkerFilter`` so a trailing ``[[ÜBUNG: <id>]]`` marker
+        never reaches ``full_response`` (and therefore never reaches TTS,
+        the stored transcript, or the pending bot text — all three are built
+        from ``full_response``). The confirmed id, if any, is pushed to the
+        client after the loop — see the `finally` block below.
         """
         text = input_dict.get("input", "")
         messages = {"messages": [{"role": "user", "content": text}]}
@@ -207,6 +318,7 @@ class ClientWrapper:
         ttft_ns = None
         final_usage = None
         final_response_metadata = None
+        marker_filter = ExerciseMarkerFilter() if self._is_teacher_lesson else None
 
         # ``get_current_turn_context()`` returns ``None`` if tracing is
         # disabled OR if no turn span is active right now. Either way OTel
@@ -250,31 +362,42 @@ class ClientWrapper:
                         # The LLM occasionally emits `**word**`; asterisks have no
                         # legitimate use in spoken output (TAND-002).
                         content = token.content.replace("*", "")
-                        full_response.append(content)
-                        yield content
+                        # AGENT-00X: teacher lessons only. Text held back as a
+                        # candidate/confirmed exercise marker comes back as ""
+                        # here — nothing below runs for it this iteration (it
+                        # either flushes later as ordinary text via a later
+                        # feed()/finalize() call, or is a confirmed marker and
+                        # never flushes at all).
+                        if marker_filter is not None:
+                            content = marker_filter.feed(content)
+                        if content:
+                            full_response.append(content)
+                            yield content
 
-                        # End trigger: count cap reached, OR a goodbye phrase appears
-                        # once armed (final exchange — see _goodbye_after). Detected
-                        # in-stream (post-yield code is unreliable)
-                        # but only MARKED as pending here — the actual stop_when_done()
-                        # call happens in flush_bot_output() after BotStoppedSpeakingFrame
-                        # so the final TTS span gets to record under the turn before
-                        # EndFrame races through and closes the turn span. See
-                        # LEARNINGS.md for the race condition that motivates this.
-                        if (not self._end_pending
-                                and (self._exchange_count >= self._max_exchanges
-                                     or (self._exchange_count >= self._goodbye_after
-                                         and _contains_goodbye("".join(full_response))))):
-                            reason = (
-                                "max_exchanges" if self._exchange_count >= self._max_exchanges
-                                else "goodbye"
-                            )
-                            logger.info(
-                                f"[END] Pending pipeline close ({reason}, "
-                                f"exchange {self._exchange_count}/{self._max_exchanges}) "
-                                f"— will fire after bot finishes speaking"
-                            )
-                            self._end_pending = True
+                            # End trigger: count cap reached, OR a goodbye phrase
+                            # appears once armed (final exchange — see
+                            # _goodbye_after). Detected in-stream (post-yield code
+                            # is unreliable) but only MARKED as pending here — the
+                            # actual stop_when_done() call happens in
+                            # flush_bot_output() after BotStoppedSpeakingFrame so
+                            # the final TTS span gets to record under the turn
+                            # before EndFrame races through and closes the turn
+                            # span. See LEARNINGS.md for the race condition that
+                            # motivates this.
+                            if (not self._end_pending
+                                    and (self._exchange_count >= self._max_exchanges
+                                         or (self._exchange_count >= self._goodbye_after
+                                             and _contains_goodbye("".join(full_response))))):
+                                reason = (
+                                    "max_exchanges" if self._exchange_count >= self._max_exchanges
+                                    else "goodbye"
+                                )
+                                logger.info(
+                                    f"[END] Pending pipeline close ({reason}, "
+                                    f"exchange {self._exchange_count}/{self._max_exchanges}) "
+                                    f"— will fire after bot finishes speaking"
+                                )
+                                self._end_pending = True
 
                     if getattr(token, "usage_metadata", None):
                         final_usage = token.usage_metadata
@@ -288,8 +411,26 @@ class ClientWrapper:
                     # adding an extra HTTP call to fetch it is out of scope.
                     if getattr(token, "response_metadata", None):
                         final_response_metadata = token.response_metadata
+
+                # AGENT-00X: stream ended — flush any leftover held text that
+                # never resolved into a confirmed marker (e.g. a stray "[["
+                # that ran out of stream). A CONFIRMED marker's text is never
+                # flushed here (finalize() drops it) — it was already fully
+                # withheld above, and its id (if any) is handled below.
+                if marker_filter is not None:
+                    tail = marker_filter.finalize()
+                    if tail:
+                        full_response.append(tail)
+                        yield tail
             finally:
                 output_text = "".join(full_response)
+                if marker_filter is not None and marker_filter.marker_id is not None:
+                    # AGENT-00X: the marker itself never entered `full_response`
+                    # (the filter withheld it entirely, above) — this only trims
+                    # the trailing whitespace the announcing sentence left
+                    # behind once the marker was cut away, per the "strip the
+                    # marker and trailing whitespace" contract.
+                    output_text = output_text.rstrip()
                 llm_span.set_attribute("langfuse.observation.output", output_text)
                 llm_span.set_attribute("langfuse.trace.output", output_text)
                 if final_usage:
@@ -329,7 +470,17 @@ class ClientWrapper:
                 # IS real and must stay, so only the bot line is appended for
                 # this one turn.
                 is_kickoff = self._kickoff is not None and text == self._kickoff
-                if not is_kickoff:
+                # AGENT-00X sentinel-IN: a turn the frontend sends with this
+                # exact prefix (through the existing POST /say path) is not
+                # something the learner said — it's a synthetic report of how
+                # a Clara-issued exercise went. It must stay out of the stored
+                # transcript and out of the audio↔text pairing below for the
+                # same reason the kickoff does (there's no learner speech and
+                # no matching audio clip behind it), while the exchange still
+                # counts (the increment at the top of astream is unconditional)
+                # and the reply streams normally either way.
+                is_exercise_result = text.startswith(EXERCISE_RESULT_PREFIX)
+                if not is_kickoff and not is_exercise_result:
                     self._transcript.append(("user", text))
                 self._transcript.append(("bot", output_text))
                 # Stamp the user text with the current VAD-stop seq so the
@@ -337,10 +488,30 @@ class ClientWrapper:
                 # at disconnect (BUG-002). Empty/whitespace inputs are skipped
                 # — `/say` injection or the (extremely rare) all-whitespace
                 # transcript shouldn't reach Azure as a reference text anyway.
-                # The kickoff is skipped for the same reason: it has no
-                # matching VAD-stop seq / audio clip to pair with (AGENT-001).
-                if text.strip() and not is_kickoff:
+                # The kickoff and exercise-result sentinel are skipped for the
+                # same reason: neither has a matching VAD-stop seq / audio clip
+                # to pair with (AGENT-001 / AGENT-00X).
+                if text.strip() and not is_kickoff and not is_exercise_result:
                     self._user_turn_text.append((self._current_vad_seq, text))
+
+                # AGENT-00X: push the confirmed exercise-request to the client
+                # now that the reply is fully assembled and stripped above.
+                # Guarded like `flush_bot_output`'s own client push — a
+                # stubbed/absent rtvi_processor (unit tests, a connect that
+                # never finished wiring the pipeline) must never raise here.
+                if marker_filter is not None and marker_filter.marker_id is not None:
+                    pattern_id = marker_filter.marker_id
+                    if _EXERCISE_MARKER_ID_RE.match(pattern_id):
+                        if self.rtvi_processor is not None and hasattr(
+                            self.rtvi_processor, "send_server_message"
+                        ):
+                            await self.rtvi_processor.send_server_message(
+                                {"type": "exercise_request", "pattern_id": pattern_id}
+                            )
+                    else:
+                        logger.warning(
+                            f"[EXERCISE] Dropping malformed marker id {pattern_id!r}"
+                        )
 
         # After first LLM call, capture system prompt for transcript
         if self.logger and not self.logger._system_prompt_written:

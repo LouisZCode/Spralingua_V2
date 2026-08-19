@@ -33,6 +33,7 @@ from satzbau import load_items as load_satzbau_items, router as satzbau_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
 from stats import router as stats_router
 from szenario import load_scenarios as load_szenario_scenarios, router as szenario_router
+from teacher import router as teacher_router
 from verbformen import router as verbformen_router
 from verbindungen import (
     load_items as load_verbindungen_items,
@@ -196,6 +197,12 @@ app.include_router(idiom_router)
 app.include_router(interview_router)
 # Cross-drill practice stats (DATA-004): GET /me/stats.
 app.include_router(stats_router)
+# Clara's interactive-exercise loop (AGENT-00X, backend half): one random
+# item per taxonomy pattern, normalized across five typed-answer drills
+# (faelle/satzbau/zeitfaerbung/verbindungen/bauteil) into one generic card,
+# graded with each drill's own checks. Writes nothing to any learning-state
+# table — see teacher/routes.py's loud comment on POST /exercise/attempts.
+app.include_router(teacher_router)
 
 
 @app.get("/health")
