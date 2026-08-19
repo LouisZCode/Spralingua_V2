@@ -35,6 +35,7 @@ from database.repository import (
     record_grammar_error,
 )
 from briefkasten.content import POINT_COUNT, load_seeds, seeds_for_level, word_target
+from briefkasten.germanizer import germanize_letter
 from briefkasten.judge import feedback_pass, hint_pass
 from briefkasten.writer import VOCAB_LIMIT, write_letter
 from security import drill_try_admit
@@ -313,6 +314,26 @@ async def submit_attempt(
                 detail="The judge is unavailable right now — try again in a moment.",
             )
 
+        # Runs only after feedback_pass has already succeeded, sequentially
+        # (it reads `verdict.corrected_text`, not the raw response) and in
+        # its OWN try/except: a Germanize outage must never fail the whole
+        # attempt the way a feedback_pass outage does above — the learner
+        # still gets their score and corrections, just no rewrite.
+        natural_version = None
+        if body.attempt == 2:
+            try:
+                natural_version = await germanize_letter(
+                    corrected_text=verdict.corrected_text,
+                    task_context=letter_body,
+                    register=seed["register"],
+                    user_id=user_id,
+                )
+            except Exception:
+                logger.warning(
+                    "Briefkasten germanize failed (seed {}) — no naturalVersion this attempt",
+                    seed["id"],
+                )
+
         if body.attempt == 1:
             attempt_span.set_attribute(
                 "langfuse.trace.output", f"hints={len(hints.items)}"
@@ -338,7 +359,7 @@ async def submit_attempt(
             )
             attempt_span.set_attribute("verdict.score", verdict.score)
             attempt_span.set_attribute(
-                "verdict.natural_offered", verdict.natural_version is not None
+                "verdict.natural_offered", natural_version is not None
             )
             result = {
                 "attempt": 2,
@@ -351,7 +372,7 @@ async def submit_attempt(
                 "score": verdict.score,
                 "feedback": verdict.feedback,
                 "improvementsFromFirst": verdict.improvements_from_first,
-                "naturalVersion": verdict.natural_version,
+                "naturalVersion": natural_version,
             }
 
     if body.attempt == 2:

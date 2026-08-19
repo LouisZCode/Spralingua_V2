@@ -118,14 +118,6 @@ class FeedbackVerdict(BaseModel):
     improvements_from_first: str = Field(
         description="One English line on what genuinely got better since attempt 1"
     )
-    natural_version: Optional[str] = Field(
-        default=None,
-        description=(
-            "The letter rewritten the way a German would really have written "
-            "it in this register. MUST be null unless a native would "
-            "genuinely phrase things differently"
-        ),
-    )
 
 
 # The German error categories carried over from Spralingua v1's email
@@ -408,25 +400,8 @@ A correct fix next to a WRONG reason teaches wrong grammar with a right answer s
 One honest English line comparing the two drafts. If nothing improved, say that kindly. Never invent progress.
 {identical_notice}
 
-# `natural_version` — read this twice
-This is NOT "their letter with errors fixed" (that is `corrected_text`). It is how a German would ACTUALLY have written this letter — the phrasings a native reaches for that a learner never would.
-
-Write one when the letter contains German that is CORRECT but that no native would produce — most often English translated word for word. These are exactly the cases to catch:
-- "Ich bin glücklich zu hören, dass..." → a German writes "Schön, dass..." or "Das freut mich."
-- "Lass mich wissen, wann..." → "Sag mir Bescheid, wann..."
-- "Ich frage mich, wie das Wetter ist" → "Wie ist denn das Wetter bei dir?"
-- "Ich hatte eine sehr beschäftigte Woche" → "Ich hatte viel zu tun."
-- "Ich werde dich besuchen kommen" → "Dann komme ich vorbei."
-A letter with two or three of these gets a `natural_version`. That is a real, teachable gap and the learner wants to see it.
-
-Return null when the letter already reads like German — simple, plain German counts as natural. Do NOT rewrite to add sophistication, vary word choice, or make it more interesting. Plain but native is the target, not impressive.
-
-The test is: would a German notice something is off? If yes, rewrite. If they would simply read it and reply, return null.
-
-When you do write one, match the register: {register_guidance}
-
 # Output discipline
-`corrected_text`, `natural_version`, and the `correction` field of each explanation are German. `feedback`, `focus_points`, `why` and `improvements_from_first` are English.
+`corrected_text` and the `correction` field of each explanation are German. `feedback`, `focus_points`, `why` and `improvements_from_first` are English.
 """
 
 _REGISTER_GUIDANCE = {
@@ -573,10 +548,6 @@ async def feedback_pass(
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
-    # Defensive: a judge that returns an empty string for "no rewrite needed"
-    # instead of null would render an empty card in the UI.
-    if result.natural_version is not None and not result.natural_version.strip():
-        result.natural_version = None
 
     # BRIEF-004 P1: the LLM's own line is discarded outright when the drafts
     # are identical — the prompt note above is defense in depth, this is the

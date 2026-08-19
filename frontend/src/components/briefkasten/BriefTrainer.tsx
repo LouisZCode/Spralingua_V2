@@ -12,6 +12,7 @@ import type {
 } from "./api";
 import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
+import GermanWay from "../shared/GermanWay";
 import type { GlossInfo } from "../satzschmiede/api";
 
 type Phase = "writing" | "hints" | "feedback";
@@ -347,7 +348,6 @@ export default function BriefTrainer({
   );
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
-  const [showNatural, setShowNatural] = useState(false);
 
   const words = wordCount(text);
   const inRange = words >= letter.wordTarget.min && words <= letter.wordTarget.max;
@@ -440,28 +440,6 @@ export default function BriefTrainer({
         )
       : undefined;
 
-    // IDIOM-002: diffed against the CORRECTED letter (not the learner's raw
-    // attempt) — this reveal answers "how would a German phrase the fixed
-    // version", so the comparison base is the fix, not the mistake. Blue,
-    // not red/green: phrasing, not a verdict (SATZ-008). Case-insensitive so
-    // a word moving to sentence-start doesn't light up as "changed". No
-    // markPunctuation — punctuation is a written-grammar concern (see the
-    // diff above), phrasing is not.
-    const naturalDiff = feedbackResult.naturalVersion
-      ? diffTokens(feedbackResult.correctedText, feedbackResult.naturalVersion, {
-          caseInsensitive: true,
-        })
-      : null;
-    const renderNaturalToken = onGloss
-      ? (t: MarkedToken) => (
-          <Glossable
-            text={t.text}
-            onGloss={(word: string) => onGloss(word, feedbackResult.naturalVersion ?? "")}
-            onAdd={onAdd}
-          />
-        )
-      : undefined;
-
     // IDIOM-002: present only when a native would genuinely phrase things
     // differently. Sits directly under "Corrected" (or its nothing-to-fix
     // stand-in) and above "What to fix" — the reveal is one more look at the
@@ -470,29 +448,21 @@ export default function BriefTrainer({
     // reuses the nothingToCorrect card treatment (paper-warm rounded card,
     // ink-soft text) so it reads as one more quiet confirmation, not a new
     // visual language, and doesn't compete with the "Corrected" block above.
+    //
+    // The rewrite itself already ran server-side (briefkasten/germanizer.py,
+    // alongside feedback_pass) — GermanWay gets it via `value`, not a fetch,
+    // and `autoExpand` opens the card without a click. Diffed against the
+    // CORRECTED letter (not the learner's raw attempt): this reveal answers
+    // "how would a German phrase the fixed version", so the comparison base
+    // is the fix, not the mistake.
     const naturalToggle = feedbackResult.naturalVersion ? (
-      <div className="mt-6 text-center">
-        <button
-          type="button"
-          onClick={() => setShowNatural((v) => !v)}
-          className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
-          style={inkShadow}
-        >
-          {showNatural ? "Hide ▴" : "How would a German write this? ▾"}
-        </button>
-        {showNatural && feedbackResult.naturalVersion && naturalDiff && (
-          <div className="mt-3 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-left">
-            <div className="text-ink">
-              <MarkedLetter
-                text={feedbackResult.naturalVersion}
-                tokens={naturalDiff.corrected}
-                mark="blue"
-                renderToken={renderNaturalToken}
-              />
-            </div>
-          </div>
-        )}
-      </div>
+      <GermanWay
+        text={feedbackResult.correctedText}
+        value={{ natural: feedbackResult.naturalVersion }}
+        autoExpand
+        onGloss={onGloss}
+        onAdd={onAdd}
+      />
     ) : (
       <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-center">
         <p className="font-body text-[13px] leading-snug text-ink-soft">

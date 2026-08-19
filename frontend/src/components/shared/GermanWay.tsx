@@ -11,6 +11,14 @@
 // Two looks: `card` (default) matches BriefTrainer's natural_version toggle
 // for the drill verdict cards; `inline` is a miniature of the same pill,
 // right-aligned under the learner's own tandem bubbles.
+//
+// Two data flows: the default is on-demand (`ask` posts /idiom/rephrase the
+// first time the button is pressed, every caller above used this). Briefkasten
+// is different — its Germanize call already ran server-side alongside the
+// attempt-2 judge, so there is nothing left to fetch. Passing `value` skips
+// the network call entirely and renders that pre-fetched verdict instead;
+// `autoExpand` opens the card on mount so the rewrite is visible without a
+// click, while the button still offers a plain collapse/reopen toggle.
 
 import { useEffect, useState } from "react";
 import { HTTP_BASE } from "@/lib/api";
@@ -36,6 +44,8 @@ export default function GermanWay({
   onAdd,
   exclude,
   onRephrase,
+  value,
+  autoExpand,
 }: {
   // The learner's own line — a verdict card's transcript or a chat bubble.
   text: string;
@@ -61,6 +71,15 @@ export default function GermanWay({
   // VocabTrainer's blue "Try again") offer a rehearsal keyed to a genuine
   // rephrase instead of every tap of the button.
   onRephrase?: () => void;
+  // Briefkasten only: a verdict the caller already has (its Germanize call
+  // ran server-side during attempt 2). `undefined` (the default, every other
+  // caller) means "fetch on first click" as before; passing an object —
+  // even `{ natural: null }` — switches this instance to render-only, no
+  // POST ever fires.
+  value?: Rephrase;
+  // Open the card immediately when `value` lands, no click needed. Only
+  // meaningful together with `value`; ignored on the fetch path.
+  autoExpand?: boolean;
 }) {
   const { token } = useAuth();
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
@@ -69,18 +88,35 @@ export default function GermanWay({
   const [result, setResult] = useState<Rephrase | null>(null);
   const [open, setOpen] = useState(false);
 
-  // A new attempt is a new line — drop the old judgement.
+  // A new attempt is a new line — drop the old judgement. When `value` is
+  // supplied, adopt it straight into the "done" state instead: there is no
+  // fetch to do, and skipping "idle" means the button never flashes its
+  // pre-judged label.
+  // Deps are the PRIMITIVES inside `value`, not the object itself: callers
+  // pass an inline literal (new identity every render), and depending on the
+  // object would re-run this effect on every parent re-render — undoing a
+  // collapse the user just made. `hasValue`/`valueNatural` only change when
+  // a genuinely new verdict lands.
+  const hasValue = value !== undefined;
+  const valueNatural = value?.natural ?? null;
   useEffect(() => {
+    if (hasValue) {
+      setState("done");
+      setResult({ natural: valueNatural });
+      setOpen(!!autoExpand);
+      return;
+    }
     setState("idle");
     setResult(null);
     setOpen(false);
-  }, [text]);
+  }, [text, hasValue, valueNatural, autoExpand]);
 
   if (!text.trim() || !token) return null;
 
   const ask = async () => {
-    // Already judged: the button is a plain visibility toggle from here on.
-    if (state === "done") {
+    // Already judged (fetched or handed in via `value`): the button is a
+    // plain visibility toggle from here on, never a fetch trigger.
+    if (value !== undefined || state === "done") {
       setOpen((v) => !v);
       return;
     }
