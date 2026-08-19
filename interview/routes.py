@@ -9,10 +9,14 @@ scoped to the caller's own rows: an item/chunk owned by someone else 404s
 (unknown id) or 403s (known id, wrong owner) — same convention
 ``GET /sessions/{session_id}`` in ``main.py`` uses.
 
-Persistence is intentionally thin (v1 scope): no per-attempt rows, no
-``drill_attempts``, no streak credit. The ONE thing this exercise writes is
-the shared grammar-error ledger, and only from Round 2's answer (Round 1's
-retell is graded on content only, never grammar) — see ``_background_harvest``.
+Persistence is intentionally thin (v1 scope): no per-attempt rows for
+Round 1 (the retell is graded on content only, never grammar) and no
+streak credit for either round. Round 2's answer writes to the shared
+grammar-error ledger AND, per harvested slip, a ``drill_attempts`` row
+(``pattern_id`` + ``correct=False``) — the same shape the single-grammar
+drills use — so an interview mistake surfaces in ``/me/stats``' topErrors
+and count7d recommendation, not just the ledger-driven focus list. See
+``_background_harvest``.
 """
 
 import asyncio
@@ -30,7 +34,7 @@ from agents.observability import tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import AudioChunk, AudioItem
-from database.repository import record_grammar_error
+from database.repository import record_drill_attempt, record_grammar_error
 from security import drill_try_admit
 
 from .bucket import presigned_audio_url
@@ -57,9 +61,12 @@ _MAX_AUDIO_BYTES = 4_000_000
 _background_tasks: set[asyncio.Task] = set()
 
 
-async def _background_harvest(transcript: str, session_id: Optional[str], user_id: str) -> None:
+async def _background_harvest(
+    transcript: str, session_id: Optional[str], user_id: str, chunk_id: str
+) -> None:
     """Fire-and-forget grammar harvest off the answer response's critical
-    path (INTV-003 slice 2's one ledger write).
+    path (INTV-003 slice 2's ledger write, slice 3B's per-slip
+    ``drill_attempts`` write).
 
     Reuses ``agents/error_extractor.py::extract_errors`` — the SAME
     situation-drill harvester ``pipeline/factory.py`` (post-session),
@@ -70,6 +77,18 @@ async def _background_harvest(transcript: str, session_id: Optional[str], user_i
     the request-scoped one closes the instant the response returns. Same
     non-fatal, log-and-swallow contract as every other ledger write in the
     repo.
+
+    Each harvested slip also writes a ``drill_attempts`` row
+    (``pattern_id`` + ``correct=False``) — unlike szenario/briefkasten,
+    whose harvests only ever call ``record_grammar_error`` with
+    ``pattern_id`` left NULL on their own attempt-log rows, so their slips
+    populate the ledger-driven ``focus`` list but never
+    ``load_top_errors``/``load_focus_with_recency``'s ``count7d``, which
+    both require a ``drill_attempts`` row with a non-null ``pattern_id``
+    and ``correct=False`` (``database/repository.py``). This is the
+    approved SLICE B change: interview is the first harvested-error
+    surface to write that row, so its mistakes actually surface in
+    ``/me/stats``.
     """
     try:
         extraction = await extract_errors(transcript=transcript, session_id=session_id)
@@ -89,6 +108,27 @@ async def _background_harvest(transcript: str, session_id: Optional[str], user_i
                 except Exception:  # noqa: BLE001 — one row must not block the rest
                     logger.exception(
                         "Interview ledger write failed (pattern {})", err.pattern_id
+                    )
+                # DATA-004, independent of the ledger write above (its own
+                # try/except — one failing must never block the other):
+                # the row that makes this pattern count toward topErrors
+                # and count7d, same shape faelle/verbindungen/etc. write
+                # per graded attempt.
+                try:
+                    await record_drill_attempt(
+                        db,
+                        user_id=user_id,
+                        exercise="interview",
+                        item_ref=chunk_id,
+                        pattern_id=err.pattern_id,
+                        correct=False,
+                        modality="spoken",
+                        session_id=session_id,
+                    )
+                except Exception:  # noqa: BLE001 — one row must not block the rest
+                    logger.exception(
+                        "Interview drill-attempt log write failed (pattern {})",
+                        err.pattern_id,
                     )
     except Exception:  # noqa: BLE001 — the harvest must never break the attempt
         logger.warning("Interview grammar extraction failed (non-fatal)")
@@ -360,9 +400,10 @@ async def post_answer(
 ):
     """Round 2 ("read & answer"): transcribe one spoken answer to a chunk,
     judge grammar + idiom (+ goal coverage when the chunk's brief has
-    goals), and silently harvest grammar errors into the shared ledger.
-    Ported from ``interview_local/app.py::post_answer``. No persistence
-    beyond the ledger write (v1 scope — no drill_attempts, no streak)."""
+    goals), and silently harvest grammar errors into the shared ledger
+    plus a per-slip ``drill_attempts`` row. Ported from
+    ``interview_local/app.py::post_answer``. Still v1 scope beyond that:
+    no streak credit, and Round 1's retell writes neither."""
     if not drill_try_admit(user_id):
         raise HTTPException(
             status_code=429,
@@ -426,9 +467,12 @@ async def post_answer(
             response["goal_coverage_error"] = goal_coverage_error
 
     # SILENT grammar enrichment — the one place this exercise writes
-    # learning state. Fire-and-forget, off the response's critical path,
-    # same as szenario/briefkasten's own background harvests.
-    harvest_task = asyncio.create_task(_background_harvest(transcript, session_id, user_id))
+    # learning state (ledger + per-slip drill_attempts, SLICE B). Fire-and-
+    # forget, off the response's critical path, same as szenario/
+    # briefkasten's own background harvests.
+    harvest_task = asyncio.create_task(
+        _background_harvest(transcript, session_id, user_id, chunk_id)
+    )
     _background_tasks.add(harvest_task)
     harvest_task.add_done_callback(_background_tasks.discard)
 
