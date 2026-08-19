@@ -268,3 +268,25 @@ All four axes PASS. Topic "Dative-only prepositions" (seeded ledger);
 "…you can now pick any of the dative-only prepositions (mit, nach, bei,
 von, zu, aus, seit) and use the right dative article in a sentence. Take
 care, see you next time!" → `SESSION_ENDING (goodbye, exchange 6/40)`.
+
+## v5 round scorecard axes (2026-08-19, contribution-first fix)
+
+Applied per partner reply, on top of a profile's own axes. Session-level
+targets in parentheses:
+
+- **contribution**: does the reply carry ONE sentence of the partner's own
+  — opinion / experience / disagreement — pinned to the learner's
+  just-given detail? A bare reaction ("Ach, schön!") does not count.
+  (≥ 70% of replies.)
+- **question-density**: share of replies ending in a question. 100% is the
+  v4 interview failure; 0% means she stopped drawing the learner out.
+  (60–85%, with at least one statement-only reply per session.)
+- **follow-up-only**: every question digs into the learner's own detail on
+  today's topic — no new-topic probes. (Zero jumps.)
+- **no-re-ask**: never asks a question the learner already answered, in any
+  phrasing. (Zero.)
+- **shape-not-script**: none of the prompt's German example sentences
+  appear verbatim in replies. (Zero.)
+- Regression axes unchanged from the v4 round: reply length ≤ 3 sentences,
+  one-topic discipline, correction contract (focus-only overt, nudge
+  first), vocab-as-opportunity, cap/goodbye behavior.

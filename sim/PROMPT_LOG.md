@@ -275,3 +275,142 @@ Open for v5: she occasionally re-asks a fact the partner already answered
 Mutter"; "warst du mit deiner Schwester dort?" two turns after the answer).
 A question-is-finished-forever rule, teacher.yaml rule-4 style, is the
 likely mechanism if a future round confirms it.
+
+## v5 (2026-08-19) — contribution-first: the interrogation fix
+
+Field report (user, 2026-08-19): v4 sessions feel like an interview —
+reaction + question every turn, nothing of Lena in them. v4's own default
+shape mandated exactly that; its too-much-talking counter-example punished
+self-disclosure outright.
+
+Design (both partners — tandem_paul gets its first calibrated pass,
+including the v4 one-topic anchor its short_term_template never received;
+it still said "Let it wander from there"):
+1. Contribution-first default shape: ONE own sentence (opinion / small
+   experience / gentle disagreement) pinned to the partner's just-given
+   detail, THEN at most one follow-up question. 2 sentences home, 3 ceiling.
+2. Question valve: after two question-ending replies, the next ends on the
+   contribution. Statement turns are legal and demonstrated (GOOD example).
+3. Answered-question rule: a question once answered is finished forever
+   (the open v4 finding — she re-asked ~1 answered fact per session).
+4. Shape-not-script note closing the German example lines (v1's "Elbe"
+   example became TAND-010's canned repeated detail — examples teach
+   shape, models copy content).
+
+Research grounding (Sonnet researcher memo, 2026-08-19; confidence tags
+per item): Hardy, Paranjape & Manning, SIGDIAL 2021 [verified] —
+back-channeling, personal disclosure, and statements-instead-of-questions
+each significantly raise user initiative in social chatbots,
+statement/back-channel turns strongest. Moon 2000, J. Consumer Research
+[verified abstract] — machine self-disclosure elicits reciprocal user
+disclosure. Huang et al. 2017, JPSP [recalled] — follow-up questions
+specifically raise liking, so follow-ups stay while new-topic probes stay
+banned. Long & Sato 1983 [recalled] — referential beats display questions
+for learner output length. Lyster & Ranta 1997 [recalled] — elicitation
+beats recasts for uptake; independently supports the unchanged nudge-first
+correction contract. Li et al. 2024, arXiv:2402.10962 [verified abstract]
+— persona/topic adherence decays measurably within ~8 turns; logged as a
+possible future code-side mechanism (mid-session re-anchor), not addressed
+in v5.
+
+Live predecessors snapshotted: tandem_v4_live_2026-08-19.yaml,
+tandem_paul_live_2026-08-19.yaml.
+
+Sim verdict (2026-08-19): pending — round below.
+Sim verdict (2026-08-19, round 1 — Nina, engaged, 10 exchanges, "Kochen
+und Essen", fixture test-lenav5):
+
+- Contribution rate 9/10 (target ≥70%): PASS — the headline v5 mechanism
+  works; v4's reaction-only turns are gone. Two of the nine were weak
+  (one mirrored the learner's own sister-detail back, two leaned on the
+  same Buchladen detail back-to-back).
+- Question-density 9/10 = 90% (target 60–85%): FAIL — the valve fired only
+  on the final reply. Session still reads interview-ish in cadence even
+  though every question was an on-detail follow-up.
+- Jumps 0, blocking fact (kein Ofen) respected across all 10, prompt-
+  example verbatim reuse 0, length all ≤3: PASS.
+- Re-asks: 1 soft FAIL — "mit wem gegessen?" answered "allein", two turns
+  later "mit wem würdest du teilen?" (same fact wearing würde).
+- Reciprocity: reply 3 DODGED the learner's direct "Und du? Was kochst du
+  gern?" — mirrored her detail and asked onward instead of answering.
+- Corrections (3 seeded slips): case nudge clean PASS; gender absorbed
+  naturally PASS; word-order nudge BROKEN — echoed the learner's broken
+  order back with a comma ("Gestern, ich habe das Dressing gemacht?").
+- Model-side noise, not prompt-addressable: one own-grammar slip by Lena
+  ("finden ich"); no farewell at the 10/10 hard cap (same behavior as the
+  v4 5/5 run — logged, not treated as a v5 regression).
+
+v5.1 (same day): reciprocity rule (answer their question first, one
+sentence, before anything else); valve hardened ("about every third reply
+shouldn't end with a question" + streak counter-example); answered-forever
+extended to hypothetical re-phrasings; contribution anti-mirror +
+anti-repeat-of-own-detail; correction nudge for word-order slips must
+carry the corrected order. Round 2 below.
+
+Sim verdict (2026-08-19, round 2 — Nina, "Wochenende und Freizeit", 10
+exchanges, v5.1): contribution 9/10; question-density 8/10 = 80% with two
+genuine statement-only replies — the interview cadence is gone (round 1:
+90%, valve fired once). Repeated-own-detail 0 (was 2). All three seeded
+slips (verb-second, dative-prep, accusative) got nudge-first corrections
+carrying the CORRECTED form — the round-1 broken echo did not recur and
+the mechanism generalized to case errors. Blocking fact (kein Auto) held.
+Two remainders: reply 5 answered the learner's question only at the END of
+her turn (ordering, no longer a dodge); reply 8 re-asked the settled
+"allein" fact in hypothetical form once, despite the würde example.
+
+v5.2 (same day): settled-facts guard — a stated life-fact is settled,
+never un-settle it with "who would you / what if you had" questions;
+answer-first tightened to "FIRST thing in your reply". Round 3 = Mia
+(shy regression) + Paul (engaged, office topic) below.
+
+Sim verdict (2026-08-19, round 3a — Mia, shy minimal-answerer, "Musik", 5
+exchanges, v5.2): the shy-partner regression is largely safe — all replies
+≤3 sentences (no monologuing to fill silence), contributions present
+without ballooning, one genuine statement-only reply, warmth held through
+two "weiß nicht" dodges with zero pressure, the "der Radio" slip recast
+cleanly mid-sentence. One FAIL: the final (cap) reply stacked a
+confirmation tag onto a topic question ("Du hörst das Radio, richtig? …
+Welchen Song…?") — the one interrogation-shape recurrence of the round.
+Also noted (accepted): patient re-approach of the same unanswered
+song/station question across three replies — no escalation, so allowed.
+Fix queued for the round-close tidy: "a confirmation tag (richtig?/oder?)
+counts as a question" appended to the ask-one-thing rule.
+
+Sim verdict (2026-08-19, round 3b — Paul, engaged "Nino", "Arbeit und
+Projekte", 5 exchanges, v5.2 — Paul's first calibrated round ever):
+corrections PASS (both slips nudged with the corrected form — verb-second
+and dative-prep), density 80% with one statement-only reply, blocking fact
+(fully remote, no office) held, all replies ≤3 sentences. FAILs:
+contribution 2-3/5 (two replies were platitudes), topic jumps ×2 (coffee,
+Ventilator — the small-talk pivot, and both pivots were also his weakest
+contributions), question stacks ×2 (a question-marked correction echo plus
+a content question in the same reply), one invented idiom ("ein echtes
+Schnäppchen an Zeitersparnissen"). Read: he lacks Lena's counter-example
+battery — rules without worked examples, the exact v4 lesson.
+
+v5.3 (same day): both files — confirmation tags count as questions (Mia
+round); a correction-nudge IS the reply's one question (Paul round). Paul
+only — the jump counter-example rendered in office content, and a
+no-invented-idioms line in the flavor paragraph. Lena is green across
+rounds 1-3 with only definitional tightenings pending no rerun; Paul rerun
+below.
+
+Sim verdict (2026-08-19, round 4 — Paul rerun on v5.3, engaged "Nino",
+software-migration week, 5 exchanges): ALL FOUR v5.2 failures FIXED —
+contribution 5/5 (every reply carried a pinned office detail, including
+both correction turns), topic jumps 0, question stacks 0 (both correction
+echoes were their reply's only question, tag included), invented idioms 0,
+one clean statement-only closer, blocking fact respected, both slips
+nudged with the corrected form. Style note for a future round: "sitzen
+stabil" / "das Ergebnis wird schön" repeated ~3× — a naturalness tic, not
+a violation.
+
+ROUND CLOSED (2026-08-19): v5.3 is the shipping version for both partners.
+Lena: green in rounds 1-3 (round-1 interview cadence and round-2
+hypothetical re-ask both fixed and re-verified; Mia shy-regression safe).
+Paul: green in round 4. Question-density landed at 80% engaged / with
+statement-only turns present; contribution 90-100%; correction contract
+intact and now carrying corrected forms on word-order slips. Known
+non-blocking observations: no farewell line when the hard cap lands
+mid-flow (pre-existing, also in v4); persona-drift re-anchor (Li et al.
+2024) noted as a possible future code-side mechanism.
