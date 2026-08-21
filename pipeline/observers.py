@@ -31,7 +31,16 @@ Turn boundaries (= trace boundaries):
   now spans the whole user-start → bot-start window.
 - **close** on ``BotStartedSpeakingFrame`` (bot's first audio leaves the
   transport) or on ``EndFrame`` / ``CancelFrame`` if the turn somehow
-  never produced bot audio.
+  never produced bot audio. A close does NOT clear pipecat's
+  ``TurnContextProvider`` singleton — only ``EndFrame``/``CancelFrame``
+  (session teardown) does. A real Deepgram final can arrive after
+  ``BotStartedSpeakingFrame`` closes the span it belongs to (~46% of tandem
+  turns, measured); leaving the just-closed turn's context live until the
+  NEXT ``_open_turn()`` overwrites it means that trailing ``stt`` span nests
+  under the adjacent turn instead of becoming an orphan root trace. Our own
+  registries (``set_current_turn_span`` and the wrapper's per-connection
+  context) still clear on every close — only the process-wide provider gets
+  this grace period, and only for that reason.
 
 Frame direction filter: ``BaseInputTransport`` emits the VAD frames via
 ``broadcast_frame()`` (``frame_processor.py:742-753``), which constructs
@@ -184,7 +193,12 @@ class PipelineLatencyObserver(BaseObserver):
                 # Belt-and-suspenders: if a turn somehow never reached
                 # BotStartedSpeakingFrame (TTS failed, pipeline canceled mid-LLM),
                 # close it now so its span ends before flush_traces() drains.
-                self._close_turn()
+                # teardown=True: this connection is ending, so the
+                # process-wide TurnContextProvider must be released now
+                # rather than left for a "next turn" that will never come —
+                # otherwise it could leak this session's context into
+                # whatever connection opens a turn next (see _close_turn).
+                self._close_turn(teardown=True)
         except Exception as e:  # noqa: BLE001 — tracing must never break the pipeline
             logger.warning(f"[PipelineLatencyObserver] {type(e).__name__}: {e}")
 
@@ -215,11 +229,31 @@ class PipelineLatencyObserver(BaseObserver):
         # also needs the LIVE span to put the turn's overall input/output on
         # this trace root (v4 root-observation I/O).
         set_current_turn_span(self._turn_span)
+        # Per-connection mirror of the same context, so the wrapper's `llm`
+        # span parents off THIS connection's turn even under concurrent
+        # clients, where the process-wide provider above could be holding
+        # another connection's turn by the time astream() reads it. Must be
+        # an OTel Context (what `start_as_current_span(context=...)` takes),
+        # not a bare SpanContext — same conversion pipecat's provider does
+        # internally.
+        if self._wrapper is not None:
+            self._wrapper.set_turn_context(trace.set_span_in_context(self._turn_span))
         # Re-arm the TTS service's one-span-per-turn gate (if present).
         if self._tts_service is not None and hasattr(self._tts_service, "reset_for_new_turn"):
             self._tts_service.reset_for_new_turn()
 
-    def _close_turn(self):
+    def _close_turn(self, *, teardown: bool = False):
+        """End the live turn span. ``teardown=True`` (EndFrame/CancelFrame —
+        this connection is ending) also releases pipecat's process-wide
+        ``TurnContextProvider``; an ordinary turn-boundary close
+        (``teardown=False``, the default) leaves it pointed at the
+        just-closed turn so a trailing Deepgram final that arrives before the
+        next turn opens still nests under a real trace instead of becoming an
+        orphan root — see the module docstring. The provider is process-wide,
+        not per-connection, so leaving it live is only safe up to the next
+        ``_open_turn()`` (which overwrites it) or this connection's own
+        teardown (which must not leave it for some other connection to
+        inherit)."""
         if self._turn_span is not None:
             # Preserve the original pipeline-TTFB metric as an attribute even
             # though the span's own duration is now UserStarted → BotStarted.
@@ -230,5 +264,10 @@ class PipelineLatencyObserver(BaseObserver):
             self._turn_span.end()
             self._turn_span = None
             self._user_stopped_ns = None
-            TurnContextProvider.get_instance().set_current_turn_context(None)
             set_current_turn_span(None)
+            # Our own per-connection context always clears — only the
+            # process-wide provider gets the between-turns grace period.
+            if self._wrapper is not None:
+                self._wrapper.set_turn_context(None)
+            if teardown:
+                TurnContextProvider.get_instance().set_current_turn_context(None)

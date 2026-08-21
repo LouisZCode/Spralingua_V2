@@ -23,6 +23,7 @@ schema's optional field.
 
 from typing import Optional
 
+from loguru import logger
 from pydantic import BaseModel, Field
 
 from agents.observability import (
@@ -178,6 +179,8 @@ async def germanize_letter(
             _REGISTER_GUIDANCE.get(register, _REGISTER_GUIDANCE["informal"]),
         )
     )
+    if not user_id:
+        logger.warning("germanize_letter: no user_id — trace will be anonymous")
     with generation_span(
         "briefkasten-germanize", model=JUDGE_MODEL, input_text=prompt, user_id=user_id
     ) as span:

@@ -123,7 +123,8 @@ async def _draft_and_verify(card: VocabCard, user_id: Optional[str]) -> Optional
     # below is a verdict and keeps the new temperature=0 default.
     llm = structured_judge_llm(ExampleDraft, temperature=None)
     with generation_span(
-        "satz-example-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id
+        "satz-example-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id,
+        environment="forge",
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
@@ -154,6 +155,7 @@ async def _draft_and_verify(card: VocabCard, user_id: Optional[str]) -> Optional
         model=FORGE_MODEL,
         input_text=verify_prompt,
         user_id=user_id,
+        environment="forge",
     ) as span:
         vresult, vusage, vmeta = unwrap_structured_output(await verify_llm.ainvoke(verify_prompt))
         record_generation_output(span, vresult.model_dump_json(), vusage, vmeta)

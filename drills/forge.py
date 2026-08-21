@@ -265,7 +265,8 @@ async def _forge_bauteil_item(row_id: str, card: VocabCard, user_id: str) -> Opt
         .replace("{adjectives}", ", ".join(sorted(SAFE_ADJECTIVES)))
     )
     with generation_span(
-        "bauteil-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id
+        "bauteil-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id,
+        environment="forge",
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
@@ -344,7 +345,8 @@ async def _forge_verbindungen_item(row_id: str, card: VocabCard, user_id: str) -
         # below is a verdict and keeps the new temperature=0 default.
         llm = structured_judge_llm(VerbindungenForgeDraft, temperature=None)
         with generation_span(
-            "verbindungen-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id
+            "verbindungen-forge", model=FORGE_MODEL, input_text=prompt, user_id=user_id,
+            environment="forge",
         ) as span:
             result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
             record_generation_output(span, result.model_dump_json(), usage, response_metadata)
@@ -383,6 +385,7 @@ async def _forge_verbindungen_item(row_id: str, card: VocabCard, user_id: str) -
             model=FORGE_MODEL,
             input_text=verify_prompt,
             user_id=user_id,
+            environment="forge",
         ) as span:
             vresult, vusage, vmeta = unwrap_structured_output(await verify_llm.ainvoke(verify_prompt))
             record_generation_output(span, vresult.model_dump_json(), vusage, vmeta)

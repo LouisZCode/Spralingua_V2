@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -443,6 +444,33 @@ class SayBody(BaseModel):
     text: str
 
 
+# /say in-flight guard (orphan-trace audit, 2026-08-21): a parallel
+# test-runner violation once fired
+# 21 concurrent /say calls for the same user_id, each queuing its own
+# LLMContextFrame before the prior turn's LLM call had finished — 21
+# concurrent `llm` spans on one trace. `task.queue_frame()` returns as soon
+# as the frame is enqueued, well before the turn's LLM/TTS work completes, so
+# "still processing" isn't observable from here without wiring a completion
+# signal back from ClientWrapper — out of scope for this guard. This is the
+# minimal version instead: `_say_locks` serializes two /say calls that land
+# for the same user practically simultaneously (no `await` happens between
+# the `.locked()` check and `.acquire()` below, so this is race-free on the
+# single-threaded event loop), and `_say_last_queued_at` rejects a second
+# call that lands within `_SAY_INFLIGHT_MIN_GAP_S` of the first — a
+# heuristic backstop for the common case where the first turn is still being
+# generated when the next call arrives, after the lock has already been
+# released. Both dicts are keyed by `target_id` (the resolved id, post-auth)
+# and, unlike ACTIVE_TASKS/ACTIVE_LESSONS in pipeline/factory.py, are never
+# popped — they grow with the set of distinct users who have ever called
+# /say, not just the ones currently connected. Accepted for this minimal
+# version: the population is bounded by real signed-in/demo users, not
+# request volume, and per-user cleanup would need the same identity-guard
+# machinery ACTIVE_TASKS already carries for a map this small to be worth it.
+_SAY_INFLIGHT_MIN_GAP_S = 1.0
+_say_locks: dict[str, asyncio.Lock] = {}
+_say_last_queued_at: dict[str, float] = {}
+
+
 def _bearer_subject(request: Request) -> str | None:
     """Verify the session JWT from an ``Authorization: Bearer`` header.
 
@@ -508,8 +536,23 @@ async def say(user_id: str, body: SayBody, request: Request):
     if task is None:
         raise HTTPException(status_code=404, detail="No active session for that user_id")
 
-    context = LLMContext([{"role": "user", "content": text}])
-    await task.queue_frame(LLMContextFrame(context=context))
+    lock = _say_locks.setdefault(target_id, asyncio.Lock())
+    if lock.locked():
+        raise HTTPException(
+            status_code=409, detail="a previous message for this user is still being processed"
+        )
+    async with lock:
+        now = time.monotonic()
+        last_queued = _say_last_queued_at.get(target_id)
+        if last_queued is not None and (now - last_queued) < _SAY_INFLIGHT_MIN_GAP_S:
+            raise HTTPException(
+                status_code=409,
+                detail="a previous message for this user is still being processed",
+            )
+        _say_last_queued_at[target_id] = now
+
+        context = LLMContext([{"role": "user", "content": text}])
+        await task.queue_frame(LLMContextFrame(context=context))
     return {"ok": True}
 
 

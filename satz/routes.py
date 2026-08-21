@@ -335,6 +335,7 @@ async def _forge_card(
             span.set_attribute("user.id", user_id)
             span.set_attribute("word", word)
             span.set_attribute("satz.gate", "base_card")
+            span.set_attribute("langfuse.environment", "forge")
             mark_span_error(span, feedback or "verification failed")
         logger.warning(
             "Satz forge exhausted {} attempts for {!r}, shipping unverified: {}",
@@ -509,6 +510,7 @@ async def _ensure_past_sibling(
                 span.set_attribute("user.id", user_id)
                 span.set_attribute("word", present.target)
                 span.set_attribute("satz.gate", "past_sibling")
+                span.set_attribute("langfuse.environment", "forge")
                 mark_span_error(span, feedback or "verification failed")
             logger.warning(
                 "Satz past sibling for {!r} never verified after {} attempts "

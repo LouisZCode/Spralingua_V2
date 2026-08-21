@@ -23,7 +23,7 @@ Browser (mic) ⇄ WebSocket ⇄ FastAPI / Pipecat (STT → buffer → LLM → TT
 | Pipeline | Pipecat 0.0.98 |
 | Backend | FastAPI + uvicorn, Python 3.12 |
 | Frontend | Next.js 16 + React 19 + Tailwind CSS 4 + TypeScript |
-| Observability | Langfuse v4 (per-turn STT / LLM / TTS Generations) |
+| Observability | Langfuse v4 via OpenTelemetry — OTLP ingestion (`x-langfuse-ingestion-version: 4`); one trace per turn plus one-shot traces for every drill/judge call |
 
 ## Setup
 
@@ -92,16 +92,16 @@ Per-turn STT / LLM / TTS spans also land in Langfuse for latency, token, and tra
 │   └── transport.py            FastAPI WebSocket transport factory (current) + legacy local/WS variants
 ├── agents/
 │   ├── conversation_agent.py   agent_assembly(user_id) — ChatOpenAI via OpenRouter (Cerebras-pinned) + InMemorySaver
-│   ├── pipecat_wrapper.py      ClientWrapper — Pipecat ↔ LangChain adapter; owns turn-N-LLM Langfuse Generation
+│   ├── pipecat_wrapper.py      ClientWrapper — Pipecat ↔ LangChain adapter; owns the per-turn `llm` generation span
 │   ├── dynamic_prompts.py      Context + StudentProfile dataclasses
 │   ├── conversational_prompt.py  layered_prompt_middleware — branches on YAML `type` (conversation | respond)
 │   ├── load_prompts.py         load_prompts(lesson_id) — resolves agents/prompts/{lesson_id}.yaml
-│   ├── observability.py        Langfuse v4 singleton
+│   ├── observability.py        OTel TracerProvider + OTLP exporter → Langfuse (ingestion v4) + generation_span helpers
 │   └── prompts/                One YAML per lesson (lesson_zero, a1_l1, goodbye_test)
 ├── pipeline/
 │   ├── factory.py              run_pipeline() — builds & runs per-client pipeline
 │   ├── converters.py           TranscriptionToContextConverter — VAD-gated buffering
-│   ├── observers.py            TurnTraceObserver — per-turn Langfuse STT/TTS Generations
+│   ├── observers.py            PipelineLatencyObserver — per-turn root trace spans (turn-{N}-{lesson})
 │   └── tts_duration.py         TTSDurationTracker — per-turn TTS audio length metric
 ├── logs/session_logger.py      Per-session log/transcript/audio writer
 └── frontend/src/components/

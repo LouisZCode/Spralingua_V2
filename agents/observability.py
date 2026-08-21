@@ -19,13 +19,15 @@ public/secret key pair from the existing ``.env``.
 
 import base64
 import os
+from collections.abc import Sequence
 from contextlib import contextmanager
 from typing import Optional
 
 from loguru import logger
 from opentelemetry import baggage, context as otel_context, trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.sdk.trace import SpanProcessor
+from opentelemetry.sdk.trace import ReadableSpan, SpanProcessor
+from opentelemetry.sdk.trace.export import SpanExporter, SpanExportResult
 from opentelemetry.trace import Span, Status, StatusCode
 from pipecat.utils.tracing.setup import setup_tracing
 
@@ -60,6 +62,52 @@ def _build_otlp_exporter() -> OTLPSpanExporter:
     )
 
 
+class _OrphanFragmentFilterExporter(SpanExporter):
+    """Drops residual anonymous ``stt``/``tts`` root spans before export.
+
+    Backstop for the fragments that survive the turn-context grace period in
+    ``pipeline/observers.py`` (a Deepgram final arriving before the very
+    first turn opens has nothing to nest under at all — no prior turn
+    exists yet). These are PARENTLESS ``stt``/``tts`` spans carrying no
+    ``user.id``, which is what makes them safe to identify here: an
+    ordinary in-turn stt/tts span always has a parent turn (or, worst case,
+    baggage-derived ``user.id``). Their transcript text also reaches the
+    following turn's ``llm`` span as input, so dropping them loses nothing
+    material — only noise-floor orphan roots disappear from the Langfuse UI.
+    ``llm`` is NEVER a candidate, named or not: it carries token usage and
+    cost and must always reach Langfuse.
+    """
+
+    def __init__(self, inner: SpanExporter) -> None:
+        self._inner = inner
+
+    def export(self, spans: Sequence[ReadableSpan]) -> SpanExportResult:
+        kept = []
+        for span in spans:
+            if (
+                span.name in ("stt", "tts")
+                and span.parent is None
+                and not (span.attributes or {}).get("user.id")
+            ):
+                logger.debug(
+                    f"Dropping orphan {span.name} span (no parent, no "
+                    f"user.id): start_time={span.start_time}"
+                )
+                continue
+            kept.append(span)
+        if not kept:
+            # Nothing left to send — skip the network round-trip entirely
+            # rather than exporting an empty batch.
+            return SpanExportResult.SUCCESS
+        return self._inner.export(kept)
+
+    def shutdown(self) -> None:
+        self._inner.shutdown()
+
+    def force_flush(self, timeout_millis: int = 30000) -> bool:
+        return self._inner.force_flush(timeout_millis)
+
+
 # Wire OTel once at import time. ``setup_tracing`` registers a
 # ``TracerProvider`` globally and wraps the exporter in a
 # ``BatchSpanProcessor`` for background flushing. Returns False if OTel
@@ -85,7 +133,7 @@ if langfuse_base_url and langfuse_public_key and langfuse_secret_key:
     os.environ.setdefault("ENVIRONMENT", langfuse_environment)
     _tracing_enabled = setup_tracing(
         service_name=f"spralingua-{langfuse_environment}",
-        exporter=_build_otlp_exporter(),
+        exporter=_OrphanFragmentFilterExporter(_build_otlp_exporter()),
     )
 else:
     logger.info("Langfuse tracing disabled — LANGFUSE_* not fully configured.")
@@ -209,6 +257,7 @@ def generation_span(
     operation: str = "chat",
     session_id: str | None = None,
     user_id: str | None = None,
+    environment: str | None = None,
 ):
     """One Generation span for the one-shot STT/LLM calls that live OUTSIDE
     the Pipecat pipeline (OBS-006): the Satzschmiede attempt path + word
@@ -223,6 +272,13 @@ def generation_span(
     trace into a Langfuse Session (the tandem debrief joins its
     conversation's session); without one the trace stands alone.
 
+    ``environment`` (optional), when set, routes the trace into a separate
+    Langfuse environment via ``langfuse.environment`` — used by the
+    background content-forge call sites (card/example/drill-item generation
+    and their verify passes) so their volume doesn't mix with learner-facing
+    traces in the default view. Every other caller leaves it unset and rides
+    the account's default environment.
+
     Callers stamp the result via :func:`record_generation_output` once it is
     in hand. With LANGFUSE_* unconfigured the tracer is a no-op and every
     ``set_attribute`` is swallowed — zero cost.
@@ -236,6 +292,8 @@ def generation_span(
             span.set_attribute("langfuse.session.id", session_id)
         if user_id:
             span.set_attribute("user.id", user_id)
+        if environment:
+            span.set_attribute("langfuse.environment", environment)
         yield span
 
 

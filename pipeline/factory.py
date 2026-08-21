@@ -32,11 +32,18 @@ from pipecat.processors.filters.stt_mute_filter import (
     STTMuteStrategy,
 )
 
+from .audio_meter import AudioSecondsMeter
 from .converters import TranscriptionToContextConverter
 from .observers import PipelineLatencyObserver
 from .tts_duration import TTSDurationTracker
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
+from agents.audio_costs import (
+    DEEPGRAM_NOVA3_STREAMING_PER_MIN,
+    stamp_audio_cost,
+    stt_cost_usd,
+    tts_cost_usd,
+)
 from agents.evaluator import evaluate
 from agents.error_extractor import extract_errors
 from agents.debrief import debrief as run_debrief
@@ -237,7 +244,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
     # on every Connect so the Langfuse UI shows one Session per conversation.
     # The same uuid is fed to Pipecat as `conversation_id`, so 1 connect = 1
-    # conversation trace = 1 Langfuse session.
+    # conversation trace = 1 Langfuse session. `session_id` is ALSO the
+    # `activity_session.id` primary key (a Postgres UUID column) — every DB
+    # and logging use of it must stay this bare hex string. See
+    # `trace_session_id` below for the Langfuse-only surface-prefixed form.
     session_id = uuid4().hex
 
     # Which `users` row this session's DB record FKs to. Defaults to `user_id`
@@ -247,6 +257,32 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # stays per-session for ACTIVE_TASKS routing, Langfuse, and the wrapper.
     db_user_id = db_user_id or user_id
 
+    # Loaded here — ahead of the aiohttp block it used to live in — so its
+    # `type` is known before the first Langfuse-facing use of the session id
+    # (`attach_trace_context`, right below). `load_prompts` is a pure YAML
+    # read with no side effects, so hoisting it this far is safe; it falls
+    # back to lesson_zero on an unknown id, same as before.
+    lesson_snapshot = load_prompts(lesson_id)
+
+    # Langfuse-only session id: mirrors the readable-prefix convention the
+    # drill surfaces already mint client-side (flow-, satz-, brf-,
+    # interview-), so voice sessions read as tandem-/teacher-/lesson-/demo-
+    # in the Langfuse UI instead of an undifferentiated hex blob. Every
+    # Langfuse-facing use below reads `trace_session_id`; every DB/logging
+    # use keeps the bare `session_id` from above. The demo socket
+    # (`main.py::ws_demo_endpoint`) is the only caller passing
+    # `db_user_id="demo"` — the same signal the disconnect-side streak gate
+    # below already keys on — so it's checked first rather than falling
+    # through the type map, which would otherwise misfile it under its
+    # forced `welcome` lesson's own type ("respond" -> "lesson").
+    if db_user_id == "demo":
+        _trace_prefix = "demo"
+    else:
+        _trace_prefix = {"tandem": "tandem", "teacher": "teacher"}.get(
+            lesson_snapshot.get("type"), "lesson"
+        )
+    trace_session_id = f"{_trace_prefix}-{session_id}"
+
     # Langfuse v4: attach `user.id`/`langfuse.session.id` as OTel baggage for
     # the whole connection. Every span created under this context — turn
     # spans, pipecat's STT/TTS spans, the wrapper's llm span, the
@@ -255,7 +291,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # agents/observability.py, so observation-level filtering works without
     # threading the ids through every call site. Detached at the end of the
     # disconnect `finally` below.
-    _trace_ctx_token = attach_trace_context(user_id=user_id, session_id=session_id)
+    _trace_ctx_token = attach_trace_context(user_id=user_id, session_id=trace_session_id)
 
     # B2: bound the MiniMax TTS session's requests — with no timeout a hung
     # MiniMax request falls back to aiohttp's 5-minute default, stalling this
@@ -267,12 +303,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
 
         # Fresh services per client. Language is per-lesson: German runtime,
         # English only for the `welcome` concierge and other English exceptions.
-        # The snapshot is loaded first because `load_prompts` falls back to
-        # lesson_zero on an unknown id — the language must follow that fallback
-        # (German STT over the English lesson_zero prompt would transcribe the
-        # user's English as noise), so it derives from the id of the lesson
-        # that actually loaded, not the raw query param.
-        lesson_snapshot = load_prompts(lesson_id)
+        # `lesson_snapshot` was already loaded above (needed early for the
+        # trace-session prefix); language still derives from the id of the
+        # lesson that actually loaded, not the raw query param, so an
+        # unknown-id fallback to lesson_zero still gets the right language.
         lesson_lang = lesson_language(lesson_snapshot.get("id", lesson_id))
         # AGENT-001: Clara's voice runs a German language_boost while everything
         # else about her session (STT, evaluators) stays on lesson_lang — see
@@ -369,8 +403,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"{snapshot_type.capitalize()} layer fetch failed (non-fatal): {type(e).__name__}: {e}"
                 )
 
-        # Per-client wrapper (agent + logger + context settings inside)
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override)
+        # Per-client wrapper (agent + logger + context settings inside).
+        # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
+        # both passed — the wrapper's own DB/transcript fields need the
+        # former, its hand-rolled `llm` span needs the latter.
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
@@ -493,7 +530,9 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # FirstOnlyTracedMiniMaxTTS (long bot replies trigger multiple run_tts
         # calls; we want exactly one TTS span per turn = the TTFB measurement).
         pipeline_observer = PipelineLatencyObserver(
-            session_id=session_id,
+            # Langfuse-only — the observer's only use of this value is the
+            # `langfuse.session.id` attribute it stamps on each turn span.
+            session_id=trace_session_id,
             user_id=user_id,
             lesson_id=lesson_id,
             voice=voice,
@@ -512,9 +551,20 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # this; this fixes speakerphone. The typed /say path is unaffected.
         stt_mute = STTMuteFilter(config=STTMuteConfig(strategies={STTMuteStrategy.ALWAYS}))
 
+        # AUDIO-COST-001: sums seconds of audio actually forwarded to Deepgram
+        # this session, for the post-session-analysis cost stamp below.
+        # Placed AFTER stt_mute — stt_mute drops InputAudioRawFrame locally
+        # while muted (see pipeline/audio_meter.py's docstring for the
+        # decisive pipecat source lines), so nothing muted ever reaches this
+        # position; counting everything that does cross it already matches
+        # what Deepgram's websocket actually bills for, no extra mute-state
+        # tracking needed here.
+        audio_meter = AudioSecondsMeter()
+
         pipeline = Pipeline([
             transport.input(),
             stt_mute,          # deafen STT while bot speaks — kills speakerphone echo
+            audio_meter,       # sums billable seconds of what actually reaches Deepgram
             stt,
             converter,
             llm,
@@ -607,8 +657,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
         ACTIVE_LESSONS[user_id] = lesson_id  # AGENT-001: this session's runtime language
         # Langfuse: let sibling HTTP requests (Clara's exercise routes) join
-        # this conversation's Session. Cleared in lockstep with the two above.
-        register_trace_session(user_id, session_id)
+        # this conversation's Session. Prefixed form — teacher/routes.py only
+        # ever uses this value as a `langfuse.session.id` span attribute.
+        # Cleared in lockstep with the two above.
+        register_trace_session(user_id, trace_session_id)
 
         # Wall-clock session cap (SEC-001). Armed only when a timeout is passed
         # (the public demo route does; /learn passes None → no watchdog, so its
@@ -677,8 +729,9 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 ACTIVE_TASKS.pop(user_id, None)
                 ACTIVE_LESSONS.pop(user_id, None)  # kept in lockstep — same guard, same branch
             # Value-guarded internally (only removes if still OUR session id),
-            # so it is safe outside the identity guard above.
-            clear_trace_session(user_id, session_id)
+            # so it is safe outside the identity guard above. Must match what
+            # register_trace_session stored above (the prefixed form).
+            clear_trace_session(user_id, trace_session_id)
             # B3: must not be bare — an unhandled raise here would skip every
             # step after it in this `finally` (evaluators, DB finalize, OTel
             # flush), leaving the activity_session row ended_at=NULL forever.
@@ -701,9 +754,40 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             # step's own `generation_span` calls auto-nest under
             # post-session-analysis with no manual context passing.
             with tracer.start_as_current_span("post-session-analysis") as analysis_span:
-                analysis_span.set_attribute("langfuse.session.id", session_id)
+                analysis_span.set_attribute("langfuse.session.id", trace_session_id)
                 analysis_span.set_attribute("user.id", user_id)
                 analysis_span.set_attribute("lesson_id", lesson_id)
+
+                # AUDIO-COST-001: session-level audio cost, independent of the
+                # evaluator gate below — runs for every lesson type, Clara
+                # included, since audio cost is real regardless of assessment
+                # exemption. STT: what AudioSecondsMeter actually measured
+                # reaching Deepgram this session (piece B above), priced at
+                # the nova-3 STREAMING rate. TTS: total characters across bot
+                # turns (ClientWrapper.bot_character_count — an approximation
+                # of billed characters, see that method's docstring), priced
+                # at the MiniMax per-char rate. Same non-fatal contract as
+                # every other step in this block.
+                try:
+                    stt_seconds = round(audio_meter.total_seconds, 2)
+                    tts_chars = wrapper.bot_character_count()
+                    usage: dict = {}
+                    cost: dict = {}
+                    if stt_seconds > 0:
+                        stt_usd = stt_cost_usd(stt_seconds, DEEPGRAM_NOVA3_STREAMING_PER_MIN)
+                        usage["stt_audio_seconds"] = stt_seconds
+                        cost["stt_audio_seconds"] = stt_usd
+                    if tts_chars > 0:
+                        tts_usd = tts_cost_usd(tts_chars)
+                        usage["tts_characters"] = tts_chars
+                        cost["tts_characters"] = tts_usd
+                    if usage:
+                        cost["total"] = sum(cost.values())
+                        stamp_audio_cost(analysis_span, usage=usage, cost=cost)
+                except Exception as e:  # noqa: BLE001 — cost stamping must not block cleanup
+                    logger.warning(
+                        f"Audio cost stamping failed (non-fatal): {type(e).__name__}: {e}"
+                    )
 
                 # AGENT-001.2 invariant: the teacher room (Clara, lesson_id
                 # "teacher") is deliberately exempt from every learner-
@@ -737,7 +821,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 # German lesson is judged as German and an English one as
                                 # English during the mixed-content migration window.
                                 language="German" if lesson_lang == "de" else "English",
-                                session_id=session_id,
+                                session_id=trace_session_id,
                             )
                             session_logger.write_evaluation(result)
                             passed_count = sum(1 for g in result.goals if g.passed)
@@ -769,7 +853,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         if wrapper._transcript and load_goal(lesson_id) is not None:
                             error_result = await extract_errors(
                                 transcript=wrapper.render_transcript(),
-                                session_id=session_id,
+                                session_id=trace_session_id,
                                 user_id=db_user_id,
                             )
                             if error_result.errors:
@@ -786,7 +870,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                                 corrected=err.corrected,
                                                 note=err.note,
                                                 source="situation",
-                                                session_id=session_id,
+                                                session_id=trace_session_id,
                                             )
                                         except Exception:  # noqa: BLE001 — one ledger row must not block the rest
                                             logger.exception(
@@ -821,7 +905,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 transcript=wrapper.render_transcript(),
                                 focus=focus,
                                 topic=topic,
-                                session_id=session_id,
+                                session_id=trace_session_id,
                                 # TAND-008: the judge reads Bot: lines as this
                                 # partner. Lena's YAML predates the field.
                                 partner=lesson_snapshot.get("partner_name", "Lena"),
@@ -841,7 +925,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                                 db,
                                                 user_id=db_user_id,
                                                 pattern_id=p.pattern_id,
-                                                session_id=session_id,
+                                                session_id=trace_session_id,
                                             )
                                             if status == "retired":
                                                 retired_ids.add(p.pattern_id)
@@ -854,7 +938,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                                 corrected=p.corrected or None,
                                                 note=p.note or None,
                                                 source="tandem",
-                                                session_id=session_id,
+                                                session_id=trace_session_id,
                                             )
                                     except Exception:  # noqa: BLE001 — one row must not block the rest
                                         logger.exception(
@@ -872,7 +956,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                             corrected=e.corrected,
                                             note=e.note,
                                             source="tandem",
-                                            session_id=session_id,
+                                            session_id=trace_session_id,
                                         )
                                     except Exception:  # noqa: BLE001 — one row must not block the rest
                                         logger.exception(
@@ -936,7 +1020,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                             pron_result = await assess_pronunciation(
                                 user_turns=wrapper.iter_user_turn_audio(),
                                 locale=locale,
-                                session_id=session_id,
+                                session_id=trace_session_id,
                             )
                             session_logger.write_pronunciation(
                                 pron_result,

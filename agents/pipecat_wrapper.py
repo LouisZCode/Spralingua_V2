@@ -188,9 +188,21 @@ class ClientWrapper:
 
     def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero",
                  topic="", grammar_focus=None, session_notes=None, vocab_words=None,
-                 max_exchanges_override: int | None = None):
+                 max_exchanges_override: int | None = None, trace_session_id: str | None = None):
         self.user_id = user_id
         self.session_id = session_id
+        # Langfuse-only, surface-prefixed form of `session_id` (e.g.
+        # "tandem-<hex>") — see pipeline/factory.py. Falls back to the bare
+        # id for any caller that doesn't pass it, so a missing kwarg degrades
+        # to the pre-existing (unprefixed) behavior rather than an empty
+        # attribute.
+        self.trace_session_id = trace_session_id or session_id
+        # Per-connection parent context for the `llm` span below, set by
+        # `PipelineLatencyObserver` on turn open/close (orphan-trace audit,
+        # 2026-08-21). Takes
+        # priority over pipecat's process-wide `TurnContextProvider` — see
+        # `astream`.
+        self._turn_context = None
         self.logger = logger
         self.agent = agent_assembly(user_id)
         self.context = Context(
@@ -320,11 +332,14 @@ class ClientWrapper:
         final_response_metadata = None
         marker_filter = ExerciseMarkerFilter() if self._is_teacher_lesson else None
 
-        # ``get_current_turn_context()`` returns ``None`` if tracing is
-        # disabled OR if no turn span is active right now. Either way OTel
-        # falls back to the current context, which is the right behavior:
-        # no parent → span becomes a root span, harmless.
-        turn_ctx = get_current_turn_context()
+        # Prefer the per-connection context PipelineLatencyObserver hands us
+        # on turn open (self._turn_context) over pipecat's process-wide
+        # TurnContextProvider singleton — under concurrent clients that
+        # singleton can be holding another connection's turn by the time
+        # this coroutine resumes. Falls back to the singleton, then to None
+        # (no parent → span becomes a root span, harmless), preserving
+        # behavior for any caller that never wires a per-connection context.
+        turn_ctx = self._turn_context or get_current_turn_context()
         span_start_ns = time.time_ns()
 
         with tracer.start_as_current_span(
@@ -335,6 +350,14 @@ class ClientWrapper:
             llm_span.set_attribute("gen_ai.request.model", CONVERSATIONAL_MODEL)
             llm_span.set_attribute("gen_ai.operation.name", "chat")
             llm_span.set_attribute("gen_ai.output.type", "text")
+            # Explicit, not just baggage-inherited: the exporter's orphan
+            # filter (agents/observability.py) drops a parentless span with
+            # no user.id, and baggage propagation has its own failure modes
+            # (a context that never got attached, a task that lost it) — a
+            # span this expensive (token usage, cost) must never go anonymous
+            # silently for either reason.
+            llm_span.set_attribute("user.id", self.user_id)
+            llm_span.set_attribute("langfuse.session.id", self.trace_session_id)
             # Observation-level input — shown on the LLM observation row in Langfuse.
             llm_span.set_attribute("langfuse.observation.input", text)
             # v4 (observations-first): the trace's Input column reads from the
@@ -531,6 +554,29 @@ class ClientWrapper:
     def render_transcript(self) -> str:
         """Format the captured turns as a single string for the evaluator prompt."""
         return "\n\n".join(f"{role.capitalize()}: {body}" for role, body in self._transcript)
+
+    def bot_character_count(self) -> int:
+        """Total characters across this session's bot turns (AUDIO-COST-001).
+
+        Approximates billed MiniMax TTS characters: `_transcript`'s "bot"
+        entries are `astream`'s `output_text` — the same text handed to TTS
+        via the yielded stream, minus the AGENT-00X exercise-marker
+        stripping in teacher sessions (the marker itself is never spoken,
+        so excluding it from the count is correct, not an approximation
+        error). Used by `pipeline/factory.py`'s post-session-analysis cost
+        stamp.
+        """
+        return sum(len(body) for role, body in self._transcript if role == "bot")
+
+    def set_turn_context(self, context) -> None:
+        """Set/clear this connection's live turn span context. Called by
+        ``PipelineLatencyObserver`` on turn open (the new turn's context) and
+        close (``None``) — see that class's ``_open_turn``/``_close_turn``.
+        Per-connection, unlike pipecat's process-wide ``TurnContextProvider``:
+        under concurrent clients that singleton can hand a turn from another
+        connection as parent, this cannot.
+        """
+        self._turn_context = context
 
     def vad_stop(self) -> None:
         """Tick the VAD-stop sequence number. Called by

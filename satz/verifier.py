@@ -180,6 +180,7 @@ async def _verify_once(
         input_text=prompt,
         user_id=user_id,
         session_id=session_id,
+        environment="forge",
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)

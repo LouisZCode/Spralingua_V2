@@ -180,6 +180,8 @@ async def extract_errors(
     # Cerebras-direct primary + OpenRouter fallback with 12s/leg deadline —
     # see agents/openrouter_llm.structured_judge_llm.
     llm = structured_judge_llm(ErrorExtraction)
+    if not user_id:
+        logger.warning("extract_errors: no user_id — trace will be anonymous")
     with generation_span(
         "grammar-harvest",
         model=EXTRACTOR_MODEL,

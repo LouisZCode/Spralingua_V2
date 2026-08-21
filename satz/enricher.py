@@ -229,6 +229,7 @@ async def enrich_word(
         input_text=word,
         user_id=user_id,
         session_id=session_id,
+        environment="forge",
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(
             await llm.ainvoke(prompt)

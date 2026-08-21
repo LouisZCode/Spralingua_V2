@@ -540,6 +540,8 @@ async def feedback_pass(
     # 20s like the writer: this one generates a whole corrected letter plus
     # explanations, so the 12s default would fall back to OpenRouter routinely.
     llm = structured_judge_llm(FeedbackVerdict, deadline_s=20.0)
+    if not user_id:
+        logger.warning("feedback_pass: no user_id — trace will be anonymous")
     with generation_span(
         "briefkasten-feedback",
         model=JUDGE_MODEL,

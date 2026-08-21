@@ -23,6 +23,11 @@ from urllib.parse import parse_qsl, urlsplit
 import httpx
 from loguru import logger
 
+from agents.audio_costs import (
+    DEEPGRAM_NOVA2_PRERECORDED_PER_MIN,
+    stamp_audio_cost,
+    stt_cost_usd,
+)
 from agents.observability import generation_span, record_generation_output
 from config import deepgram_api_key
 
@@ -62,6 +67,18 @@ async def transcribe_answer(audio: bytes, content_type: Optional[str]) -> str:
             body = resp.json()
         transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
         record_generation_output(span, transcript)
+        # Same exact-cost stamp as satz/examiner.py::transcribe_attempt, priced
+        # at the nova-2 prerecorded proxy rate (see agents/audio_costs.py).
+        # Missing metadata.duration -> skip silently, never crash the call.
+        duration = body.get("metadata", {}).get("duration")
+        if duration is not None:
+            audio_seconds = round(duration, 2)
+            usd = stt_cost_usd(audio_seconds, DEEPGRAM_NOVA2_PRERECORDED_PER_MIN)
+            stamp_audio_cost(
+                span,
+                usage={"audio_seconds": audio_seconds},
+                cost={"audio_seconds": usd, "total": usd},
+            )
     return transcript
 
 
@@ -242,6 +259,17 @@ async def transcribe_comprehension(audio: bytes, content_type: Optional[str], ke
                 body = resp.json()
             transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
             record_generation_output(span, transcript)
+            # Same exact-cost stamp as transcribe_answer above — round 1 bills
+            # Deepgram identically; a boost-triggered retry stamps its own span.
+            duration = body.get("metadata", {}).get("duration")
+            if duration is not None:
+                audio_seconds = round(duration, 2)
+                usd = stt_cost_usd(audio_seconds, DEEPGRAM_NOVA2_PRERECORDED_PER_MIN)
+                stamp_audio_cost(
+                    span,
+                    usage={"audio_seconds": audio_seconds},
+                    cost={"audio_seconds": usd, "total": usd},
+                )
             return transcript
     except Exception as exc:  # noqa: BLE001 -- a keyword-boost failure must never break round 1
         if not keywords:

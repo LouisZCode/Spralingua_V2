@@ -24,6 +24,11 @@ from agents.openrouter_llm import structured_judge_llm
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from agents.audio_costs import (
+    DEEPGRAM_NOVA3_PRERECORDED_PER_MIN,
+    stamp_audio_cost,
+    stt_cost_usd,
+)
 from agents.observability import (
     generation_span,
     record_generation_output,
@@ -129,6 +134,18 @@ async def transcribe_attempt(
             )
         transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
         record_generation_output(span, transcript)
+        # Exact per-attempt cost: Deepgram's prerecorded response carries the
+        # clip's own length at `metadata.duration` (seconds). Missing key ->
+        # skip the stamp silently, never crash the attempt over a cost metric.
+        duration = body.get("metadata", {}).get("duration")
+        if duration is not None:
+            audio_seconds = round(duration, 2)
+            usd = stt_cost_usd(audio_seconds, DEEPGRAM_NOVA3_PRERECORDED_PER_MIN)
+            stamp_audio_cost(
+                span,
+                usage={"audio_seconds": audio_seconds},
+                cost={"audio_seconds": usd, "total": usd},
+            )
     return transcript
 
 
