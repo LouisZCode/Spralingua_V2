@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from bauteil.content import TARGET_PATTERNS, load_items
 from bauteil.judge import judge_attempt
@@ -210,12 +210,12 @@ async def submit_attempt(
     # OBS-007: one Langfuse trace per judged attempt, grouped into the
     # practice sitting. Deterministic greens trace too (no `llm` child) —
     # a session should show every attempt, not just the ones that cost tokens.
-    with tracer.start_as_current_span("bauteil-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("bauteil-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("item_id", item["id"])
         if body.session_id:
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
-        attempt_span.set_attribute("langfuse.trace.input", answer)
+        attempt_span.set_attribute("langfuse.observation.input", answer)
 
         if body.give_up:
             # FLOW-002 escape hatch: skip the judge entirely, grade as a
@@ -253,7 +253,7 @@ async def submit_attempt(
             )
 
         attempt_span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             f"correct={correct} caseOk={case_ok} carrierOk={carrier_ok}"
             + (f" — {note}" if note else ""),
         )

@@ -19,7 +19,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
@@ -187,7 +187,7 @@ async def submit_attempt(
             detail="That recording is too long — a few sentences is enough.",
         )
 
-    with tracer.start_as_current_span("sprechen-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("sprechen-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("task_id", task["id"])
         if session_id:
@@ -211,7 +211,7 @@ async def submit_attempt(
                 status_code=422,
                 detail="We couldn't hear anything — try again a bit closer to the mic.",
             )
-        attempt_span.set_attribute("langfuse.trace.input", transcript)
+        attempt_span.set_attribute("langfuse.observation.input", transcript)
 
         try:
             verdict = await judge_spoken(task, transcript)
@@ -231,7 +231,7 @@ async def submit_attempt(
 
         passed = verdict.constraint_met and not verdict.slips
         attempt_span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             f"passed={passed} constraintMet={verdict.constraint_met} "
             f"hits={verdict.hits} slips={len(verdict.slips)}",
         )
@@ -329,13 +329,13 @@ async def give_up_attempt(
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")
 
-    with tracer.start_as_current_span("sprechen-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("sprechen-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("task_id", task["id"])
         attempt_span.set_attribute("gave_up", True)
         if body.session_id:
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
-        attempt_span.set_attribute("langfuse.trace.output", "gave_up=True")
+        attempt_span.set_attribute("langfuse.observation.output", "gave_up=True")
 
         # Feed the ledger (design rule 4) — non-fatal, same contract as a
         # real slip. There's no transcript to quote, so `sentence` carries a
@@ -419,12 +419,12 @@ async def vocab_nudge(
     if not deck:
         return {"words": []}
 
-    with tracer.start_as_current_span("sprechen-nudge") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("sprechen-nudge") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("task_id", task["id"])
         if body.session_id:
             span.set_attribute("langfuse.session.id", body.session_id)
-        span.set_attribute("langfuse.trace.input", task["title"])
+        span.set_attribute("langfuse.observation.input", task["title"])
         span.set_attribute("deck_size", len(deck))
         try:
             pick = await suggest_vocab(task, list(deck.values()))
@@ -435,7 +435,7 @@ async def vocab_nudge(
 
         words = filter_picks(pick, deck)
         span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             ", ".join(w["word"] for w in words) or "(none)",
         )
         return {"words": words}

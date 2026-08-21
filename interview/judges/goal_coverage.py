@@ -14,9 +14,14 @@ full of grammar mistakes and still cover every goal.
 
 Same Cerebras ``gpt-oss-120b`` structured-output wiring as every other
 interview judge (``agents.openrouter_llm.structured_judge_llm``), wired
-WITHOUT observability (same as the workbench).
+WITH observability since 2026-08-20 (one ``generation_span`` per call).
 """
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -94,8 +99,8 @@ This is speech recognition of spontaneous spoken German, not something the learn
 
 async def judge_goal_coverage(transcript: str, goals: list[str], question: str) -> GoalCoverageVerdict:
     """One structured-output judgement call: per-goal content coverage
-    only. No observability -- interview judges never wrap their calls in a
-    generation span."""
+    only, traced as one ``interview-goal-coverage-judge`` generation under
+    the route's root span."""
     llm = structured_judge_llm(GoalCoverageVerdict, temperature=0)
     goals_block = "\n".join(f"{i + 1}. {g}" for i, g in enumerate(goals))
     prompt = (
@@ -104,7 +109,7 @@ async def judge_goal_coverage(transcript: str, goals: list[str], question: str) 
         .replace("{goals}", goals_block)
         .replace("{transcript}", transcript)
     )
-    result = await llm.ainvoke(prompt)
-    if result.get("parsing_error") is not None:
-        raise result["parsing_error"]
-    return result["parsed"]
+    with generation_span("interview-goal-coverage-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        parsed, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, parsed.model_dump_json(), usage, response_metadata)
+    return parsed

@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
@@ -285,12 +285,12 @@ async def submit_attempt(
                 detail="Those aren't the chips you were given for this item.",
             )
 
-    with tracer.start_as_current_span("satzbau-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satzbau-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("item_id", item["id"])
         if body.session_id:
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
-        attempt_span.set_attribute("langfuse.trace.input", " ".join(order))
+        attempt_span.set_attribute("langfuse.observation.input", " ".join(order))
 
         variant: str | None = None
         if body.give_up:
@@ -319,7 +319,7 @@ async def submit_attempt(
             correct, note, variant = diag.correct, diag.note, diag.variant
 
         attempt_span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             f"correct={correct}" + (f" — {note}" if note else ""),
         )
         # Structured verdict attribute so Langfuse can filter without

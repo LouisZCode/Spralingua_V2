@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.error_extractor import extract_errors
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import User
@@ -67,7 +67,7 @@ async def _background_harvest(text: str, session_id: str | None, user_id: str) -
     ledger write in the repo.
     """
     try:
-        extraction = await extract_errors(transcript=text, session_id=session_id)
+        extraction = await extract_errors(transcript=text, session_id=session_id, user_id=user_id)
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:
@@ -178,11 +178,14 @@ async def get_letter(
         logger.exception("Briefkasten name read failed — greeting without a name")
         reader_name = None
 
-    with tracer.start_as_current_span("briefkasten-letter") as span:
+    with propagate_trace_context(user_id=user_id), tracer.start_as_current_span("briefkasten-letter") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("seed_id", seed["id"])
         span.set_attribute("register", seed["register"])
         span.set_attribute("user.level", level or "")
+        span.set_attribute(
+            "langfuse.observation.input", f"seed={seed['id']} register={seed['register']}"
+        )
         try:
             draft = await write_letter(seed, vocab, reader_name, user_id=user_id)
         except Exception as exc:
@@ -192,6 +195,7 @@ async def get_letter(
                 status_code=502,
                 detail="Couldn't write your letter just now — try again in a moment.",
             )
+        span.set_attribute("langfuse.observation.output", draft.betreff)
 
     min_words, max_words = word_target(seed["level"])
     return {
@@ -271,14 +275,14 @@ async def submit_attempt(
             detail="That's longer than this exercise expects — keep it to a letter.",
         )
 
-    with tracer.start_as_current_span("briefkasten-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("briefkasten-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("seed_id", seed["id"])
         attempt_span.set_attribute("attempt", body.attempt)
         attempt_span.set_attribute("register", seed["register"])
         if body.session_id:
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
-        attempt_span.set_attribute("langfuse.trace.input", response)
+        attempt_span.set_attribute("langfuse.observation.input", response)
 
         try:
             if body.attempt == 1:
@@ -336,7 +340,7 @@ async def submit_attempt(
 
         if body.attempt == 1:
             attempt_span.set_attribute(
-                "langfuse.trace.output", f"hints={len(hints.items)}"
+                "langfuse.observation.output", f"hints={len(hints.items)}"
             )
             attempt_span.set_attribute("verdict.hint_count", len(hints.items))
             result = {
@@ -355,7 +359,7 @@ async def submit_attempt(
             }
         else:
             attempt_span.set_attribute(
-                "langfuse.trace.output", f"score={verdict.score}"
+                "langfuse.observation.output", f"score={verdict.score}"
             )
             attempt_span.set_attribute("verdict.score", verdict.score)
             attempt_span.set_attribute(

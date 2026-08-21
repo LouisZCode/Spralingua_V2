@@ -18,7 +18,7 @@ from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
@@ -263,12 +263,12 @@ async def submit_attempt(
                 detail="Keep it to the missing words — that looks like a paragraph.",
             )
 
-    with tracer.start_as_current_span("faelle-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("faelle-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("item_id", item["id"])
         if body.session_id:
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
-        attempt_span.set_attribute("langfuse.trace.input", answer)
+        attempt_span.set_attribute("langfuse.observation.input", answer)
 
         means_instead: str | None = None
         if body.give_up:
@@ -297,7 +297,7 @@ async def submit_attempt(
             correct, note, means_instead = diag.correct, diag.note, diag.means_instead
 
         attempt_span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             f"correct={correct}" + (f" — {note}" if note else ""),
         )
         # Structured verdict attribute so Langfuse can filter without

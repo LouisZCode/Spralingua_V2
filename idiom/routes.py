@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from idiom.judge import germanize
 from security import drill_try_admit
@@ -74,10 +74,11 @@ async def rephrase(
         context = context[:_MAX_CONTEXT_CHARS]
     target = " ".join(body.target.split()) if body.target else None
 
-    with tracer.start_as_current_span("idiom-rephrase") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("idiom-rephrase") as span:
         span.set_attribute("user.id", user_id)
         if body.session_id:
-            span.set_attribute("session.id", body.session_id)
+            span.set_attribute("langfuse.session.id", body.session_id)
+        span.set_attribute("langfuse.observation.input", text)
         try:
             result = await germanize(text, context, body.register_, target=target)
         except Exception:
@@ -90,5 +91,6 @@ async def rephrase(
                 detail="The judge is busy — try again in a moment.",
             )
         span.set_attribute("idiom.rewrote", result.natural is not None)
+        span.set_attribute("langfuse.observation.output", result.natural or "(already natural)")
 
     return {"natural": result.natural}

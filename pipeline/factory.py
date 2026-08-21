@@ -44,7 +44,14 @@ from agents.load_goals import load_goal
 from agents.load_prompts import list_lesson_ids, load_prompts, tandem_lesson_ids
 from agents.load_pronunciation import load_pronunciation_locale
 from agents.pronunciation import assess_pronunciation
-from agents.observability import flush_traces, tracer
+from agents.observability import (
+    attach_trace_context,
+    clear_trace_session,
+    detach_trace_context,
+    flush_traces,
+    register_trace_session,
+    tracer,
+)
 
 from grammar import load_taxonomy
 
@@ -239,6 +246,16 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # (AUTH-001) instead of minting a `users` row per visitor; `user_id` itself
     # stays per-session for ACTIVE_TASKS routing, Langfuse, and the wrapper.
     db_user_id = db_user_id or user_id
+
+    # Langfuse v4: attach `user.id`/`langfuse.session.id` as OTel baggage for
+    # the whole connection. Every span created under this context — turn
+    # spans, pipecat's STT/TTS spans, the wrapper's llm span, the
+    # post-session evaluators' generation spans (asyncio tasks copy the
+    # context) — gets both attributes stamped by the baggage processor in
+    # agents/observability.py, so observation-level filtering works without
+    # threading the ids through every call site. Detached at the end of the
+    # disconnect `finally` below.
+    _trace_ctx_token = attach_trace_context(user_id=user_id, session_id=session_id)
 
     # B2: bound the MiniMax TTS session's requests — with no timeout a hung
     # MiniMax request falls back to aiohttp's 5-minute default, stalling this
@@ -589,6 +606,9 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
         ACTIVE_LESSONS[user_id] = lesson_id  # AGENT-001: this session's runtime language
+        # Langfuse: let sibling HTTP requests (Clara's exercise routes) join
+        # this conversation's Session. Cleared in lockstep with the two above.
+        register_trace_session(user_id, session_id)
 
         # Wall-clock session cap (SEC-001). Armed only when a timeout is passed
         # (the public demo route does; /learn passes None → no watchdog, so its
@@ -656,6 +676,9 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             if ACTIVE_TASKS.get(user_id) is task:
                 ACTIVE_TASKS.pop(user_id, None)
                 ACTIVE_LESSONS.pop(user_id, None)  # kept in lockstep — same guard, same branch
+            # Value-guarded internally (only removes if still OUR session id),
+            # so it is safe outside the identity guard above.
+            clear_trace_session(user_id, session_id)
             # B3: must not be bare — an unhandled raise here would skip every
             # step after it in this `finally` (evaluators, DB finalize, OTel
             # flush), leaving the activity_session row ended_at=NULL forever.
@@ -747,6 +770,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                             error_result = await extract_errors(
                                 transcript=wrapper.render_transcript(),
                                 session_id=session_id,
+                                user_id=db_user_id,
                             )
                             if error_result.errors:
                                 async with get_sessionmaker()() as db:
@@ -1012,4 +1036,8 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             # OTel call — run it off the event loop so a slow Langfuse OTLP
             # endpoint can't freeze every other connected client's pipeline.
             await asyncio.to_thread(flush_traces)
+            try:
+                detach_trace_context(_trace_ctx_token)
+            except Exception:  # noqa: BLE001 — context detach must not block cleanup
+                logger.exception("Trace-context detach failed (non-fatal)")
             logger.info(f"Client disconnected: {user_id}")

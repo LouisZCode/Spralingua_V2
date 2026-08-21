@@ -20,7 +20,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 
 from agents.error_extractor import extract_errors
-from agents.observability import tracer
+from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_sessionmaker
 from database.repository import record_drill_attempt, record_grammar_error
@@ -59,7 +59,7 @@ async def _background_harvest(transcript: str, session_id: str, user_id: str) ->
     like the conversation flow's Harvester B. Same non-fatal, log-and-
     swallow contract as the inline block this replaces."""
     try:
-        extraction = await extract_errors(transcript=transcript, session_id=session_id)
+        extraction = await extract_errors(transcript=transcript, session_id=session_id, user_id=user_id)
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:
@@ -209,7 +209,7 @@ async def submit_attempt(
             detail="That recording is too long — one answer is enough.",
         )
 
-    with tracer.start_as_current_span("szenario-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=sessionId), tracer.start_as_current_span("szenario-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("scenario_id", scenario["id"])
         attempt_span.set_attribute("langfuse.session.id", sessionId)
@@ -232,7 +232,7 @@ async def submit_attempt(
                 status_code=422,
                 detail="We couldn't hear anything — try again.",
             )
-        attempt_span.set_attribute("langfuse.trace.input", transcript)
+        attempt_span.set_attribute("langfuse.observation.input", transcript)
 
         try:
             verdict = await judge_structure(
@@ -256,7 +256,7 @@ async def submit_attempt(
             scenarioId,
         )
         attempt_span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             f"verdict={verdict.verdict} level={verdict.level_read}",
         )
         # Structured verdict attributes so Langfuse can filter without

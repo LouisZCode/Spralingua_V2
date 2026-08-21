@@ -16,6 +16,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel, Field
 
+from agents.observability import (
+    get_trace_session,
+    mark_span_error,
+    propagate_trace_context,
+    tracer,
+)
 from auth.deps import get_current_user_id
 from security import drill_try_admit
 from teacher.registry import get_adapter, pick_random_item
@@ -34,20 +40,36 @@ async def get_exercise(
     404 when no covered drill targets this pattern — Clara's own prompt is
     told to only ever name an id from her rendered focus list, but a stale
     or hallucinated id must still fail closed here, not 500."""
-    picked = pick_random_item(pattern)
-    if picked is None:
-        raise HTTPException(status_code=404, detail="no exercise for this pattern")
-    drill_name, item = picked
-    adapter = get_adapter(drill_name)
-    card = adapter.build_card(item)
-    return {
-        "drill": drill_name,
-        "itemId": item["id"],
-        "patternId": item["pattern_id"],
-        "instruction": card["instruction"],
-        "prompt": card["prompt"],
-        "expected_shape": card.get("expected_shape"),
-    }
+    # Joins Clara's live conversation Session in Langfuse (server-side lookup;
+    # the frontend carries no session id). One trace per dealt exercise =
+    # Clara's deal rate is countable per session/user. A 404 is stamped as an
+    # ERROR trace deliberately: it means Clara named a pattern her exercise
+    # catalog doesn't cover — an agent-quality signal, not client noise.
+    session_id = get_trace_session(user_id)
+    with tracer.start_as_current_span("teacher-exercise-deal") as span:
+        span.set_attribute("user.id", user_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
+        span.set_attribute("langfuse.observation.input", pattern)
+        span.set_attribute("langfuse.observation.metadata.pattern", pattern)
+        picked = pick_random_item(pattern)
+        if picked is None:
+            mark_span_error(span, "no exercise for this pattern (stale/hallucinated id?)")
+            raise HTTPException(status_code=404, detail="no exercise for this pattern")
+        drill_name, item = picked
+        adapter = get_adapter(drill_name)
+        card = adapter.build_card(item)
+        span.set_attribute("drill", drill_name)
+        span.set_attribute("item_id", item["id"])
+        span.set_attribute("langfuse.observation.output", f"{drill_name}:{item['id']}")
+        return {
+            "drill": drill_name,
+            "itemId": item["id"],
+            "patternId": item["pattern_id"],
+            "instruction": card["instruction"],
+            "prompt": card["prompt"],
+            "expected_shape": card.get("expected_shape"),
+        }
 
 
 class AttemptIn(BaseModel):
@@ -96,15 +118,39 @@ async def submit_exercise_attempt(
             detail="Keep it to the answer — that looks like a paragraph.",
         )
 
-    try:
-        correct, expected, note = await adapter.grade(item, answer)
-    except Exception:
-        logger.exception(
-            "Teacher exercise judge call failed (drill {} item {})", body.drill, item["id"]
+    # Same tracing shape as every drill's /attempts: a root span carrying the
+    # answer as root-observation input and the verdict as output, wrapped in
+    # propagate_trace_context so the judge generation the grade may fire
+    # nests under it WITH user/session (it was an orphan before this span
+    # existed). `langfuse.session.id` joins Clara's live conversation Session
+    # server-side. Tracing only — the WRITES-NOTHING invariant above is
+    # untouched; nothing here goes near the ledger.
+    session_id = get_trace_session(user_id)
+    with propagate_trace_context(user_id=user_id, session_id=session_id), \
+            tracer.start_as_current_span("teacher-exercise-attempt") as span:
+        span.set_attribute("user.id", user_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
+        span.set_attribute("drill", body.drill)
+        span.set_attribute("item_id", item["id"])
+        span.set_attribute("langfuse.observation.input", answer)
+        # Filterable metadata (langfuse.observation.metadata.*) — the fields
+        # OBS-009-style evaluation will want to slice by.
+        span.set_attribute("langfuse.observation.metadata.pattern", item["pattern_id"])
+        try:
+            correct, expected, note = await adapter.grade(item, answer)
+        except Exception:
+            logger.exception(
+                "Teacher exercise judge call failed (drill {} item {})", body.drill, item["id"]
+            )
+            mark_span_error(span, "judge unavailable")
+            raise HTTPException(
+                status_code=502,
+                detail="The judge is unavailable right now — try again in a moment.",
+            )
+        span.set_attribute("langfuse.observation.metadata.correct", str(correct))
+        span.set_attribute(
+            "langfuse.observation.output",
+            f"correct={correct} expected={expected}" + (f" note={note}" if note else ""),
         )
-        raise HTTPException(
-            status_code=502,
-            detail="The judge is unavailable right now — try again in a moment.",
-        )
-
-    return {"correct": correct, "expected": expected, "note": note}
+        return {"correct": correct, "expected": expected, "note": note}

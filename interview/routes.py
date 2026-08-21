@@ -30,7 +30,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.error_extractor import extract_errors
-from agents.observability import tracer
+from agents.observability import mark_span_error, propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import AudioChunk, AudioItem
@@ -91,7 +91,7 @@ async def _background_harvest(
     ``/me/stats``.
     """
     try:
-        extraction = await extract_errors(transcript=transcript, session_id=session_id)
+        extraction = await extract_errors(transcript=transcript, session_id=session_id, user_id=user_id)
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:
@@ -360,30 +360,42 @@ async def post_comprehension(
         logger.warning(f"keyword boost construction failed for chunk {chunk_id}: {exc}")
         keywords = []
 
-    try:
-        transcript = await transcribe_comprehension(audio_bytes, audio.content_type, keywords)
-    except Exception as exc:  # noqa: BLE001 -- a Deepgram outage must 502, not 500
-        logger.warning(f"interview comprehension transcription failed: {exc}")
-        raise HTTPException(status_code=502, detail="Couldn't process the audio — try again in a moment.")
-    if not transcript:
-        return {"transcript": "", "error": "no_speech"}
-    if len(transcript) > TRANSCRIPT_MAX_LEN:
-        raise HTTPException(status_code=422, detail="transcript too long")
-
-    response = {"transcript": transcript}
-    with tracer.start_as_current_span("interview-comprehension") as span:
+    # The root span opens BEFORE transcription (since 2026-08-20), so the
+    # Deepgram call's `stt` generation nests under this trace instead of
+    # being invisible — and a transcription outage shows up as an ERROR
+    # trace rather than a bare 502 in the access log.
+    with propagate_trace_context(user_id=user_id), \
+            tracer.start_as_current_span("interview-comprehension") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("chunk_id", chunk_id)
-        span.set_attribute("langfuse.trace.input", transcript)
+        try:
+            transcript = await transcribe_comprehension(audio_bytes, audio.content_type, keywords)
+        except Exception as exc:  # noqa: BLE001 -- a Deepgram outage must 502, not 500
+            logger.warning(f"interview comprehension transcription failed: {exc}")
+            mark_span_error(span, "transcription unavailable")
+            raise HTTPException(status_code=502, detail="Couldn't process the audio — try again in a moment.")
+        span.set_attribute("langfuse.observation.input", transcript or "(no speech)")
+        if not transcript:
+            span.set_attribute("langfuse.observation.output", "no_speech")
+            return {"transcript": "", "error": "no_speech"}
+        if len(transcript) > TRANSCRIPT_MAX_LEN:
+            mark_span_error(span, "transcript too long")
+            raise HTTPException(status_code=422, detail="transcript too long")
+
+        response = {"transcript": transcript}
         try:
             verdict = await judge_comprehension(transcript, shape, summary, question_text)
             response["comprehension"] = verdict.model_dump()
             span.set_attribute("verdict.passed", verdict.passed)
+            span.set_attribute(
+                "langfuse.observation.output",
+                f"passed={verdict.passed}" + (f" | {verdict.got_right}" if verdict.got_right else ""),
+            )
         except Exception as exc:  # noqa: BLE001 -- a failing judge must not crash round 1
             span.record_exception(exc)
             logger.warning(f"interview comprehension judge failed: {exc}")
             response["comprehension_error"] = str(exc)
-    return response
+        return response
 
 
 @router.post("/answer/{chunk_id}")
@@ -418,16 +430,6 @@ async def post_answer(
     if len(audio_bytes) > _MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="That recording is too long — one answer is enough.")
 
-    try:
-        transcript = await transcribe_answer(audio_bytes, audio.content_type)
-    except Exception as exc:  # noqa: BLE001 -- a Deepgram outage must 502, not 500
-        logger.warning(f"interview answer transcription failed: {exc}")
-        raise HTTPException(status_code=502, detail="Couldn't process the audio — try again in a moment.")
-    if not transcript:
-        return {"transcript": "", "error": "no_speech"}
-    if len(transcript) > TRANSCRIPT_MAX_LEN:
-        raise HTTPException(status_code=422, detail="transcript too long")
-
     question = chunk.transcript or ""
     brief = chunk.brief
     if not brief:
@@ -435,12 +437,28 @@ async def post_answer(
     goals = (brief or {}).get("goals") or []
     goal_question = ((brief or {}).get("question") or {}).get("text") or question
 
-    with tracer.start_as_current_span("interview-answer") as span:
+    # The root span opens BEFORE transcription (since 2026-08-20), so the
+    # Deepgram call's `stt` generation nests under this trace beside the
+    # judges — and a transcription outage shows up as an ERROR trace.
+    with propagate_trace_context(user_id=user_id, session_id=session_id), \
+            tracer.start_as_current_span("interview-answer") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("chunk_id", chunk_id)
         if session_id:
             span.set_attribute("langfuse.session.id", session_id)
-        span.set_attribute("langfuse.trace.input", transcript)
+        try:
+            transcript = await transcribe_answer(audio_bytes, audio.content_type)
+        except Exception as exc:  # noqa: BLE001 -- a Deepgram outage must 502, not 500
+            logger.warning(f"interview answer transcription failed: {exc}")
+            mark_span_error(span, "transcription unavailable")
+            raise HTTPException(status_code=502, detail="Couldn't process the audio — try again in a moment.")
+        span.set_attribute("langfuse.observation.input", transcript or "(no speech)")
+        if not transcript:
+            span.set_attribute("langfuse.observation.output", "no_speech")
+            return {"transcript": "", "error": "no_speech"}
+        if len(transcript) > TRANSCRIPT_MAX_LEN:
+            mark_span_error(span, "transcript too long")
+            raise HTTPException(status_code=422, detail="transcript too long")
 
         (
             grammar_result,
@@ -450,6 +468,27 @@ async def post_answer(
             goal_coverage_result,
             goal_coverage_error,
         ) = await _run_judges(question, transcript, goals or None, goal_question)
+
+        # Compact verdict summary as the root-observation output — the Trace
+        # list's Output column; the full verdicts live on the judge children.
+        summary_parts = []
+        if grammar_result is not None:
+            summary_parts.append(
+                f"grammar_ok={grammar_result.get('ok')} slips={len(grammar_result.get('slips') or [])}"
+            )
+        if grammar_error:
+            summary_parts.append("grammar=error")
+        if idiom_result is not None:
+            summary_parts.append(f"idiom_suggestions={len(idiom_result.get('suggestions') or [])}")
+        if idiom_error:
+            summary_parts.append("idiom=error")
+        if goals:
+            if goal_coverage_result is not None:
+                covered = sum(1 for g in goal_coverage_result if g.get("covered"))
+                summary_parts.append(f"goals_covered={covered}/{len(goal_coverage_result)}")
+            if goal_coverage_error:
+                summary_parts.append("goals=error")
+        span.set_attribute("langfuse.observation.output", " ".join(summary_parts) or "no verdicts")
 
     response = {
         "transcript": transcript,

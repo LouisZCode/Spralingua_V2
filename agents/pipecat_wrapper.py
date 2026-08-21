@@ -49,7 +49,7 @@ from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 from .fake_profiles import load_profile
 from .load_prompts import load_prompts
-from .observability import tracer
+from .observability import get_current_turn_span, tracer
 
 # `max_exchanges` is now per-lesson, read from the YAML in `ClientWrapper.__init__`.
 # End-of-call fires when either the count cap (max_exchanges) is reached OR a
@@ -337,10 +337,14 @@ class ClientWrapper:
             llm_span.set_attribute("gen_ai.output.type", "text")
             # Observation-level input — shown on the LLM observation row in Langfuse.
             llm_span.set_attribute("langfuse.observation.input", text)
-            # Trace-level input — populates the "Input" column on the conversation
-            # trace itself. Setting on any span in the trace works; we set it here
-            # (last LLM call wins for multi-turn lessons).
-            llm_span.set_attribute("langfuse.trace.input", text)
+            # v4 (observations-first): the trace's Input column reads from the
+            # ROOT observation — the observer's live turn span — not from the
+            # deprecated `langfuse.trace.input` on a child. If no turn span is
+            # live (tracing off, or this llm span is its own root), the
+            # observation.input above already covers it.
+            turn_span = get_current_turn_span()
+            if turn_span is not None and turn_span.is_recording():
+                turn_span.set_attribute("langfuse.observation.input", text)
             llm_span.set_attribute("voice", self.context.agent_voice)
             llm_span.set_attribute("lesson_id", self.context.lesson_id)
             llm_span.set_attribute("exchange", self._exchange_count)
@@ -432,7 +436,12 @@ class ClientWrapper:
                     # marker and trailing whitespace" contract.
                     output_text = output_text.rstrip()
                 llm_span.set_attribute("langfuse.observation.output", output_text)
-                llm_span.set_attribute("langfuse.trace.output", output_text)
+                # v4 root-observation output — same contract as the input
+                # stamp above. The turn span is still recording here: it ends
+                # on BotStoppedSpeaking, which is always after LLM streaming.
+                turn_span = get_current_turn_span()
+                if turn_span is not None and turn_span.is_recording():
+                    turn_span.set_attribute("langfuse.observation.output", output_text)
                 if final_usage:
                     if (n := final_usage.get("input_tokens")) is not None:
                         llm_span.set_attribute("gen_ai.usage.input_tokens", n)

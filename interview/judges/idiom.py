@@ -11,10 +11,15 @@ silently uses correct German, but no ``suggestions`` entry may be about
 grammar.
 
 Same Cerebras ``gpt-oss-120b`` structured-output wiring as
-``interview/judges/grammar.py``, wired WITHOUT observability (same as the
-workbench).
+``interview/judges/grammar.py``, traced with a ``generation_span`` per call
+since 2026-08-20.
 """
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
 
@@ -99,11 +104,11 @@ Some answers carry the shape of another language -- an English idiom translated 
 
 async def judge_idiom(question: str, transcript: str) -> IdiomVerdict:
     """One structured-output judgement call: nativeness only. No
-    observability -- interview judges never wrap their calls in a
-    generation span."""
+    correctness, traced as one ``interview-idiom-judge`` generation under
+    the route's root span."""
     llm = structured_judge_llm(IdiomVerdict, temperature=0)
     prompt = PROMPT.replace("{question}", question).replace("{transcript}", transcript)
-    result = await llm.ainvoke(prompt)
-    if result.get("parsing_error") is not None:
-        raise result["parsing_error"]
-    return result["parsed"]
+    with generation_span("interview-idiom-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        parsed, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, parsed.model_dump_json(), usage, response_metadata)
+    return parsed

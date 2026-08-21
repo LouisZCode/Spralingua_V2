@@ -10,12 +10,17 @@ to say it" belong entirely to the sibling judge, ``interview/judges/idiom.py``
 
 Same Cerebras ``gpt-oss-120b`` structured-output wiring as the main app's
 other judges (``agents/openrouter_llm.py::structured_judge_llm``), wired
-WITHOUT observability -- same as the workbench: no ``generation_span``, no
+WITH observability since 2026-08-20: a ``generation_span`` per call, no
 Langfuse/OTel, no ledger writes at this layer (the ledger harvest lives in
 ``interview/routes.py``, over this same answer, via the shared
 ``agents/error_extractor.py`` harvester, not this judge).
 """
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
 
@@ -81,11 +86,11 @@ This is speech recognition, not something the learner typed or saw on a screen. 
 
 
 async def judge_grammar(question: str, transcript: str) -> GrammarVerdict:
-    """One structured-output judgement call: grammar only. No observability
-    -- interview judges never wrap their calls in a generation span."""
+    """One structured-output judgement call: grammar only, traced as one
+    ``interview-grammar-judge`` generation under the route's root span."""
     llm = structured_judge_llm(GrammarVerdict, temperature=0)
     prompt = PROMPT.replace("{question}", question).replace("{transcript}", transcript)
-    result = await llm.ainvoke(prompt)
-    if result.get("parsing_error") is not None:
-        raise result["parsing_error"]
-    return result["parsed"]
+    with generation_span("interview-grammar-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        parsed, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, parsed.model_dump_json(), usage, response_metadata)
+    return parsed

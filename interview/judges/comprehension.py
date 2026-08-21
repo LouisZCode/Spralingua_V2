@@ -15,11 +15,16 @@ wrong idea FAILS.
 
 Same Cerebras ``gpt-oss-120b`` structured-output wiring as every other
 interview judge (``agents.openrouter_llm.structured_judge_llm``), wired
-WITHOUT observability -- same as the workbench: no ``generation_span``, no
+WITH observability since 2026-08-20: a ``generation_span`` per call, no
 Langfuse/OTel, no ledger writes at this layer (the ledger harvest lives in
 ``interview/routes.py``, over round 2's answer only).
 """
 
+from agents.observability import (
+    generation_span,
+    record_generation_output,
+    unwrap_structured_output,
+)
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -117,8 +122,8 @@ Ground truth: same as example 6. Retell: "Sie hat gefragt, wie viel Gehalt ich m
 
 async def judge_comprehension(transcript: str, shape: str, summary: str, question: str) -> ComprehensionVerdict:
     """One structured-output judgement call: Round-1 content comprehension
-    only. No observability -- interview judges never wrap their calls in a
-    generation span."""
+    only, traced as one ``interview-comprehension-judge`` generation under
+    the route's root span."""
     llm = structured_judge_llm(ComprehensionVerdict, temperature=0)
     prompt = (
         PROMPT
@@ -127,7 +132,7 @@ async def judge_comprehension(transcript: str, shape: str, summary: str, questio
         .replace("{question}", question or "(none)")
         .replace("{transcript}", transcript)
     )
-    result = await llm.ainvoke(prompt)
-    if result.get("parsing_error") is not None:
-        raise result["parsing_error"]
-    return result["parsed"]
+    with generation_span("interview-comprehension-judge", model=JUDGE_MODEL, input_text=prompt) as span:
+        parsed, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, parsed.model_dump_json(), usage, response_metadata)
+    return parsed

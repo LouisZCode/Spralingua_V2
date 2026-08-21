@@ -157,7 +157,7 @@ transcript:
 
 
 async def extract_errors(
-    *, transcript: str, session_id: str | None = None
+    *, transcript: str, session_id: str | None = None, user_id: str | None = None
 ) -> ErrorExtraction:
     """Classify the learner's grammar slips in a drill transcript.
 
@@ -166,7 +166,11 @@ async def extract_errors(
     wins). Callers upsert each entry into the ledger with ``source="situation"``.
 
     ``session_id`` (OBS-006) files the harvest's Langfuse trace into the same
-    Session as the conversation turns it classifies.
+    Session as the conversation turns it classifies. ``user_id`` stamps the
+    trace's user — required when this runs as a BACKGROUND harvest (szenario/
+    briefkasten/interview), where the request's baggage context is gone and
+    the harvest becomes its own root trace: without it the trace is invisible
+    in every user-filtered Langfuse view (found by the 2026-08-20 trace test).
     """
     rendered = (
         PROMPT
@@ -181,6 +185,7 @@ async def extract_errors(
         model=EXTRACTOR_MODEL,
         input_text=transcript,
         session_id=session_id,
+        user_id=user_id,
     ) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(rendered))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)

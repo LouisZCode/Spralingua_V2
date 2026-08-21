@@ -69,6 +69,8 @@ from pipecat.observers.base_observer import BaseObserver, FramePushed
 from pipecat.processors.frame_processor import FrameDirection
 from pipecat.utils.tracing.turn_context_provider import TurnContextProvider
 
+from agents.observability import set_current_turn_span
+
 
 class PipelineLatencyObserver(BaseObserver):
     """Open a new Langfuse trace per turn. Turn span duration = UserStarted
@@ -209,6 +211,10 @@ class PipelineLatencyObserver(BaseObserver):
         TurnContextProvider.get_instance().set_current_turn_context(
             self._turn_span.get_span_context()
         )
+        # The provider above only carries the SpanContext (ids); the wrapper
+        # also needs the LIVE span to put the turn's overall input/output on
+        # this trace root (v4 root-observation I/O).
+        set_current_turn_span(self._turn_span)
         # Re-arm the TTS service's one-span-per-turn gate (if present).
         if self._tts_service is not None and hasattr(self._tts_service, "reset_for_new_turn"):
             self._tts_service.reset_for_new_turn()
@@ -225,3 +231,4 @@ class PipelineLatencyObserver(BaseObserver):
             self._turn_span = None
             self._user_stopped_ns = None
             TurnContextProvider.get_instance().set_current_turn_context(None)
+            set_current_turn_span(None)

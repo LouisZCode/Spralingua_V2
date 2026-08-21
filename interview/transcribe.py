@@ -7,11 +7,13 @@ Deliberately NOT ``satz/examiner.py::transcribe_attempt``, for the same
 reason the workbench avoided it: that helper pins ``nova-3`` and wraps every
 call in ``agents.observability.generation_span``, where this exercise pins
 ``nova-2`` (round 1's ``keywords`` boosting is a nova-2-only parameter —
-nova-3's equivalent, ``keyterm``, is English-only) and — like every other
-interview_local judge/transcription call — stays unobserved by Langfuse/OTel
-at the STT layer (the judges downstream of it are equally unobserved; only
-the ledger harvest in ``interview/routes.py`` gets its own span, via
-``agents/error_extractor.py``).
+nova-3's equivalent, ``keyterm``, is English-only). Since 2026-08-20 both
+calls are traced: each opens an ``stt`` generation span (same shape as
+``satz/examiner.py``'s), which nests under the route's root span because
+``interview/routes.py`` opens that root BEFORE transcribing — so every
+network call in this exercise is now under the Langfuse umbrella (the
+judges got their spans the same day; the ledger harvest already had one
+via ``agents/error_extractor.py``).
 """
 
 import re
@@ -21,6 +23,7 @@ from urllib.parse import parse_qsl, urlsplit
 import httpx
 from loguru import logger
 
+from agents.observability import generation_span, record_generation_output
 from config import deepgram_api_key
 
 # Deepgram prerecorded endpoint for both round-1 (retell) and round-2
@@ -45,11 +48,21 @@ async def transcribe_answer(audio: bytes, content_type: Optional[str]) -> str:
         "Authorization": f"Token {deepgram_api_key}",
         "Content-Type": content_type or "audio/webm",
     }
-    async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(_DEEPGRAM_ANSWER_URL, headers=headers, content=audio)
-        resp.raise_for_status()
-        body = resp.json()
-    return body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+    with generation_span(
+        "stt",
+        system="deepgram",
+        model="nova-2",
+        operation="transcription",
+        input_text=f"[{len(audio)} bytes, {content_type or 'audio/webm'}]",
+    ) as span:
+        span.set_attribute("audio.bytes", len(audio))
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(_DEEPGRAM_ANSWER_URL, headers=headers, content=audio)
+            resp.raise_for_status()
+            body = resp.json()
+        transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+        record_generation_output(span, transcript)
+    return transcript
 
 
 # Round-1 ("listen & retell") Deepgram keyword boosting -- curated
@@ -209,11 +222,27 @@ async def transcribe_comprehension(audio: bytes, content_type: Optional[str], ke
     if keywords:
         logger.info(f"comprehension transcription keyword boosts: {keywords}")
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(endpoint, headers=headers, params=params, content=audio)
-            resp.raise_for_status()
-            body = resp.json()
-        return body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+        # A failed keyworded attempt closes its span with the exception
+        # recorded (status ERROR), and the no-keyword retry below opens a
+        # fresh sibling `stt` span — so a boost-triggered retry shows up in
+        # the trace as two Deepgram calls, which it was.
+        with generation_span(
+            "stt",
+            system="deepgram",
+            model="nova-2",
+            operation="transcription",
+            input_text=f"[{len(audio)} bytes, {content_type or 'audio/webm'}]",
+        ) as span:
+            span.set_attribute("audio.bytes", len(audio))
+            if keywords:
+                span.set_attribute("stt.keywords", ", ".join(keywords))
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(endpoint, headers=headers, params=params, content=audio)
+                resp.raise_for_status()
+                body = resp.json()
+            transcript = body["results"]["channels"][0]["alternatives"][0]["transcript"].strip()
+            record_generation_output(span, transcript)
+            return transcript
     except Exception as exc:  # noqa: BLE001 -- a keyword-boost failure must never break round 1
         if not keywords:
             raise

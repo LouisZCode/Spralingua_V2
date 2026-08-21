@@ -20,11 +20,13 @@ public/secret key pair from the existing ``.env``.
 import base64
 import os
 from contextlib import contextmanager
+from typing import Optional
 
 from loguru import logger
-from opentelemetry import trace
+from opentelemetry import baggage, context as otel_context, trace
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-from opentelemetry.trace import Status, StatusCode
+from opentelemetry.sdk.trace import SpanProcessor
+from opentelemetry.trace import Span, Status, StatusCode
 from pipecat.utils.tracing.setup import setup_tracing
 
 from config import (
@@ -88,6 +90,109 @@ if langfuse_base_url and langfuse_public_key and langfuse_secret_key:
 else:
     logger.info("Langfuse tracing disabled — LANGFUSE_* not fully configured.")
     _tracing_enabled = False
+
+# Langfuse v4 (observations-first data model) queries observations directly:
+# `user.id` / `langfuse.session.id` set only on a trace's ROOT span are
+# invisible when filtering or aggregating its child observations (the judge
+# generations, pipecat's STT/TTS spans). The docs' recommended fix is OTel
+# Baggage plus a processor that copies whitelisted baggage entries onto every
+# span at start — root sites attach the context once via
+# `propagate_trace_context()` and every span created inside it (including
+# spans in tasks spawned from that context) inherits the attributes.
+# https://langfuse.com/integrations/native/opentelemetry#propagating-attributes
+_PROPAGATED_BAGGAGE_KEYS = ("user.id", "langfuse.session.id")
+
+
+class _BaggagePropagationProcessor(SpanProcessor):
+    """Copy whitelisted baggage entries to span attributes at span start."""
+
+    def on_start(self, span, parent_context=None):
+        for key in _PROPAGATED_BAGGAGE_KEYS:
+            value = baggage.get_baggage(key, parent_context)
+            if value is not None:
+                span.set_attribute(key, str(value))
+
+
+_provider = trace.get_tracer_provider()
+if _tracing_enabled and hasattr(_provider, "add_span_processor"):
+    _provider.add_span_processor(_BaggagePropagationProcessor())
+
+
+def attach_trace_context(*, user_id: str | None = None, session_id: str | None = None):
+    """Attach `user.id`/`langfuse.session.id` baggage to the current OTel
+    context; every span started under it (this task and tasks spawned from
+    it) gets the attributes stamped by `_BaggagePropagationProcessor`.
+
+    Returns the context token for `detach_trace_context`. Baggage values here
+    are identifiers, never secrets — baggage would ride any OTel-instrumented
+    outbound HTTP call, but this codebase instruments no HTTP clients.
+    """
+    ctx = otel_context.get_current()
+    if user_id:
+        ctx = baggage.set_baggage("user.id", user_id, ctx)
+    if session_id:
+        ctx = baggage.set_baggage("langfuse.session.id", session_id, ctx)
+    return otel_context.attach(ctx)
+
+
+def detach_trace_context(token) -> None:
+    otel_context.detach(token)
+
+
+@contextmanager
+def propagate_trace_context(*, user_id: str | None = None, session_id: str | None = None):
+    """Context-manager form of `attach_trace_context` for the HTTP drill
+    routes: wrap the root span so its judge/STT children carry user + session.
+    None values are skipped, matching the routes' conditional session lines.
+    """
+    token = attach_trace_context(user_id=user_id, session_id=session_id)
+    try:
+        yield
+    finally:
+        detach_trace_context(token)
+
+
+# The live turn span, so `ClientWrapper.astream` can put the turn's overall
+# input/output on the ROOT observation (v4 replaces the deprecated
+# `langfuse.trace.input`/`.output` child-span attributes with root-observation
+# I/O). Module-level single slot — the same per-process singleton semantics as
+# pipecat's `TurnContextProvider`, which the pipeline already relies on; that
+# provider only stores the SpanContext (ids), so the live span object needs
+# its own registry. Set/cleared by `PipelineLatencyObserver`.
+_current_turn_span: Optional[Span] = None
+
+
+def set_current_turn_span(span: Optional[Span]) -> None:
+    global _current_turn_span
+    _current_turn_span = span
+
+
+def get_current_turn_span() -> Optional[Span]:
+    return _current_turn_span
+
+
+# user_id → the live voice session's Langfuse session id. Registered/cleared
+# by `run_pipeline` in lockstep with ACTIVE_TASKS (same second-tab identity
+# guard). Lets sibling HTTP requests that belong to a live conversation —
+# today Clara's exercise routes (`teacher/routes.py`) — join their traces to
+# that conversation's Langfuse Session without the frontend carrying the id.
+_active_trace_sessions: dict[str, str] = {}
+
+
+def register_trace_session(user_id: str, session_id: str) -> None:
+    _active_trace_sessions[user_id] = session_id
+
+
+def clear_trace_session(user_id: str, session_id: str) -> None:
+    """Remove the entry only if it is still ours — a second tab's connect
+    overwrites the slot, and its session must survive our disconnect."""
+    if _active_trace_sessions.get(user_id) == session_id:
+        _active_trace_sessions.pop(user_id, None)
+
+
+def get_trace_session(user_id: str) -> Optional[str]:
+    return _active_trace_sessions.get(user_id)
+
 
 # Tracer for hand-rolled spans (the LLM span in ``pipecat_wrapper.astream``).
 # Pipecat-owned spans use their own tracer names internally.

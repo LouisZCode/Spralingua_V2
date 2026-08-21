@@ -24,7 +24,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agents.observability import mark_span_error, tracer
+from agents.observability import mark_span_error, propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db
@@ -329,7 +329,7 @@ async def _forge_card(
         # All _MAX_FORGE_ATTEMPTS rounds came back rejected — ship the last
         # attempt anyway, but make the failure loud in Langfuse rather than
         # silent.
-        with tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
+        with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
             if session_id:
                 span.set_attribute("langfuse.session.id", session_id)
             span.set_attribute("user.id", user_id)
@@ -503,7 +503,7 @@ async def _ensure_past_sibling(
             # Same Langfuse error signal as the base-card gate: giving up is
             # the safe outcome here, but it must never be a *silent* one, or
             # verbs quietly stop getting past siblings and nobody notices.
-            with tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
+            with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
                 if session_id:
                     span.set_attribute("langfuse.session.id", session_id)
                 span.set_attribute("user.id", user_id)
@@ -825,7 +825,7 @@ async def submit_attempt(
     # — start_as_current_span nests them here automatically) split the
     # attempt's highly variable latency per stage; the perf_counter log line
     # below answers the same question locally when Langfuse is off.
-    with tracer.start_as_current_span("satz-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("card_id", card_id)
         if session_id:
@@ -852,7 +852,7 @@ async def submit_attempt(
                 status_code=422,
                 detail="We couldn't hear anything — try again a bit closer to the mic.",
             )
-        attempt_span.set_attribute("langfuse.trace.input", transcript)
+        attempt_span.set_attribute("langfuse.observation.input", transcript)
 
         try:
             judgement = await examine_attempt(card, transcript, extra_forms=extra_forms)
@@ -871,7 +871,7 @@ async def submit_attempt(
             card_id,
         )
         attempt_span.set_attribute(
-            "langfuse.trace.output",
+            "langfuse.observation.output",
             f"wordOk={judgement.word_ok} grammarOk={judgement.grammar_ok}"
             + (f" → {judgement.corrected}" if judgement.corrected else ""),
         )
@@ -1212,12 +1212,12 @@ async def explain_attempt(
     if card is None:
         raise HTTPException(status_code=404, detail="Unknown card.")
 
-    with tracer.start_as_current_span("satz-explain-attempt") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satz-explain-attempt") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("card_id", body.card_id)
         if body.session_id:
             span.set_attribute("langfuse.session.id", body.session_id)
-        span.set_attribute("langfuse.trace.input", transcript)
+        span.set_attribute("langfuse.observation.input", transcript)
         try:
             result = await explain_correction(
                 card, transcript, corrected, body.error, user_id=user_id
@@ -1229,7 +1229,7 @@ async def explain_attempt(
                 status_code=502,
                 detail="The coach is unavailable right now — try again in a moment.",
             )
-        span.set_attribute("langfuse.trace.output", result.explanation)
+        span.set_attribute("langfuse.observation.output", result.explanation)
     return {"explanation": result.explanation}
 
 
@@ -1295,11 +1295,11 @@ async def gloss_word_route(
     if not lookup:
         raise HTTPException(status_code=422, detail="Type a word first.")
 
-    with tracer.start_as_current_span("satz-gloss-request") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satz-gloss-request") as span:
         span.set_attribute("user.id", user_id)
         if body.session_id:
             span.set_attribute("langfuse.session.id", body.session_id)
-        span.set_attribute("langfuse.trace.input", word)
+        span.set_attribute("langfuse.observation.input", word)
 
         # 0) SATZ-026: closed-class function words (articles, pronouns, the
         # commonest particles) are answered from a fixed table before ANY
@@ -1307,7 +1307,7 @@ async def gloss_word_route(
         # has to outrank even the cache.
         function_result = function_word_gloss(word, context or word)
         if function_result is not None:
-            span.set_attribute("langfuse.trace.output", function_result.lemma)
+            span.set_attribute("langfuse.observation.output", function_result.lemma)
             gloss_adds_remaining = max(
                 0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
             )
@@ -1407,7 +1407,7 @@ async def gloss_word_route(
                 )
             ) is not None
 
-        span.set_attribute("langfuse.trace.output", lemma)
+        span.set_attribute("langfuse.observation.output", lemma)
 
     # SATZ-013: today's remaining gloss-path allowance, computed up front so
     # the popover can render "noch N heute" / the limit line BEFORE the
