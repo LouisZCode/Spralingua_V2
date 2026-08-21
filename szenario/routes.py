@@ -153,6 +153,29 @@ _TIER_BY_BUCKET: dict[str, tuple[str, str]] = {
 _DEFAULT_TIER: tuple[str, str] = ("b1", "questions")
 
 
+async def _serving_tier(user_id: str) -> tuple[str, str]:
+    """Resolve the tier to serve `user_id` (SZEN-007), shared by both
+    `get_scenario` and `get_round` so they always agree on which tier a
+    learner is served.
+
+    Reads the account-level bucket (`users.level`, LEVEL-001) via
+    `load_user_level` + `grammar.levels.bucket_of`, then maps it to
+    `(tier_label, questions_field)` via `_TIER_BY_BUCKET`. Any failure (DB
+    unreachable, no level set, etc.) is swallowed and logged — leveling must
+    never break the drill — falling back to `_DEFAULT_TIER` ("b1",
+    "questions"), same "leveling is never fatal" contract `drills/leveling.py`
+    gives the grammar drills.
+    """
+    bucket = None
+    try:
+        async with get_sessionmaker()() as db:
+            bucket = bucket_of(await load_user_level(db, user_id=user_id))
+    except Exception:  # noqa: BLE001 — leveling must never break the drill
+        logger.warning("Szenario level read failed (non-fatal) — serving base tier")
+
+    return _TIER_BY_BUCKET.get(bucket, _DEFAULT_TIER)
+
+
 @router.get("/scenario")
 async def get_scenario(
     # VARY-001: comma-separated "scenarioId:questionIndex" tokens the client
@@ -187,14 +210,7 @@ async def get_scenario(
     learner sees only the picked question, so the drill stays unpredictable
     on repeat visits to the same scenario.
     """
-    bucket = None
-    try:
-        async with get_sessionmaker()() as db:
-            bucket = bucket_of(await load_user_level(db, user_id=user_id))
-    except Exception:  # noqa: BLE001 — leveling must never break the drill
-        logger.warning("Szenario level read failed (non-fatal) — serving base tier")
-
-    tier, questions_key = _TIER_BY_BUCKET.get(bucket, _DEFAULT_TIER)
+    tier, questions_key = await _serving_tier(user_id)
 
     scenarios = [
         {**s, "questions": s[questions_key]} for s in load_scenarios().values()
@@ -217,6 +233,96 @@ async def get_scenario(
         "cycleReset": cycle_reset,
         "tier": tier,
     }
+
+
+@router.get("/round")
+async def get_round(
+    # Flow prefetch size (FLOW-006) — how many items to draw in one call
+    # instead of the standalone page's one-at-a-time GET /scenario. Clamped
+    # to 1..5 server-side; an out-of-range value is silently clamped rather
+    # than rejected, matching this router's "never take the drill dark"
+    # posture (see _serving_tier / the tier fallback above).
+    n: int = 3,
+    # Same per-tier "scenarioId:questionIndex" seen-token contract as
+    # GET /scenario's `seen` param (VARY-001, SZEN-007) — see that route's
+    # docstring for the full rationale. Here it seeds the FIRST draw of the
+    # batch; each subsequent draw in the batch is seeded by this plus every
+    # token already drawn earlier in the same call (see below).
+    seen: str | None = None,
+    user_id: str = Depends(get_current_user_id),
+):
+    """Draw a small batch of scenario/question pairs for the Flow's prefetch
+    buffer (FLOW-006). Szenario-Sparring is joining the Flow, which prefetches
+    a few items ahead per drill rather than fetching one at a time — this is
+    that batch fetch, sitting alongside the existing single-draw
+    `GET /scenario` (still used by the standalone Szenario page).
+
+    Tier resolution is identical to `GET /scenario` (`_serving_tier`,
+    SZEN-007): read from the account-level bucket, echoed back as the
+    envelope's top-level `"tier"` (not per-item — every item in one batch is
+    drawn from the same tier). `seen` carries the same comma-separated
+    "scenarioId:questionIndex" tokens as `GET /scenario`, FOR THE TIER THE
+    CLIENT EXPECTS — the server is authoritative about which tier it actually
+    served, so the client re-keys its stored per-tier seen-tokens against the
+    returned `"tier"` if that differs from its own guess.
+
+    Items are drawn by calling `_pick_scenario` `n` times in a row: the first
+    draw is seeded with the caller's `seen` tokens, and after each draw the
+    just-drawn "scenarioId:questionIndex" token is appended to the working
+    list before the next draw. This is exactly what a client calling
+    `GET /scenario` `n` times in a row, re-submitting an ever-growing `seen`
+    list each time, would produce — so `_pick_scenario`'s no-immediate-repeat
+    and cycle-reset semantics fall out for free: consecutive items in the
+    batch never share a scenario (unless the pool is exhausted), and pairs
+    within one batch are never repeated. If a draw's `cycleReset` fires
+    mid-batch, the working list is restarted to hold just that draw's own
+    token — mirroring the seen-history a sequential client would have right
+    after a reset — so later draws in the same batch treat that as the sole
+    seen pair rather than carrying the pre-reset history forward.
+
+    Each item has the same shape as `GET /scenario`'s response minus the
+    top-level `tier` field (which moves up to the envelope, shared by the
+    whole batch), items ordered as drawn. The client is expected to process
+    `cycleReset` sequentially, in item order, when folding this batch's
+    tokens into its own stored per-tier seen list — same contract as
+    consuming `GET /scenario` one draw at a time.
+    """
+    n = max(1, min(5, n))
+    tier, questions_key = await _serving_tier(user_id)
+
+    scenarios = [
+        {**s, "questions": s[questions_key]} for s in load_scenarios().values()
+    ]
+    working_tokens = seen.split(",") if seen else []
+
+    items = []
+    for _ in range(n):
+        scenario, question_index, cycle_reset = _pick_scenario(
+            scenarios, working_tokens
+        )
+        question = scenario["questions"][question_index]
+        persona = scenario["persona"]
+
+        token = f"{scenario['id']}:{question_index}"
+        working_tokens = [token] if cycle_reset else working_tokens + [token]
+
+        items.append(
+            {
+                "scenarioId": scenario["id"],
+                "questionIndex": question_index,
+                "persona": {
+                    "name": persona["name"],
+                    "role": persona["role"],
+                    "attitude": persona["attitude"],
+                },
+                "kontext": scenario["kontext"],
+                "question": question,
+                "zielVokabular": scenario["ziel_vokabular"],
+                "cycleReset": cycle_reset,
+            }
+        )
+
+    return {"tier": tier, "items": items}
 
 
 @router.post("/attempts")

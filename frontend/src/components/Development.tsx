@@ -188,7 +188,7 @@ const HIDDEN_EXERCISES: { href: string; name: string; note: string }[] = [
   { href: "/verbformen", name: "Verbformen", note: "past forms — in Flow" },
   { href: "/genus", name: "Artikel-Anker", note: "der/die/das — in Flow" },
   { href: "/sprechen", name: "Sprechen", note: "speaking drills — in Flow" },
-  { href: "/szenario", name: "Szenario-Sparring", note: "dormant" },
+  { href: "/szenario", name: "Szenario-Sparring", note: "structure coach — in Flow" },
   { href: "/learn", name: "Conversation Practice", note: "dormant" },
   { href: "/interview", name: "Interview", note: "personal audio pool — INTV-003" },
 ];

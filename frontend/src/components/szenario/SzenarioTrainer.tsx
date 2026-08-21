@@ -70,6 +70,18 @@ export default function SzenarioTrainer({
   onNewQuestion,
   onGloss,
   onAdd,
+  // FLOW-006: mixed-practice mode — the parent deals exactly one item via
+  // `scenario` and remounts per turn (via `key`), so this trainer only
+  // needs to hand the verdict back instead of ever reaching a standalone
+  // "New question"/"Back to menu" navigation.
+  flow,
+  onFlowDone,
+  // FLOW-002: the deliberate "give up" escape — Flow-only (default false),
+  // so standalone practice stays pixel-identical. No audio involved, so
+  // this is a separate call from `onAttempt`, not a flag on it — same shape
+  // convention as SprechenTrainer's onGiveUp.
+  allowGiveUp,
+  onGiveUp,
 }: {
   scenario: Scenario;
   initialPhase: Phase;
@@ -90,8 +102,18 @@ export default function SzenarioTrainer({
   // SATZ-013: resolves with the remaining gloss-path adds today (0..3) so
   // the popover can update its own counter after a successful add.
   onAdd?: (lemma: string) => Promise<{ glossRemaining?: number } | void>;
+  flow?: boolean;
+  onFlowDone?: (correct: boolean) => void;
+  allowGiveUp?: boolean;
+  onGiveUp?: (
+    scenarioId: string,
+    question: string
+  ) => Promise<StructureResult>;
 }) {
-  const [phase, setPhase] = useState<Phase>(initialPhase);
+  // FLOW-006: force "scene" in flow mode regardless of what `initialPhase`
+  // the parent passed — the one-time "How it works" card belongs to the
+  // standalone page's first visit only, never to a mixed-practice turn.
+  const [phase, setPhase] = useState<Phase>(flow ? "scene" : initialPhase);
   const [recording, setRecording] = useState(false);
   const [checking, setChecking] = useState(false);
   const [elapsed, setElapsed] = useState(0);
@@ -143,14 +165,15 @@ export default function SzenarioTrainer({
   }, []);
 
   // UI-012: Space/Enter mirror the mouse — toggle Record while a question is
-  // live ("scene"), advance via the primary "New question" once a verdict is
-  // showing ("result"). "intro" (the one-time how-it-works card, with its own
-  // "Start" button) is deliberately left alone — not a record control or a
-  // verdict continue. The Record button here has no `disabled` prop — it
-  // simply isn't rendered while `checking` — so that's the only extra guard.
+  // live ("scene"), advance via the primary continue once a verdict is
+  // showing ("result") — `next()` below already branches on `flow`. "intro"
+  // (the one-time how-it-works card, with its own "Start" button) is
+  // deliberately left alone — not a record control or a verdict continue.
+  // The Record button here has no `disabled` prop — it simply isn't
+  // rendered while `checking` — so that's the only extra guard.
   useSpeakHotkey(() => {
     if (phase === "result") {
-      onNewQuestion();
+      next();
       return;
     }
     if (phase !== "scene" || checking) return;
@@ -221,6 +244,42 @@ export default function SzenarioTrainer({
     }
   }
 
+  // FLOW-002: the deliberate give-up — no mic involved, so this hits its own
+  // handler instead of `submit`, but lands in the same `verdict`/"result"
+  // state a real attempt would, so `next()` below needs no change.
+  async function giveUp() {
+    if (checking || recording || !onGiveUp) return;
+    setChecking(true);
+    setFailed(null);
+    try {
+      const res = await onGiveUp(scenario.scenarioId, scenario.question);
+      setVerdict(res);
+      setPhase("result");
+    } catch (err) {
+      setFailed(
+        err instanceof Error && err.message && !err.message.includes("failed (")
+          ? err.message
+          : "Couldn't check that — try again in a moment."
+      );
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  // FLOW-006: no "New question"/"Back to menu" in flow mode — hand the
+  // verdict to the parent, which deals the next item (a fresh mount, via
+  // `key`). FLOW-006's tally rule: `clear`/`a_bit_heavy` count as correct,
+  // `overcomplicated` doesn't — a give-up forces `overcomplicated` (via
+  // `gaveUp`) regardless of whatever placeholder verdict it carries.
+  function next() {
+    if (flow) {
+      const correct = !!verdict && verdict.verdict !== "overcomplicated" && !verdict.gaveUp;
+      onFlowDone?.(correct);
+      return;
+    }
+    onNewQuestion();
+  }
+
   // Same-question redo: unlike New question (a fresh scenario), this reuses
   // `scenario` as-is — clear the verdict/details and drop back to "scene" so
   // the mic UI is live, then start recording immediately. GermanWay isn't
@@ -265,6 +324,40 @@ export default function SzenarioTrainer({
         >
           Start
         </button>
+      </div>
+    );
+  }
+
+  if (phase === "result" && verdict?.gaveUp) {
+    // FLOW-002: a modest feedback state — there was no recording to judge,
+    // so the full badge/skeleton breakdown below (built for a real attempt)
+    // would just show empty/blank. `gaveUp` is only ever set by the Flow's
+    // give-up handler, so `next()` always takes the flow branch here.
+    return (
+      <div>
+        <div className="mb-3 flex items-center justify-between">
+          <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
+            {scenario.persona.name} asked
+          </p>
+        </div>
+        <div
+          className="rounded-[28px] border-[3px] border-ink bg-white p-7 text-center"
+          style={inkShadow}
+        >
+          <p className="font-body text-[14px] font-semibold text-flag-red-deep">
+            {verdict.coachMessage}
+          </p>
+          <div className="mt-6 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={next}
+              className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+              style={inkShadow}
+            >
+              Next
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -483,20 +576,26 @@ export default function SzenarioTrainer({
             >
               ↻ Try again
             </button>
+            {/* FLOW-006: in flow mode this is the single continue action —
+                onNewQuestion (a fresh scenario fetch) is never called; `next`
+                hands the verdict to the parent instead. Standalone keeps its
+                own "New question" + "Back to menu" exactly as before. */}
             <button
               type="button"
-              onClick={onNewQuestion}
+              onClick={next}
               className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
               style={redShadow}
             >
-              New question
+              {flow ? "Next" : "New question"}
             </button>
-            <Link
-              href="/practice"
-              className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
-            >
-              ← Back to menu
-            </Link>
+            {!flow && (
+              <Link
+                href="/practice"
+                className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+              >
+                ← Back to menu
+              </Link>
+            )}
           </div>
         </div>
       </div>
@@ -573,6 +672,17 @@ export default function SzenarioTrainer({
                   · Space
                 </span>
               </p>
+              {/* FLOW-002: deliberately unstyled/small — never a rival to Record. */}
+              {allowGiveUp && onGiveUp && (
+                <button
+                  type="button"
+                  onClick={giveUp}
+                  disabled={recording}
+                  className="font-body text-[11px] text-ink-muted underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
+                >
+                  Give up
+                </button>
+              )}
             </>
           )}
           {failed && (

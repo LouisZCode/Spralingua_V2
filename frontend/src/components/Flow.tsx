@@ -76,6 +76,15 @@ import {
   type SprechenVerdict,
 } from "./sprechen/api";
 
+import SzenarioTrainer from "./szenario/SzenarioTrainer";
+import {
+  fetchSzenarioRound,
+  submitAttempt as submitSzenarioAttempt,
+  type SzenarioRoundItem,
+  type StructureResult,
+} from "./szenario/api";
+import { expectedTier, readSeen, writeSeen, type Tier } from "./szenario/seen";
+
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import {
   fetchDeck as fetchSatzDeck,
@@ -109,10 +118,10 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
 
-// FLOW-001: the eight drills this mode draws from — Szenario, Tandem
-// and Conversation Practice are deliberately not in the rotation.
-// Genus deals its DRAG BEAT only (the gender choice); the typed production
-// stays a standalone-page exercise.
+// FLOW-001/FLOW-006: the nine drills this mode draws from, plus Szenario
+// (FLOW-006) as a capped tenth source — Tandem and Conversation Practice are
+// deliberately not in the rotation. Genus deals its DRAG BEAT only (the
+// gender choice); the typed production stays a standalone-page exercise.
 type SourceKind =
   | "satz"
   | "verbformen"
@@ -122,7 +131,8 @@ type SourceKind =
   | "sprechen"
   | "genus"
   | "faelle"
-  | "satzbau";
+  | "satzbau"
+  | "szenario";
 
 const ALL_KINDS: SourceKind[] = [
   "satz",
@@ -134,6 +144,7 @@ const ALL_KINDS: SourceKind[] = [
   "genus",
   "faelle",
   "satzbau",
+  "szenario",
 ];
 
 const KICKER: Record<SourceKind, string> = {
@@ -146,6 +157,7 @@ const KICKER: Record<SourceKind, string> = {
   genus: "ARTIKEL",
   faelle: "FÄLLE",
   satzbau: "SATZBAU",
+  szenario: "SZENARIO · STRUKTUR",
 };
 
 // One dealt turn: exactly one item from exactly one source, tagged with a
@@ -160,6 +172,7 @@ type Deal =
   | { kind: "genus"; key: number; item: GenusItem }
   | { kind: "faelle"; key: number; item: CaseItem }
   | { kind: "satzbau"; key: number; item: ClauseItem }
+  | { kind: "szenario"; key: number; item: SzenarioRoundItem }
   | { kind: "satz"; key: number; card: DeckCard; rehearsal: boolean }
   | { kind: "verbformen"; key: number; card: DeckCard };
 
@@ -322,9 +335,15 @@ type FlowBag = {
   genus: GenusItem[];
   faelle: CaseItem[];
   satzbau: ClauseItem[];
+  szenario: SzenarioRoundItem[];
   satz: SatzCycle;
   verbformen: CardCycle;
   dealCounter: number;
+  // FLOW-006: how many szenario items THIS round has already dealt — read
+  // by pickSource against the round's cap (roundTarget/10, uncapped on
+  // endless) so szenario drops out of the rotation once its quota is spent,
+  // even if its bag buffer still holds prefetched items.
+  szenarioDealtThisRound: number;
 };
 
 function emptyBag(): FlowBag {
@@ -336,9 +355,11 @@ function emptyBag(): FlowBag {
     genus: [],
     faelle: [],
     satzbau: [],
+    szenario: [],
     satz: { deck: [], gradedOrder: [], rehearsalOrder: [] },
     verbformen: { deck: [], order: [] },
     dealCounter: 0,
+    szenarioDealtThisRound: 0,
   };
 }
 
@@ -350,14 +371,28 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
   if (kind === "genus") return bag.genus.length;
   if (kind === "faelle") return bag.faelle.length;
   if (kind === "satzbau") return bag.satzbau.length;
+  if (kind === "szenario") return bag.szenario.length;
   if (kind === "satz") return bag.satz.deck.length;
   return bag.verbformen.deck.length;
 }
 
 // A random exercise different from the previous one — unless only one
 // source is left standing, in which case there's nothing to vary.
-function pickSource(bag: FlowBag, prevKind: SourceKind | null): SourceKind | null {
-  const avail = ALL_KINDS.filter((k) => sourceCount(bag, k) > 0);
+// FLOW-006: `szenarioCap` is this round's szenario quota (Infinity on an
+// endless round) — szenario drops out of `avail` once it's spent, same as
+// any other exhausted source, just capped rather than buffer-driven.
+function pickSource(
+  bag: FlowBag,
+  prevKind: SourceKind | null,
+  szenarioCap: number
+): SourceKind | null {
+  const avail = ALL_KINDS.filter((k) => {
+    if (sourceCount(bag, k) === 0) return false;
+    if (k === "szenario" && bag.szenarioDealtThisRound >= szenarioCap) {
+      return false;
+    }
+    return true;
+  });
   if (avail.length === 0) return null;
   const pool =
     avail.length > 1 && prevKind ? avail.filter((k) => k !== prevKind) : avail;
@@ -395,12 +430,39 @@ function dealFromSource(bag: FlowBag, kind: SourceKind): Deal | null {
     const item = bag.satzbau.shift();
     return item ? { kind, key, item } : null;
   }
+  if (kind === "szenario") {
+    const item = bag.szenario.shift();
+    if (item) bag.szenarioDealtThisRound += 1;
+    return item ? { kind, key, item } : null;
+  }
   if (kind === "satz") {
     const dealt = nextSatzCard(bag.satz);
     return dealt ? { kind, key, card: dealt[0], rehearsal: dealt[1] } : null;
   }
   const card = nextCard(bag.verbformen);
   return card ? { kind: "verbformen", key, card } : null;
+}
+
+// FLOW-006: fold one GET /szenario/round batch's "scenarioId:questionIndex"
+// tokens into the served tier's stored seen list, sequentially — same
+// contract the standalone Szenario page applies one draw at a time
+// (Szenario.tsx's loadScenario): cycleReset REPLACES the list with just
+// that item's own token, otherwise it's appended. `priorForExpected` is the
+// seen list already read for the caller's tier GUESS — reused only if the
+// server actually served that tier; otherwise re-read fresh for whatever
+// tier it did serve (SZEN-007's "server is authoritative" rule).
+function foldSzenarioSeen(
+  tier: Tier,
+  items: SzenarioRoundItem[],
+  expected: Tier,
+  priorForExpected: string[]
+) {
+  let running = tier === expected ? priorForExpected : readSeen(tier);
+  for (const item of items) {
+    const token = `${item.scenarioId}:${item.questionIndex}`;
+    running = item.cycleReset ? [token] : [...running, token];
+  }
+  writeSeen(tier, running);
 }
 
 // Once a round buffer drops to <=1, top it up in the background — fire and
@@ -414,8 +476,12 @@ function refillIfLow(
     | "sprechen"
     | "genus"
     | "faelle"
-    | "satzbau",
-  token: string
+    | "satzbau"
+    | "szenario",
+  token: string,
+  // Only read for the "szenario" branch — the account-level bucket driving
+  // its tier guess (SZEN-007). undefined for every other kind.
+  szenarioLevel?: string | null
 ) {
   if (kind === "bauteil" && bag.bauteil.length <= 1) {
     fetchBauteilRound(token)
@@ -459,6 +525,18 @@ function refillIfLow(
         bag.satzbau = [...bag.satzbau, ...items];
       })
       .catch(() => {});
+  } else if (kind === "szenario" && bag.szenario.length <= 1) {
+    // FLOW-006: same per-tier "scenarioId:questionIndex" seen-token
+    // contract as the standalone page (szenario/seen.ts) — read before the
+    // draw, fold the batch's tokens in sequentially after.
+    const expected = expectedTier(szenarioLevel);
+    const seen = readSeen(expected);
+    fetchSzenarioRound(token, seen, 3)
+      .then(({ tier, items }) => {
+        bag.szenario = [...bag.szenario, ...items];
+        foldSzenarioSeen(tier, items, expected, seen);
+      })
+      .catch(() => {});
   }
 }
 
@@ -475,6 +553,7 @@ function emptyTallies(): Record<SourceKind, Tally> {
     genus: { done: 0, correct: 0 },
     faelle: { done: 0, correct: 0 },
     satzbau: { done: 0, correct: 0 },
+    szenario: { done: 0, correct: 0 },
   };
 }
 
@@ -530,7 +609,10 @@ function targetFromChoice(choice: StoredRoundChoice): number | null {
 // auth-guarded page shell + the dealing/tally state; each existing trainer
 // runs unmodified except for its opt-in `flow` prop.
 export default function Flow() {
-  const { token, ready, signOut } = useAuth();
+  // FLOW-006: `user` is read only for `user?.level` — the account-level
+  // bucket szenario's tier guess is derived from (SZEN-007), same as the
+  // standalone Szenario page.
+  const { token, ready, user, signOut } = useAuth();
   const router = useRouter();
 
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
@@ -624,7 +706,14 @@ export default function Flow() {
   const dealNext = useCallback(
     (prevKind: SourceKind | null, mood: BeatMood = "neutral") => {
       const bag = bagRef.current;
-      const kind = pickSource(bag, prevKind);
+      // FLOW-006: szenario's per-round cap — roundTarget/10 (floored), 0
+      // under a 10-round target, uncapped on an endless (null) round.
+      // roundTarget can't change once dealing has started (the picker
+      // screen is gone by then), so recomputing it per deal is cheap and
+      // always correct.
+      const szenarioCap =
+        roundTarget === null ? Infinity : Math.floor(roundTarget / 10);
+      const kind = pickSource(bag, prevKind, szenarioCap);
       if (!kind) {
         setDeal(null);
         return;
@@ -642,9 +731,10 @@ export default function Flow() {
           kind === "sprechen" ||
           kind === "genus" ||
           kind === "faelle" ||
-          kind === "satzbau")
+          kind === "satzbau" ||
+          kind === "szenario")
       ) {
-        refillIfLow(bag, kind, token);
+        refillIfLow(bag, kind, token, kind === "szenario" ? user?.level : undefined);
       }
       // FLOW-003: latch this deal's rehearsal flag before it renders — the
       // attempt handler below has no other way to know which order this
@@ -661,7 +751,7 @@ export default function Flow() {
         setDeal(pendingDealRef.current);
       }, BEAT_MS);
     },
-    [token]
+    [token, user?.level, roundTarget]
   );
 
   // FLOW-004: never let the beat timer fire into an unmounted component.
@@ -690,6 +780,11 @@ export default function Flow() {
     if (!token) return;
     let cancelled = false;
     const bag = bagRef.current;
+    // FLOW-006: same per-tier seen-token read the standalone page does
+    // before its first draw (SZEN-007) — read once up front so the initial
+    // fetch and its seen-list fold below agree on the same snapshot.
+    const szenarioExpected = expectedTier(user?.level);
+    const szenarioSeen = readSeen(szenarioExpected);
 
     async function loadOne<T>(
       promise: Promise<T>,
@@ -727,6 +822,10 @@ export default function Flow() {
       loadOne(fetchSatzbauRound(token), (items) => {
         bag.satzbau = items;
       }),
+      loadOne(fetchSzenarioRound(token, szenarioSeen, 3), ({ tier, items }) => {
+        bag.szenario = items;
+        foldSzenarioSeen(tier, items, szenarioExpected, szenarioSeen);
+      }),
       loadOne(fetchSatzDeck(token), (payload) => {
         // FLOW-003: due-first + the server's dosed daily new-word drip —
         // rehearsalOrder starts empty and is only built (endlessly) once
@@ -756,7 +855,7 @@ export default function Flow() {
     return () => {
       cancelled = true;
     };
-  }, [token, signOut, dealNext]);
+  }, [token, signOut, dealNext, user?.level]);
 
   const handleItemDone = useCallback(
     (kind: SourceKind, correct: boolean) => {
@@ -983,6 +1082,44 @@ export default function Flow() {
       }
     },
     [token, signOut, sid]
+  );
+
+  const handleSzenarioAttempt = useCallback(
+    async (
+      scenarioId: string,
+      question: string,
+      audio: Blob
+    ): Promise<StructureResult> => {
+      if (!token) throw new UnauthorizedError("/szenario/attempts");
+      try {
+        return await submitSzenarioAttempt(token, scenarioId, question, audio, sid());
+      } catch (e) {
+        if (e instanceof UnauthorizedError) signOut();
+        throw e;
+      }
+    },
+    [token, signOut, sid]
+  );
+
+  // FLOW-006: szenario has no backend /give-up route yet — unlike bauteil,
+  // verbindungen, zeitfaerbung, sprechen, genus and faelle above, it never
+  // reaches the network. This resolves the same synthetic "gave up" verdict
+  // every time: `overcomplicated` (a miss for the FLOW-006 tally) with
+  // `gaveUp: true` so SzenarioTrainer renders its modest gave-up state
+  // instead of the full breakdown. Nothing is written to the ledger or
+  // drill_attempts here — a known v1 gap, worth a real endpoint (mirroring
+  // sprechen/routes.py's give-up route) if this sees real use.
+  const handleSzenarioGiveUp = useCallback(
+    async (): Promise<StructureResult> => ({
+      transcript: "",
+      verdict: "overcomplicated",
+      levelRead: "",
+      coachMessage: "You gave up — no recording was judged.",
+      sentences: [],
+      skeleton: { kern: "", punkte: [], absprung: "", vokabelAnker: [] },
+      gaveUp: true,
+    }),
+    []
   );
 
   const handleGenusArticle = useCallback(
@@ -1429,6 +1566,22 @@ export default function Flow() {
                         onFlowDone={(correct) => handleItemDone("sprechen", correct)}
                         allowGiveUp
                         onGiveUp={handleSprechenGiveUp}
+                      />
+                    )}
+                    {deal.kind === "szenario" && (
+                      <SzenarioTrainer
+                        key={deal.key}
+                        scenario={deal.item}
+                        initialPhase="scene"
+                        onStart={noopNewRound}
+                        onAttempt={handleSzenarioAttempt}
+                        onNewQuestion={noopNewRound}
+                        onGloss={handleGloss}
+                        onAdd={handleAddWord}
+                        flow
+                        onFlowDone={(correct) => handleItemDone("szenario", correct)}
+                        allowGiveUp
+                        onGiveUp={handleSzenarioGiveUp}
                       />
                     )}
                     {deal.kind === "genus" && (

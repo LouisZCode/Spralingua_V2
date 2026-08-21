@@ -56,6 +56,36 @@ export type StructureResult = {
     absprung: string;
     vokabelAnker: string[];
   };
+  // FLOW-006: present and true only on a client-synthesized "gave up"
+  // result (see Flow.tsx's give-up handler) — the trainer uses it to show a
+  // modest "gave up" state instead of the full verdict-card UI a real
+  // attempt would render. There is no backend /szenario/give-up route (the
+  // other Flow drills each have one) — this stays client-side for now.
+  gaveUp?: boolean;
+};
+
+// FLOW-006: one item as GET /szenario/round serves it — same shape as
+// `Scenario` minus `tier` (which moves up to the batch envelope below,
+// shared by the whole draw).
+export type SzenarioRoundItem = {
+  scenarioId: string;
+  questionIndex: number;
+  persona: Persona;
+  kontext: string;
+  question: string;
+  zielVokabular: string[];
+  // VARY-001: true when this draw exhausted and reset the server's
+  // seen-pool — the client should fold this into its stored seen-token list
+  // by REPLACING it with just this item's own token rather than appending.
+  cycleReset?: boolean;
+};
+
+// FLOW-006: GET /szenario/round's response — a small prefetch batch for the
+// Flow's bag, `n` items drawn in one call instead of one at a time. `tier`
+// is shared by the whole batch (every item is drawn from the same tier).
+export type SzenarioRound = {
+  tier: "a1" | "a2" | "b1" | "b2";
+  items: SzenarioRoundItem[];
 };
 
 async function request<T>(
@@ -101,6 +131,22 @@ export async function fetchScenario(
   }
   const qs = params.length > 0 ? `?${params.join("&")}` : "";
   return request<Scenario>(`/szenario/scenario${qs}`, token);
+}
+
+// FLOW-006: the Flow's prefetch batch — `n` scenario/question draws in one
+// call instead of the standalone page's one-at-a-time fetchScenario above.
+// Same per-tier "scenarioId:questionIndex" seen-token contract (VARY-001,
+// SZEN-007); see szenario/seen.ts for the shared storage helpers.
+export async function fetchSzenarioRound(
+  token: string,
+  seen?: string[],
+  n = 3
+): Promise<SzenarioRound> {
+  const params: string[] = [`n=${n}`];
+  if (seen && seen.length > 0) {
+    params.push(`seen=${encodeURIComponent(seen.join(","))}`);
+  }
+  return request<SzenarioRound>(`/szenario/round?${params.join("&")}`, token);
 }
 
 export async function submitAttempt(
