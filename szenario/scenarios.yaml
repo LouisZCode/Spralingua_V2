@@ -16,8 +16,16 @@
 #                    medical counters, surname-addressed strangers).
 #   kontext        — ONE English sentence setting the scene, shown to the
 #                    learner before the question
-#   questions      — 3-5 German questions this persona might casually ask;
-#                    one is picked at random at runtime
+#   questions_a1   — 4 easier (A1) questions for the same persona/scene —
+#                    answerable in one short present-tense main clause
+#                    (sein/haben/mögen, gern/lieber, either-or, yes/no,
+#                    simple W-questions). Same register as the scene.
+#   questions_a2   — 4 easier (A2) questions for the same persona/scene —
+#                    answerable with 1-2 clauses; Perfekt, "Warum ...?" and
+#                    a simple "wenn ..." condition are fine. Same register
+#                    as the scene.
+#   questions      — 3-5 German questions this persona might casually ask
+#                    (the B1 tier); one is picked at random at runtime
 #   questions_b2   — 4 harder (B2) questions for the same persona/scene —
 #                    opinion + justification, hypotheticals (Konjunktiv II),
 #                    trade-offs, nuanced experience. Same register as the
@@ -36,6 +44,16 @@ scenarios:
     kontext: >-
       You're browsing in a small board-game shop and the clerk starts
       chatting with you while you look at the shelves.
+    questions_a1:
+      - Magst du Brettspiele?
+      - Bist du zum ersten Mal hier?
+      - Kaufst du gern Spiele als Geschenk?
+      - Was ist dein Lieblingsspiel?
+    questions_a2:
+      - Warum spielst du gern Brettspiele?
+      - Was hast du am Wochenende mit deinen Freunden vor?
+      - Spielst du lieber neue Spiele, oder magst du lieber die Klassiker?
+      - Was machst du, wenn eine Anleitung zu kompliziert ist?
     questions:
       - Suchst du ein Geschenk oder ist das für dich selbst?
       - Spielst du lieber mit Freunden oder in der Familie?
@@ -67,6 +85,16 @@ scenarios:
     kontext: >-
       You're standing at the counter of a small café and the barista makes
       conversation while preparing your order.
+    questions_a1:
+      - Nimmst du Zucker in deinen Kaffee?
+      - Magst du Kuchen zum Kaffee?
+      - Bist du zum ersten Mal hier?
+      - Kommst du oft in unser Café?
+    questions_a2:
+      - Hast du schon mal unseren Kuchen probiert?
+      - Warum trinkst du gern Kaffee?
+      - Was machst du, wenn dein Kaffee zu heiß ist?
+      - Kommst du nach der Arbeit oft noch auf einen Kaffee vorbei?
     questions:
       - Trinkst du lieber Kaffee oder Tee?
       - Willst du das hier trinken oder mitnehmen?
@@ -98,6 +126,16 @@ scenarios:
     kontext: >-
       You just moved into a new apartment and your neighbor stops you in the
       hallway for a quick, friendly chat.
+    questions_a1:
+      - In welchem Stock wohnen Sie?
+      - Sind Sie neu in dieser Straße?
+      - Haben Sie schon viele Kartons im Flur?
+      - Wohnen Sie hier allein, oder mit Familie?
+    questions_a2:
+      - Warum sind Sie in dieses Haus gezogen?
+      - Haben Sie schon mal in einer anderen Stadt gewohnt?
+      - Was machen Sie, wenn Sie mal Hilfe im Haus brauchen?
+      - Was hat Ihnen am Umzug am meisten Spaß gemacht?
     questions:
       - Wohnen Sie jetzt auch in diesem Haus?
       - Woher kommen Sie eigentlich?
@@ -129,6 +167,16 @@ scenarios:
     kontext: >-
       You're checking in at the reception desk of a doctor's office and the
       assistant chats with you while checking your insurance card.
+    questions_a1:
+      - Haben Sie Ihre Versicherungskarte dabei?
+      - Warten Sie schon lange?
+      - Kommen Sie mit dem Auto oder zu Fuß?
+      - Möchten Sie im Wartezimmer Platz nehmen?
+    questions_a2:
+      - Waren Sie schon einmal bei diesem Arzt?
+      - Warum brauchen Sie heute einen Termin?
+      - Was machen Sie, wenn Sie lange im Wartezimmer warten müssen?
+      - Haben Sie lange auf diesen Termin gewartet?
     questions:
       - Sind Sie zum ersten Mal in unserer Praxis?
       - Hatten Sie heute einen weiten Weg hierher?
@@ -158,6 +206,16 @@ scenarios:
     kontext: >-
       You're standing at the information desk in a train station and the
       clerk chats with you while looking up your connection.
+    questions_a1:
+      - Haben Sie schon eine Fahrkarte?
+      - Fahren Sie heute allein?
+      - Brauchen Sie Hilfe mit dem Fahrplan?
+      - Kommt Ihr Zug gleich?
+    questions_a2:
+      - Haben Sie schon oft Verspätung bei der Bahn gehabt?
+      - Warum reisen Sie heute mit dem Zug?
+      - Was machen Sie, wenn Sie das Gleis nicht finden?
+      - Haben Sie sich den Fahrplan schon genau angeschaut?
     questions:
       - Fahren Sie öfter mit dem Zug, oder ist das eher eine Ausnahme?
       - Wohin soll Ihre Reise heute gehen?
@@ -187,6 +245,16 @@ scenarios:
     kontext: >-
       You're unloading your groceries at the checkout of a supermarket and
       the cashier makes conversation while scanning your items.
+    questions_a1:
+      - Hast du Kleingeld dabei?
+      - Brauchst du eine Quittung?
+      - Kaufst du oft hier ein?
+      - Ist heute viel los?
+    questions_a2:
+      - Warum kaufst du heute so viel ein?
+      - Was machst du, wenn die Schlange an der Kasse sehr lang ist?
+      - Was kochst du normalerweise am Wochenende?
+      - Zahlst du meistens bar, oder lieber mit Karte?
     questions:
       - Kochst du gern, oder isst du lieber schnell und einfach?
       - Hast du das Wochenende schon verplant?
@@ -217,6 +285,16 @@ scenarios:
     kontext: >-
       You're at the city registration office to register your new address,
       and the clerk chats with you while checking your documents.
+    questions_a1:
+      - Haben Sie Ihren Ausweis dabei?
+      - Ist das Ihre neue Adresse?
+      - Brauchen Sie Hilfe mit dem Formular?
+      - Sind Sie heute zum ersten Mal hier?
+    questions_a2:
+      - Haben Sie das Formular schon zu Hause ausgefüllt?
+      - Warum brauchen Sie heute die Bescheinigung?
+      - Was machen Sie, wenn ein Dokument fehlt?
+      - Wie lange haben Sie auf einen Termin hier gewartet?
     questions:
       - Warum sind Sie eigentlich nach Deutschland gezogen?
       - Wie lange wohnen Sie schon in dieser Stadt?
@@ -246,6 +324,16 @@ scenarios:
     kontext: >-
       You're on a free trial visit at a gym and the trainer chats with you
       while showing you around the equipment.
+    questions_a1:
+      - Treibst du gern Sport?
+      - Kennst du diese Geräte schon?
+      - Trainierst du lieber morgens oder abends?
+      - Bist du heute zum ersten Mal hier im Studio?
+    questions_a2:
+      - Warum möchtest du mit dem Training anfangen?
+      - Hast du früher schon andere Sportarten ausprobiert?
+      - Was machst du, wenn du keine Lust auf Sport hast?
+      - Was ist dein Ziel für die nächsten Monate?
     questions:
       - Warst du schon einmal Mitglied in einem Fitnessstudio?
       - Willst du eher Muskeln aufbauen oder einfach fit bleiben?
@@ -275,6 +363,16 @@ scenarios:
     kontext: >-
       You're sitting in the chair at a hair salon and the hairdresser chats
       with you while cutting your hair.
+    questions_a1:
+      - Magst du deine Haare lieber kurz oder lang?
+      - Kommst du oft zum Friseur?
+      - Gefällt dir diese Frisur im Spiegel?
+      - Bist du zum ersten Mal hier bei mir?
+    questions_a2:
+      - Warum möchtest du heute eine neue Frisur?
+      - Hast du deine Haare schon mal selbst gefärbt?
+      - Was machst du, wenn dir ein neuer Haarschnitt nicht gefällt?
+      - Was hast du am Wochenende Schönes vor?
     questions:
       - Möchtest du dir die Haare eher kurz schneiden lassen, oder nur die
         Spitzen?
@@ -306,6 +404,16 @@ scenarios:
     kontext: >-
       You're browsing in a small independent bookshop and the bookseller
       chats with you while restocking a shelf nearby.
+    questions_a1:
+      - Suchst du ein bestimmtes Buch?
+      - Liest du gern vor dem Schlafen?
+      - Magst du lieber dicke oder dünne Bücher?
+      - Brauchst du ein Lesezeichen dazu?
+    questions_a2:
+      - Hast du diesen Bestseller schon gelesen?
+      - Warum liest du gern Romane?
+      - Was machst du, wenn ein Buch dich langweilt?
+      - Liest du lieber im Bett, oder eher unterwegs im Zug?
     questions:
       - Liest du lieber Romane oder Sachbücher?
       - Wie oft kaufst du dir ein neues Buch?
@@ -336,6 +444,16 @@ scenarios:
     kontext: >-
       You're choosing vegetables at a farmer's stall on the weekly market
       and the vendor chats with you while weighing your purchase.
+    questions_a1:
+      - Hast du einen Korb dabei?
+      - Isst du gern frisches Obst?
+      - Kochst du gern mit Gemüse?
+      - Kommst du zu Fuß, oder mit dem Fahrrad?
+    questions_a2:
+      - Warum kaufst du lieber hier statt im Supermarkt?
+      - Wie schwer ist dein Korb heute geworden?
+      - Was machst du, wenn ein Gemüse gerade keine Saison hat?
+      - Was kochst du am liebsten mit frischem Gemüse?
     questions:
       - Kaufst du lieber Obst oder Gemüse?
       - Kommst du regelmäßig zum Wochenmarkt, oder eher selten?
@@ -366,6 +484,16 @@ scenarios:
     kontext: >-
       You're waiting at the counter of a small neighborhood pharmacy and
       the pharmacist chats with you while looking for what you need.
+    questions_a1:
+      - Brauchen Sie Tabletten oder Hustensaft?
+      - Haben Sie Schmerzen?
+      - Sind Sie heute zum ersten Mal hier?
+      - Möchten Sie auch Vitamine dazu?
+    questions_a2:
+      - Haben Sie diese Tabletten schon mal genommen?
+      - Warum brauchen Sie heute eine Salbe?
+      - Was machen Sie, wenn eine Erkältung nicht besser wird?
+      - Was hilft Ihnen normalerweise am besten gegen Kopfschmerzen?
     questions:
       - Vertrauen Sie bei einer Erkältung lieber auf Hausmittel oder auf Medikamente aus der Apotheke?
       - Wie oft sind Sie im Winter erkältet?
@@ -397,6 +525,16 @@ scenarios:
     kontext: >-
       You're having dinner alone at a small neighborhood restaurant and the
       waiter chats with you while bringing your order.
+    questions_a1:
+      - Möchtest du auch einen Nachtisch?
+      - Isst du lieber Fleisch oder Fisch?
+      - Sitzt du gern am Fenster?
+      - Brauchst du noch Zeit mit der Speisekarte?
+    questions_a2:
+      - Hast du schon eine Vorspeise gewählt?
+      - Warum isst du heute Abend hier statt zu Hause?
+      - Was machst du, wenn dir ein Gericht nicht schmeckt?
+      - Isst du normalerweise eine große oder eine kleine Portion?
     questions:
       - Isst du lieber deftig oder eher leicht?
       - Wie oft gehst du abends essen, statt zu Hause zu kochen?
@@ -428,6 +566,16 @@ scenarios:
     kontext: >-
       You're riding in a taxi to the airport and the driver starts a friendly
       conversation during the trip.
+    questions_a1:
+      - Fliegen Sie heute geschäftlich oder privat?
+      - Haben Sie viel Gepäck dabei?
+      - Sind Sie zum ersten Mal in dieser Stadt?
+      - Brauchen Sie Hilfe mit dem Koffer?
+    questions_a2:
+      - Warum fliegen Sie heute?
+      - Waren Sie schon oft am Flughafen hier?
+      - Was machen Sie, wenn der Stau zu lang wird?
+      - Was packen Sie normalerweise zuerst in Ihren Koffer?
     questions:
       - Fahren Sie generell lieber mit dem Taxi oder mit dem Bus?
       - Wie oft sind Sie beruflich unterwegs?
@@ -459,6 +607,16 @@ scenarios:
     kontext: >-
       You're sitting on a bench in the park when a stranger's dog runs up to
       greet you, and its owner stops to chat while you pet it.
+    questions_a1:
+      - Hast du Angst vor Hunden?
+      - Bist du oft hier im Park?
+      - Hast du selbst ein Haustier zu Hause?
+      - Streichelst du gern fremde Hunde?
+    questions_a2:
+      - Warum magst du Hunde so gern?
+      - Hast du schon mal einen Hund für einen Freund gehütet?
+      - Was machst du, wenn ein fremder Hund zu dir kommt?
+      - Gehst du auch am Wochenende gern in den Park?
     questions:
       - Magst du Hunde, oder bist du eher ein Katzenmensch?
       - Kommst du oft in diesen Park?
@@ -491,6 +649,16 @@ scenarios:
     kontext: >-
       You're at the bakery counter early in the morning and the clerk chats
       with you while bagging your order.
+    questions_a1:
+      - Magst du lieber Brötchen oder Brezeln?
+      - Frühstückst du gern süß oder herzhaft?
+      - Ist das deine erste Bestellung heute?
+      - Kaufst du oft frisches Brot hier?
+    questions_a2:
+      - Hast du heute schon gefrühstückt?
+      - Hast du schon mal selbst Brot gebacken?
+      - Was machst du, wenn du morgens keine Zeit zum Frühstücken hast?
+      - Isst du dein Brötchen hier, oder nimmst du es mit?
     questions:
       - Nimmst du lieber ein Brötchen oder ein Stück Kuchen zum Frühstück?
       - Kommst du jeden Morgen schon so früh hierher?
@@ -521,6 +689,16 @@ scenarios:
     kontext: >-
       Your train is running forty minutes late and the young traveler next
       to you on the platform starts chatting out of boredom.
+    questions_a1:
+      - Fährst du auch mit diesem Zug?
+      - Hast du viel Gepäck dabei?
+      - Wartest du schon lange hier?
+      - Wohin fährst du heute?
+    questions_a2:
+      - Warum reist du heute mit dem Zug?
+      - Hast du die Durchsage eben verstanden?
+      - Was machst du, wenn dein Anschluss weg ist?
+      - Verlierst du bei so einer Verspätung schnell die Geduld?
     questions:
       - Ist dir das mit der Verspätung schon öfter passiert?
       - Hast du deswegen schon mal einen Anschlusszug verpasst?
@@ -551,6 +729,16 @@ scenarios:
     kontext: >-
       A plumber is fixing your leaking kitchen sink and chats with you
       while working underneath it.
+    questions_a1:
+      - Wohnen Sie schon lange in dieser Wohnung?
+      - Ist der Abfluss oft verstopft?
+      - Kochen Sie hier jeden Tag?
+      - Ist das Wasser meistens so kalt?
+    questions_a2:
+      - Warum tropft der Wasserhahn schon so lange?
+      - Rufen Ihre Nachbarn hier im Haus auch oft einen Klempner?
+      - Was machen Sie, wenn zu Hause mal etwas kaputtgeht?
+      - Kennen Sie noch einen anderen guten Handwerker in der Gegend?
     questions:
       - Reparieren Sie zu Hause gern selbst, oder rufen Sie lieber einen Handwerker?
       - Wie oft haben Sie schon Ärger mit alten Rohren gehabt?
@@ -580,6 +768,16 @@ scenarios:
     kontext: >-
       You and a colleague are both waiting for the coffee machine in the
       office kitchen and start chatting to pass the time.
+    questions_a1:
+      - Trinkst du auch einen Kaffee?
+      - Machst du gerade Pause?
+      - Magst du starken oder schwachen Kaffee?
+      - Ist deine Tasse schon leer?
+    questions_a2:
+      - Warum bist du heute so spät in der Küche?
+      - Hast du die neuen Kollegen schon kennengelernt?
+      - Was machst du, wenn die Kaffeemaschine besetzt ist?
+      - Machst du deine Pause lieber allein, oder mit Kollegen?
     questions:
       - Arbeitest du diese Woche eigentlich viel, oder ist es gerade ruhig?
       - Wie oft holst du dir hier eigentlich einen Kaffee?
@@ -609,6 +807,16 @@ scenarios:
     kontext: >-
       A friend of a friend is helping you carry boxes on moving day and
       chats with you on the stairs between trips.
+    questions_a1:
+      - Sind das schwere Kartons?
+      - Wohnst du jetzt hier im Haus?
+      - Brauchst du noch Hilfe mit den Kisten?
+      - Ist der Möbelwagen schon leer?
+    questions_a2:
+      - Warum sind so viele Kartons im Treppenhaus?
+      - Wie hast du deine neue Wohnung gefunden?
+      - Was machst du, wenn ein Karton zu schwer ist?
+      - Wie oft gehst du heute noch die Treppe hoch?
     questions:
       - Bist du selbst eigentlich schon oft umgezogen?
       - Trägst du lieber die schweren Kisten oder die leichten?
@@ -638,6 +846,16 @@ scenarios:
     kontext: >-
       You're both waiting for your laundry to finish at the laundromat and
       start chatting on the bench by the machines.
+    questions_a1:
+      - Hast du Münzen für den Trockner?
+      - Wohnst du in der Nähe?
+      - Wartest du auch auf deine Wäsche?
+      - Brauchst du noch Waschmittel?
+    questions_a2:
+      - Wie lange dauert eine Wäsche hier normalerweise?
+      - Wohnst du schon lange in dieser Gegend?
+      - Was machst du, wenn der Trockner besetzt ist?
+      - Wie oft wäschst du normalerweise deine Wäsche?
     questions:
       - Wie oft kommst du eigentlich hierher zum Waschen?
       - Wartest du lieber hier, oder gehst du in der Zeit einkaufen?
@@ -667,6 +885,16 @@ scenarios:
     kontext: >-
       You're getting a library card at the city library and the librarian
       chats with you while filling in the form.
+    questions_a1:
+      - Haben Sie schon einen Bibliotheksausweis?
+      - Lesen Sie lieber Romane oder Sachbücher?
+      - Ist das Ihr erster Besuch bei uns?
+      - Brauchen Sie Hilfe beim Formular?
+    questions_a2:
+      - Warum brauchen Sie heute einen neuen Ausweis?
+      - Haben Sie schon mal ein Buch zu spät zurückgebracht?
+      - Was machen Sie, wenn Sie ein bestimmtes Buch nicht finden?
+      - Kommen Sie meistens allein, oder mit der Familie?
     questions:
       - Suchen Sie heute etwas Bestimmtes, oder schauen Sie sich erst mal um?
       - Wie oft kommen Sie ungefähr in die Bibliothek?
@@ -696,6 +924,16 @@ scenarios:
     kontext: >-
       You're both catching your breath at the edge of the pool after a few
       laps and start chatting.
+    questions_a1:
+      - Ist das Wasser heute warm?
+      - Hast du eine eigene Schwimmbrille?
+      - Schwimmst du gern im Becken oder im See?
+      - Kommst du oft ins Hallenbad?
+    questions_a2:
+      - Warum schwimmst du so gern hier im Becken?
+      - Hast du schon mal deine Schwimmbrille verloren?
+      - Was machst du, wenn das Becken zu voll ist?
+      - Wie viele Bahnen schwimmst du normalerweise?
     questions:
       - Wie oft schwimmst du eigentlich hier im Hallenbad?
       - Machst du lieber Brustschwimmen oder Kraulen?
@@ -725,6 +963,16 @@ scenarios:
     kontext: >-
       You're buying popcorn at the cinema snack counter before the film
       starts and the clerk chats with you while filling your tub.
+    questions_a1:
+      - Möchtest du auch etwas zu trinken?
+      - Hast du schon deine Kinokarte?
+      - Beginnt deine Vorstellung bald?
+      - Magst du Popcorn mit oder ohne Salz?
+    questions_a2:
+      - Warum hast du dir gerade diesen Film ausgesucht?
+      - Kennst du den Hauptdarsteller aus anderen Filmen?
+      - Was machst du, wenn der Kinosaal komplett voll ist?
+      - Sitzt du lieber vorne, oder weiter hinten im Saal?
     questions:
       - Isst du dein Popcorn lieber süß oder salzig?
       - Gehst du öfter allein ins Kino, oder meistens mit Freunden?
@@ -754,6 +1002,16 @@ scenarios:
     kontext: >-
       You're browsing a flea market stall full of old books and records
       and the vendor chats with you while rearranging his table.
+    questions_a1:
+      - Suchst du etwas Bestimmtes?
+      - Magst du alte Schallplatten?
+      - Ist das dein erster Flohmarktbesuch?
+      - Gefällt dir diese Ware hier?
+    questions_a2:
+      - Warum sammelst du gern alte Sachen?
+      - Hast du schon mal auf einem Flohmarkt verkauft?
+      - Was machst du, wenn du ein tolles Schnäppchen siehst?
+      - Kommst du meistens früh, oder eher spät zum Flohmarkt?
     questions:
       - Sammelst du lieber alte Bücher oder eher Schallplatten?
       - Kommst du öfter hierher auf den Flohmarkt?
@@ -783,6 +1041,16 @@ scenarios:
     kontext: >-
       You're on a break during your evening German class and a classmate
       starts chatting with you in the hallway.
+    questions_a1:
+      - Lernst du schon lange Deutsch?
+      - Magst du diesen Kurs?
+      - Ist Deutsch deine erste Fremdsprache?
+      - Brauchst du Hilfe bei der Übung?
+    questions_a2:
+      - Warum lernst du eigentlich Deutsch?
+      - Hast du schon mal einen anderen Sprachkurs gemacht?
+      - Was machst du, wenn du ein Wort nicht verstehst?
+      - Sprichst du zu Hause manchmal Deutsch mit deiner Familie?
     questions:
       - Wie oft übst du eigentlich zu Hause Deutsch?
       - Lernst du lieber Grammatik oder neue Vokabeln?
@@ -812,6 +1080,16 @@ scenarios:
     kontext: >-
       A mechanic is checking over your bike and chats with you while
       adjusting the brakes.
+    questions_a1:
+      - Ist das dein eigenes Fahrrad?
+      - Fährst du gern lange Touren?
+      - Sind deine Bremsen noch gut?
+      - Kommst du oft in diese Werkstatt?
+    questions_a2:
+      - Warum bringst du dein Fahrrad heute zur Reparatur?
+      - Hast du schon mal selbst eine Kette repariert?
+      - Was machst du, wenn dir unterwegs ein Reifen platzt?
+      - Fährst du im Winter genauso viel Fahrrad wie im Sommer?
     questions:
       - Fährst du eigentlich jeden Tag mit dem Fahrrad?
       - Bist du lieber im Wald unterwegs oder mehr in der Stadt?

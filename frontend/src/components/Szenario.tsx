@@ -27,27 +27,48 @@ import {
 // handler), never during render.
 const SEEN_STORAGE_KEY = "szenario-seen-v1";
 
-// SZEN-005: manual level toggle (B1 base tier / B2 harder tier), persisted
-// like the seen-tokens. Per-tier seen lists so each tier cycles its own
-// pool without cross-contaminating variety state. Migrates into a users
-// table column when profile machinery lands.
-const LEVEL_STORAGE_KEY = "szenario-level-v1";
+// SZEN-007: the question tier is no longer a client toggle (SZEN-005's
+// localStorage-backed B1/B2 switch is gone) — it's read server-side from
+// the learner's account level (`users.level`, LEVEL-001) and echoed back as
+// `Scenario.tier`. The seen-token storage stays per-tier (a token's
+// question index only makes sense against the list it was drawn from), just
+// keyed by that tier instead of a manual toggle. The b1/b2 keys are the
+// same ones SZEN-005 already used, kept for continuity with existing
+// localStorage; a1/a2 are new.
+type Tier = "a1" | "a2" | "b1" | "b2";
 
-function readLevel(): "b1" | "b2" {
-  try {
-    return localStorage.getItem(LEVEL_STORAGE_KEY) === "b2" ? "b2" : "b1";
-  } catch {
-    return "b1";
+// LEVEL-001/LEVEL-002 bucket -> the tier this trainer requests before the
+// server confirms — same mapping szenario/routes.py applies for real. B2+
+// maps to "b2" (not a "b1"-shaped fallback); no level set (or AuthContext
+// hasn't hydrated yet) guesses the base "b1" tier, same as the backend's own
+// no-level fallback.
+const BUCKET_TO_TIER: Record<string, Tier> = {
+  A1: "a1",
+  A2: "a2",
+  B1: "b1",
+  "B2+": "b2",
+};
+
+function expectedTier(level: string | null | undefined): Tier {
+  return (level && BUCKET_TO_TIER[level]) || "b1";
+}
+
+function seenKey(tier: Tier): string {
+  switch (tier) {
+    case "a1":
+      return "szenario-seen-a1-v1";
+    case "a2":
+      return "szenario-seen-a2-v1";
+    case "b2":
+      return "szenario-seen-b2-v1";
+    default:
+      return SEEN_STORAGE_KEY; // "b1" — the original, pre-tier key.
   }
 }
 
-function seenKey(level: "b1" | "b2"): string {
-  return level === "b2" ? "szenario-seen-b2-v1" : SEEN_STORAGE_KEY;
-}
-
-function readSeen(level: "b1" | "b2"): string[] {
+function readSeen(tier: Tier): string[] {
   try {
-    const raw = localStorage.getItem(seenKey(level));
+    const raw = localStorage.getItem(seenKey(tier));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed)
@@ -58,9 +79,9 @@ function readSeen(level: "b1" | "b2"): string[] {
   }
 }
 
-function writeSeen(level: "b1" | "b2", list: string[]): void {
+function writeSeen(tier: Tier, list: string[]): void {
   try {
-    localStorage.setItem(seenKey(level), JSON.stringify(list));
+    localStorage.setItem(seenKey(tier), JSON.stringify(list));
   } catch {
     // Storage blocked/unavailable — variety just resets next visit.
   }
@@ -73,30 +94,12 @@ function writeSeen(level: "b1" | "b2", list: string[]): void {
 // Sprechen.tsx); SzenarioTrainer owns the interaction and remounts per
 // question via `key`.
 export default function Szenario() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, user, signOut } = useAuth();
   const router = useRouter();
 
   const [scenario, setScenario] = useState<Scenario | null>(null); // null = loading
   const [scenarioKey, setScenarioKey] = useState(0); // remounts the trainer per question
   const [error, setError] = useState(false);
-
-  // SZEN-005: manual B1/B2 tier toggle. Default to "b1" and hydrate from
-  // localStorage in an effect — same SSR-safe pattern as AuthContext.tsx's
-  // `ready` flag and SetupView.tsx's dev-unlock hydration (reading storage
-  // during render would mismatch server HTML). `levelReady` gates the first
-  // fetch below so a stored "b2" can't leak an initial "b1" request: without
-  // it, loadScenario's effect would fire once on mount with the default
-  // "b1" (before this hydration effect's setLevel has committed) and again
-  // right after with "b2", double-fetching.
-  const [level, setLevel] = useState<"b1" | "b2">("b1");
-  const [levelReady, setLevelReady] = useState(false);
-
-  useEffect(() => {
-    if (readLevel() === "b2") {
-      setLevel("b2");
-    }
-    setLevelReady(true);
-  }, []);
 
   // Once the learner has clicked past the "How it works" card, later
   // remounts (New question) should land straight on "scene" — the intro is
@@ -116,18 +119,30 @@ export default function Szenario() {
   }, [ready, token, router]);
 
   const loadScenario = useCallback(() => {
-    if (!token || !levelReady) return;
+    if (!token) return;
     setScenario(null);
-    const seen = readSeen(level);
-    fetchScenario(token, seen, level)
+    // SZEN-007: guess the tier from the account level before asking — the
+    // server needs a seen-list up front, so the client can't wait for the
+    // response to know which one to send. The server's own guess (from the
+    // SAME bucket->tier mapping, applied to `users.level`) will normally
+    // agree; when it doesn't (stale/absent AuthContext read), the response's
+    // `tier` is authoritative and storage below re-keys against it.
+    const expected = expectedTier(user?.level);
+    const seen = readSeen(expected);
+    fetchScenario(token, seen)
       .then((s) => {
         setScenario(s);
         setScenarioKey((k) => k + 1);
         // VARY-001: an old backend omits questionIndex — skip the
         // localStorage update rather than writing a malformed token.
         if (typeof s.questionIndex === "number") {
+          const servedTier = s.tier ?? expected;
+          const priorSeen = servedTier === expected ? seen : readSeen(servedTier);
           const served = `${s.scenarioId}:${s.questionIndex}`;
-          writeSeen(level, s.cycleReset ? [served] : [...seen, served]);
+          writeSeen(
+            servedTier,
+            s.cycleReset ? [served] : [...priorSeen, served]
+          );
         }
       })
       .catch((e) => {
@@ -137,7 +152,7 @@ export default function Szenario() {
           setError(true);
         }
       });
-  }, [token, signOut, level, levelReady]);
+  }, [token, signOut, user?.level]);
 
   useEffect(() => {
     loadScenario();
@@ -258,29 +273,21 @@ export default function Szenario() {
           <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
             structure, not grammar
           </p>
-          {/* SZEN-005: manual tier switch — B2 swaps every scene's questions
-              for the harder set. Personal-level DB column comes later. */}
-          <div className="mt-3 inline-flex overflow-hidden rounded-full border-[3px] border-ink">
-            {(["b1", "b2"] as const).map((l) => (
-              <button
-                key={l}
-                type="button"
-                onClick={() => {
-                  if (l === level) return;
-                  setLevel(l);
-                  try {
-                    localStorage.setItem(LEVEL_STORAGE_KEY, l);
-                  } catch {}
-                }}
-                className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
-                  l === level
-                    ? "bg-ink text-white"
-                    : "bg-white text-ink hover:text-flag-red"
-                }`}
-              >
-                {l === "b1" ? "B1" : "B2"}
-              </button>
-            ))}
+          {/* SZEN-007: the tier is read from the account level server-side
+              now — this pill is a read-only affordance, not a control, so
+              the level setting stays visible without letting the learner
+              fake it here. Same pill styling family as the removed
+              SZEN-005 toggle. */}
+          <div
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full border-[3px] border-ink bg-white px-4 py-1.5"
+            title="Set your level on the practice menu"
+          >
+            <span className="font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink">
+              {user?.level ?? "B1"}
+            </span>
+            <span className="font-body text-[9px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+              level
+            </span>
           </div>
         </div>
 

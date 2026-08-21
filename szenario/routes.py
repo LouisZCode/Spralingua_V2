@@ -23,7 +23,12 @@ from agents.error_extractor import extract_errors
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_sessionmaker
-from database.repository import record_drill_attempt, record_grammar_error
+from database.repository import (
+    load_user_level,
+    record_drill_attempt,
+    record_grammar_error,
+)
+from grammar.levels import bucket_of
 from satz.examiner import transcribe_attempt
 from security import drill_try_admit
 from szenario.content import load_scenarios
@@ -135,28 +140,65 @@ def _pick_scenario(
     return by_id[chosen_id], chosen_idx, cycle_reset
 
 
+# SZEN-007: account-level bucket (grammar.levels.bucket_of) -> (tier label
+# echoed to the client, the scenario field that tier serves from). B1 and
+# "no level known" deliberately land on the same entry — the base tier is
+# what every pre-LEVEL-001 account already gets.
+_TIER_BY_BUCKET: dict[str, tuple[str, str]] = {
+    "A1": ("a1", "questions_a1"),
+    "A2": ("a2", "questions_a2"),
+    "B1": ("b1", "questions"),
+    "B2+": ("b2", "questions_b2"),
+}
+_DEFAULT_TIER: tuple[str, str] = ("b1", "questions")
+
+
 @router.get("/scenario")
 async def get_scenario(
     # VARY-001: comma-separated "scenarioId:questionIndex" tokens the client
-    # has already been served this pool cycle. Optional — absent behaves
-    # exactly like the old stateless draw (full backward compatibility).
+    # has already been served this pool cycle FOR THE TIER IT EXPECTS
+    # (SZEN-007) — a token's question index only makes sense against the
+    # question list it was drawn from, so the seen-token contract is
+    # per-tier. The client sends the list for the tier its own account-level
+    # guess maps to; the server is authoritative about which tier it
+    # actually served (see `"tier"` in the response below) and the client
+    # re-keys its stored seen-tokens against THAT, not its guess. Optional —
+    # absent behaves exactly like the old stateless draw (full backward
+    # compatibility).
     seen: str | None = None,
-    # SZEN-005: "b2" serves each scene's harder questions_b2 tier; anything
-    # else (absent, "b1", junk) serves the base tier. The seen-token contract
-    # is per-tier — the client keeps separate lists.
-    level: str | None = None,
     user_id: str = Depends(get_current_user_id),
 ):
     """Pick one scenario and one of its questions, avoiding repeats the
     client has already seen (VARY-001).
 
+    SZEN-007: the question tier served is no longer a client toggle
+    (SZEN-005 is superseded) — it is read from the learner's account-level
+    bucket (`users.level`, LEVEL-001) via `load_user_level` +
+    `grammar.levels.bucket_of`, then mapped straight to a question-list
+    field: A1 -> questions_a1, A2 -> questions_a2, B1 -> questions, B2+ ->
+    questions_b2. No level set, or a failed read, falls back to the base
+    "questions" tier — same "leveling is never fatal" contract
+    `drills/leveling.py` gives the grammar drills: a personalisation outage
+    must never take the drill dark. The tier actually served is echoed back
+    as `"tier"` so the client's per-tier seen-token storage stays correct
+    even if its own guess was wrong or stale.
+
     The `questions` list stays server-side beyond the one chosen — the
     learner sees only the picked question, so the drill stays unpredictable
     on repeat visits to the same scenario.
     """
-    scenarios = list(load_scenarios().values())
-    if level == "b2":
-        scenarios = [{**s, "questions": s["questions_b2"]} for s in scenarios]
+    bucket = None
+    try:
+        async with get_sessionmaker()() as db:
+            bucket = bucket_of(await load_user_level(db, user_id=user_id))
+    except Exception:  # noqa: BLE001 — leveling must never break the drill
+        logger.warning("Szenario level read failed (non-fatal) — serving base tier")
+
+    tier, questions_key = _TIER_BY_BUCKET.get(bucket, _DEFAULT_TIER)
+
+    scenarios = [
+        {**s, "questions": s[questions_key]} for s in load_scenarios().values()
+    ]
     seen_tokens = seen.split(",") if seen else []
     scenario, question_index, cycle_reset = _pick_scenario(scenarios, seen_tokens)
     question = scenario["questions"][question_index]
@@ -173,6 +215,7 @@ async def get_scenario(
         "question": question,
         "zielVokabular": scenario["ziel_vokabular"],
         "cycleReset": cycle_reset,
+        "tier": tier,
     }
 
 

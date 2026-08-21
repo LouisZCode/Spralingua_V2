@@ -18,10 +18,19 @@ _REQUIRED = (
     "register",
     "kontext",
     "questions",
+    "questions_a1",
+    "questions_a2",
     "questions_b2",
     "ziel_vokabular",
 )
 _PERSONA_REQUIRED = ("name", "role", "attitude")
+
+# SZEN-007: four question tiers, one per account-level bucket (A1/A2 below
+# the base "questions" list, B2+ above it via questions_b2) — the server
+# picks which one to serve from the learner's `users.level`
+# (szenario/routes.py), never a client toggle. Same shape rules apply to
+# every tier: a list of non-empty strings, 3-5 entries.
+_QUESTION_FIELDS = ("questions", "questions_a1", "questions_a2", "questions_b2")
 
 # Keep round content tight — one persona, one unpredictable question, not a
 # whole dialogue tree.
@@ -65,26 +74,21 @@ def load_scenarios() -> dict[str, dict]:
         if not isinstance(scenario["kontext"], str) or not scenario["kontext"].strip():
             raise ValueError(f"{where}: 'kontext' must be a non-empty string")
 
-        questions = scenario["questions"]
-        if not isinstance(questions, list) or not all(
-            isinstance(q, str) and q.strip() for q in questions
-        ):
-            raise ValueError(f"{where}: 'questions' must be a list of non-empty strings")
-        if not (_MIN_QUESTIONS <= len(questions) <= _MAX_QUESTIONS):
-            raise ValueError(
-                f"{where}: 'questions' must have {_MIN_QUESTIONS}-{_MAX_QUESTIONS} entries"
-            )
-
-        # SZEN-005: the harder tier, same shape rules as the base list.
-        questions_b2 = scenario["questions_b2"]
-        if not isinstance(questions_b2, list) or not all(
-            isinstance(q, str) and q.strip() for q in questions_b2
-        ):
-            raise ValueError(f"{where}: 'questions_b2' must be a list of non-empty strings")
-        if not (_MIN_QUESTIONS <= len(questions_b2) <= _MAX_QUESTIONS):
-            raise ValueError(
-                f"{where}: 'questions_b2' must have {_MIN_QUESTIONS}-{_MAX_QUESTIONS} entries"
-            )
+        # SZEN-007: every tier (base + the three level-mapped ones) validates
+        # against the same shape rules, so one loop replaces what used to be
+        # a pasted copy per tier.
+        for field in _QUESTION_FIELDS:
+            values = scenario[field]
+            if not isinstance(values, list) or not all(
+                isinstance(q, str) and q.strip() for q in values
+            ):
+                raise ValueError(
+                    f"{where}: '{field}' must be a list of non-empty strings"
+                )
+            if not (_MIN_QUESTIONS <= len(values) <= _MAX_QUESTIONS):
+                raise ValueError(
+                    f"{where}: '{field}' must have {_MIN_QUESTIONS}-{_MAX_QUESTIONS} entries"
+                )
 
         ziel_vokabular = scenario["ziel_vokabular"]
         if not isinstance(ziel_vokabular, list) or not all(

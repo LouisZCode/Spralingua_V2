@@ -29,6 +29,11 @@ export type Scenario = {
   // VARY-001: true when the server's seen-pool was exhausted and reset for
   // this pick — the client should clear its stored seen-token list.
   cycleReset?: boolean;
+  // SZEN-007: the question tier actually served (server-derived from the
+  // account level, `users.level`) — authoritative for which per-tier
+  // seen-token bucket the served token gets written into. Absent only
+  // against an old backend that predates account-level tiers.
+  tier?: "a1" | "a2" | "b1" | "b2";
 };
 
 export type SentenceRead = {
@@ -85,18 +90,14 @@ async function request<T>(
 export async function fetchScenario(
   token: string,
   // VARY-001: "scenarioId:questionIndex" tokens already served this pool
-  // cycle (localStorage-backed, see Szenario.tsx) — omit or pass empty for
-  // the old stateless draw.
-  seen?: string[],
-  // SZEN-005: "b2" asks for the harder tier; omit for the base tier.
-  level?: "b1" | "b2"
+  // cycle for the TIER the caller expects to be served (SZEN-007; see
+  // Szenario.tsx for the account-level -> tier guess and per-tier
+  // localStorage keys) — omit or pass empty for the old stateless draw.
+  seen?: string[]
 ): Promise<Scenario> {
   const params: string[] = [];
   if (seen && seen.length > 0) {
     params.push(`seen=${encodeURIComponent(seen.join(","))}`);
-  }
-  if (level === "b2") {
-    params.push("level=b2");
   }
   const qs = params.length > 0 ? `?${params.join("&")}` : "";
   return request<Scenario>(`/szenario/scenario${qs}`, token);
