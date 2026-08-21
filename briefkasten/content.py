@@ -20,19 +20,21 @@ _SEEDS_PATH = Path(__file__).parent / "seeds.yaml"
 REGISTERS = ("informal", "formal")
 LEVELS = ("a1", "a2", "b1", "b2")
 
-# LEVEL-001: the learner's self-declared bucket (grammar/levels.py::BUCKETS)
-# -> the seed levels it may draw from. Strict, not a ceiling: a learner who
-# said "A2" gets A2 situations only — the letter, its word target and the
-# judge's expectations all follow the seed level, so an A1 seed for a B1+
-# learner was a 30-50-word letter graded to A1, which is what prompted this.
-# B1 and B2 share the top bucket because the picker has no B2 rung.
-# Pool sizes today: A1 -> 1 seed, A2 -> 4, B1+ -> 5. The A1 pool is thin
-# enough that an A1 learner sees the same situation every time — a content
-# gap to fill in seeds.yaml, not a reason to soften the rule here.
+# LEVEL-001/LEVEL-002: the learner's self-declared bucket
+# (grammar/levels.py::BUCKETS) -> the seed levels it may draw from. Strict,
+# not a ceiling: a learner who said "A2" gets A2 situations only — the
+# letter, its word target and the judge's expectations all follow the seed
+# level, so an A1 seed for a B1+ learner was a 30-50-word letter graded to
+# A1, which is what prompted this.
+# B2+ keeps the combined (b1, b2) pool for now because only 2 b2 seeds
+# exist — a b2-only pool would repeat almost immediately. Authoring more b2
+# seeds is tracked as follow-up content work.
+# Pool sizes today (seeds.yaml): a1 -> 6, a2 -> 7, b1 -> 6, b2 -> 2.
 BUCKET_SEED_LEVELS: dict[str, tuple[str, ...]] = {
     "A1": ("a1",),
     "A2": ("a2",),
-    "B1+": ("b1", "b2"),
+    "B1": ("b1",),
+    "B2+": ("b1", "b2"),
 }
 
 # How much the learner is asked to write, by seed level — carried over from

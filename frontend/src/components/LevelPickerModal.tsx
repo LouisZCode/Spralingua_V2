@@ -11,10 +11,12 @@ import type { Level } from "./auth/AuthContext";
 // every Flow. This answer sets the ceiling on what they're served; the error
 // ledger decides which below-level patterns still come back.
 //
-// Three buckets, not six — a self-declared level isn't accurate past that,
-// and the grammar taxonomy tops out at B1. "Not sure" is a real answer that
-// stores null and keeps serving everything, so nobody is ever stuck behind a
-// guess they made once. Portaled to <body> for the same reason
+// Four buckets, not six — a self-declared level isn't accurate past that.
+// B1 and B2+ are split even though the grammar taxonomy tops out at B1,
+// because content-leveled exercises need the finer distinction. "Not sure"
+// is a real answer that stores null and keeps serving everything, so
+// nobody is ever stuck behind a guess they made once. Portaled to <body>
+// for the same reason
 // QuietRoomModal is: the rise-in transforms on the page below would otherwise
 // trap a fixed overlay.
 
@@ -30,9 +32,14 @@ const OPTIONS: { level: Level; title: string; blurb: string }[] = [
     blurb: "Cases, past tense, prepositions that trip you up.",
   },
   {
-    level: "B1+",
-    title: "B1+ · Fairly confident",
+    level: "B1",
+    title: "B1 · Fairly confident",
     blurb: "Subordinate clauses, relative clauses, tense colouring.",
+  },
+  {
+    level: "B2+",
+    title: "B2+ · At home in German",
+    blurb: "Complex German is comfortable — you want fine-tuning and natural phrasing, not simplification.",
   },
 ];
 

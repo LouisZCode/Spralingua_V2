@@ -7,12 +7,17 @@ any notion of where the learner is. Practice time spent on a decision they
 made correctly two years ago is time not spent on the thing they actually
 get wrong.
 
-Three buckets, not six
+Four buckets, not six
 ----------------------
-``A1`` · ``A2`` · ``B1+``. CEFR has more rungs, but a self-declared level is
-only accurate to about this resolution, and the taxonomy tops out at B1
-anyway (33 patterns: 11 A1, 12 A2, 10 B1). Collapsing B1/B2 into one bucket
-is deliberate — see ``BUCKETS``.
+``A1`` · ``A2`` · ``B1`` · ``B2+``. CEFR has more rungs, but a self-declared
+level is only accurate to about this resolution. B1 and B2+ are split even
+though the grammar taxonomy tops out at B1 (33 patterns: 11 A1, 12 A2, 10
+B1, zero B2) — CONTENT-leveled exercises (Briefkasten seeds, Szenario
+question tiers) and judge calibration need the finer distinction. For
+taxonomy-derived gating specifically, B2+ has no ceiling: no pattern maps to
+it, so a B2+ learner with open ledger gaps drills exactly those, and one
+with a clean ledger gets the whole pool back via ``select()``'s degrade
+ladder — see ``BUCKETS``.
 
 Where item levels come from
 ---------------------------
@@ -61,13 +66,13 @@ __all__ = [
 ]
 
 # Ordered easiest → hardest; the index IS the rank used for comparison.
-BUCKETS: tuple[str, ...] = ("A1", "A2", "B1+")
+BUCKETS: tuple[str, ...] = ("A1", "A2", "B1", "B2+")
 
 DEFAULT_BUCKET = "A1"
 
 # Taxonomy level -> bucket. B2 is mapped even though no pattern uses it
 # today, so adding a B2 pattern later cannot raise a KeyError at serve time.
-_TO_BUCKET = {"A1": "A1", "A2": "A2", "B1": "B1+", "B2": "B1+"}
+_TO_BUCKET = {"A1": "A1", "A2": "A2", "B1": "B1", "B2": "B2+"}
 
 
 def bucket_of(level: str | None) -> str | None:
@@ -141,7 +146,7 @@ def select(items, user_level, weak_patterns=None, *, pattern_of=None):
 
     Not every drill has content at every level — ``faelle`` is entirely
     A1/A2, ``zeitfaerbung`` entirely A2/B1 — so the strict rule alone would
-    hand a B1+ learner an EMPTY Fälle round and take the drill dark. That
+    hand a B2+ learner an EMPTY Fälle round and take the drill dark. That
     is worse than the problem being fixed, so this walks a ladder:
 
     1. the full rule (at level, plus below-level gaps the ledger knows);

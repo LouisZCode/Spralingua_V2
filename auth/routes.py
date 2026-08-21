@@ -37,10 +37,11 @@ class UserOut(BaseModel):
 
 
 class LevelBody(BaseModel):
-    # A Literal, not a str: the check constraint in migration 0021 is the
-    # backstop, but a client should never be able to write a junk bucket
-    # that silently disables filtering. ``None`` is the "not sure" escape.
-    level: Optional[Literal["A1", "A2", "B1+"]]
+    # A Literal, not a str: the ck_users_level check constraint (0021,
+    # widened by 0023) is the backstop, but a client should never be able
+    # to write a junk bucket that silently disables filtering. ``None`` is
+    # the "not sure" escape.
+    level: Optional[Literal["A1", "A2", "B1", "B2+"]]
 
 
 class AuthOut(BaseModel):

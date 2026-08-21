@@ -13,9 +13,11 @@ import { HTTP_BASE } from "@/lib/api";
 // WS handshake (?token=) and on /say (Authorization: Bearer) — see AUTH-001.
 const STORAGE_KEY = "spralingua_auth";
 
-// LEVEL-001: three buckets, not six — a self-declared level is only accurate
-// to about this resolution, and the grammar taxonomy tops out at B1.
-export type Level = "A1" | "A2" | "B1+";
+// LEVEL-001/LEVEL-002: four buckets, not six — a self-declared level is only
+// accurate to about this resolution. B1 and B2+ are split even though the
+// grammar taxonomy tops out at B1, because content-leveled exercises
+// (Briefkasten seeds, Szenario question tiers) need the finer distinction.
+export type Level = "A1" | "A2" | "B1" | "B2+";
 
 export type AuthUser = {
   id: string;
