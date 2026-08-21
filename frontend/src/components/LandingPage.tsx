@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import HeroDemo from "./HeroDemo";
 import StartCta from "./auth/StartCta";
 
@@ -310,6 +311,27 @@ export default function LandingPage() {
           <span className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted">
             Voice-powered language learning
           </span>
+          {/* LEGAL-001: quiet links to the three legal documents. */}
+          <nav className="flex items-center gap-4">
+            <Link
+              href="/legal/impressum"
+              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Impressum
+            </Link>
+            <Link
+              href="/legal/privacy"
+              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Privacy
+            </Link>
+            <Link
+              href="/legal/terms"
+              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Terms
+            </Link>
+          </nav>
         </div>
       </footer>
     </div>

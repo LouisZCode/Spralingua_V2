@@ -81,6 +81,29 @@ export default function SignInModal({
             {error}
           </p>
         )}
+
+        {/* LEGAL-001: consent + age gate, right under the sign-in button. */}
+        <p className="mx-auto mt-5 max-w-[280px] font-body text-[11px] leading-relaxed text-ink-muted">
+          By continuing you confirm that you are 16 or older and agree to our{" "}
+          <a
+            href="/legal/terms"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-ink"
+          >
+            Terms of Service
+          </a>{" "}
+          and{" "}
+          <a
+            href="/legal/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="underline underline-offset-2 hover:text-ink"
+          >
+            Privacy Policy
+          </a>
+          .
+        </p>
       </div>
     </div>,
     document.body,

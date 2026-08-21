@@ -450,6 +450,30 @@ export default function PracticeMenu() {
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
         </Link>
+
+        {/* LEGAL-001: discreet in-app reachability for the legal docs — the
+            two-click rule (home footer is the other click). Small and muted
+            on purpose; this isn't a feature, just a reachable link. */}
+        <footer className="mt-10 flex justify-center gap-4">
+          <Link
+            href="/legal/impressum"
+            className="font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+          >
+            Impressum
+          </Link>
+          <Link
+            href="/legal/privacy"
+            className="font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+          >
+            Privacy
+          </Link>
+          <Link
+            href="/legal/terms"
+            className="font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+          >
+            Terms
+          </Link>
+        </footer>
       </main>
     </div>
   );

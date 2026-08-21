@@ -361,6 +361,13 @@ export default function HeroDemo() {
               disabled={false}
               onClick={onOrbClick}
             />
+            {/* AI Act Art. 50(1): in-product disclosure, shown before this
+                demo connects — HeroDemo doesn't mount ConversationView, so
+                it needs its own copy of the line (see Privacy Policy §8). */}
+            <p className="mt-5 max-w-[220px] text-center font-body text-[11px] leading-relaxed text-ink-faint">
+              You&apos;ll be speaking with an AI conversation partner — the
+              voice is computer-generated.
+            </p>
           </div>
         ) : (
           <div className="flex min-h-[440px] flex-col items-center gap-4">

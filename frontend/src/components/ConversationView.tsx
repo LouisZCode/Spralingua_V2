@@ -840,6 +840,17 @@ function BriefingPhase({
         I am ready
       </button>
 
+      {/* AI Act Art. 50(1): in-product disclosure, shown before every
+          session — see Privacy Policy §8. Additive-only: no behavior/timing
+          change to the briefing flow itself. */}
+      <p
+        className="rise-in mt-3 text-center font-body text-[12px] leading-relaxed text-ink-faint"
+        style={{ animationDelay: "220ms" }}
+      >
+        You&apos;ll be speaking with an AI conversation partner — the voice
+        is computer-generated.
+      </p>
+
       <div
         className="rise-in mt-4 flex items-center justify-between"
         style={{ animationDelay: "240ms" }}
