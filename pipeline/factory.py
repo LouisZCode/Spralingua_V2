@@ -1,6 +1,7 @@
 import asyncio
 import wave
 from datetime import datetime
+from pathlib import Path
 from uuid import uuid4
 
 import aiohttp
@@ -71,9 +72,6 @@ from database.repository import (
     load_vocab_words,
     record_grammar_error,
 )
-
-from logs import setup_session_logger
-
 
 # Live pipeline tasks keyed by user_id. Used by /say/{user_id} in main.py
 # to inject typed turns into an active session. Per-client isolation rule
@@ -334,20 +332,22 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         if exchanges_override is not None:
             lesson_snapshot["max_exchanges"] = exchanges_override
 
-        # Per-client logger
-        session_logger = setup_session_logger(stt, tts, CONVERSATIONAL_MODEL)
+        # Per-session audio location (OBS-010: the session logger is gone —
+        # transcript lives in activity_session, latency in Langfuse). The MP3
+        # is named by the bare session hex so it correlates with the
+        # activity_session row directly, no counter to reconcile.
+        audio_dir = Path("logs/conversations") / datetime.now().strftime("%Y-%m-%d")
+        audio_dir.mkdir(parents=True, exist_ok=True)
 
         # Insert the activity_session row at connect (DATA-001). Non-fatal:
         # if the DB is down we log a warning and continue — audio export,
-        # evaluators, logger close, and OTel flush MUST still run. The row
+        # evaluators, and OTel flush MUST still run. The row
         # is then UPDATEd on disconnect with transcript + eval results.
         # ``lesson_snapshot`` freezes the YAML at session start so future
         # history UI shows what the user actually saw, even if the YAML
         # changes later.
         started_at = datetime.now()
-        audio_path = str(
-            (session_logger.session_dir / session_logger.session_id).with_suffix(".mp3")
-        )
+        audio_path = str(audio_dir / f"{session_id}.mp3")
         try:
             async with get_sessionmaker()() as db:
                 await create_session_row(
@@ -407,7 +407,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
         # both passed — the wrapper's own DB/transcript fields need the
         # former, its hand-rolled `llm` span needs the latter.
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, logger=session_logger, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
@@ -437,7 +437,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
 
         @audiobuffer.event_handler("on_audio_data")
         async def on_audio_data(buffer, audio, sample_rate, num_channels):
-            base_path = session_logger.session_dir / session_logger.session_id
+            base_path = audio_dir / session_id
             wav_path = base_path.with_suffix(".wav")
             mp3_path = base_path.with_suffix(".mp3")
             # Same non-fatal contract as the other disconnect-side steps: an
@@ -823,7 +823,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 language="German" if lesson_lang == "de" else "English",
                                 session_id=trace_session_id,
                             )
-                            session_logger.write_evaluation(result)
                             passed_count = sum(1 for g in result.goals if g.passed)
                             logger.info(
                                 f"Evaluation: passed={result.passed} "
@@ -1022,10 +1021,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 locale=locale,
                                 session_id=trace_session_id,
                             )
-                            session_logger.write_pronunciation(
-                                pron_result,
-                                dropped_audio=wrapper._dropped_audio_count,
-                            )
                             logger.info(
                                 f"Pronunciation: locale={pron_result.locale} "
                                 f"pron={pron_result.aggregate.pron_score:.1f} "
@@ -1109,12 +1104,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 logger.warning(
                     f"DB session finalize failed (non-fatal): {type(e).__name__}: {e}"
                 )
-            # B3: same non-fatal contract as above — a close failure must not
-            # skip the OTel flush that follows it.
-            try:
-                session_logger.close()
-            except Exception:  # noqa: BLE001 — logger close must not block cleanup
-                logger.exception("Session logger close failed (non-fatal)")
             # B1: force_flush() is bounded (timeout_millis=2000 in
             # agents/observability.py) but still a synchronous, thread-blocking
             # OTel call — run it off the event loop so a slow Langfuse OTLP

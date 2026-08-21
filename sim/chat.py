@@ -10,9 +10,9 @@ synthesizes and streams at real-time pace, so a turn completes when the bot
 
 Lena's replies are recovered from the BACKEND LOG (the uvicorn process must
 be started with its output redirected to a file; pass it via --backend-log
-or SIM_BACKEND_LOG). The session .md transcript can't be used: typed /say
-turns have no VAD timestamps, so `session_logger._write_turn_summary`
-discards them as incomplete turns and they never land in the .md.
+or SIM_BACKEND_LOG). There is no per-session transcript file to read
+(OBS-010 removed the session logger); the stored transcript lands in
+activity_session only at disconnect, too late for turn-by-turn driving.
 
 Usage (from repo root, backend running on :8765 with logs to a file):
     uv run python sim/chat.py start --topic "Der Alltag"

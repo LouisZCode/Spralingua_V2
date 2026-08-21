@@ -9,7 +9,7 @@ See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for the full architectural breakdown,
 ```
 Browser (mic) ⇄ WebSocket ⇄ FastAPI / Pipecat (STT → buffer → LLM → TTS) ⇄ Browser (speaker)
                                               ↓
-                                      logs/conversations/YYYY-MM-DD/session_NNN.{log,md,mp3}
+                                      logs/conversations/YYYY-MM-DD/{session_id}.mp3
 ```
 
 ## Stack
@@ -71,15 +71,13 @@ Open `http://localhost:3000`, pick a lesson + voice, click *Continue* → *I am 
 
 ## Output
 
-Each session writes three files under `logs/conversations/YYYY-MM-DD/`:
+Each session writes one file under `logs/conversations/YYYY-MM-DD/`:
 
 | File | Content |
 |---|---|
-| `session_NNN.log` | Latency metrics (macro + per-stage micro) |
-| `session_NNN.md` | Markdown transcript with the system prompt captured on the first LLM call |
-| `session_NNN.mp3` | Full conversation audio (WAV captured by `AudioBufferProcessor`, converted via `pydub`) |
+| `{session_id}.mp3` | Full conversation audio (WAV captured by `AudioBufferProcessor`, converted via `pydub`), named by the session's `activity_session` id |
 
-Per-turn STT / LLM / TTS spans also land in Langfuse for latency, token, and trace analytics.
+Transcript and evaluation results are stored in Postgres (`activity_session`); per-turn STT / LLM / TTS spans land in Langfuse for latency, token, and trace analytics.
 
 ## Project structure
 
@@ -103,7 +101,6 @@ Per-turn STT / LLM / TTS spans also land in Langfuse for latency, token, and tra
 │   ├── converters.py           TranscriptionToContextConverter — VAD-gated buffering
 │   ├── observers.py            PipelineLatencyObserver — per-turn root trace spans (turn-{N}-{lesson})
 │   └── tts_duration.py         TTSDurationTracker — per-turn TTS audio length metric
-├── logs/session_logger.py      Per-session log/transcript/audio writer
 └── frontend/src/components/
     ├── VoiceChat.tsx           Thin orchestrator
     ├── SetupView.tsx           Lesson / level / situation / voice picker

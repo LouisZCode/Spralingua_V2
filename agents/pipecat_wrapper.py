@@ -4,7 +4,6 @@ ClientWrapper: makes the LangChain agent compatible with Pipecat's LangchainProc
 Each client connection gets its own ClientWrapper instance, holding:
 - agent: a fresh LangChain agent with its own InMemorySaver
 - user_id: unique thread_id for conversation memory
-- logger: per-session transcript logger
 """
 
 import asyncio
@@ -186,7 +185,7 @@ class ExerciseMarkerFilter:
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
-    def __init__(self, user_id, session_id, logger, voice="happy_harry", lesson_id="lesson_zero",
+    def __init__(self, user_id, session_id, voice="happy_harry", lesson_id="lesson_zero",
                  topic="", grammar_focus=None, session_notes=None, vocab_words=None,
                  max_exchanges_override: int | None = None, trace_session_id: str | None = None):
         self.user_id = user_id
@@ -203,7 +202,9 @@ class ClientWrapper:
         # priority over pipecat's process-wide `TurnContextProvider` — see
         # `astream`.
         self._turn_context = None
-        self.logger = logger
+        # OBS-010: set once the first llm span has stamped the rendered
+        # system prompt (see astream's finally block).
+        self._system_prompt_stamped = False
         self.agent = agent_assembly(user_id)
         self.context = Context(
             lesson_id=lesson_id,
@@ -482,6 +483,20 @@ class ClientWrapper:
                         (ttft_ns - span_start_ns) / 1_000_000,
                     )
 
+                # OBS-010: the rendered system prompt — ledger layers, vocab
+                # words, topic, notes all injected — exists nowhere else once
+                # the session logger is gone (the DB lesson_snapshot freezes
+                # only the raw YAML), so stamp it once on this session's first
+                # llm span. Rendered by the middleware during the stream above,
+                # so it's available here; the span is still open.
+                if not self._system_prompt_stamped:
+                    prompt = get_last_system_prompt()
+                    if prompt:
+                        llm_span.set_attribute(
+                            "langfuse.observation.metadata.system_prompt", prompt
+                        )
+                        self._system_prompt_stamped = True
+
                 # Stash the full reply; the actual push to the client now happens
                 # in `flush_bot_output`, invoked by TTSDurationTracker once TTS has
                 # finished streaming audio (server-side end-of-speech). The framework
@@ -544,12 +559,6 @@ class ClientWrapper:
                         logger.warning(
                             f"[EXERCISE] Dropping malformed marker id {pattern_id!r}"
                         )
-
-        # After first LLM call, capture system prompt for transcript
-        if self.logger and not self.logger._system_prompt_written:
-            prompt = get_last_system_prompt()
-            if prompt:
-                self.logger.write_system_prompt(prompt)
 
     def render_transcript(self) -> str:
         """Format the captured turns as a single string for the evaluator prompt."""
