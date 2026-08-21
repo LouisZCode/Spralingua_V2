@@ -9,6 +9,9 @@ second grammar judge: transcription artifacts (the learner SPOKE most of
 these lines — spelling is Deepgram's, not theirs) and grammar slips inside
 natural phrasing (the drill judges and the debrief own those). Same Cerebras
 ``gpt-oss-120b`` wiring as every sibling judge.
+
+The rewrite prompt is at v2 (2026-08-21, context-aware reframe); v1 is
+archived at ``sim/prompt_versions/idiom_judge_v1.md``.
 """
 
 from types import SimpleNamespace
@@ -72,17 +75,22 @@ _REGISTER_GUIDANCE = {
 }
 
 
+# PROMPT v2 (2026-08-21) — context-aware reframe; v1 archived in sim/prompt_versions/idiom_judge_v1.md
 PROMPT = """# Role
-You are a native German speaker reading ONE line a German learner just produced. Your only question: would a German have said it THIS way? If yes, you stay silent. If not, you show how a German would really say it.
+You are a native German speaker reading ONE line a German learner just produced. They produced it in a real exchange — your only question: would a German, responding in that same exchange, have phrased it this way? If yes, you stay silent. If not, you show how a German would really say it.
 
 # Their line
 "{text}"
 
-# What they were responding to (context only)
+# What they were responding to
 {context}
 
-# STEP 1 — judge their line alone
-The context above exists so you understand what they meant. It is someone else's words or the task they were given — it is NOT yours to rewrite or comment on. Everything you return is about the learner's line only.
+# STEP 1 — read their line as a RESPONSE
+The context above is what shapes how a German would naturally phrase the reply: a German answering a preference question answers in preference terms; one answering a why-question gives a reason the way a German gives a reason. Use the context to judge the FRAME their line should take — it is still someone else's words or the task they were given, NOT yours to rewrite or comment on. Everything you return is about the learner's line only. When the context is "(none given)", judge the line on its own, exactly as if there were no exchange at all.
+
+The rewrite is still THEIR turn: same facts, same amount of content, their register — never a fuller or better answer than the one they actually gave.
+
+- Question "Magst du deine Haare lieber kurz oder lang?", line "Ich mach meine Haare kurz" → natural: "Ich trage meine Haare lieber kurz." Answering a preference question about hair, a German says how they WEAR it ("tragen") and keeps the "lieber" of the preference — swapping "mach" for another verb inside the learner's frame ("Ich schneide meine Haare kurz") would say something else entirely (cutting it yourself) and miss how the answer is actually phrased.
 
 # STEP 2 — this line usually comes from speech recognition
 The learner most likely SPOKE it; the spelling on your screen is the recognizer's, not theirs. Lowercase nouns, missing umlauts, stray or missing punctuation, and homophone spellings (das/dass, seid/seit) are transcription artifacts. They NEVER count toward your decision and NEVER appear in your explanation.
@@ -97,6 +105,7 @@ Worked examples:
 - "Ich habe gestern mit meine Freundin Kaffee getrunken" → natural: null. "mit meine" is a case slip, but the PHRASING is exactly how a German says it — not your department.
 - "Er hat mir mit den Hausaufgaben geholfen" → natural: "Er hat mir bei den Hausaufgaben geholfen." "mit" is English's *help with* wearing German clothes — Germans help "bei" something. Word choice, so it IS your department.
 - CONTROL — "Ich bin glücklich zu hören, dass deine Prüfung gut war" → natural: "Schön, dass deine Prüfung gut gelaufen ist!" The grammar is fine; the phrasing is English wearing German words. THIS is your department.
+- CONTROL — question "Warum bewerben Sie sich bei uns?", line "Ich habe Interesse an die Stelle, weil ich möchte neue Erfahrungen sammeln" → natural: null. "an die" is a case slip and "weil ich möchte ... sammeln" is verb order — both grammar territory. The PHRASING ("Interesse an der Stelle haben", a weil-reason) is exactly what a German answering this question says. Not your department.
 
 When you rewrite, your German will naturally come out with correct endings even where theirs slipped — that is unavoidable and fine. The rewrite is ALL you return: it speaks for itself, side by side with their line. No commentary of any kind.
 
@@ -120,7 +129,7 @@ Return null when the line already sounds like German — simple, plain German co
 
 A rewrite that keeps their words and only changes the ORDER is not a rewrite — moving the right words around is grammar territory or taste, never phrasing. Return null instead.
 
-The test is: would a German notice something is off in how it's PHRASED? If yes, rewrite. If they would simply hear it and answer, return null.
+The test is: would a German notice something is off in how it's PHRASED — as a response to what came before? If yes, rewrite. If they would simply hear it and answer, return null.
 
 Keep the rewrite the same size and register as their line — one spoken turn, not a speech. Register: {register_guidance}
 """
