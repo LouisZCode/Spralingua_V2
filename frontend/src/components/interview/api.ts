@@ -241,10 +241,17 @@ export async function fetchAudioUrl(token: string, chunkId: string): Promise<str
 export async function submitComprehension(
   token: string,
   chunkId: string,
-  audio: Blob
+  audio: Blob,
+  // OBS-007: the practice-sitting id (minted by Interview.tsx on the first
+  // round-1 attempt, shared with round 2) — same field as `submitAnswer`
+  // below. Optional so a caller with no session id yet still works.
+  sessionId?: string
 ): Promise<ComprehensionResult> {
   const form = new FormData();
   form.append("audio", audio, "retell");
+  if (sessionId) {
+    form.append("session_id", sessionId);
+  }
   const r = await request<RawComprehensionResponse>(
     `/interview/comprehension/${encodeURIComponent(chunkId)}`,
     token,
@@ -272,8 +279,8 @@ export async function submitAnswer(
   chunkId: string,
   audio: Blob,
   // OBS-007: the practice-sitting id (minted by Interview.tsx on the first
-  // round-2 attempt) — the backend files the ledger harvest's Langfuse
-  // grouping under it. Round 1 (/comprehension) takes no such field.
+  // attempt, round 1 or round 2 — see `submitComprehension` above) — the
+  // backend files the ledger harvest's Langfuse grouping under it.
   sessionId: string
 ): Promise<AnswerResult> {
   const form = new FormData();

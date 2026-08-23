@@ -23,8 +23,14 @@ from loguru import logger
 from pydantic import BaseModel, Field
 
 import azure.cognitiveservices.speech as speechsdk
+from agents.audio_costs import AZURE_PRONUNCIATION_PER_MIN, stamp_audio_cost, stt_cost_usd
 from agents.observability import generation_span, record_generation_output
 from config import azure_speech_key, azure_speech_region
+
+# 16-bit mono PCM — the exact format `_score_turn` below builds its WAV from
+# (and what `pipeline/factory.py`'s `on_user_turn_audio_data` handler hands
+# us), so duration is 2 bytes/sample, one channel.
+_PCM_BYTES_PER_SAMPLE = 2
 
 
 class WordScore(BaseModel):
@@ -98,6 +104,22 @@ async def assess_pronunciation(
             aggregate=_aggregate(scored),
         )
         record_generation_output(span, result.aggregate.model_dump_json())
+
+        # AUDIO-COST: what was actually sent to Azure — every submitted turn,
+        # not just the ones it managed to recognize (a rejected turn still
+        # cost the API call). Computed straight from the raw PCM already in
+        # hand, no extra pass over the audio or a session-file duration read.
+        audio_seconds = round(
+            sum(len(audio) / (sample_rate * _PCM_BYTES_PER_SAMPLE) for _, audio, sample_rate in turns),
+            2,
+        )
+        if audio_seconds > 0:
+            usd = stt_cost_usd(audio_seconds, AZURE_PRONUNCIATION_PER_MIN)
+            stamp_audio_cost(
+                span,
+                usage={"audio_seconds": audio_seconds},
+                cost={"audio_seconds": usd, "total": usd},
+            )
     return result
 
 

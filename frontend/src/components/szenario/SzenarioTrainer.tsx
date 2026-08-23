@@ -82,6 +82,7 @@ export default function SzenarioTrainer({
   // convention as SprechenTrainer's onGiveUp.
   allowGiveUp,
   onGiveUp,
+  sessionId,
 }: {
   scenario: Scenario;
   initialPhase: Phase;
@@ -109,6 +110,9 @@ export default function SzenarioTrainer({
     scenarioId: string,
     question: string
   ) => Promise<StructureResult>;
+  // OBS-007 practice-sitting id, owned by the parent (Szenario.tsx or
+  // Flow.tsx) — threaded through to GermanWay's rephrase call.
+  sessionId?: string;
 }) {
   // FLOW-006: force "scene" in flow mode regardless of what `initialPhase`
   // the parent passed — the one-time "How it works" card belongs to the
@@ -444,6 +448,7 @@ export default function SzenarioTrainer({
               context={scenario.question}
               onGloss={onGloss}
               onAdd={onAdd}
+              sessionId={sessionId}
             />
           )}
 

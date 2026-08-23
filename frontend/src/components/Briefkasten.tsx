@@ -58,6 +58,15 @@ export default function Briefkasten() {
   // first attempt, held for the whole page visit — "New letter" top-ups
   // share it because the ref lives above the per-letter remounts.
   const practiceSessionRef = useRef<string | null>(null);
+  // IDIOM-002: the letter GET fires before any attempt (loadLetter runs on
+  // mount, ahead of handleAttempt), so it needs the id minted eagerly rather
+  // than waiting on the lazy `??=` inside handleAttempt below. `sid()` mints
+  // in place the first time anything calls it — same convention as Flow.tsx.
+  const sid = useCallback((): string => {
+    practiceSessionRef.current ??=
+      "brf-" + crypto.randomUUID().replace(/-/g, "");
+    return practiceSessionRef.current;
+  }, []);
 
   useEffect(() => {
     if (ready && !token) {
@@ -70,7 +79,7 @@ export default function Briefkasten() {
     setLetter(null);
     setError(false);
     const seen = readSeen();
-    fetchLetter(token, seen)
+    fetchLetter(token, seen, undefined, sid())
       .then((l) => {
         setLetter(l);
         setLetterKey((k) => k + 1);
@@ -83,7 +92,7 @@ export default function Briefkasten() {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, signOut, sid]);
 
   useEffect(() => {
     loadLetter();

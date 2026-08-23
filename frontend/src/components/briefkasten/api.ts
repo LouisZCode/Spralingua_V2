@@ -89,7 +89,11 @@ export async function fetchLetter(
   // see Briefkasten.tsx) — omit or pass empty for a plain draw.
   seen?: string[],
   // Filters the seed pool; omit (or "any") for the whole pool.
-  register?: Register
+  register?: Register,
+  // OBS-007 practice-sitting id, owned by the Briefkasten shell — same
+  // contract as `submitAttempt`'s `sessionId` below, but this is a GET so it
+  // rides as a query param instead of a JSON body field.
+  sessionId?: string
 ): Promise<Letter> {
   const params: string[] = [];
   if (seen && seen.length > 0) {
@@ -97,6 +101,9 @@ export async function fetchLetter(
   }
   if (register) {
     params.push(`register=${register}`);
+  }
+  if (sessionId) {
+    params.push(`session_id=${encodeURIComponent(sessionId)}`);
   }
   const qs = params.length > 0 ? `?${params.join("&")}` : "";
   return request<Letter>(`/briefkasten/letter${qs}`, token);

@@ -1122,6 +1122,7 @@ export default function VocabTrainer({
                         onAdd={onAdd}
                         exclude={glossExclude}
                         onRephrase={() => setRephraseOffered(true)}
+                        sessionId={sessionId ?? practiceSessionRef.current ?? undefined}
                       />
                     )}
                     {/* SATZ-008: recourse for a verdict that feels wrong —

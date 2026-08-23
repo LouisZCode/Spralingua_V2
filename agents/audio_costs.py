@@ -16,6 +16,16 @@ Researched 2026-08-21:
   JS-rendered and could not be scraped directly — FLAGGED, confirm in
   the MiniMax console before trusting this number for an actual invoice
   reconciliation.
+- Azure AI Speech Pronunciation Assessment: $1.32/hour for Standard
+  real-time transcription, billed as ordinary Speech-to-Text — Microsoft's
+  own FAQ states the assessment itself carries no separate charge, it
+  rides the base STT rate ("charged as standard Speech to Text"). Cross-
+  checked 2026-08-23 against a second figure (~$1/hour base real-time STT
+  + a documented $0.30/hour real-time add-on surcharge ≈ $1.30/hour,
+  consistent within rounding). Azure's own pricing calculator page gates
+  the number behind a region/currency picker and returned no static figure
+  — FLAGGED, confirm in the Azure portal before trusting this for an
+  actual invoice reconciliation.
 
 Both `langfuse.observation.usage_details` and
 `langfuse.observation.cost_details` are JSON-ENCODED STRINGS in Langfuse
@@ -37,6 +47,13 @@ DEEPGRAM_NOVA2_PRERECORDED_PER_MIN = DEEPGRAM_NOVA3_PRERECORDED_PER_MIN
 # USD per character, MiniMax speech-2.8-turbo. FLAGGED: official pricing
 # page is JS-rendered — corroborated via resellers + OpenRouter only.
 MINIMAX_TTS_PER_CHAR = 0.00006
+
+# USD per minute, Azure AI Speech Pronunciation Assessment (billed as
+# standard real-time Speech-to-Text — see module docstring). FLAGGED:
+# Azure's public pricing calculator gates the actual figure behind a
+# region/currency picker. Confirm in the Azure portal before trusting this
+# for real cost reconciliation.
+AZURE_PRONUNCIATION_PER_MIN = 1.32 / 60  # ≈ $0.022/min
 
 
 def stt_cost_usd(seconds: float, per_min_rate: float) -> float:

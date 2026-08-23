@@ -42,10 +42,10 @@ export default function Interview() {
   const [item, setItem] = useState<InterviewItem | null>(null); // null = loading
   const [itemError, setItemError] = useState(false);
 
-  // OBS-007: minted lazily on the first round-2 attempt, held for the whole
-  // page visit — same convention as every other drill shell's
-  // practiceSessionRef (Sprechen.tsx, Szenario.tsx, …). Round 1
-  // (/interview/comprehension) takes no session id at all.
+  // OBS-007: minted lazily on the first attempt (round 1 or round 2,
+  // whichever fires first — the same item's two rounds are one sitting),
+  // held for the whole page visit — same convention as every other drill
+  // shell's practiceSessionRef (Sprechen.tsx, Szenario.tsx, …).
   const sessionIdRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -117,8 +117,9 @@ export default function Interview() {
   const handleComprehension = useCallback(
     async (chunkId: string, audio: Blob): Promise<ComprehensionResult> => {
       if (!token) throw new UnauthorizedError("/interview/comprehension");
+      sessionIdRef.current ??= "interview-" + crypto.randomUUID().replace(/-/g, "");
       try {
-        return await submitComprehension(token, chunkId, audio);
+        return await submitComprehension(token, chunkId, audio, sessionIdRef.current);
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;

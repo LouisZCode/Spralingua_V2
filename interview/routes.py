@@ -317,6 +317,9 @@ async def get_audio(
 async def post_comprehension(
     chunk_id: str,
     audio: UploadFile = File(...),
+    # Optional client-minted practice-sitting id (OBS-007 convention, same
+    # as round 2 below) — purely for observability; nothing here requires it.
+    session_id: Optional[str] = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -364,10 +367,12 @@ async def post_comprehension(
     # Deepgram call's `stt` generation nests under this trace instead of
     # being invisible — and a transcription outage shows up as an ERROR
     # trace rather than a bare 502 in the access log.
-    with propagate_trace_context(user_id=user_id), \
+    with propagate_trace_context(user_id=user_id, session_id=session_id), \
             tracer.start_as_current_span("interview-comprehension") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("chunk_id", chunk_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
         try:
             transcript = await transcribe_comprehension(audio_bytes, audio.content_type, keywords)
         except Exception as exc:  # noqa: BLE001 -- a Deepgram outage must 502, not 500

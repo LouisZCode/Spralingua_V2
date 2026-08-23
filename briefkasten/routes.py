@@ -123,6 +123,11 @@ async def get_letter(
     # the whole pool. Both registers ship on purpose: a learner who only ever
     # writes to friends never practises the register they need for an Amt.
     register: str | None = None,
+    # OBS-007 practice-sitting id — same contract as the attempt route below
+    # (``AttemptIn.session_id``), just carried as a query param here since
+    # this is a GET. Threads through so the ``briefkasten-writer`` generation
+    # lands inside the learner's practice sitting instead of session-less.
+    session_id: str | None = None,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -178,11 +183,13 @@ async def get_letter(
         logger.exception("Briefkasten name read failed — greeting without a name")
         reader_name = None
 
-    with propagate_trace_context(user_id=user_id), tracer.start_as_current_span("briefkasten-letter") as span:
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("briefkasten-letter") as span:
         span.set_attribute("user.id", user_id)
         span.set_attribute("seed_id", seed["id"])
         span.set_attribute("register", seed["register"])
         span.set_attribute("user.level", level or "")
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
         span.set_attribute(
             "langfuse.observation.input", f"seed={seed['id']} register={seed['register']}"
         )

@@ -1566,6 +1566,7 @@ export default function Flow() {
                         onFlowDone={(correct) => handleItemDone("sprechen", correct)}
                         allowGiveUp
                         onGiveUp={handleSprechenGiveUp}
+                        sessionId={sid()}
                       />
                     )}
                     {deal.kind === "szenario" && (
@@ -1582,6 +1583,7 @@ export default function Flow() {
                         onFlowDone={(correct) => handleItemDone("szenario", correct)}
                         allowGiveUp
                         onGiveUp={handleSzenarioGiveUp}
+                        sessionId={sid()}
                       />
                     )}
                     {deal.kind === "genus" && (

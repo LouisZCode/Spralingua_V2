@@ -19,8 +19,10 @@ _model = ChatOpenAI(
     stream_usage=True,                       # final usage chunk on streamed OpenAI calls (token counts → Langfuse)
     timeout=30,
     extra_body={
-        # Pin to Cerebras for speed. Cost tracking via Langfuse is deferred —
-        # see LEARNINGS.md 2026-05-19 entry.
+        # Pin to Cerebras for speed. Cost tracking via Langfuse is live: the
+        # per-turn `llm` span (agents/pipecat_wrapper.py::ClientWrapper.astream,
+        # since 2026-08-21) records usage + model, priced by a Langfuse model
+        # definition matching the served model name.
         # allow_fallbacks stays True here ONLY — every one-shot judge
         # (satz/sprechen/bauteil/verbindungen/szenario judges, evaluator,
         # error_extractor, debrief) was flipped to False (OBS-008): a slow

@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
-from agents.observability import propagate_trace_context, tracer
+from agents.observability import get_trace_session, propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from idiom.judge import germanize
 from security import drill_try_admit
@@ -74,10 +74,20 @@ async def rephrase(
         context = context[:_MAX_CONTEXT_CHARS]
     target = " ".join(body.target.split()) if body.target else None
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("idiom-rephrase") as span:
+    # Drill surfaces send session_id on the wire; the three voice surfaces
+    # (tandem/teacher/lesson chat bubbles) can't — their widget only knows
+    # the bare session hex, not the tandem-/teacher-/lesson- prefixed
+    # Langfuse session id minted server-side in run_pipeline. When the
+    # client is silent, fall back to the live-voice-session join
+    # (get_trace_session) the teacher exercise routes already use. A
+    # client-provided id always wins; with neither, this stays session-less
+    # and user-attributed, same as before.
+    session_id = body.session_id or get_trace_session(user_id)
+
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("idiom-rephrase") as span:
         span.set_attribute("user.id", user_id)
-        if body.session_id:
-            span.set_attribute("langfuse.session.id", body.session_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
         span.set_attribute("langfuse.observation.input", text)
         try:
             result = await germanize(text, context, body.register_, target=target)

@@ -44,6 +44,16 @@ export default function Szenario() {
   // first attempt, held for the whole page visit — "New question" top-ups
   // share it because the ref lives above the per-question remounts.
   const practiceSessionRef = useRef<string | null>(null);
+  // IDIOM-002: GermanWay's rephrase call needs the id at RENDER time, not
+  // just inside handleAttempt's closure — a ref read directly in JSX would
+  // stay stale (assigning `.current` doesn't trigger this component to
+  // re-render), so `sid()` mints eagerly in place the first time anything
+  // calls it, same convention as Flow.tsx's own `sid`.
+  const sid = useCallback((): string => {
+    practiceSessionRef.current ??=
+      "szn-" + crypto.randomUUID().replace(/-/g, "");
+    return practiceSessionRef.current;
+  }, []);
 
   useEffect(() => {
     if (ready && !token) {
@@ -240,6 +250,7 @@ export default function Szenario() {
             onNewQuestion={loadScenario}
             onGloss={handleGloss}
             onAdd={handleAddWord}
+            sessionId={sid()}
           />
         )}
       </main>

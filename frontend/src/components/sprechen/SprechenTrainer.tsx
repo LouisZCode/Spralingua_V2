@@ -38,6 +38,7 @@ export default function SprechenTrainer({
   onFlowDone,
   allowGiveUp,
   onGiveUp,
+  sessionId,
 }: {
   round: SpokenTask[];
   // Judge one recorded clip (POST /sprechen/attempts via the parent, which
@@ -66,6 +67,9 @@ export default function SprechenTrainer({
   // this is a separate call from `onAttempt`, not a flag on it.
   allowGiveUp?: boolean;
   onGiveUp?: (taskId: string) => Promise<SprechenVerdict>;
+  // OBS-007 practice-sitting id, owned by the parent (Sprechen.tsx or
+  // Flow.tsx) — threaded through to GermanWay's rephrase call.
+  sessionId?: string;
 }) {
   const [phase, setPhase] = useState<Phase>("drill");
   const [index, setIndex] = useState(0);
@@ -575,6 +579,7 @@ export default function SprechenTrainer({
                 context={task.prompt}
                 onGloss={onGloss}
                 onAdd={onAdd}
+                sessionId={sessionId}
               />
             )}
 

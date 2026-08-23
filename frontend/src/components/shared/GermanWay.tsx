@@ -46,6 +46,7 @@ export default function GermanWay({
   onRephrase,
   value,
   autoExpand,
+  sessionId,
 }: {
   // The learner's own line — a verdict card's transcript or a chat bubble.
   text: string;
@@ -80,6 +81,10 @@ export default function GermanWay({
   // Open the card immediately when `value` lands, no click needed. Only
   // meaningful together with `value`; ignored on the fetch path.
   autoExpand?: boolean;
+  // OBS-007 practice-sitting id — same contract as the sibling drills' own
+  // attempt calls. Optional: a caller that owns no session id (or the fetch
+  // path is skipped entirely via `value`) simply omits it, same as before.
+  sessionId?: string;
 }) {
   const { token } = useAuth();
   const [state, setState] = useState<"idle" | "loading" | "done" | "error">(
@@ -128,7 +133,12 @@ export default function GermanWay({
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ text, context: context ?? null, target: target ?? null }),
+        body: JSON.stringify({
+          text,
+          context: context ?? null,
+          target: target ?? null,
+          session_id: sessionId ?? null,
+        }),
       });
       if (!res.ok) throw new Error(`rephrase failed (${res.status})`);
       const data = (await res.json()) as Rephrase;
