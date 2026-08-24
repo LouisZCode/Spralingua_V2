@@ -18,6 +18,7 @@ from pipecat.frames.frames import LLMContextFrame
 from pipecat.processors.aggregators.llm_context import LLMContext
 
 from agents.load_prompts import load_prompts, load_tandem_topics, tandem_lesson_ids
+from agents.observability import get_trace_session, propagate_trace_context, tracer
 from auth import AuthError, decode_session_jwt, get_current_user_id, router as auth_router
 from bauteil import load_items as load_bauteil_items, router as bauteil_router
 from briefkasten import load_seeds as load_briefkasten_seeds, router as briefkasten_router
@@ -622,14 +623,30 @@ async def tandem_say_audio(
     # German. "tandem" fallback only fires if ACTIVE_LESSONS and ACTIVE_TASKS
     # ever disagree, which preserves today's (German) behavior for that edge.
     language = lesson_language(ACTIVE_LESSONS.get(user_id, "tandem"))
-    try:
-        transcript = await transcribe_attempt(data, audio.content_type, language=language)
-    except Exception as e:  # noqa: BLE001 — a Deepgram outage must 502, not 500
-        logger.warning(f"Tandem say-audio transcription failed: {type(e).__name__}: {e}")
-        raise HTTPException(
-            status_code=502,
-            detail="Couldn't process the audio — try again in a moment.",
-        )
+    # COST-001: without a root span here, the `stt` generation inside
+    # transcribe_attempt is a PARENTLESS span with no `user.id`, which is
+    # exactly what agents/observability.py::_OrphanFragmentFilterExporter
+    # drops before export — so every Practice-mode clip was billed by
+    # Deepgram but invisible in Langfuse (found reconciling 2026-08-24:
+    # 69 billed requests vs 63 traced, Δ = the 6 clips of one tandem
+    # session). Same live-session join as idiom/routes.py: the trace files
+    # into the live tandem/teacher session, and the cost stamp inside
+    # transcribe_attempt rides along.
+    session_id = get_trace_session(user_id)
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span(
+        "tandem-say-audio"
+    ) as span:
+        span.set_attribute("user.id", user_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
+        try:
+            transcript = await transcribe_attempt(data, audio.content_type, language=language)
+        except Exception as e:  # noqa: BLE001 — a Deepgram outage must 502, not 500
+            logger.warning(f"Tandem say-audio transcription failed: {type(e).__name__}: {e}")
+            raise HTTPException(
+                status_code=502,
+                detail="Couldn't process the audio — try again in a moment.",
+            )
 
     text = (transcript or "").strip()
     if not text:
