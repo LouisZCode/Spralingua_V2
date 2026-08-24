@@ -97,9 +97,17 @@ export default function LandingPage() {
               Spralingua
             </span>
           </div>
-          <StartCta className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red">
-            Start →
-          </StartCta>
+          <nav className="flex items-center gap-6">
+            <Link
+              href="/pricing"
+              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+            >
+              Pricing
+            </Link>
+            <StartCta className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red">
+              Start →
+            </StartCta>
+          </nav>
         </div>
       </header>
 
@@ -313,6 +321,12 @@ export default function LandingPage() {
           </span>
           {/* LEGAL-001: quiet links to the three legal documents. */}
           <nav className="flex items-center gap-4">
+            <Link
+              href="/pricing"
+              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Pricing
+            </Link>
             <Link
               href="/legal/impressum"
               className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"

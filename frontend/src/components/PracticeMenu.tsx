@@ -224,17 +224,28 @@ export default function PracticeMenu() {
             </span>
           </Link>
 
-          {/* LEVEL-001: the level is always visible and always changeable —
-              a self-declared level goes stale as the learner improves, and
-              one that can't be corrected is worse than none. */}
-          <button
-            type="button"
-            onClick={() => setAskLevel(true)}
-            className="rounded-full border-[3px] border-ink bg-paper-warm px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink"
-            title="Change your level"
-          >
-            {user?.level ?? "Set level"}
-          </button>
+          <div className="flex items-center gap-4">
+            {/* PAY-001: the signed-in door to /pricing — upgrade for free
+                users, plan management (portal) for paying ones. */}
+            <Link
+              href="/pricing"
+              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Pricing
+            </Link>
+
+            {/* LEVEL-001: the level is always visible and always changeable —
+                a self-declared level goes stale as the learner improves, and
+                one that can't be corrected is worse than none. */}
+            <button
+              type="button"
+              onClick={() => setAskLevel(true)}
+              className="rounded-full border-[3px] border-ink bg-paper-warm px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink"
+              title="Change your level"
+            >
+              {user?.level ?? "Set level"}
+            </button>
+          </div>
         </div>
       </header>
 
