@@ -7,9 +7,8 @@ import { useAuth } from "./auth/AuthContext";
 import StartCta from "./auth/StartCta";
 import { createCheckout, fetchBillingPortal } from "@/lib/api";
 
-// PAY-001 (Phase 3): the pricing page. Not linked from the shared nav or
-// PracticeMenu yet — that's a separate decision — but it's a real, reachable
-// route for anyone who has the link.
+// PAY-001 (Phase 3): the pricing page. Linked from the landing page nav,
+// the landing footer and the practice menu — it's a real, reachable route.
 //
 // CRITICAL correctness rule this whole file is built around: a signed-in
 // user already on "basic" or "premium" must never be sent through Checkout
@@ -33,16 +32,22 @@ const PLANS: Plan[] = [
   {
     id: "free",
     kicker: "Free",
-    price: "€0",
-    priceNote: "to get started",
-    bullets: ["100 coins to get started (one-time)"],
+    price: "Free",
+    priceNote: "",
+    bullets: ["100 coins are yours to try", "No card needed"],
   },
   {
     id: "basic",
     kicker: "Basic",
     price: "€15",
     priceNote: "/ month",
-    bullets: ["200 coins every day"],
+    bullets: [
+      "200 coins every day",
+      "20 new words a day",
+      "A tandem conversation every day",
+      "A letter with corrections",
+      "Or spend your coins your way",
+    ],
   },
   {
     id: "premium",
@@ -51,8 +56,10 @@ const PLANS: Plan[] = [
     priceNote: "/ month",
     bullets: [
       "500 coins every day",
+      "30+ new words a day",
+      "Long tandem conversations, every day",
+      "Interview practice with real-life audio",
       "Upload your own audio",
-      "Extended interview audio library",
       "Early access to new features",
     ],
   },
@@ -151,10 +158,23 @@ export default function Pricing() {
           <h1 className="mt-3 font-display text-[clamp(30px,5vw,50px)] font-black leading-[1.02] tracking-tight text-ink">
             Coins for however you like to practice.
           </h1>
-          <p className="mx-auto mt-4 max-w-xl font-body text-[15px] leading-relaxed text-ink-soft">
-            Every voice session — Satzschmiede, Tandem, Clara, Briefkasten —
-            spends coins. Pick the plan that keeps you talking.
-          </p>
+          <div className="mt-6 inline-flex flex-col items-start gap-2.5 text-left">
+            {[
+              "Practice new vocabulary every day",
+              "Speak the words you want to learn",
+              "Talk to a tandem partner every day",
+              "Grammar practice built into real conversations",
+              "Rehearse real German situations before they happen",
+            ].map((benefit) => (
+              <p
+                key={benefit}
+                className="flex items-start gap-2 font-body text-[15px] leading-relaxed text-ink-soft"
+              >
+                <CheckIcon />
+                <span>{benefit}</span>
+              </p>
+            ))}
+          </div>
         </div>
 
         {notConfigured && (
@@ -190,6 +210,29 @@ export default function Pricing() {
               onSwitch={goPortal}
             />
           ))}
+        </div>
+
+        {/* Displayed offer only — the top-up purchase path ships with
+            PAY-002 (coin balance); until then the chip stays inert. */}
+        <div
+          className="rise-in mt-6 flex flex-col items-start gap-4 rounded-[28px] border-[3px] border-ink bg-paper-warm p-6 sm:flex-row sm:items-center sm:justify-between"
+          style={{ boxShadow: "0 5px 0 var(--color-ink)", animationDelay: "120ms" }}
+        >
+          <div>
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+              Top-up
+            </p>
+            <p className="mt-2 font-display text-[18px] font-bold text-ink">
+              Big day in German? Top up any time.
+            </p>
+            <p className="mt-1 font-body text-[14px] text-ink-soft">
+              €2 for a full extra day of coins — 500 coins, whenever you need
+              them.
+            </p>
+          </div>
+          <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+            Coming soon
+          </span>
         </div>
 
         {signedIn && currentTier !== "free" && (
@@ -244,9 +287,11 @@ function PricingCard({
       </p>
       <p className="mt-2 font-display text-[36px] font-black leading-none text-ink">
         {plan.price}
-        <span className="ml-1.5 font-body text-[14px] font-semibold text-ink-muted">
-          {plan.priceNote}
-        </span>
+        {plan.priceNote && (
+          <span className="ml-1.5 font-body text-[14px] font-semibold text-ink-muted">
+            {plan.priceNote}
+          </span>
+        )}
       </p>
       <ul className="mt-6 flex-1 space-y-2.5">
         {plan.bullets.map((b) => (
