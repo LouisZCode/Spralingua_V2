@@ -13,7 +13,7 @@ operation is idempotent across reconnects without a SELECT-then-INSERT race.
 
 from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from loguru import logger
 from sqlalchemy import Text, cast, func, or_, select, update
@@ -28,6 +28,8 @@ from .orm import (
     ActivitySession,
     DailyModeCompletion,
     DrillAttempt,
+    StripeEvent,
+    Subscription,
     User,
     UserCard,
     UserError,
@@ -145,7 +147,7 @@ async def upsert_user(
     email: str | None,
     name: str | None,
     picture: str | None,
-) -> str:
+) -> tuple[str, str]:
     """Insert or refresh a user from a verified Google sign-in (AUTH-001).
 
     Keyed on the Google ``sub`` (``user_id``). On a repeat sign-in we refresh the
@@ -153,14 +155,17 @@ async def upsert_user(
     and stamp ``last_login_at``. ``created_at`` keeps its first-insert value via
     the server default and is left untouched on update.
 
-    ``role`` is deliberately NOT in the conflict update set — it's set out-of-band
-    (SQL) and must survive re-logins — and we ``RETURNING`` it so the caller can
-    embed it in the session JWT + sign-in response. New rows get the column
-    default ("normal").
+    ``role`` and ``tier`` (PAY-001) are deliberately NOT in the conflict update
+    set — both are set out-of-band (SQL for role, the Stripe webhook for tier)
+    and must survive re-logins — and we ``RETURNING`` both so the caller can
+    embed the fresh values in the session JWT + sign-in response. New rows get
+    the column defaults ("normal" / "free").
 
     CHORE-001: ``email`` is lowercased here (the write site) for case-insensitive
     uniqueness — Google itself is case-insensitive on the local part, so two
     sign-ins that differ only in case must land on the same row.
+
+    Returns ``(role, tier)``.
     """
     _assert_test_user(user_id)
     try:
@@ -179,11 +184,170 @@ async def upsert_user(
                 "picture": stmt.excluded.picture,
                 "last_login_at": stmt.excluded.last_login_at,
             },
-        ).returning(User.role)
+        ).returning(User.role, User.tier)
         result = await db.execute(stmt)
-        role = result.scalar_one()
+        role, tier = result.one()
         await db.commit()
-        return role
+        return role, tier
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+# ── Stripe billing (PAY-001) ──────────────────────────────────────────────
+# ``subscriptions`` is a local mirror of Stripe subscription state, one row
+# per user; ``stripe_events`` is the webhook dedup ledger — Stripe delivery
+# is at-least-once, so every webhook handler must check-then-skip a
+# previously applied event id before mutating tier state.
+
+
+async def record_stripe_event(
+    db: AsyncSession, *, event_id: str, event_type: str
+) -> bool:
+    """Idempotency gate for the Stripe webhook handler (PAY-001).
+
+    ``INSERT ... ON CONFLICT DO NOTHING`` keyed on the Stripe event id
+    itself. Returns True the first time this event id is seen — the caller
+    should process it — or False if it was already recorded, meaning this
+    is a Stripe redelivery the caller should skip.
+
+    Not user-scoped (the table carries no ``user_id``), so no test-guard
+    check here — same reasoning as ``finalize_session_row``, which is also
+    deliberately unguarded because it takes no ``user_id``.
+    """
+    try:
+        result = await db.execute(
+            pg_insert(StripeEvent)
+            .values(id=event_id, type=event_type)
+            .on_conflict_do_nothing(index_elements=["id"])
+        )
+        await db.commit()
+        return result.rowcount > 0
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+async def upsert_subscription(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    stripe_customer_id: str,
+    stripe_subscription_id: str | None = None,
+    stripe_price_id: str | None = None,
+    tier: str,
+    status: str,
+    current_period_end: datetime | None = None,
+) -> None:
+    """Upsert the one ``subscriptions`` row for ``user_id`` (PAY-001).
+
+    One row per user (``UNIQUE`` on ``user_id``): the first webhook seen for
+    this user inserts a fresh row, minting its own ``uuid4().hex`` id; every
+    later webhook updates that same row in place and bumps ``updated_at``.
+    Same non-fatal contract as the other ledger ops: re-raises on
+    ``SQLAlchemyError``, the caller owns the wrapping.
+    """
+    _assert_test_user(user_id)
+    now = datetime.now()
+    try:
+        stmt = pg_insert(Subscription).values(
+            id=uuid4().hex,
+            user_id=user_id,
+            stripe_customer_id=stripe_customer_id,
+            stripe_subscription_id=stripe_subscription_id,
+            stripe_price_id=stripe_price_id,
+            tier=tier,
+            status=status,
+            current_period_end=current_period_end,
+            updated_at=now,
+        )
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["user_id"],
+            set_={
+                "stripe_customer_id": stmt.excluded.stripe_customer_id,
+                "stripe_subscription_id": stmt.excluded.stripe_subscription_id,
+                "stripe_price_id": stmt.excluded.stripe_price_id,
+                "tier": stmt.excluded.tier,
+                "status": stmt.excluded.status,
+                "current_period_end": stmt.excluded.current_period_end,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+        await db.execute(stmt)
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
+
+
+async def seen_stripe_event(db: AsyncSession, *, event_id: str) -> bool:
+    """Read-only idempotency check for the Stripe webhook handler (PAY-001):
+    has this event id already been recorded in ``stripe_events``?
+
+    Style-matched to ``get_subscription`` — read-only, no commit, caller owns
+    the transaction. The webhook handler calls this BEFORE processing an
+    event (check -> process -> ``record_stripe_event``), not after — see
+    ``payments/webhook.py::handle_stripe_event`` for why recording first
+    would silently lose events on a mid-processing crash.
+    """
+    return (
+        await db.scalar(select(StripeEvent.id).where(StripeEvent.id == event_id))
+    ) is not None
+
+
+async def get_subscription_by_stripe_id(
+    db: AsyncSession, *, stripe_subscription_id: str
+) -> Subscription | None:
+    """Fallback lookup for a ``customer.subscription.*`` webhook whose payload
+    metadata is missing ``user_id`` (PAY-001) — e.g. a subscription created by
+    hand in the Dashboard, or an older event shape that never got our
+    ``subscription_data.metadata`` stamp. Same read-only / no-commit /
+    ``populate_existing`` contract as :func:`get_subscription`.
+    """
+    return await db.scalar(
+        select(Subscription)
+        .where(Subscription.stripe_subscription_id == stripe_subscription_id)
+        .execution_options(populate_existing=True)
+    )
+
+
+async def get_subscription(db: AsyncSession, *, user_id: str) -> Subscription | None:
+    """The user's ``subscriptions`` row, or None if they've never had one
+    (PAY-001) — needed by the billing-portal endpoint. Read-only, same
+    unguarded/no-commit contract as the other read helpers in this file
+    (e.g. ``load_user_level``).
+
+    ``populate_existing=True``: ``upsert_subscription`` writes via a Core
+    ``ON CONFLICT`` statement, which does not refresh an already
+    identity-mapped ORM instance. A caller that upserts then reads back in
+    the same session (a natural webhook-handler shape) would otherwise see
+    the pre-write attributes on this row; this option forces a fresh read
+    from the row regardless of what's cached.
+    """
+    return await db.scalar(
+        select(Subscription)
+        .where(Subscription.user_id == user_id)
+        .execution_options(populate_existing=True)
+    )
+
+
+# Tier values the app understands. Same content-as-data choice as
+# ``STREAK_MODES``: the column itself carries no DB check constraint, so
+# this set is the only thing standing between a typo and a silently broken
+# tier read.
+_VALID_TIERS = frozenset({"free", "basic", "premium"})
+
+
+async def set_user_tier(db: AsyncSession, *, user_id: str, tier: str) -> None:
+    """Write ``users.tier`` (PAY-001), called from the Stripe webhook
+    handler once a subscription's tier is known. Validated against
+    ``_VALID_TIERS`` in code before touching the row."""
+    _assert_test_user(user_id)
+    if tier not in _VALID_TIERS:
+        raise ValueError(f"Unknown tier: {tier!r}")
+    try:
+        await db.execute(update(User).where(User.id == user_id).values(tier=tier))
+        await db.commit()
     except SQLAlchemyError:
         await db.rollback()
         raise

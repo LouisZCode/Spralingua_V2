@@ -31,6 +31,7 @@ from genus import (
 )
 from idiom import router as idiom_router
 from interview import router as interview_router
+from payments import router as payments_router
 from satzbau import load_items as load_satzbau_items, router as satzbau_router
 from sprechen import load_tasks as load_sprechen_tasks, router as sprechen_router
 from stats import router as stats_router
@@ -205,6 +206,10 @@ app.include_router(stats_router)
 # graded with each drill's own checks. Writes nothing to any learning-state
 # table — see teacher/routes.py's loud comment on POST /exercise/attempts.
 app.include_router(teacher_router)
+# Stripe billing (PAY-001): Checkout, the billing portal, and the webhook
+# that keeps users.tier + the local subscriptions mirror in sync. Fail-soft —
+# every route 503s until STRIPE_* env is set (payments/stripe_sync.py).
+app.include_router(payments_router)
 
 
 @app.get("/health")

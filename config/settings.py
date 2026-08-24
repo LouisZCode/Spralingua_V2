@@ -114,6 +114,21 @@ google_client_id = os.getenv("GOOGLE_CLIENT_ID")
 jwt_secret = os.getenv("JWT_SECRET")
 jwt_expiry_days = int(os.getenv("JWT_EXPIRY_DAYS", "7"))
 
+# --- Stripe billing (PAY-001) ---
+# Absent -> every /payments route 503s "billing not configured" (fail-soft,
+# same contract as azure_speech_key / google_client_id): the app must boot
+# fine with no Stripe env set at all.
+stripe_secret_key = os.getenv("STRIPE_SECRET_KEY")
+stripe_webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+stripe_basic_price_id = os.getenv("STRIPE_BASIC_PRICE_ID")
+stripe_premium_price_id = os.getenv("STRIPE_PREMIUM_PRICE_ID")
+# Off by default until Stripe Tax is turned on in the Dashboard — passing
+# automatic_tax=enabled on a Checkout Session without Dashboard tax setup
+# errors the call, so this stays "0" until that configuration is done.
+stripe_automatic_tax = os.getenv("STRIPE_AUTOMATIC_TAX", "0") == "1"
+# Where Checkout/portal success, cancel, and return URLs point back to.
+frontend_base_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
+
 # --- Interview audio bucket (INTV-003 slice 2) ---
 # Railway Bucket "audio" (S3-compatible, Tigris-backed) credentials for
 # presigning GET URLs to interview chunk mp3s (interview/bucket.py). All

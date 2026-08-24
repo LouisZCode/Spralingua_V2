@@ -86,6 +86,16 @@ class User(Base):
     # The one missed day the automatic weekly grace forgave, at most once per
     # rolling 7 days. Never purchasable (GAME-001: no repair economy).
     streak_grace_used_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # PAY-001: billing tier — "free" (default) | "basic" | "premium".
+    # Webhook-driven for paid tiers (database.repository.set_user_tier, called
+    # from the Stripe webhook handler); every Google sign-up lands here via
+    # the column default, no app-code write needed at signup time. Separate
+    # from ``role`` above, which keeps its own dev-tools meaning (unlocking
+    # internal tools in the UI) — a "developer" role user can still be on the
+    # "free" billing tier and vice versa.
+    tier: Mapped[str] = mapped_column(
+        Text, nullable=False, server_default=text("'free'")
+    )
 
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 
@@ -597,4 +607,76 @@ class AudioChunk(Base):
         UniqueConstraint(
             "item_id", "source_chunk_id", name="uq_audio_chunks_item_source_chunk"
         ),
+    )
+
+
+# ── Stripe billing (PAY-001) ──────────────────────────────────────────────
+# ``subscriptions`` is a local mirror of the Stripe subscription object, kept
+# just detailed enough to answer "what does this user have" without a Stripe
+# round trip on every request; Stripe itself, not this table, is the billing
+# audit-of-record. ``stripe_events`` is the webhook dedup ledger — Stripe
+# delivery is at-least-once, so every handler checks this table before
+# acting on an event id it may have already applied.
+
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    # uuid4().hex, minted at insert time — same PK style as AudioItem/
+    # AudioChunk/WordGloss (a Text id minted in app code, not a DB identity).
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # One subscription row per user (UNIQUE). CASCADE, unlike
+    # activity_session's RESTRICT: Stripe is the audit-of-record for billing
+    # history, so a deleted account doesn't need to keep an orphaned local
+    # mirror row — and CASCADE is what keeps scripts/test_user.py destroy
+    # working without a special case for this table.
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    stripe_customer_id: Mapped[str] = mapped_column(Text, nullable=False)
+    # Nullable+UNIQUE: a customer can exist (e.g. mid-Checkout) before a
+    # subscription does; once one exists, its Stripe id is the natural dedup
+    # key for webhook upserts.
+    stripe_subscription_id: Mapped[str | None] = mapped_column(
+        Text, nullable=True, unique=True
+    )
+    stripe_price_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The basic/premium mapping of stripe_price_id — not a copy of
+    # users.tier, kept separate so a webhook can upsert this row before (or
+    # without) touching the user's own tier column. Same content-as-data
+    # choice as users.tier: validated in code, not by the schema.
+    tier: Mapped[str] = mapped_column(Text, nullable=False)
+    # Stripe subscription status verbatim ("active", "past_due", "canceled",
+    # "incomplete", ...) — not narrowed in the schema, same content-as-data
+    # choice as tier.
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    current_period_end: Mapped[datetime | None] = mapped_column(
+        TIMESTAMP, nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+    # Bumped explicitly by database.repository.upsert_subscription on every
+    # write — no DB trigger, matching this repo's existing no-trigger style.
+    updated_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+
+
+class StripeEvent(Base):
+    """Webhook dedup ledger (PAY-001). ``id`` is the Stripe event id itself
+    (``evt_...``), not a minted one — that's what makes an
+    ``ON CONFLICT DO NOTHING`` insert the dedup check: a redelivered event
+    (Stripe's delivery is at-least-once) is a cheap no-op instead of a
+    double-applied tier change."""
+
+    __tablename__ = "stripe_events"
+
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # Stripe event type verbatim, e.g. "checkout.session.completed",
+    # "customer.subscription.updated" — logged for debugging, not branched
+    # on by the schema.
+    type: Mapped[str] = mapped_column(Text, nullable=False)
+    received_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
     )

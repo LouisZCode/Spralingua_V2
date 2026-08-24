@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -28,6 +29,11 @@ export type AuthUser = {
   // null = never asked. The picker shows on /practice until it's answered,
   // and until then the learner is served every item, as before LEVEL-001.
   level: Level | null;
+  // PAY-001: billing tier — "free" | "basic" | "premium". Always present on
+  // sign-in and /auth/me responses (the backend defaults it to "free"); the
+  // localStorage hydration path below backfills it for sessions stored
+  // before this field existed.
+  tier: string;
 };
 
 type AuthState = {
@@ -40,6 +46,13 @@ type AuthState = {
   signInWithGoogle: (credential: string) => Promise<void>;
   signOut: () => void;
   setLevel: (level: Level | null) => Promise<void>;
+  // PAY-001: re-pull the signed-in user from /auth/me and mirror it into
+  // localStorage. Needed after a Stripe Checkout/portal round trip, where the
+  // tier changes server-side (via webhook) without any local action of ours
+  // to react to — the /pricing/success poller is the first caller. Returns
+  // the fresh user (or null on failure) so a caller can inspect the result
+  // immediately, without waiting on the next render.
+  refreshUser: () => Promise<AuthUser | null>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -59,7 +72,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // state on mount; reading it during render would mismatch server HTML.
           // eslint-disable-next-line react-hooks/set-state-in-effect
           setToken(parsed.token);
-          setUser(parsed.user);
+          // PAY-001: a session stored before the tier field existed has none
+          // in localStorage — default it to "free" rather than leaving it
+          // undefined, since callers (e.g. the /pricing page) trust it to
+          // always be a string.
+          setUser({ ...parsed.user, tier: parsed.user.tier ?? "free" });
         }
       }
     } catch {
@@ -109,6 +126,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
+  // PAY-001: see the AuthState docstring above. Memoized on `token` alone so
+  // it's a stable reference across the setUser-triggered re-renders it
+  // itself causes — a plain function here would give a poller keying an
+  // effect off this callback a new identity every 2s and never converge.
+  const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
+    if (!token) return null;
+    try {
+      const res = await fetch(`${HTTP_BASE}/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      const updated = (await res.json()) as AuthUser;
+      setUser(updated);
+      localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({ token, user: updated })
+      );
+      return updated;
+    } catch {
+      return null;
+    }
+  }, [token]);
+
   function signOut() {
     setToken(null);
     setUser(null);
@@ -120,7 +160,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, user, ready, signInWithGoogle, signOut, setLevel }}
+      value={{
+        token,
+        user,
+        ready,
+        signInWithGoogle,
+        signOut,
+        setLevel,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

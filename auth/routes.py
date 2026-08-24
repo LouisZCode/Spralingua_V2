@@ -34,6 +34,10 @@ class UserOut(BaseModel):
     # LEVEL-001. null means "never asked" — the frontend shows the picker,
     # and until it's answered the learner is served everything as before.
     level: str | None = None
+    # PAY-001: billing tier — "free" | "basic" | "premium". Webhook-driven
+    # for paid tiers; every account starts "free" via the users.tier column
+    # default. Separate from role, which keeps its own dev-tools meaning.
+    tier: str = "free"
 
 
 class LevelBody(BaseModel):
@@ -75,7 +79,7 @@ async def auth_google(body: GoogleAuthBody) -> AuthOut:
 
     try:
         async with get_sessionmaker()() as db:
-            role = await upsert_user(
+            role, tier = await upsert_user(
                 db, user_id=user_id, email=email, name=name, picture=picture
             )
             # Returning users already have a level; sending it with the
@@ -89,7 +93,13 @@ async def auth_google(body: GoogleAuthBody) -> AuthOut:
     return AuthOut(
         token=token,
         user=UserOut(
-            id=user_id, email=email, name=name, picture=picture, role=role, level=level
+            id=user_id,
+            email=email,
+            name=name,
+            picture=picture,
+            role=role,
+            level=level,
+            tier=tier,
         ),
     )
 
@@ -108,6 +118,7 @@ async def auth_me(user_id: str = Depends(get_current_user_id)) -> UserOut:
         picture=user.picture,
         role=user.role,
         level=user.level,
+        tier=user.tier,
     )
 
 
@@ -141,4 +152,5 @@ async def set_level(
         picture=user.picture,
         role=user.role,
         level=user.level,
+        tier=user.tier,
     )
