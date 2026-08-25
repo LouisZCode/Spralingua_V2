@@ -873,8 +873,10 @@ export default function Flow() {
   );
 
   // GAME-001: the round-summary card is a bigger moment than any one item —
-  // fires once per reveal (round target reached or manual Finish), guarded
-  // against double-fire from the "Keep going" → re-finish round trip.
+  // fires once per reveal (round target reached or manual Finish). The `else`
+  // reset below is vestigial since PAY-002 retired "Keep going": nothing sets
+  // `finished` back to false any more. Kept as a cheap guard rather than
+  // assuming that stays true.
   //
   // The earcon follows the score: celebrating a 4/10 the same way as a 10/10
   // makes the celebration mean nothing. Below 60% the summary gets the warm
@@ -896,7 +898,7 @@ export default function Flow() {
   // "reveal" moment, own ref so it can't interfere with the earcon's
   // double-fire guard. Same "no graded items, no outcome" rule as the sound:
   // a round finished without a single graded item has no outcome to credit
-  // either. Reset on the same "Keep going" → re-finish round trip.
+  // either. Same vestigial reset as the earcon above.
   const flowModePingedRef = useRef(false);
   useEffect(() => {
     if (finished && !flowModePingedRef.current) {
@@ -909,12 +911,13 @@ export default function Flow() {
     }
   }, [finished, totals, token]);
 
-  // FLOW-005: auto-finish once the completed tally hits a finite round's
-  // target — same summary screen the manual Finish button shows. Exact
-  // equality (not >=) so continuing past the target via "Keep going" never
-  // bounces straight back to the summary on the very next item.
+  // FLOW-005: auto-finish once the completed tally reaches the round's target
+  // — same summary screen the manual Finish button shows. This was exact
+  // equality while "Keep going" existed, so that continuing past the target
+  // didn't bounce straight back to the summary; PAY-002 removed that path, so
+  // >= is now the safer read of the same rule.
   useEffect(() => {
-    if (totals.total === roundTarget) {
+    if (totals.total >= roundTarget) {
       setFinished(true);
     }
   }, [totals.total, roundTarget]);
@@ -1465,11 +1468,7 @@ export default function Flow() {
                 Couldn&apos;t load — is the backend running?
               </p>
             ) : finished ? (
-              <SummaryCard
-                totals={totals}
-                perExercise={perExercise}
-                onKeepGoing={() => setFinished(false)}
-              />
+              <SummaryCard totals={totals} perExercise={perExercise} />
             ) : (
               <>
                 <div className="mb-4 flex items-center justify-between">
@@ -1673,14 +1672,16 @@ export default function Flow() {
 // Same card language as the trainers' own "done" screens: big score, a
 // breakdown list, a primary action to resume, a quiet link back to the menu.
 
+// PAY-002: no "Keep going". A round is a pre-paid length the learner chose on
+// the picker, and extending it from its own summary made that number — and the
+// coin cost printed next to it — mean nothing. Another round is a deliberate
+// trip through the menu.
 function SummaryCard({
   totals,
   perExercise,
-  onKeepGoing,
 }: {
   totals: { total: number; correct: number };
   perExercise: Record<SourceKind, Tally>;
-  onKeepGoing: () => void;
 }) {
   const rows = ALL_KINDS.filter((k) => perExercise[k].done > 0);
   return (
@@ -1710,18 +1711,11 @@ function SummaryCard({
           </ul>
         </div>
       )}
-      <div className="mt-7 flex items-center justify-center gap-5">
-        <button
-          type="button"
-          onClick={onKeepGoing}
-          className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
-          style={redShadow}
-        >
-          Keep going
-        </button>
+      <div className="mt-7 flex items-center justify-center">
         <Link
           href="/practice"
-          className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+          className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+          style={inkShadow}
         >
           ← Back to menu
         </Link>

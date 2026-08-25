@@ -281,19 +281,29 @@ function LetterPanel({
   );
 }
 
-// `newLetter` — the red "New letter" button. Hidden between attempt 1 and
-// attempt 2 (user request, 2026-08-17): with the hints on screen the only next
-// step is to revise the draft ABOVE and send it again; a fresh-letter button
-// at the foot of that page read as "the next thing to click" and threw the
-// draft away. It stays on the untouched writing screen (a reroll of a letter
-// you don't want to answer) and on the final feedback screen (the natural
-// next action).
+// `newLetter` — the red advance button, shown ONLY on the final feedback
+// screen. It was hidden between attempt 1 and attempt 2 already (user request,
+// 2026-08-17): with the hints on screen the only next step is to revise the
+// draft ABOVE and send it again, and a fresh-letter button at the foot of that
+// page read as "the next thing to click" and threw the draft away.
+//
+// PAY-002: it is now hidden on the untouched writing screen too, where it used
+// to offer a reroll. A round is a fixed, pre-paid number of letters — rerolling
+// spent one of them on a letter the learner never answered, and on the (default)
+// one-letter round it ended the sitting outright. Rerolling also let a learner
+// shop for an easier prompt; staying with the letter you were dealt is the
+// exercise. The way out is ← Back to practice.
+//
+// `label` — "Next letter" mid-round, "Finish round" on the last one, so the
+// button says what it actually does rather than implying an endless supply.
 function Footer({
   onNewLetter,
   newLetter = true,
+  label = "Next letter",
 }: {
   onNewLetter: () => void;
   newLetter?: boolean;
+  label?: string;
 }) {
   return (
     <div className="mt-8 flex items-center justify-center gap-5">
@@ -304,7 +314,7 @@ function Footer({
           className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
           style={redShadow}
         >
-          New letter
+          {label}
         </button>
       )}
       <Link
@@ -321,6 +331,7 @@ export default function BriefTrainer({
   letter,
   onAttempt,
   onNewLetter,
+  isLastLetter = false,
   onGloss,
   onAdd,
 }: {
@@ -336,8 +347,12 @@ export default function BriefTrainer({
     firstAttempt?: string;
     attempt: 1 | 2;
   }) => Promise<AttemptResult>;
-  // Fetch a fresh letter; the parent remounts this component with it.
+  // Advance the round: the parent counts this letter as done and remounts
+  // this component with the next one (or shows the round-complete screen).
   onNewLetter: () => void;
+  // True on the round's final letter — flips the advance button's label from
+  // "Next letter" to "Finish round".
+  isLastLetter?: boolean;
   // UI-007: word-gloss popover for the incoming letter (Task 1) — optional,
   // threaded straight down to LetterPanel. Absent means plain text, same
   // as before this wiring landed.
@@ -589,7 +604,10 @@ export default function BriefTrainer({
           )}
         </div>
 
-        <Footer onNewLetter={onNewLetter} />
+        <Footer
+          onNewLetter={onNewLetter}
+          label={isLastLetter ? "Finish round" : "Next letter"}
+        />
       </div>
     );
   }
@@ -740,7 +758,7 @@ export default function BriefTrainer({
         </div>
       )}
 
-      <Footer onNewLetter={onNewLetter} newLetter={phase === "writing"} />
+      <Footer onNewLetter={onNewLetter} newLetter={false} />
     </div>
   );
 }

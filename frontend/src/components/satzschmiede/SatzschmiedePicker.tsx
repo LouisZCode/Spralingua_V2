@@ -45,10 +45,16 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
   const bal = useCoinBalance();
   const bypassed = useCoinsBypassed();
 
+  // SSR-safe hydration from localStorage, same idiom as Flow.tsx's round
+  // picker — reading storage during render would mismatch the server HTML.
+  // The setState is the whole point of the effect, hence the disable: the
+  // rule fires here but not on Flow's identical effect, which sits in a
+  // component too large for the compiler's analysis to reach.
   useEffect(() => {
     const stored = readStoredChoice();
     if (SATZ_PRESETS.some((p) => p.value === stored)) {
-      if (stored !== 30) setPresetChoice(stored);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setPresetChoice(stored);
     } else {
       setCustomText(String(stored));
     }

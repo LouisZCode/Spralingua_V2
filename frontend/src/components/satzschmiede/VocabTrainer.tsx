@@ -86,10 +86,6 @@ const MAX_RECORD_SECONDS = 45;
 // the backend instead (see buildQueue below).
 const NEW_PER_SESSION = 15;
 
-// SATZ-012: the done-panel follow-up batch is deliberately small — one more
-// push, not a second full session (the initial queue keeps `reviewCap`).
-const MORE_CAP = 10;
-
 // SATZ-011: after this many in-session lapses (failed verdicts or reveals)
 // on one card, the next advance completes it for the session instead of
 // recycling it — silently. STT can genuinely lose a word (a learner needed
@@ -764,20 +760,20 @@ export default function VocabTrainer({
     }
   }
 
-  // Done-panel "+ Noch N üben": pull the next small MORE_CAP batch of due
-  // cards, most-overdue-first. Reuses buildQueue with newAllowance forced to
-  // 0 so it can never smuggle in new words beyond today's allowance — that
-  // button only ever offers due cards.
-  function reviewMore() {
-    const newQueue = buildQueue(deck, doneRef.current, 0, MORE_CAP);
-    setQueue(roundTarget && roundTarget > 0 ? newQueue.slice(0, roundTarget) : newQueue);
-    resetScratch();
-  }
-
-  // Done-panel "+ Practice ahead": once due and new are both spent, offer up
-  // to 10 not-yet-due "later" cards, soonest-dueAt-first. They're graded
-  // normally like anything else, so an early success climbs the SRS ladder
-  // a rung ahead of schedule — a mild net positive, not a bug.
+  // Nothing-due-panel "+ Ein paar vorziehen": offer up to 10 not-yet-due
+  // "later" cards, soonest-dueAt-first. They're graded normally like anything
+  // else, so an early success climbs the SRS ladder a rung ahead of schedule —
+  // a mild net positive, not a bug.
+  //
+  // PAY-002: this is the ONLY continue-button left on this panel, and it is
+  // gated to the nothing-due LANDING (`!finished`), never to a round's ending.
+  // A round is a pre-paid length; extending it from its own summary made the
+  // picker's cost a number that didn't mean anything. The landing keeps it
+  // because the alternative is a dead end — a learner who has met today's
+  // SESSION_TARGET would otherwise bounce picker → "nothing due" → menu →
+  // picker forever with no way to practise. (The old "+ Noch N üben" needed no
+  // such exemption: it can only ever appear after a round, since an empty
+  // queue at mount means nothing was due in the first place.)
   function practiceAhead() {
     const ahead = deck
       .filter((c) => c.srs.status === "later" && !doneRef.current.has(c.id))
@@ -821,7 +817,6 @@ export default function VocabTrainer({
     const laterAhead = deck.filter(
       (c) => c.srs.status === "later" && !doneRef.current.has(c.id)
     ).length;
-    const reviewMoreCount = Math.min(dueRemaining, MORE_CAP);
     const finished = doneRef.current.size > 0;
     return (
       <div className="mx-auto w-full max-w-xl text-center">
@@ -834,37 +829,23 @@ export default function VocabTrainer({
               ? dueRemaining === 1
                 ? "Runde geschafft — ein fälliges Wort wartet noch."
                 : `Runde geschafft — ${dueRemaining} fällige Wörter warten noch.`
-              : laterAhead > 0
-                ? "Runde geschafft — du kannst ein paar kommende Wörter vorziehen."
-                : "Runde geschafft — deine Wörter ruhen sich jetzt aus."
+              : "Runde geschafft — deine Wörter ruhen sich jetzt aus."
             : laterAhead > 0
               ? "Du kannst ein paar kommende Wörter vorziehen."
               : "Deine Wörter ruhen sich aus — sie kommen zurück, wenn es Zeit ist."}
         </p>
-        {/* SATZ-012: the clean end keeps exactly two actions — one small
-            follow-up batch and the way back. The browse link stays off the
-            post-round screen; the nothing-due panel keeps it, it's a
-            landing state, not an ending. */}
-        {dueRemaining > 0 ? (
+        {/* SATZ-012 + PAY-002: a round's ending keeps exactly one action —
+            the way back. The browse link and the vorziehen button belong to
+            the nothing-due panel only; that's a landing state, not an ending. */}
+        {!finished && laterAhead > 0 && (
           <button
             type="button"
-            onClick={reviewMore}
+            onClick={practiceAhead}
             className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
             style={redShadow}
           >
-            + Noch {reviewMoreCount} üben
+            + Ein paar vorziehen
           </button>
-        ) : (
-          laterAhead > 0 && (
-            <button
-              type="button"
-              onClick={practiceAhead}
-              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
-              style={redShadow}
-            >
-              + Ein paar vorziehen
-            </button>
-          )
         )}
         <div className="mt-4">
           <Link

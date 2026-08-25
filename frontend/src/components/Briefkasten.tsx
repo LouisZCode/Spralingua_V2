@@ -327,24 +327,13 @@ export default function Briefkasten() {
             <p className="mx-auto mt-3 max-w-[380px] font-body text-[15px] leading-relaxed text-ink-soft">
               You&apos;ve written {lettersCompleted} letter{lettersCompleted === 1 ? "" : "s"}.
             </p>
-            <div className="mt-6 flex items-center justify-center gap-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setPhase("picker");
-                  setRoundTarget(null);
-                  setLettersCompleted(0);
-                  setLetter(null);
-                  setError(false);
-                  setInsufficient(null);
-                }}
-                className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
-              >
-                New round
-              </button>
+            {/* PAY-002: one way on, and it leaves. A "New round" button here
+                would start spending again straight from an ending screen;
+                another round should cost a deliberate trip through the menu. */}
+            <div className="mt-6 flex items-center justify-center">
               <Link
                 href="/practice"
-                className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+                className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
               >
                 ← Back to menu
               </Link>
@@ -365,6 +354,9 @@ export default function Briefkasten() {
             letter={letter}
             onAttempt={handleAttempt}
             onNewLetter={handleNewLetter}
+            isLastLetter={
+              roundTarget !== null && lettersCompleted + 1 >= roundTarget
+            }
             onGloss={handleGloss}
             onAdd={handleAddWord}
           />
