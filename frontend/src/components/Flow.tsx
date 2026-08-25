@@ -340,9 +340,9 @@ type FlowBag = {
   verbformen: CardCycle;
   dealCounter: number;
   // FLOW-006: how many szenario items THIS round has already dealt — read
-  // by pickSource against the round's cap (roundTarget/10, uncapped on
-  // endless) so szenario drops out of the rotation once its quota is spent,
-  // even if its bag buffer still holds prefetched items.
+  // by pickSource against the round's cap (roundTarget/10) so szenario drops
+  // out of the rotation once its quota is spent, even if its bag buffer still
+  // holds prefetched items.
   szenarioDealtThisRound: number;
 };
 
@@ -378,9 +378,9 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
 
 // A random exercise different from the previous one — unless only one
 // source is left standing, in which case there's nothing to vary.
-// FLOW-006: `szenarioCap` is this round's szenario quota (Infinity on an
-// endless round) — szenario drops out of `avail` once it's spent, same as
-// any other exhausted source, just capped rather than buffer-driven.
+// FLOW-006: `szenarioCap` is this round's szenario quota (roundTarget/10,
+// floored) — szenario drops out of `avail` once it's spent, same as any
+// other exhausted source, just capped rather than buffer-driven.
 function pickSource(
   bag: FlowBag,
   prevKind: SourceKind | null,
@@ -557,13 +557,13 @@ function emptyTallies(): Record<SourceKind, Tally> {
   };
 }
 
-// FLOW-005: the pre-start round-length picker — 10 / 20 / ∞ presets or a
+// FLOW-005: the pre-start round-length picker — 10 / 20 / 30 presets or a
 // custom 1–50, persisted across visits. Presets and the custom field are
 // mutually exclusive: a non-empty custom value always wins over whichever
 // preset was last picked (see the `roundChoice` derivation in Flow()), and
 // picking a preset clears the custom field. The two states are never
 // reconciled imperatively — the derivation IS the mutual-exclusion rule.
-type RoundPreset = "10" | "20" | "inf";
+type RoundPreset = "10" | "20" | "30";
 type StoredRoundChoice = RoundPreset | number;
 
 const ROUND_STORAGE_KEY = "flow-rounds-v1";
@@ -571,7 +571,7 @@ const ROUND_STORAGE_KEY = "flow-rounds-v1";
 const ROUND_PRESETS: { key: RoundPreset; label: string; costLabel: string }[] = [
   { key: "10", label: "10", costLabel: "≈ 50 coins" },
   { key: "20", label: "20", costLabel: "≈ 100 coins" },
-  { key: "inf", label: "∞", costLabel: "plays while your coins last" },
+  { key: "30", label: "30", costLabel: "≈ 150 coins" },
 ];
 
 function clampRounds(n: number): number {
@@ -581,13 +581,13 @@ function clampRounds(n: number): number {
 function loadStoredRoundChoice(): StoredRoundChoice {
   try {
     const raw = localStorage.getItem(ROUND_STORAGE_KEY);
-    if (raw === "10" || raw === "20" || raw === "inf") return raw;
+    if (raw === "10" || raw === "20" || raw === "30") return raw;
     if (raw) {
       const n = Number(raw);
       if (Number.isFinite(n)) return clampRounds(n);
     }
   } catch {}
-  return "inf";
+  return "30";
 }
 
 function persistRoundChoice(choice: StoredRoundChoice) {
@@ -596,10 +596,10 @@ function persistRoundChoice(choice: StoredRoundChoice) {
   } catch {}
 }
 
-function targetFromChoice(choice: StoredRoundChoice): number | null {
-  if (choice === "inf") return null;
+function targetFromChoice(choice: StoredRoundChoice): number {
   if (choice === "10") return 10;
   if (choice === "20") return 20;
+  if (choice === "30") return 30;
   return choice;
 }
 
@@ -665,7 +665,7 @@ export default function Flow() {
   const [screen, setScreen] = useState<"picker" | "playing">("picker");
   const startedDealingRef = useRef(false);
 
-  const [presetChoice, setPresetChoice] = useState<RoundPreset>("inf");
+  const [presetChoice, setPresetChoice] = useState<RoundPreset>("30");
   const [customText, setCustomText] = useState<string>("");
 
   // SSR-safe hydration from localStorage, same idiom as TopicScreen's input
@@ -675,7 +675,7 @@ export default function Flow() {
     const stored = loadStoredRoundChoice();
     if (typeof stored === "number") {
       setCustomText(String(stored));
-    } else if (stored !== "inf") {
+    } else {
       setPresetChoice(stored);
     }
   }, []);
@@ -706,13 +706,11 @@ export default function Flow() {
   const dealNext = useCallback(
     (prevKind: SourceKind | null, mood: BeatMood = "neutral") => {
       const bag = bagRef.current;
-      // FLOW-006: szenario's per-round cap — roundTarget/10 (floored), 0
-      // under a 10-round target, uncapped on an endless (null) round.
+      // FLOW-006: szenario's per-round cap — roundTarget/10 (floored).
       // roundTarget can't change once dealing has started (the picker
       // screen is gone by then), so recomputing it per deal is cheap and
       // always correct.
-      const szenarioCap =
-        roundTarget === null ? Infinity : Math.floor(roundTarget / 10);
+      const szenarioCap = Math.floor(roundTarget / 10);
       const kind = pickSource(bag, prevKind, szenarioCap);
       if (!kind) {
         setDeal(null);
@@ -916,7 +914,7 @@ export default function Flow() {
   // equality (not >=) so continuing past the target via "Keep going" never
   // bounces straight back to the summary on the very next item.
   useEffect(() => {
-    if (roundTarget !== null && totals.total === roundTarget) {
+    if (totals.total === roundTarget) {
       setFinished(true);
     }
   }, [totals.total, roundTarget]);
@@ -1477,13 +1475,7 @@ export default function Flow() {
                 <div className="mb-4 flex items-center justify-between">
                   <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
                     {totals.total} item{totals.total === 1 ? "" : "s"} ·{" "}
-                    {totals.correct} ✓
-                    {roundTarget !== null && (
-                      <>
-                        {" "}
-                        · {totals.total} / {roundTarget}
-                      </>
-                    )}
+                    {totals.correct} ✓ · {totals.total} / {roundTarget}
                   </p>
                   <div className="flex items-center gap-3">
                     <SoundToggle />
@@ -1740,7 +1732,7 @@ function SummaryCard({
 
 // ─── Round picker (FLOW-005) ─────────────────────────────────────────────
 // The pre-start screen: same visual language as PartnerScreen/TopicScreen
-// (kicker heading, btn-3d cards, ink borders) — 10 / 20 / ∞ preset cards
+// (kicker heading, btn-3d cards, ink borders) — 10 / 20 / 30 preset cards
 // plus a custom 1–50 field, one primary Start button. Round buffers may
 // already be prefetching in the background while this is up; nothing gets
 // dealt until Start fires.
@@ -1767,8 +1759,7 @@ function RoundPicker({
         How many exercises?
       </h1>
       <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
-        Pick a round length, or go endless — you can always stop early with
-        Finish.
+        Pick a round length — you can always stop early with Finish.
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">

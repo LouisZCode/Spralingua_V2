@@ -156,6 +156,7 @@ export default function VocabTrainer({
   sessionId,
   newAllowance,
   reviewCap,
+  roundTarget,
   onDoneChange,
   onGenderMiss,
   onGenderCues,
@@ -214,6 +215,10 @@ export default function VocabTrainer({
   // Caps how many due cards one session's queue pulls in, most-overdue
   // first. Undefined (Verbformen's implicit default) stays uncapped.
   reviewCap?: number;
+  // Optional hard cap on the total queue size for this round (due + new).
+  // When set, the built queue is truncated to this length. Used by the
+  // Satzschmiede picker to let the learner choose 10/20/30 exercises.
+  roundTarget?: number;
   // SATZ-012: fires true while the post-round clean end screen is up (queue
   // exhausted AFTER real work), so the shell can hide its pool/add-cards
   // chrome. The nothing-due-at-mount panel does NOT count as done.
@@ -238,11 +243,12 @@ export default function VocabTrainer({
   // FLOW-001: the parent deals exactly one card via `deck` regardless of its
   // SRS status — buildQueue's due/new filter would drop a "later" card, so
   // flow mode takes the deck's id(s) directly instead.
-  const [queue, setQueue] = useState<string[]>(() =>
-    flow
+  const [queue, setQueue] = useState<string[]>(() => {
+    const initialQueue = flow
       ? deck.map((c) => c.id)
-      : buildQueue(deck, new Set(), newAllowance, reviewCap)
-  );
+      : buildQueue(deck, new Set(), newAllowance, reviewCap);
+    return roundTarget && roundTarget > 0 ? initialQueue.slice(0, roundTarget) : initialQueue;
+  });
   const [index, setIndex] = useState(0); // browse-mode position
 
   const [revealed, setRevealed] = useState(false); // used the hint → a miss
@@ -763,7 +769,8 @@ export default function VocabTrainer({
   // 0 so it can never smuggle in new words beyond today's allowance — that
   // button only ever offers due cards.
   function reviewMore() {
-    setQueue(buildQueue(deck, doneRef.current, 0, MORE_CAP));
+    const newQueue = buildQueue(deck, doneRef.current, 0, MORE_CAP);
+    setQueue(roundTarget && roundTarget > 0 ? newQueue.slice(0, roundTarget) : newQueue);
     resetScratch();
   }
 
@@ -777,7 +784,8 @@ export default function VocabTrainer({
       .sort((a, b) => (a.srs.dueAt ?? "").localeCompare(b.srs.dueAt ?? ""))
       .slice(0, 10)
       .map((c) => c.id);
-    setQueue(shuffle(ahead));
+    const newQueue = shuffle(ahead);
+    setQueue(roundTarget && roundTarget > 0 ? newQueue.slice(0, roundTarget) : newQueue);
     resetScratch();
   }
 

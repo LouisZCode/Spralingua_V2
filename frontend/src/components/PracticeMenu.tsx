@@ -54,6 +54,7 @@ export default function PracticeMenu() {
   // LEVEL-001: the one-time level question (see the effect below).
   const [askLevel, setAskLevel] = useState(false);
   const router = useRouter();
+  const isDev = user?.role === "developer";
 
   // REC-001: today's data-driven pick, shown as a banner above the modes.
   // Non-fatal — any load failure just means no banner; the menu is the core.
@@ -398,6 +399,22 @@ export default function PracticeMenu() {
             done={streak?.modesToday.includes("briefkasten")}
           />
         </div>
+
+        {/* Developer-only: Interview exercise (not yet fully surfaced) */}
+        {isDev && (
+          <div className="rise-in mt-10" style={{ animationDelay: "120ms" }}>
+            <ModeCard
+              href="/interview"
+              accent="red"
+              icon="mic"
+              kicker="Developer Preview"
+              title="Interview Practice"
+              body="Audio comprehension exercise — listen and answer. 20 coins per answer chunk. Work in progress."
+              cta="Try Interview"
+              done={false}
+            />
+          </div>
+        )}
 
         {/* REC-001: after ~3 active days this week, the data may pick one
             pillar to push today. Absent = no clear signal, and that's fine.

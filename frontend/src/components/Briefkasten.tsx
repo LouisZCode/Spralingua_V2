@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import BriefTrainer from "./briefkasten/BriefTrainer";
+import BriefkastenPicker from "./briefkasten/BriefkastenPicker";
 import {
   fetchLetter,
   submitAttempt,
@@ -65,6 +66,13 @@ export default function Briefkasten() {
     available: number;
   } | null>(null);
 
+  // Picker phase: "picker" | "playing"
+  const [phase, setPhase] = useState<"picker" | "playing">("picker");
+  // Chosen round target from picker (number of letters to write)
+  const [roundTarget, setRoundTarget] = useState<number | null>(null);
+  // Letters completed in this round
+  const [lettersCompleted, setLettersCompleted] = useState(0);
+
   // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
   // first attempt, held for the whole page visit — "New letter" top-ups
   // share it because the ref lives above the per-letter remounts.
@@ -109,9 +117,37 @@ export default function Briefkasten() {
       });
   }, [token, signOut, sid]);
 
+  const isRoundComplete = roundTarget !== null && lettersCompleted >= roundTarget;
+
+  // Load first letter when entering playing phase
   useEffect(() => {
-    loadLetter();
-  }, [loadLetter]);
+    if (phase === "playing") {
+      loadLetter();
+    }
+  }, [phase, loadLetter]);
+
+  // After a letter is counted as completed, load the next one if the round
+  // still has letters left. Guarded to not fire on picker phase or before
+  // the first letter has loaded (lettersCompleted 0 -> no auto-load).
+  useEffect(() => {
+    if (
+      phase === "playing" &&
+      lettersCompleted > 0 &&
+      roundTarget !== null &&
+      lettersCompleted < roundTarget
+    ) {
+      loadLetter();
+    }
+  }, [lettersCompleted, roundTarget, phase, loadLetter]);
+
+  const handlePickerStart = useCallback(
+    (count: number) => {
+      setRoundTarget(count);
+      setLettersCompleted(0);
+      setPhase("playing");
+    },
+    []
+  );
 
   const handleAttempt = useCallback(
     async (params: {
@@ -185,8 +221,56 @@ export default function Briefkasten() {
     [token, signOut]
   );
 
+  // When BriefTrainer signals "New letter", count the just-finished letter
+  // and auto-load the next one if the round still has letters left.
+  const handleNewLetter = useCallback(() => {
+    setLettersCompleted((prev) => prev + 1);
+    // Loading the next letter is done by the effect watching
+    // lettersCompleted – avoids stale closure on roundTarget.
+  }, []);
+
   if (!ready || !token) {
     return null;
+  }
+
+  // Show picker first
+  if (phase === "picker") {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-white text-ink">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
+        />
+
+        <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+            <Link href="/" className="flex items-center gap-2.5">
+              <Image
+                src="/mascot/raven.png"
+                alt="Spralingua raven mascot"
+                width={40}
+                height={40}
+                priority
+                className="h-9 w-9 select-none"
+              />
+              <span className="font-display text-[22px] font-black tracking-tight text-ink">
+                Spralingua
+              </span>
+            </Link>
+            <Link
+              href="/practice"
+              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+            >
+              ← Menu
+            </Link>
+          </div>
+        </header>
+
+        <main className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center px-6 py-12">
+          <BriefkastenPicker onStart={handlePickerStart} />
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -228,9 +312,45 @@ export default function Briefkasten() {
           <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
             letter writing
           </p>
+          {roundTarget !== null && !isRoundComplete && (
+            <p className="mt-2 font-body text-[13px] text-ink-soft">
+              Letter {lettersCompleted + 1} of {roundTarget}
+            </p>
+          )}
         </div>
 
-        {insufficient ? (
+        {isRoundComplete ? (
+          <div className="mx-auto max-w-xl text-center">
+            <h2 className="font-display text-[clamp(26px,5vw,36px)] font-black leading-tight tracking-tight text-ink">
+              Round complete!
+            </h2>
+            <p className="mx-auto mt-3 max-w-[380px] font-body text-[15px] leading-relaxed text-ink-soft">
+              You&apos;ve written {lettersCompleted} letter{lettersCompleted === 1 ? "" : "s"}.
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                onClick={() => {
+                  setPhase("picker");
+                  setRoundTarget(null);
+                  setLettersCompleted(0);
+                  setLetter(null);
+                  setError(false);
+                  setInsufficient(null);
+                }}
+                className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+              >
+                New round
+              </button>
+              <Link
+                href="/practice"
+                className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
+              >
+                ← Back to menu
+              </Link>
+            </div>
+          </div>
+        ) : insufficient ? (
           <OutOfCoinsPanel
             needed={insufficient.needed}
             available={insufficient.available}
@@ -244,7 +364,7 @@ export default function Briefkasten() {
             key={letterKey}
             letter={letter}
             onAttempt={handleAttempt}
-            onNewLetter={loadLetter}
+            onNewLetter={handleNewLetter}
             onGloss={handleGloss}
             onAdd={handleAddWord}
           />
