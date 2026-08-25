@@ -96,6 +96,23 @@ class User(Base):
     tier: Mapped[str] = mapped_column(
         Text, nullable=False, server_default=text("'free'")
     )
+    # PAY-002: coin system — two-bucket model.
+    # ``timezone`` is the IANA name the frontend reports once via
+    # ``PUT /coins/timezone`` (``Intl.DateTimeFormat().resolvedOptions().
+    # timeZone``); NULL → UTC. ``allowance_day`` is the user-local "coin day"
+    # the current daily bucket belongs to: ``(local_now - 5h).date()``; NULL
+    # means never refreshed (every pre-migration row, new signups before their
+    # first spend/read). ``allowance_remaining`` is today's remaining daily
+    # coins (reset lazily — no cron); ``purchased_coins`` is the persistent
+    # bucket: signup grant (100) + Stripe top-ups (500 each), never reset.
+    timezone: Mapped[str | None] = mapped_column(Text, nullable=True)
+    allowance_day: Mapped[date | None] = mapped_column(Date, nullable=True)
+    allowance_remaining: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    purchased_coins: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
 
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 
@@ -679,4 +696,39 @@ class StripeEvent(Base):
     type: Mapped[str] = mapped_column(Text, nullable=False)
     received_at: Mapped[datetime] = mapped_column(
         TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+
+
+# ── Coin ledger (PAY-002) ──────────────────────────────────────────────────
+# One row per grant/spend/top-up. The two delta columns let one spend span
+# both buckets in one row (debit allowance + debit purchased). The UNIQUE on
+# (user_id, kind, ref) is the idempotency key for top-ups: a Stripe
+# checkout.session.completed redelivery with the same session id must not
+# double-credit — the UNIQUE + ON CONFLICT DO NOTHING makes it a no-op.
+
+
+class CoinLedger(Base):
+    __tablename__ = "coin_ledger"
+
+    # uuid4().hex minted in app code; migration backfill uses gen_random_uuid()::text.
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(Text, nullable=False)
+    ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    delta_allowance: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    delta_purchased: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default=text("0")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP, nullable=False, server_default=text("now()")
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "kind", "ref", name="uq_coin_ledger_user_kind_ref"
+        ),
     )

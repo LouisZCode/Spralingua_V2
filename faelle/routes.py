@@ -33,6 +33,9 @@ from faelle.judge import judge_case
 from grammar import expand_contractions
 from security import drill_try_admit
 
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
+
 router = APIRouter(prefix="/faelle", tags=["faelle"])
 
 ROUND_SIZE = 10
@@ -251,6 +254,13 @@ async def submit_attempt(
     item = load_items().get(body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
+    # PAY-002: AFTER the 404 but BEFORE the judge/deterministic grading.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     answer = " ".join(body.answer.split())
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.

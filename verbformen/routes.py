@@ -31,6 +31,12 @@ from satz.examiner import examine_attempt, transcribe_attempt
 from satz.scheduler import lapse_interval, schedule
 from security import drill_try_admit
 
+# PAY-002: 5 coins per graded past-form attempt (same as a Satzschmiede
+# attempt — same STT+judge cost). Free before 0025_coins; now charged before
+# STT/judge work.
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
+
 router = APIRouter(prefix="/verbformen", tags=["verbformen"])
 
 
@@ -151,6 +157,14 @@ async def submit_attempt(
         raise HTTPException(
             status_code=404, detail="That verb isn't in your Verbformen deck."
         )
+    # PAY-002: charged AFTER the 404 (stale card must not burn coins) but
+    # BEFORE any STT/judge work.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     card, uvf = row
 
     data = await audio.read()

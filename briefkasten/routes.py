@@ -40,6 +40,9 @@ from briefkasten.judge import feedback_pass, hint_pass
 from briefkasten.writer import VOCAB_LIMIT, write_letter
 from security import drill_try_admit
 
+from coins.gate import admit_coins_or_402
+from coins.prices import LETTER
+
 router = APIRouter(prefix="/briefkasten", tags=["briefkasten"])
 
 # A letter and a reply are both long-form by design, but neither is a novel.
@@ -140,6 +143,15 @@ async def get_letter(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
+    # PAY-002: one charge per letter cycle, at creation (not at the attempts).
+    # The two attempts + germanize call that follow ride on this single 15-coin
+    # ticket; the POST /attempts site is deliberately free.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=LETTER, kind="spend_letter")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
     seeds = list(load_seeds().values())
 

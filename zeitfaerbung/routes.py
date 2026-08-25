@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
+from security import drill_try_admit
 from database.repository import (
     credit_pattern_success,
     record_drill_attempt,
@@ -34,6 +35,9 @@ from zeitfaerbung.content import (
     FORM_TO_FAMILY,
     load_items,
 )
+
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
 
 router = APIRouter(prefix="/zeitfaerbung", tags=["zeitfaerbung"])
 
@@ -137,9 +141,21 @@ async def submit_attempt(
     """Grade one typed war/wurde/blieb form deterministically, feed the
     ledger, and return the verdict (+ the meaning note — only now, it would
     answer the item beforehand)."""
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
     item = load_items().get(body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
+    # PAY-002: AFTER the 404 but BEFORE grading/logging — stale id must not burn coins.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     answer = " ".join(body.answer.split())
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.

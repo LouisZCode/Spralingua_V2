@@ -37,6 +37,9 @@ from database.orm import AudioChunk, AudioItem
 from database.repository import record_drill_attempt, record_grammar_error
 from security import drill_try_admit
 
+from coins.gate import admit_coins_or_402
+from coins.prices import INTERVIEW_ANSWER
+
 from .bucket import presigned_audio_url
 from .display import classify_kind, company_display, dir_name_from_storage_prefix, interviewer_display
 from .judges.comprehension import judge_comprehension
@@ -428,6 +431,20 @@ async def post_answer(
         )
 
     chunk, _item = await _get_owned_chunk(db, chunk_id, user_id)
+
+    # PAY-002: round 1 (comprehension) is free — reading/listening + one judge
+    # at ~0.4¢ is deliberately left unmetered (same as vocab card free path in
+    # the spec); only the judged *answer* chunk (round 2, this handler) is
+    # priced at 20 coins. Rate-limit first (free), then coins, before any
+    # STT/judge work.
+    # NOTE: the check is AFTER _get_owned_chunk (which 404/403s on an
+    # unowned chunk) — we don't charge for a nonexistent resource.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=INTERVIEW_ANSWER, kind="spend_interview")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
     audio_bytes = await audio.read()
     if not audio_bytes:

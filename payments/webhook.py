@@ -90,15 +90,23 @@ async def _resolve_subscription_user_id(db: AsyncSession, sub_obj) -> str | None
 
 
 async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
-    """``checkout.session.completed`` / ``.async_payment_succeeded`` (PAY-001).
+    """``checkout.session.completed`` / ``.async_payment_succeeded`` (PAY-001 + PAY-002).
 
     Re-retrieves the session (the webhook payload alone doesn't carry line
     items) and only fulfills once payment has actually landed. A delayed
     method like SEPA fires ``.completed`` with ``payment_status="unpaid"``
     first, then ``.async_payment_succeeded`` later once the debit clears —
-    we no-op on the former and let the latter do the work. Idempotent by
-    construction: ``upsert_subscription`` + ``set_user_tier`` are both safe
-    to call twice with the same values.
+    we no-op on the former and let the latter do the work.
+
+    Branches on ``session["mode"]``:
+    - ``subscription`` → existing PAY-001 path (upsert_subscription + set_user_tier).
+    - ``payment`` → PAY-002 top-up: ``coins.credit(amount=TOPUP_COINS, kind='topup',
+      ref=session_id)``.
+
+    Idempotent by construction: ``upsert_subscription`` + ``set_user_tier`` are
+    both safe to call twice with the same values; for top-ups the UNIQUE
+    ``(user_id, kind, ref)`` + ``ON CONFLICT DO NOTHING`` in ``coins.credit``
+    makes a redelivery's credit a no-op without a separate already-seen check.
     """
     session = await retrieve_checkout_session(checkout_session_id, expand=["line_items"])
     if session["payment_status"] != "paid":
@@ -106,6 +114,56 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
             f"Stripe checkout {checkout_session_id}: payment_status="
             f"{session['payment_status']!r}, not fulfilling yet"
         )
+        return
+
+    # PAY-002: one-time top-up (mode == "payment") vs subscription (mode == "subscription").
+    # Must branch on mode BEFORE looking at price_id — the top-up price is not
+    # in the subscription price table and would otherwise warn as "unknown price".
+    # Stripe object rule: bracket access + ``in`` checks only, never .get() — see
+    # this module's top-level docstring. A crash here = Stripe retries 4× then
+    # gives up silently while a paying customer never gets coins.
+    mode = session["mode"] if "mode" in session else None
+    if mode == "payment":
+        # Top-up: resolve the user from client_reference_id (belt) or metadata (suspenders),
+        # then credit purchased_coins. The UNIQUE (user_id, kind, ref) index
+        # is the idempotency key — the existing check→process→record ordering
+        # for the webhook means a crash AFTER crediting but BEFORE
+        # record_stripe_event would get a redelivery; the ON CONFLICT DO
+        # NOTHING inside credit() is what makes the re-credit a no-op (comment
+        # this at the credit site — done inside coins/engine.py::credit).
+        # Unresolvable user → log error, don't crash (a 500 here retries a
+        # permanently failing event forever).
+        user_id = session["client_reference_id"] if "client_reference_id" in session else None
+        if not user_id:
+            metadata = session["metadata"] if "metadata" in session and session["metadata"] else {}
+            user_id = metadata["user_id"] if "user_id" in metadata else None
+        if not user_id:
+            logger.error(
+                f"Stripe topup checkout {checkout_session_id}: no client_reference_id or "
+                "metadata user_id — cannot credit coins"
+            )
+            return
+        # The credit MUST be idempotent BY ITSELF: the webhook's
+        # check->process->record ordering means a crash after credit() but
+        # before record_stripe_event() gets a Stripe redelivery — the UNIQUE
+        # (user_id, kind, ref) + ON CONFLICT DO NOTHING inside credit() is
+        # what makes the re-credit a no-op (see coins/engine.py::credit).
+        try:
+            from coins.engine import credit as _credit  # local import — coins not available at module load in older deploys
+
+            from coins.prices import TOPUP_COINS as _TOPUP
+
+            credited = await _credit(db, user_id=user_id, amount=_TOPUP, kind="topup", ref=checkout_session_id)
+            if credited:
+                logger.info(f"Stripe topup credited: user={user_id} session={checkout_session_id} amount={_TOPUP}")
+                await db.commit()
+            else:
+                logger.debug(f"Stripe topup duplicate (already credited): user={user_id} session={checkout_session_id}")
+        except Exception as e:
+            # A DB error here propagates so Stripe retries — same fail-retry
+            # contract as the subscription path (never silently swallow).
+            logger.exception(f"Stripe topup credit failed for session {checkout_session_id}: {e}")
+            raise
         return
 
     user_id = session["client_reference_id"]

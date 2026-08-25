@@ -31,6 +31,9 @@ from database.repository import (
 from grammar.levels import bucket_of
 from satz.examiner import transcribe_attempt
 from security import drill_try_admit
+
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
 from szenario.content import load_scenarios
 from szenario.judge import judge_structure
 
@@ -348,6 +351,25 @@ async def submit_attempt(
     scenario = load_scenarios().get(scenarioId)
     if scenario is None:
         raise HTTPException(status_code=404, detail="Unknown scenario.")
+    # PAY-002: 404 BEFORE the charge — a stale scenario id must not burn coins.
+    # Szenario has no db param, so open a short-lived session just for the coin
+    # gate (same pattern as briefkasten background harvest). Still BEFORE any
+    # STT/judge work. Fail closed: a DB outage 503s rather than admitting free.
+    from database.connection import get_sessionmaker as _get_sm
+    from sqlalchemy.exc import SQLAlchemyError as _SAE
+    try:
+        async with _get_sm()() as _db:
+            try:
+                await admit_coins_or_402(_db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+            except HTTPException as _e:
+                if _e.status_code == 402:
+                    raise
+                raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+            await _db.commit()
+    except HTTPException:
+        raise
+    except _SAE:
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
     data = await audio.read()
     if not data:

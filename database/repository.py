@@ -16,7 +16,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from loguru import logger
-from sqlalchemy import Text, cast, func, or_, select, update
+from sqlalchemy import Text, cast, func, or_, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -161,6 +161,13 @@ async def upsert_user(
     embed the fresh values in the session JWT + sign-in response. New rows get
     the column defaults ("normal" / "free").
 
+    PAY-002: on row CREATION (not on every login) the one-time 100-coin grant
+    lands in ``purchased_coins`` + one ``signup_grant`` ledger row (ref =
+    users.id). The insert-vs-update distinction is detected via the
+    ``xmax == 0`` trick (Postgres system column: 0 = inserted, non-zero =
+    updated) returned alongside role/tier — idempotent across reconnects
+    without a separate SELECT, same ON CONFLICT shape as before.
+
     CHORE-001: ``email`` is lowercased here (the write site) for case-insensitive
     uniqueness — Google itself is case-insensitive on the local part, so two
     sign-ins that differ only in case must land on the same row.
@@ -184,9 +191,44 @@ async def upsert_user(
                 "picture": stmt.excluded.picture,
                 "last_login_at": stmt.excluded.last_login_at,
             },
-        ).returning(User.role, User.tier)
+        ).returning(User.role, User.tier, text("xmax"))
         result = await db.execute(stmt)
-        role, tier = result.one()
+        row = result.one()
+        role, tier, xmax = row[0], row[1], row[2]
+        is_insert = xmax == 0
+        if is_insert:
+            # PAY-002: one-time 100-coin grant into the persistent bucket.
+            # Must be inside the same transaction as the insert so a crash
+            # between "row created" and "grant credited" can't orphan a user
+            # with no coins. Use an explicit UPDATE (not relying on the
+            # server_default) so the in-DB value is 100 regardless of what
+            # the column default was at migration time.
+            await db.execute(
+                update(User)
+                .where(User.id == user_id)
+                .values(purchased_coins=100)
+            )
+            # Ledger row for the grant — idempotency key (user_id, kind, ref)
+            # where ref = users.id, so a retry that re-enters this branch
+            # (shouldn't happen — xmax check — but if it did) would hit the
+            # UNIQUE and become a no-op rather than double-grant. Use a
+            # separate INSERT … ON CONFLICT DO NOTHING for that reason.
+            from uuid import uuid4 as _uuid4
+
+            from database.orm import CoinLedger as _CoinLedger
+
+            await db.execute(
+                pg_insert(_CoinLedger)
+                .values(
+                    id=_uuid4().hex,
+                    user_id=user_id,
+                    kind="signup_grant",
+                    ref=user_id,
+                    delta_allowance=0,
+                    delta_purchased=100,
+                )
+                .on_conflict_do_nothing(index_elements=["user_id", "kind", "ref"])
+            )
         await db.commit()
         return role, tier
     except SQLAlchemyError:
@@ -341,12 +383,38 @@ _VALID_TIERS = frozenset({"free", "basic", "premium"})
 async def set_user_tier(db: AsyncSession, *, user_id: str, tier: str) -> None:
     """Write ``users.tier`` (PAY-001), called from the Stripe webhook
     handler once a subscription's tier is known. Validated against
-    ``_VALID_TIERS`` in code before touching the row."""
+    ``_VALID_TIERS`` in code before touching the row.
+
+    PAY-002: when tier moves to ``basic``/``premium``, today's allowance is
+    ALSO lifted immediately to ``DAILY_ALLOWANCE[new_tier]`` with
+    ``allowance_day = today_key(timezone)`` — a free user upgrading at noon
+    gets their 200 coins right away instead of waiting for 5am. Downgrade to
+    ``free`` leaves today's remaining untouched (next 5am refresh gives 0).
+    Webhook redelivery re-lifting the allowance to full is accepted: redelivery
+    isn't user-triggerable (only Stripe retries on 500), so a user can't loop
+    it for infinite coins, and even a retry that re-lifts after the user
+    already spent some of the fresh allowance is a bounded, non-exploitable
+    side effect — the alternative (tracking "already lifted for this event")
+    would add state for no real abuse vector.
+    """
     _assert_test_user(user_id)
     if tier not in _VALID_TIERS:
         raise ValueError(f"Unknown tier: {tier!r}")
     try:
         await db.execute(update(User).where(User.id == user_id).values(tier=tier))
+        if tier in ("basic", "premium"):
+            # Lift today's allowance immediately (PAY-002). Read the user's
+            # timezone for the day-key, then overwrite the bucket — same
+            # semantics as refresh_allowance but forced to full even if the
+            # day key hasn't changed (the tier itself is what changed).
+            from coins.engine import today_key as _today_key
+            from coins.prices import DAILY_ALLOWANCE as _DAILY
+
+            user = await db.get(User, user_id)
+            if user is not None:
+                user.allowance_day = _today_key(user.timezone)
+                user.allowance_remaining = _DAILY.get(tier, 0)
+                await db.flush()
         await db.commit()
     except SQLAlchemyError:
         await db.rollback()

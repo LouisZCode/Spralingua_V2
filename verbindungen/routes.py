@@ -35,6 +35,9 @@ from security import drill_try_admit
 from verbindungen.content import TARGET_PATTERNS, load_items
 from verbindungen.judge import judge_chunk
 
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
+
 router = APIRouter(prefix="/verbindungen", tags=["verbindungen"])
 
 ROUND_SIZE = 10
@@ -296,8 +299,6 @@ async def submit_attempt(
         )
     item = load_items().get(body.item_id)
     if item is None:
-        # CONT-002: personal forged items live in user_drill_items, keyed by
-        # the same id the round handed out; scoped to the caller.
         row = await db.scalar(
             select(UserDrillItem).where(
                 UserDrillItem.id == body.item_id,
@@ -307,6 +308,13 @@ async def submit_attempt(
         item = row.item if row is not None and row.item is not None else None
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
+    # PAY-002: AFTER the 404 (stale id must not burn coins) but BEFORE the judge/forged lookup finishes.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     answer = " ".join(body.answer.split())
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.

@@ -30,6 +30,7 @@ from config import database_url
 from database import dispose_engine, get_sessionmaker, init_engine
 from database.orm import (
     ActivitySession,
+    CoinLedger,
     DrillAttempt,
     User,
     UserCard,
@@ -130,6 +131,14 @@ async def destroy(user_id: str) -> None:
         # so it also needs an explicit delete before the user row goes.
         drill_items_result = await db.execute(
             delete(UserDrillItem).where(UserDrillItem.user_id == user_id)
+        )
+        # PAY-002: coin_ledger.user_id is ondelete="CASCADE" in the migration,
+        # so the user delete cascades it — but explicitly delete here too so
+        # a count can be reported and the destroy stays correct even if the FK
+        # were ever changed to RESTRICT. Same pattern as activity_session
+        # above: delete explicitly, then rely on CASCADE as the safety net.
+        coin_ledger_result = await db.execute(
+            delete(CoinLedger).where(CoinLedger.user_id == user_id)
         )
         # The user row cascades user_cards, user_errors, drill_attempts,
         # daily_mode_completions (all ondelete="CASCADE" in orm.py), and

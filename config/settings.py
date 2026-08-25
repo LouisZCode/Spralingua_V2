@@ -129,6 +129,10 @@ stripe_automatic_tax = os.getenv("STRIPE_AUTOMATIC_TAX", "0") == "1"
 # Where Checkout/portal success, cancel, and return URLs point back to.
 frontend_base_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 
+# PAY-002 top-up (one-time 500 coins for €2). Absent → POST /payments/topup/checkout 503s
+# "billing not configured", same fail-soft contract as the PAY-001 price ids.
+stripe_topup_price_id = os.getenv("STRIPE_TOPUP_PRICE_ID")
+
 # --- Interview audio bucket (INTV-003 slice 2) ---
 # Railway Bucket "audio" (S3-compatible, Tigris-backed) credentials for
 # presigning GET URLs to interview chunk mp3s (interview/bucket.py). All

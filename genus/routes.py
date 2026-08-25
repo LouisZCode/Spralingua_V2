@@ -53,6 +53,9 @@ from genus.nudge import suggest_vocab
 from security import drill_try_admit
 from vocab_nudge import filter_picks, load_deck
 
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
+
 router = APIRouter(prefix="/genus", tags=["genus"])
 
 ROUND_SIZE = 10
@@ -531,9 +534,19 @@ async def submit_attempt(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
+    # Only the free-text phrase beat pays for a judge — the article drop is
+    # deterministic and stays free. 404 BEFORE the charge: a stale item id must
+    # not burn coins. Still BEFORE any STT/judge work.
     item = await _resolve_item(db, user_id, body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
+    if body.phase == "phrase":
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     answer = " ".join(body.answer.split())
     # give_up skips validation entirely — there's no drag/answer to check,
     # the learner is conceding the item.

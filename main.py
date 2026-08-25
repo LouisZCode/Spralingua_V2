@@ -210,6 +210,10 @@ app.include_router(teacher_router)
 # that keeps users.tier + the local subscriptions mirror in sync. Fail-soft —
 # every route 503s until STRIPE_* env is set (payments/stripe_sync.py).
 app.include_router(payments_router)
+# Coins (PAY-002): balance + timezone.
+from coins.routes import router as coins_router  # noqa: E402 — after payments, avoids circular import
+
+app.include_router(coins_router)
 
 
 @app.get("/health")

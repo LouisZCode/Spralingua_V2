@@ -317,53 +317,92 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         tts = tts_minimax(session, voice=voice, language=tts_lang)
         converter = TranscriptionToContextConverter()
 
-        # TAND-012 (2026-08-11): per-session exchange cap for tandem, whitelisted
-        # to {5, 10, 15} by the frontend/main.py query param. Only tandem lessons
-        # honor it — anything else (including a stray query param on a non-tandem
-        # /learn connect) leaves the YAML's own max_exchanges untouched. Mutating
-        # the snapshot dict (not just a local var) keeps the DB `lesson_snapshot`
-        # column faithful to what the session actually ran with — `load_prompts`
+        # TAND-012 (2026-08-11, PAY-002 extended to teacher): per-session
+        # exchange cap for tandem AND teacher, whitelisted to {5, 10, 15} by the
+        # frontend/main.py query param. Only those two types honor it — anything
+        # else (including a stray query param on a non-tandem /learn connect)
+        # leaves the YAML's own max_exchanges untouched. Mutating the snapshot
+        # dict (not just a local var) keeps the DB `lesson_snapshot` column
+        # faithful to what the session actually ran with — `load_prompts`
         # returns a fresh dict per call, so this never leaks into another session.
         exchanges_override = (
             exchanges
-            if lesson_snapshot.get("type") == "tandem" and exchanges in (5, 10, 15)
+            if lesson_snapshot.get("type") in ("tandem", "teacher") and exchanges in (5, 10, 15)
             else None
         )
         if exchanges_override is not None:
             lesson_snapshot["max_exchanges"] = exchanges_override
 
-        # Per-session audio location (OBS-010: the session logger is gone —
-        # transcript lives in activity_session, latency in Langfuse). The MP3
-        # is named by the bare session hex so it correlates with the
-        # activity_session row directly, no counter to reconcile.
-        audio_dir = Path("logs/conversations") / datetime.now().strftime("%Y-%m-%d")
-        audio_dir.mkdir(parents=True, exist_ok=True)
+        # PAY-002 accept gate (MUST run BEFORE the activity_session INSERT —
+        # a rejected session never gets a row). Two branches:
+        # - teacher + free tier → close 4002 ("Clara is a Basic feature")
+        # - bundle (exchanges/bundle price vs available balance) → close 4001
+        # Both only for authenticated sockets (db_user_id != "demo"); the demo
+        # socket is never charged or gated. The frontend maps 4001/4002 (see
+        # main.py's ws_endpoint docstring for the code table). Developer role
+        # bypasses every gate (no deduction, no lockout).
+        # Bundle math: tandem (and tandem_paul) use the per-session exchanges
+        # param × VOICE_EXCHANGE (default 10 when no param, for pricing only —
+        # the behavioral cap stays as-is); conversation/respond use the YAML's
+        # max_exchanges × VOICE_EXCHANGE.
+        if db_user_id != "demo":
+            try:
+                from coins.prices import DAILY_ALLOWANCE as _DA, VOICE_EXCHANGE as _VE
+                from coins.engine import today_key as _tk, next_reset_at as _nra
+                from sqlalchemy import select as _select
+                from database.orm import User as _User
 
-        # Insert the activity_session row at connect (DATA-001). Non-fatal:
-        # if the DB is down we log a warning and continue — audio export,
-        # evaluators, and OTel flush MUST still run. The row
-        # is then UPDATEd on disconnect with transcript + eval results.
-        # ``lesson_snapshot`` freezes the YAML at session start so future
-        # history UI shows what the user actually saw, even if the YAML
-        # changes later.
-        started_at = datetime.now()
-        audio_path = str(audio_dir / f"{session_id}.mp3")
-        try:
-            async with get_sessionmaker()() as db:
-                await create_session_row(
-                    db,
-                    session_id=session_id,
-                    user_id=db_user_id,
-                    lesson_id=lesson_id,
-                    voice=voice,
-                    started_at=started_at,
-                    audio_path=audio_path,
-                    lesson_snapshot=lesson_snapshot,
-                )
-        except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
-            logger.warning(
-                f"DB session insert failed (non-fatal): {type(e).__name__}: {e}"
-            )
+                lesson_type = lesson_snapshot.get("type")
+                async with get_sessionmaker()() as _gate_db:
+                    _user = await _gate_db.scalar(_select(_User).where(_User.id == db_user_id))
+                    if _user is not None and (_user.role or "") != "developer":
+                        # Teacher gate: free tier cannot open Clara.
+                        if lesson_type == "teacher" and (_user.tier or "free") == "free":
+                            logger.info(f"coin gate: teacher blocked for free user {db_user_id} (4002)")
+                            await websocket.close(code=4002, reason="Clara is a Basic feature")
+                            return
+                        # Bundle check — compute owed before the session starts.
+                        if lesson_type == "tandem":
+                            # Tandem re-gate also extended to teacher's exchanges param
+                            # for the bundle, but teacher was already blocked above
+                            # for free. For tandem, use exchanges param with default 10.
+                            bundle_exchanges = exchanges if exchanges in (5, 10, 15) else 10
+                            owed = bundle_exchanges * _VE
+                        elif lesson_type == "teacher":
+                            bundle_exchanges = exchanges if exchanges in (5, 10, 15) else 10
+                            owed = bundle_exchanges * _VE
+                        elif lesson_type in ("conversation", "respond"):
+                            owed = int(lesson_snapshot.get("max_exchanges") or 0) * _VE
+                        else:
+                            owed = 0
+                        if owed > 0:
+                            # Lazy allowance math mirrors coins/engine.py — use
+                            # the same day-key formula so the gate agrees with
+                            # the engine on available balance.
+                            _key = _tk(_user.timezone)
+                            if _user.allowance_day != _key:
+                                _allow = _DA.get(_user.tier or "free", 0)
+                            else:
+                                _allow = _user.allowance_remaining or 0
+                            _purch = _user.purchased_coins or 0
+                            _available = _allow + _purch
+                            if _available < owed:
+                                logger.info(
+                                    f"coin gate: insufficient funds for user {db_user_id} "
+                                    f"owed={owed} available={_available} (4001)"
+                                )
+                                await websocket.close(code=4001, reason="Not enough coins")
+                                return
+            except Exception as _ge:
+                # A gate check that itself errors must NOT admit for free.
+                # Closing 1011 (internal error) tells the client to retry
+                # rather than silently admitting a free session.
+                logger.warning(f"coin gate check failed — closing 1011: {_ge}")
+                try:
+                    await websocket.close(code=1011, reason="billing check failed")
+                except Exception:
+                    pass
+                return
 
         # Ledger-backed prompt layers. The prompt middleware is sync, so these
         # async DB reads happen here, once at connect, and ride on Context.
@@ -402,6 +441,38 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 logger.warning(
                     f"{snapshot_type.capitalize()} layer fetch failed (non-fatal): {type(e).__name__}: {e}"
                 )
+
+        # Per-session audio location (OBS-010). Derived before the DB insert
+        # so audio_path is available for the row; kept here (not above the
+        # gate) because mkdir is the only side-effect and the gate has no
+        # use for it.
+        audio_dir = Path("logs/conversations") / datetime.now().strftime("%Y-%m-%d")
+        audio_dir.mkdir(parents=True, exist_ok=True)
+
+        # Insert the activity_session row at connect (DATA-001). Non-fatal:
+        # if the DB is down we log a warning and continue — audio export,
+        # evaluators, and OTel flush MUST still run. The row is then UPDATEd
+        # on disconnect with transcript + eval results. ``lesson_snapshot``
+        # freezes the YAML at session start so future history UI shows what
+        # the user actually saw, even if the YAML changes later.
+        started_at = datetime.now()
+        audio_path = str(audio_dir / f"{session_id}.mp3")
+        try:
+            async with get_sessionmaker()() as db:
+                await create_session_row(
+                    db,
+                    session_id=session_id,
+                    user_id=db_user_id,
+                    lesson_id=lesson_id,
+                    voice=voice,
+                    started_at=started_at,
+                    audio_path=audio_path,
+                    lesson_snapshot=lesson_snapshot,
+                )
+        except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
+            logger.warning(
+                f"DB session insert failed (non-fatal): {type(e).__name__}: {e}"
+            )
 
         # Per-client wrapper (agent + logger + context settings inside).
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
@@ -1065,6 +1136,44 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     error_eval_dict = None
                 passed = goal_eval_dict["passed"] if goal_eval_dict is not None else None
                 async with get_sessionmaker()() as db:
+                    # PAY-002 disconnect charge: one ledger row for the whole
+                    # voice session, priced at exchange_count × VOICE_EXCHANGE.
+                    # Capped at available (spend_capped) — multi-tab abuse
+                    # (LEARN_MAX_CONCURRENT_PER_USER=3) can otherwise open
+                    # concurrent sessions each admitted against the same
+                    # pre-session balance, then disconnect all three and owe
+                    # more than what's left. Never goes negative. Demo socket
+                    # is never charged; developer role bypasses. Typed Practice-
+                    # mode /say turns count as exchanges too — same session,
+                    # same price (ClientWrapper._exchange_count already
+                    # counts them). Crash-mid-session = uncharged partial
+                    # session (consistent with the existing non-fatal
+                    # disconnect-write philosophy — the accept gate already
+                    # bounded the worst-case exposure before any audio ran).
+                    # Must run BEFORE finalize_session_row so the same DB
+                    # session/transaction covers both.
+                    if (
+                        db_user_id != "demo"
+                        and lesson_snapshot.get("type")
+                        in ("tandem", "teacher", "conversation", "respond")
+                    ):
+                        try:
+                            from coins.engine import spend_capped as _spend_capped
+                            from coins.prices import VOICE_EXCHANGE as _VE2
+
+                            _owed = int(wrapper._exchange_count or 0) * _VE2
+                            if _owed > 0:
+                                await _spend_capped(
+                                    db,
+                                    user_id=db_user_id,
+                                    owed=_owed,
+                                    kind="spend_voice",
+                                    ref=session_id,
+                                )
+                        except Exception as _ce:  # noqa: BLE001 — charge must not block finalize
+                            logger.warning(
+                                f"coin voice disconnect charge failed (non-fatal): {_ce}"
+                            )
                     await finalize_session_row(
                         db,
                         session_id=session_id,

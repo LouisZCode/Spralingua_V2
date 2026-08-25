@@ -32,6 +32,9 @@ from database.repository import (
 from satz.examiner import transcribe_attempt
 from drills import apply_level
 from security import drill_try_admit
+
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
 from sprechen.content import TARGET_PATTERNS, load_tasks
 from sprechen.judge import judge_spoken
 from sprechen.nudge import suggest_vocab
@@ -177,6 +180,13 @@ async def submit_attempt(
     task = load_tasks().get(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")
+    # PAY-002: AFTER the 404 (stale task id must not burn coins) but BEFORE any STT/judge.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
     data = await audio.read()
     if not data:

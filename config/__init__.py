@@ -13,6 +13,7 @@ from .settings import (
     azure_speech_key,
     azure_speech_region,
     database_url,
+    stripe_topup_price_id,
 )
 
 

@@ -38,6 +38,9 @@ from satz.examiner import examine_attempt, transcribe_attempt
 from satz.explainer import explain_correction
 from satz.glosser import function_word_gloss, gloss_word
 from satz.scheduler import lapse_interval, schedule
+
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
 from satz.verifier import verify_card
 from security import drill_try_admit, gloss_try_admit
 
@@ -788,6 +791,15 @@ async def submit_attempt(
     ).first()
     if row is None:
         raise HTTPException(status_code=404, detail="That card isn't in your pool.")
+    # PAY-002: graded satz attempt — 5 coins each. Charged AFTER the 404
+    # (a stale card id must not burn coins) but BEFORE any STT/judge work.
+    # Rehearsal is charged like any other attempt.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     card, user_card = row
 
     data = await audio.read()

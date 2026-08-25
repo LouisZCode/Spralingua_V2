@@ -25,6 +25,7 @@ from config.settings import (
     stripe_automatic_tax,
     stripe_basic_price_id,
     stripe_premium_price_id,
+    stripe_topup_price_id,
     stripe_webhook_secret,
 )
 from database.connection import get_db
@@ -127,6 +128,54 @@ async def create_checkout(
             status_code=502, detail="Could not start checkout — try again in a moment."
         )
 
+    return {"url": session["url"]}
+
+
+@router.post("/topup/checkout")
+async def create_topup_checkout(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Start a Checkout Session for a one-time coin top-up (PAY-002).
+
+    One line item at ``STRIPE_TOPUP_PRICE_ID`` (configured per env: €2 for
+    500 coins). ``client_reference_id`` + ``metadata`` carry the
+    ``user_id`` so the ``checkout.session.completed`` webhook can resolve it
+    without a Stripe customer lookup. ``mode="payment"`` (not subscription) is
+    what makes the webhook branch into the top-up handler rather than the
+    existing subscription path.
+    """
+    _require_configured()
+    if not stripe_topup_price_id:
+        raise HTTPException(status_code=503, detail="billing not configured")
+
+    user = await db.get(User, user_id)
+    if user is None or user_id == "demo":
+        raise HTTPException(status_code=400, detail="No billable account for this session.")
+    if not user.email:
+        raise HTTPException(
+            status_code=400, detail="Your account has no email on file — sign in again."
+        )
+
+    try:
+        customer_id = await find_or_create_customer(email=user.email, name=user.name)
+        session = await create_checkout_session(
+            mode="payment",
+            customer=customer_id,
+            line_items=[{"price": stripe_topup_price_id, "quantity": 1}],
+            client_reference_id=user_id,
+            metadata={"user_id": user_id, "kind": "topup"},
+            success_url=f"{frontend_base_url}/pricing/success?session_id={{CHECKOUT_SESSION_ID}}&topup=1",
+            cancel_url=f"{frontend_base_url}/pricing",
+            locale="auto",
+            managed_payments={"enabled": False},
+            **({"automatic_tax": {"enabled": True}} if stripe_automatic_tax else {}),
+        )
+    except stripe.StripeError:
+        logger.exception(f"Stripe topup checkout creation failed (user {user_id})")
+        raise HTTPException(
+            status_code=502, detail="Could not start checkout — try again in a moment."
+        )
     return {"url": session["url"]}
 
 

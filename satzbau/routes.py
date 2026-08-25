@@ -32,6 +32,9 @@ from satzbau.content import TARGET_PATTERNS, load_items
 from satzbau.judge import judge_clause
 from security import drill_try_admit
 
+from coins.gate import admit_coins_or_402
+from coins.prices import SATZ_ATTEMPT
+
 router = APIRouter(prefix="/satzbau", tags=["satzbau"])
 
 ROUND_SIZE = 10
@@ -270,6 +273,13 @@ async def submit_attempt(
     item = load_items().get(body.item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
+    # PAY-002: AFTER the 404 but BEFORE grading/logging.
+    try:
+        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+    except HTTPException as _e:
+        if _e.status_code == 402:
+            raise
+        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
     order = body.order
     # give_up skips validation entirely — there's nothing built, the
