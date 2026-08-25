@@ -63,10 +63,8 @@ export default function TeacherChat() {
   // null = still picking; "" is a valid choice (the "just want to talk"
   // escape hatch), so the gate below is `=== null`, not falsiness.
   const [topic, setTopic] = useState<string | null>(null);
-  const [teacherExchanges, setTeacherExchanges] = useState<number | undefined>(undefined);
-  const handleTopicStart = useCallback((t: string, exchanges?: number) => {
+  const handleTopicStart = useCallback((t: string) => {
     setTopic(t);
-    setTeacherExchanges(exchanges);
   }, []);
 
   // Same guard the /learn and /tandem routes use: once hydration settles, a
@@ -254,7 +252,7 @@ export default function TeacherChat() {
   return (
     <>
       <ConversationView
-        params={{ lesson: TEACHER_LESSON, voice: TEACHER_VOICE, topic, exchanges: teacherExchanges }}
+        params={{ lesson: TEACHER_LESSON, voice: TEACHER_VOICE, topic }}
         // AGENT-001 note 1: the teacher room is never open-mic — the learner
         // needs time to think before speaking to a teacher. No natural/practice
         // toggle here on purpose, unlike TopicScreen.

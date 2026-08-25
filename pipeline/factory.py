@@ -317,38 +317,89 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         tts = tts_minimax(session, voice=voice, language=tts_lang)
         converter = TranscriptionToContextConverter()
 
-        # TAND-012 (2026-08-11, PAY-002 extended to teacher): per-session
-        # exchange cap for tandem AND teacher, whitelisted to {5, 10, 15} by the
-        # frontend/main.py query param. Only those two types honor it — anything
-        # else (including a stray query param on a non-tandem /learn connect)
+        # TAND-012: per-session exchange cap for tandem only, whitelisted to
+        # {5, 10, 15} by the frontend/main.py query param. Teacher no longer
+        # uses an exchange picker — she caps at teacher.yaml's max_exchanges
+        # (20) and is gated by daily talk count instead (see below). Any other
+        # type (including a stray query param on a non-tandem /learn connect)
         # leaves the YAML's own max_exchanges untouched. Mutating the snapshot
         # dict (not just a local var) keeps the DB `lesson_snapshot` column
         # faithful to what the session actually ran with — `load_prompts`
         # returns a fresh dict per call, so this never leaks into another session.
         exchanges_override = (
             exchanges
-            if lesson_snapshot.get("type") in ("tandem", "teacher") and exchanges in (5, 10, 15)
+            if lesson_snapshot.get("type") == "tandem" and exchanges in (5, 10, 15)
             else None
         )
         if exchanges_override is not None:
             lesson_snapshot["max_exchanges"] = exchanges_override
 
-        # PAY-002 accept gate (MUST run BEFORE the activity_session INSERT —
-        # a rejected session never gets a row). Two branches:
-        # - teacher + free tier → close 4002 ("Clara is a Basic feature")
-        # - bundle (exchanges/bundle price vs available balance) → close 4001
-        # Both only for authenticated sockets (db_user_id != "demo"); the demo
-        # socket is never charged or gated. The frontend maps 4001/4002 (see
-        # main.py's ws_endpoint docstring for the code table). Developer role
-        # bypasses every gate (no deduction, no lockout).
-        # Bundle math: tandem (and tandem_paul) use the per-session exchanges
-        # param × VOICE_EXCHANGE (default 10 when no param, for pricing only —
-        # the behavioral cap stays as-is); conversation/respond use the YAML's
-        # max_exchanges × VOICE_EXCHANGE.
-        if db_user_id != "demo":
+        # Clara daily-count gate (replaces the PAY-002 coin bundle for teacher).
+        # free→0/day (locked), basic→1/day, premium→3/day, developer→∞.
+        # Counted at accept time — the moment Start creates the session — so the
+        # tally increments even if the talk ends early. Window is the coin day
+        # (05:00 local, same as coins/engine.py::today_key / next_reset_at).
+        # PAY-002 coin gate for tandem/conversation/respond stays below.
+        if db_user_id != "demo" and lesson_snapshot.get("type") == "teacher":
+            try:
+                from datetime import timedelta as _td
+                from sqlalchemy import func as _func, select as _select2
+                from database.orm import ActivitySession as _AS2, User as _User2
+                from coins.engine import next_reset_at as _nra2
+
+                async with get_sessionmaker()() as _gate_db2:
+                    _u2 = await _gate_db2.scalar(_select2(_User2).where(_User2.id == db_user_id))
+                    if _u2 is not None and (_u2.role or "") != "developer":
+                        tier2 = _u2.tier or "free"
+                        limit2 = {"free": 0, "basic": 1, "premium": 3}.get(tier2, 0)
+                        if limit2 <= 0:
+                            logger.info(f"teacher gate: free/locked for user {db_user_id} (4002)")
+                            await websocket.close(code=4002, reason="Clara is a Basic feature")
+                            return
+                        nxt = _nra2(_u2.timezone)
+                        day_start = nxt - _td(days=1)
+                        # started_at is stored naive (datetime.now()), compare naive UTC
+                        ds_naive = day_start.replace(tzinfo=None)
+                        nr_naive = nxt.replace(tzinfo=None)
+                        cnt = await _gate_db2.scalar(
+                            _select2(_func.count()).select_from(_AS2).where(
+                                _AS2.user_id == db_user_id,
+                                _AS2.lesson_id == "teacher",
+                                _AS2.started_at >= ds_naive,
+                                _AS2.started_at < nr_naive,
+                            )
+                        )
+                        used2 = int(cnt or 0)
+                        if used2 >= limit2:
+                            logger.info(
+                                f"teacher gate: daily limit hit for user {db_user_id} "
+                                f"tier={tier2} used={used2}/{limit2} (4003)"
+                            )
+                            await websocket.close(code=4003, reason="Daily Clara limit reached")
+                            return
+            except Exception as _ge2:
+                # Don't fail closed on a 4003 path error — close 1011 so the
+                # client can retry rather than silently admitting beyond the lim.
+                # But a close error here must still block admission (fail closed).
+                if "_gate_db2" in locals():
+                    pass
+                logger.warning(f"teacher daily gate check failed — closing 1011: {_ge2}")
+                try:
+                    await websocket.close(code=1011, reason="billing check failed")
+                except Exception:
+                    pass
+                return
+
+        # PAY-002 coin accept gate for tandem/conversation/respond (teacher
+        # excluded — she is daily-count-gated above, not coin-gated). MUST run
+        # BEFORE the activity_session INSERT — a rejected session never gets a row.
+        # Bundle: tandem uses exchanges param × VOICE_EXCHANGE (default 10),
+        # conversation/respond use YAML max_exchanges × VOICE_EXCHANGE.
+        # Developer role bypasses. Demo socket is never charged or gated.
+        if db_user_id != "demo" and lesson_snapshot.get("type") in ("tandem", "conversation", "respond"):
             try:
                 from coins.prices import DAILY_ALLOWANCE as _DA, VOICE_EXCHANGE as _VE
-                from coins.engine import today_key as _tk, next_reset_at as _nra
+                from coins.engine import today_key as _tk
                 from sqlalchemy import select as _select
                 from database.orm import User as _User
 
@@ -356,19 +407,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 async with get_sessionmaker()() as _gate_db:
                     _user = await _gate_db.scalar(_select(_User).where(_User.id == db_user_id))
                     if _user is not None and (_user.role or "") != "developer":
-                        # Teacher gate: free tier cannot open Clara.
-                        if lesson_type == "teacher" and (_user.tier or "free") == "free":
-                            logger.info(f"coin gate: teacher blocked for free user {db_user_id} (4002)")
-                            await websocket.close(code=4002, reason="Clara is a Basic feature")
-                            return
-                        # Bundle check — compute owed before the session starts.
                         if lesson_type == "tandem":
-                            # Tandem re-gate also extended to teacher's exchanges param
-                            # for the bundle, but teacher was already blocked above
-                            # for free. For tandem, use exchanges param with default 10.
-                            bundle_exchanges = exchanges if exchanges in (5, 10, 15) else 10
-                            owed = bundle_exchanges * _VE
-                        elif lesson_type == "teacher":
                             bundle_exchanges = exchanges if exchanges in (5, 10, 15) else 10
                             owed = bundle_exchanges * _VE
                         elif lesson_type in ("conversation", "respond"):
@@ -376,9 +415,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         else:
                             owed = 0
                         if owed > 0:
-                            # Lazy allowance math mirrors coins/engine.py — use
-                            # the same day-key formula so the gate agrees with
-                            # the engine on available balance.
                             _key = _tk(_user.timezone)
                             if _user.allowance_day != _key:
                                 _allow = _DA.get(_user.tier or "free", 0)
@@ -394,9 +430,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 await websocket.close(code=4001, reason="Not enough coins")
                                 return
             except Exception as _ge:
-                # A gate check that itself errors must NOT admit for free.
-                # Closing 1011 (internal error) tells the client to retry
-                # rather than silently admitting a free session.
                 logger.warning(f"coin gate check failed — closing 1011: {_ge}")
                 try:
                     await websocket.close(code=1011, reason="billing check failed")
@@ -430,7 +463,8 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # words, so scale down with the exchange cap — fewer
                         # exchanges means fewer words to weave, so the partner
                         # never crams.
-                        vocab_limit = {5: 4, 10: 7, 15: 10}.get(exchanges_override or 0, 7)
+                        # Teacher uses fixed lesson cap (YAML 20), no exchange picker
+                        vocab_limit = 7 if snapshot_type == "teacher" else {5: 4, 10: 7, 15: 10}.get(exchanges_override or 0, 7)
                         vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=vocab_limit)
                 logger.info(
                     f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
@@ -1155,7 +1189,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     if (
                         db_user_id != "demo"
                         and lesson_snapshot.get("type")
-                        in ("tandem", "teacher", "conversation", "respond")
+                        in ("tandem", "conversation", "respond")
                     ):
                         try:
                             from coins.engine import spend_capped as _spend_capped

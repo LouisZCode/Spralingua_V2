@@ -377,8 +377,8 @@ export default function ConversationView({
         enableMic: !practiceMode,
         callbacks: {
           onConnected: () => setStatus("Connected"),
-          // PAY-002: WS close codes are a backstop — entry screens pre-check the
-          // bundle so this path is rarely hit. 4001 = not enough coins, 4002 = Clara requires Basic.
+          // WS close codes are a backstop — entry screens pre-check the bundle/limit
+          // so this path is rarely hit. 4001 = not enough coins, 4002 = Clara requires Basic, 4003 = Clara daily limit.
           onDisconnected: () => {
             setStatus("Disconnected");
             handleFinish();

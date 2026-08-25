@@ -28,6 +28,45 @@ from teacher.registry import get_adapter, pick_random_item
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 
+
+@router.get("/balance")
+async def teacher_balance(user_id: str = Depends(get_current_user_id)):
+    """Daily Clara talk allowance for the picker header.
+
+    free 0/day, basic 1/day, premium 3/day, developer ∞. Window is the coin
+    day (05:00 local via coins/engine). Counts activity_session rows with
+    lesson_id='teacher' in [day_start, nextResetAt)."""
+    from datetime import timedelta as _td
+    from sqlalchemy import func as _func, select as _select
+
+    from coins.engine import next_reset_at as _nra
+    from database.connection import get_sessionmaker
+    from database.orm import ActivitySession as _AS, User as _User
+
+    async with get_sessionmaker()() as db:
+        user = await db.scalar(_select(_User).where(_User.id == user_id))
+        if user is None:
+            return {"tier": "free", "limit": 0, "used": 0, "remaining": 0, "nextResetAt": _nra(None).isoformat()}
+        if (user.role or "") == "developer":
+            nxt = _nra(user.timezone)
+            return {"tier": user.tier or "free", "limit": 99, "used": 0, "remaining": 99, "nextResetAt": nxt.isoformat(), "bypass": True}
+        tier = user.tier or "free"
+        limit = {"free": 0, "basic": 1, "premium": 3}.get(tier, 0)
+        nxt = _nra(user.timezone)
+        day_start = nxt - _td(days=1)
+        ds_naive = day_start.replace(tzinfo=None)
+        nr_naive = nxt.replace(tzinfo=None)
+        cnt = await db.scalar(
+            _select(_func.count()).select_from(_AS).where(
+                _AS.user_id == user_id,
+                _AS.lesson_id == "teacher",
+                _AS.started_at >= ds_naive,
+                _AS.started_at < nr_naive,
+            )
+        )
+        used = int(cnt or 0)
+        return {"tier": tier, "limit": limit, "used": used, "remaining": max(0, limit - used), "nextResetAt": nxt.isoformat()}
+
 _MAX_ANSWER_CHARS = 200  # generous: a satzbau order retypes several words
 
 
