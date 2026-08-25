@@ -48,6 +48,41 @@ async def get_balance(
     return data
 
 
+@router.get("/topup/{checkout_session_id}")
+async def get_topup_status(
+    checkout_session_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Has THIS checkout session's top-up been credited yet? (PAY-002)
+
+    ``/pricing/success?topup=1`` polls this rather than watching the balance
+    rise. The webhook frequently lands BEFORE the browser finishes redirecting
+    back from Stripe, so a baseline-then-rise check can never observe the rise
+    and would report a false timeout on a perfectly successful purchase — and
+    the naive fix (treat any non-zero ``purchasedCoins`` as proof) confirms for
+    every user alive, since everyone carries the 100-coin signup grant. The
+    ledger row ``(user_id, 'topup', ref=<checkout session id>)`` written by
+    ``coins/engine.py::credit`` IS the fact, so ask for it directly.
+
+    Scoped to the caller's own ``user_id``: a guessed session id reveals
+    nothing about anyone else's purchases, only whether the CALLER was
+    credited for it.
+    """
+    from sqlalchemy import select as _select  # noqa: PLC0415
+
+    from database.orm import CoinLedger  # noqa: PLC0415
+
+    row = await db.scalar(
+        _select(CoinLedger.id).where(
+            CoinLedger.user_id == user_id,
+            CoinLedger.kind == "topup",
+            CoinLedger.ref == checkout_session_id,
+        )
+    )
+    return {"credited": row is not None}
+
+
 class TimezoneBody(BaseModel):
     timezone: str
 

@@ -43,34 +43,42 @@ export default function PricingSuccess() {
 
   const [status, setStatus] = useState<PollStatus>("waiting");
 
-  // PAY-002: top-up variant — poll coin balance instead of tier.
+  // PAY-002: top-up variant — poll THIS checkout session's ledger row.
+  //
+  // Not the balance: the two obvious balance tests are both wrong. Watching
+  // for a rise misses the (common) case where the webhook credited before
+  // this page even mounted, so a real purchase reports a false timeout; and
+  // "purchasedCoins > 0" is true for every user alive, since everyone carries
+  // the 100-coin signup grant — it confirmed a credit that may never have
+  // landed. GET /coins/topup/{id} answers the actual question, in both races.
+  //
+  // Without a session_id in the URL there is nothing to ask about; fall
+  // straight through to the timeout copy ("it can take a minute") rather
+  // than claiming success.
   useEffect(() => {
     if (!isTopup) return;
     if (!ready || !token) return;
+    if (!sessionId) {
+      setStatus("timeout");
+      return;
+    }
     let cancelled = false;
     const deadline = Date.now() + POLL_TIMEOUT_MS;
-    let initialBalance: number | null = null;
     async function pollTopup() {
       try {
-        const { fetchCoinBalance } = await import("@/lib/coins");
-        const bal = await fetchCoinBalance(token!);
+        const { fetchTopupCredited } = await import("@/lib/coins");
+        const credited = await fetchTopupCredited(token!, sessionId!);
         if (cancelled) return;
-        if (initialBalance === null) initialBalance = bal.balance;
-        else if (bal.balance > initialBalance || bal.purchasedCoins > 0) {
+        if (credited) {
           setStatus("confirmed");
+          // Pull the new balance into the shared store so the coin pill on
+          // the next screen is already correct.
+          const { refreshCoins } = await import("./shared/Coins");
+          refreshCoins();
           return;
         }
-        // Fallback: if balance fetch succeeds and a beat has passed, still confirm
-        // (webhook credit near-instant in test mode; idempotent).
-        if (Date.now() >= deadline - POLL_INTERVAL_MS && !cancelled) {
-          // One more check — if initial captured, any rise counts; otherwise
-          // just confirm that we did see a balance.
-          if (initialBalance !== null) {
-            // If balance didn't rise but we did get through, give timeout.
-          }
-        }
       } catch {
-        // keep polling
+        // Network blip or a 5xx — keep polling until the deadline.
       }
       if (Date.now() >= deadline) {
         if (!cancelled) setStatus("timeout");
@@ -80,21 +88,11 @@ export default function PricingSuccess() {
         if (!cancelled) pollTopup();
       }, POLL_INTERVAL_MS);
     }
-    // Capture initial quickly, then poll for rise.
-    (async () => {
-      try {
-        const { fetchCoinBalance } = await import("@/lib/coins");
-        const bal = await fetchCoinBalance(token!);
-        if (!cancelled) initialBalance = bal.balance;
-      } catch {
-        // ignore
-      }
-      if (!cancelled) setTimeout(pollTopup, POLL_INTERVAL_MS);
-    })();
+    void pollTopup();
     return () => {
       cancelled = true;
     };
-  }, [isTopup, ready, token]);
+  }, [isTopup, ready, token, sessionId]);
 
   useEffect(() => {
     if (isTopup) return;
@@ -192,8 +190,9 @@ export default function PricingSuccess() {
           Almost there
         </h1>
         <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">
-          This can take a minute to finish on our end. Your plan will be
-          ready shortly — no need to do anything else.
+          This can take a minute to finish on our end.{" "}
+          {isTopup ? "Your coins" : "Your plan"} will be ready shortly — no
+          need to do anything else.
         </p>
         <Link
           href="/practice"

@@ -88,6 +88,19 @@ export function OutOfCoinsPanel({
   );
 }
 
+// ─── developer bypass ───────────────────────────────────────────────────
+
+// PAY-002: every backend coin gate bypasses `role: "developer"` outright
+// (coins/engine.py::try_spend / spend_capped, pipeline/factory.py's accept
+// gate) — no charge, no ledger row. So a developer's balance NEVER moves: it
+// sits at the 100-coin signup grant forever. Any UI that disables an action
+// because the price exceeds the balance must ask this first, or it locks
+// developers out of their own product with a balance frozen by design.
+export function useCoinsBypassed(): boolean {
+  const { user } = useAuth();
+  return user?.role === "developer";
+}
+
 // ─── tiny balance store ─────────────────────────────────────────────────
 // Module-level listener pattern: useCoinBalance subscribes, refreshCoins
 // notifies. Keeps it simple — no extra context provider to thread.

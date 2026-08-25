@@ -16,6 +16,11 @@ import GermanWay from "../shared/GermanWay";
 import type { GlossInfo } from "../satzschmiede/api";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+// PAY-002 note: Briefkasten charges the LETTER, not the attempt — the 15
+// coins are taken at GET /briefkasten/letter and both attempts ride free on
+// that ticket, so the real out-of-coins surface is Briefkasten.tsx's mint.
+// The handlers below stay as a defensive net in case pricing ever moves to
+// the attempt, and cost nothing while it hasn't.
 
 type Phase = "writing" | "hints" | "feedback";
 

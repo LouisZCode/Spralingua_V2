@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { HTTP_BASE } from "@/lib/api";
-import { useCoinBalance } from "./shared/Coins";
+import { useCoinBalance, useCoinsBypassed } from "./shared/Coins";
 import type { TandemPartner } from "./shared/tandem";
 
 // The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP;
@@ -356,8 +356,16 @@ export default function TopicScreen({
 // PAY-002: one-line balance note below the length picker.
 function TopicBalanceNote({ exchanges }: { exchanges: number }) {
   const bal = useCoinBalance();
+  const bypassed = useCoinsBypassed();
   if (!bal) return null;
   const cost = exchanges * 15;
+  if (bypassed) {
+    return (
+      <p className="rise-in mt-3 font-body text-[12px] text-ink-muted" style={{ animationDelay: "220ms" }}>
+        🪙 developer · this chat is free
+      </p>
+    );
+  }
   return (
     <p className="rise-in mt-3 font-body text-[12px] text-ink-muted" style={{ animationDelay: "220ms" }}>
       🪙 {bal.balance} coins · this chat costs {cost} coins
@@ -388,8 +396,11 @@ function TopicStartButton({
   onStart: (topic: string, mode: "natural" | "practice", exchanges: number) => void;
 }) {
   const bal = useCoinBalance();
+  // PAY-002: developers are never charged (see useCoinsBypassed) — their
+  // balance is frozen, so pricing must never gate their Start button.
+  const bypassed = useCoinsBypassed();
   const cost = exchanges * 15;
-  const insufficient = bal !== null && bal.balance < cost;
+  const insufficient = !bypassed && bal !== null && bal.balance < cost;
   const disabled = !effectiveTopic || insufficient;
   return (
     <>

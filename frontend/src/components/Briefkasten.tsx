@@ -14,6 +14,8 @@ import {
   type Letter,
 } from "./briefkasten/api";
 import { addWord, fetchGloss, type GlossInfo } from "./satzschmiede/api";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "./shared/Coins";
 
 // VARY-001: seed ids already served this pool cycle, kept in localStorage so
 // variety persists across page visits. Guarded exactly like Szenario.tsx:
@@ -53,6 +55,15 @@ export default function Briefkasten() {
   const [letter, setLetter] = useState<Letter | null>(null); // null = loading
   const [letterKey, setLetterKey] = useState(0); // remounts the trainer per letter
   const [error, setError] = useState(false);
+  // PAY-002: Briefkasten charges the LETTER (GET /briefkasten/letter, 15
+  // coins for the whole cycle) — the two attempts that follow ride free on
+  // that ticket. So the 402 arrives here, on the mint, not inside
+  // BriefTrainer's submit path, and this is the component that has to own the
+  // out-of-coins state.
+  const [insufficient, setInsufficient] = useState<{
+    needed: number;
+    available: number;
+  } | null>(null);
 
   // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
   // first attempt, held for the whole page visit — "New letter" top-ups
@@ -78,6 +89,7 @@ export default function Briefkasten() {
     if (!token) return;
     setLetter(null);
     setError(false);
+    setInsufficient(null);
     const seen = readSeen();
     fetchLetter(token, seen, undefined, sid())
       .then((l) => {
@@ -88,6 +100,9 @@ export default function Briefkasten() {
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
           signOut();
+        } else if (e instanceof InsufficientCoinsError) {
+          setInsufficient({ needed: e.needed, available: e.available });
+          refreshCoins();
         } else {
           setError(true);
         }
@@ -215,7 +230,12 @@ export default function Briefkasten() {
           </p>
         </div>
 
-        {error ? (
+        {insufficient ? (
+          <OutOfCoinsPanel
+            needed={insufficient.needed}
+            available={insufficient.available}
+          />
+        ) : error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
             Couldn&apos;t load a letter — is the backend running?
           </p>

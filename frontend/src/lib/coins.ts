@@ -48,6 +48,28 @@ export async function putTimezone(
   return res.json() as Promise<{ timezone: string }>;
 }
 
+// PAY-002: did THIS checkout session's 500 coins land? Backed by the ledger
+// row the webhook writes, so it answers correctly no matter which of the two
+// races (browser redirect vs webhook delivery) wins — see
+// coins/routes.py::get_topup_status.
+export async function fetchTopupCredited(
+  token: string,
+  checkoutSessionId: string
+): Promise<boolean> {
+  const res = await fetch(
+    `${HTTP_BASE}/coins/topup/${encodeURIComponent(checkoutSessionId)}`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new Error(
+      typeof detail === "string" ? detail : `/coins/topup failed (${res.status})`
+    );
+  }
+  const data = (await res.json()) as { credited: boolean };
+  return data.credited === true;
+}
+
 export async function createTopupCheckout(token: string): Promise<string> {
   const res = await fetch(`${HTTP_BASE}/payments/topup/checkout`, {
     method: "POST",

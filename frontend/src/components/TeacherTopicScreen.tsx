@@ -6,7 +6,7 @@ import Image from "next/image";
 import { useAuth } from "./auth/AuthContext";
 import { fetchStats, UnauthorizedError, type FocusPattern } from "./development/api";
 import { TEACHER_NAME } from "./shared/teacher";
-import { useCoinBalance } from "./shared/Coins";
+import { useCoinBalance, useCoinsBypassed } from "./shared/Coins";
 
 // AGENT-001 note 5: Clara's pre-session picker, the teacher counterpart to
 // TopicScreen. Instead of a topic pool, the cards are the learner's own error
@@ -279,8 +279,16 @@ export default function TeacherTopicScreen({
 // PAY-002: balance note below the teacher length picker.
 function TeacherBalanceNote({ exchanges }: { exchanges: number }) {
   const bal = useCoinBalance();
+  const bypassed = useCoinsBypassed();
   if (!bal) return null;
   const cost = exchanges * 15;
+  if (bypassed) {
+    return (
+      <p className="rise-in mt-3 font-body text-[12px] text-ink-muted" style={{ animationDelay: "250ms" }}>
+        🪙 developer · this chat is free
+      </p>
+    );
+  }
   return (
     <p className="rise-in mt-3 font-body text-[12px] text-ink-muted" style={{ animationDelay: "250ms" }}>
       🪙 {bal.balance} coins · this chat costs {cost} coins
@@ -304,8 +312,11 @@ function TeacherStartButton({
   onStart: (topic: string, exchanges?: number) => void;
 }) {
   const bal = useCoinBalance();
+  // PAY-002: developers are never charged (see useCoinsBypassed) — their
+  // balance is frozen, so pricing must never gate their Start button.
+  const bypassed = useCoinsBypassed();
   const cost = exchanges * 15;
-  const insufficient = bal !== null && bal.balance < cost;
+  const insufficient = !bypassed && bal !== null && bal.balance < cost;
   const disabled = !effectiveTopic || insufficient;
   return (
     <>
