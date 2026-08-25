@@ -14,10 +14,17 @@ built on these rounded numbers.
   1.3¢ measured → 1.5¢ (+15%). Loosely 3 vocab attempts' worth; the whole
   letter (hints + corrections + germanize) is included in one charge.
 
-- VOICE_EXCHANGE (one learner↔agent turn in tandem/teacher/conversation/
-  respond): 15 coins ≈ 1.2¢ measured → 1.5¢ (+25%). TTS dominates; Clara's
-  ~2¢/turn pre-diet cost is intentionally carried at the same 15 until the
-  verbosity diet lands (see cost_price.md's "Clara decision" note).
+- VOICE_EXCHANGE (one learner↔agent turn in tandem/conversation/respond):
+  15 coins ≈ 1.2¢ measured → 1.5¢ (+25%). TTS dominates.
+
+  NOT teacher. Clara used to be priced here at the same 15/turn, carrying her
+  ~2¢/turn pre-diet cost deliberately until the verbosity diet landed. As of
+  2026-08-25 she is off coins entirely and gated on a daily talk count instead
+  (free 0 / basic 1 / premium 3, developer unlimited), enforced in
+  pipeline/factory.py against activity_session rows inside the same
+  timezone-aware 05:00 coin day, and read by GET /teacher/balance. Her cost is
+  bounded by teacher.yaml's max_exchanges: 20, not by a per-turn charge — so
+  changing VOICE_EXCHANGE no longer moves what Clara costs or earns.
 
 - INTERVIEW_ANSWER (one judged answer chunk): 20 coins ≈ 1.7¢ measured →
   2.0¢ (+18%). Three judges + ~90s batch STT per chunk.
