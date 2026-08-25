@@ -2,6 +2,7 @@
 // call replays the session JWT as a Bearer header — same AUTH-001 token the
 // WS handshake and /say already use.
 import { HTTP_BASE } from "@/lib/api";
+import { InsufficientCoinsError } from "@/lib/coins";
 import type { Card, DeckCard } from "./deck";
 
 export type PackSummary = {
@@ -69,6 +70,17 @@ async function request<T>(
     throw new WordRejectedError(
       typeof detail === "string" ? detail : "That input didn't work — try a single German word."
     );
+  }
+  if (res.status === 402) {
+    const body = await res.clone().json().catch(() => null);
+    const detail = (body as { detail?: unknown })?.detail;
+    if (detail && typeof detail === "object") {
+      const d = detail as { code?: unknown; needed?: unknown; available?: unknown };
+      if (d.code === "insufficient_coins" && typeof d.needed === "number" && typeof d.available === "number") {
+        
+        throw new InsufficientCoinsError(d.needed, d.available);
+      }
+    }
   }
   if (!res.ok) {
     throw new Error(`${path} failed (${res.status})`);

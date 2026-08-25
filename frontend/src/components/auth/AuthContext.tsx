@@ -5,6 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -61,6 +62,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
+  // PAY-002: guard so the timezone report fires once per browser session.
+  const tzSentRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -130,6 +133,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // it's a stable reference across the setUser-triggered re-renders it
   // itself causes — a plain function here would give a poller keying an
   // effect off this callback a new identity every 2s and never converge.
+  // PAY-002: one-time timezone report after sign-in or /auth/me hydration.
+  // Fire-and-forget, never blocks or breaks sign-in.
+  useEffect(() => {
+    if (!token || !user) return;
+    if (tzSentRef.current) return;
+    try {
+      if (sessionStorage.getItem("spralingua_tz_sent") === "1") {
+        tzSentRef.current = true;
+        return;
+      }
+    } catch {
+      // storage unavailable — still try once per mount
+    }
+    tzSentRef.current = true;
+    try {
+      sessionStorage.setItem("spralingua_tz_sent", "1");
+    } catch {
+      // ignore
+    }
+    let tz: string;
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return;
+    }
+    if (!tz) return;
+    import("@/lib/coins").then(({ putTimezone }) =>
+      putTimezone(token, tz).catch(() => {})
+    );
+  }, [token, user]);
+
   const refreshUser = useCallback(async (): Promise<AuthUser | null> => {
     if (!token) return null;
     try {

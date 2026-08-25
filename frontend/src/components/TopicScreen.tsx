@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { HTTP_BASE } from "@/lib/api";
+import { useCoinBalance } from "./shared/Coins";
 import type { TandemPartner } from "./shared/tandem";
 
 // The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP;
@@ -41,10 +42,11 @@ function readMode(): InputMode {
 // (backend whitelists {5,10,15}). Same persist-and-hydrate idiom as the
 // input-mode toggle above.
 const EXCHANGES_STORAGE_KEY = "tandem-exchanges-v1";
+// PAY-002: 15 coins per exchange — cost labels on the length picker.
 const EXCHANGE_OPTIONS = [
-  { value: 5, label: "Short · 5" },
-  { value: 10, label: "Classic · 10" },
-  { value: 15, label: "Long · 15" },
+  { value: 5, label: "Short · 5 · 75 coins" },
+  { value: 10, label: "Classic · 10 · 150 coins" },
+  { value: 15, label: "Long · 15 · 225 coins" },
 ] as const;
 
 function readExchanges(): number {
@@ -333,30 +335,93 @@ export default function TopicScreen({
           />
         </div>
 
+        {/* PAY-002: balance note + insufficient-Start disable */}
+        <TopicBalanceNote exchanges={exchanges} />
+
         {/* Start */}
         <div className="rise-in mt-9" style={{ animationDelay: "260ms" }}>
-          <button
-            type="button"
-            onClick={() => onStart(effectiveTopic, mode, exchanges)}
-            disabled={!effectiveTopic}
-            className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-            style={inkShadow}
-          >
-            Start chatting with {partner.name}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </button>
+          <TopicStartButton
+            partnerName={partner.name}
+            effectiveTopic={effectiveTopic}
+            mode={mode}
+            exchanges={exchanges}
+            onStart={onStart}
+          />
         </div>
       </main>
     </div>
+  );
+}
+
+// PAY-002: one-line balance note below the length picker.
+function TopicBalanceNote({ exchanges }: { exchanges: number }) {
+  const bal = useCoinBalance();
+  if (!bal) return null;
+  const cost = exchanges * 15;
+  return (
+    <p className="rise-in mt-3 font-body text-[12px] text-ink-muted" style={{ animationDelay: "220ms" }}>
+      🪙 {bal.balance} coins · this chat costs {cost} coins
+      {bal.balance < cost && (
+        <>
+          {" "}
+          —{" "}
+          <Link href="/pricing" className="font-bold text-flag-red underline underline-offset-2">
+            Get more coins
+          </Link>
+        </>
+      )}
+    </p>
+  );
+}
+
+function TopicStartButton({
+  partnerName,
+  effectiveTopic,
+  mode,
+  exchanges,
+  onStart,
+}: {
+  partnerName: string;
+  effectiveTopic: string;
+  mode: "natural" | "practice";
+  exchanges: number;
+  onStart: (topic: string, mode: "natural" | "practice", exchanges: number) => void;
+}) {
+  const bal = useCoinBalance();
+  const cost = exchanges * 15;
+  const insufficient = bal !== null && bal.balance < cost;
+  const disabled = !effectiveTopic || insufficient;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onStart(effectiveTopic, mode, exchanges)}
+        disabled={disabled}
+        className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+        style={inkShadow}
+      >
+        Start chatting with {partnerName}
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="h-4 w-4"
+        >
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      </button>
+      {insufficient && (
+        <p className="mt-2 font-body text-[13px] font-semibold text-flag-red-deep">
+          Not enough coins for this length —{" "}
+          <Link href="/pricing" className="underline underline-offset-2">
+            get more coins
+          </Link>{" "}
+          or pick a shorter chat.
+        </p>
+      )}
+    </>
   );
 }

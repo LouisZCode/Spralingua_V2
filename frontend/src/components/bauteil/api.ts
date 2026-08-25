@@ -2,6 +2,7 @@
 // same Bearer-replay + 401-signout contract as the satzschmiede client, whose
 // UnauthorizedError is reused so one catch handles every practice module.
 import { HTTP_BASE } from "@/lib/api";
+import { InsufficientCoinsError } from "@/lib/coins";
 import { UnauthorizedError } from "../satzschmiede/api";
 
 // One drill item as the round serves it. The answer never ships — checking
@@ -37,6 +38,17 @@ async function request<T>(
   });
   if (res.status === 401) {
     throw new UnauthorizedError(path);
+  }
+  if (res.status === 402) {
+    const body = await res.clone().json().catch(() => null);
+    const detail = (body as { detail?: unknown })?.detail;
+    if (detail && typeof detail === "object") {
+      const d = detail as { code?: unknown; needed?: unknown; available?: unknown };
+      if (d.code === "insufficient_coins" && typeof d.needed === "number" && typeof d.available === "number") {
+        
+        throw new InsufficientCoinsError(d.needed, d.available);
+      }
+    }
   }
   if (!res.ok) {
     const detail = (await res.json().catch(() => null))?.detail;

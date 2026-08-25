@@ -76,7 +76,7 @@ export default function Pricing() {
 
   // Which button is mid-request — disables the others so a slow network
   // can't produce two in-flight Checkout/portal calls.
-  const [pending, setPending] = useState<TierId | "portal" | null>(null);
+  const [pending, setPending] = useState<TierId | "portal" | "topup" | null>(null);
   const [error, setError] = useState<string | null>(null);
   // There's no separate "is billing configured" endpoint to check up front —
   // the only signal is a 503 "billing not configured" from an actual
@@ -212,28 +212,15 @@ export default function Pricing() {
           ))}
         </div>
 
-        {/* Displayed offer only — the top-up purchase path ships with
-            PAY-002 (coin balance); until then the chip stays inert. */}
-        <div
-          className="rise-in mt-6 flex flex-col items-start gap-4 rounded-[28px] border-[3px] border-ink bg-paper-warm p-6 sm:flex-row sm:items-center sm:justify-between"
-          style={{ boxShadow: "0 5px 0 var(--color-ink)", animationDelay: "120ms" }}
-        >
-          <div>
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
-              Top-up
-            </p>
-            <p className="mt-2 font-display text-[18px] font-bold text-ink">
-              Big day in German? Top up any time.
-            </p>
-            <p className="mt-1 font-body text-[14px] text-ink-soft">
-              €2 for a full extra day of coins — 500 coins, whenever you need
-              them.
-            </p>
-          </div>
-          <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
-            Coming soon
-          </span>
-        </div>
+        <TopupBanner
+          signedIn={signedIn}
+          token={token}
+          pending={pending}
+          notConfigured={notConfigured}
+          onStart={(p) => setPending(p)}
+          onDone={() => setPending(null)}
+          onFailure={handleFailure}
+        />
 
         {signedIn && currentTier !== "free" && (
           <p
@@ -267,7 +254,7 @@ function PricingCard({
   plan: Plan;
   signedIn: boolean;
   currentTier: TierId;
-  pending: TierId | "portal" | null;
+  pending: TierId | "portal" | "topup" | null;
   notConfigured: boolean;
   onChoose: (tier: "basic" | "premium") => void;
   onSwitch: () => void;
@@ -341,7 +328,7 @@ function PricingCta({
   signedIn: boolean;
   currentTier: TierId;
   isCurrent: boolean;
-  pending: TierId | "portal" | null;
+  pending: TierId | "portal" | "topup" | null;
   notConfigured: boolean;
   onChoose: (tier: "basic" | "premium") => void;
   onSwitch: () => void;
@@ -406,6 +393,70 @@ function PricingCta({
     >
       {busy ? "Starting…" : `Choose ${plan.kicker}`}
     </button>
+  );
+}
+
+// PAY-002: €2 for 500 coins top-up — real button when signed in.
+function TopupBanner({
+  signedIn,
+  token,
+  pending,
+  notConfigured,
+  onStart,
+  onDone,
+  onFailure,
+}: {
+  signedIn: boolean;
+  token: string | null;
+  pending: TierId | "portal" | "topup" | null;
+  notConfigured: boolean;
+  onStart: (p: "topup") => void;
+  onDone: () => void;
+  onFailure: (e: unknown) => void;
+}) {
+  const busy = pending === "topup";
+  async function handleTopup() {
+    if (!token) return;
+    onStart("topup");
+    try {
+      const { createTopupCheckout } = await import("@/lib/coins");
+      const url = await createTopupCheckout(token);
+      window.location.assign(url);
+    } catch (e) {
+      onFailure(e);
+      onDone();
+    }
+  }
+  return (
+    <div
+      className="rise-in mt-6 flex flex-col items-start gap-4 rounded-[28px] border-[3px] border-ink bg-paper-warm p-6 sm:flex-row sm:items-center sm:justify-between"
+      style={{ boxShadow: "0 5px 0 var(--color-ink)", animationDelay: "120ms" }}
+    >
+      <div>
+        <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Top-up</p>
+        <p className="mt-2 font-display text-[18px] font-bold text-ink">Big day in German? Top up any time.</p>
+        <p className="mt-1 font-body text-[14px] text-ink-soft">€2 for a full extra day of coins — 500 coins, whenever you need them.</p>
+      </div>
+      {!signedIn ? (
+        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+          Sign in to top up
+        </span>
+      ) : notConfigured ? (
+        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+          Not live yet
+        </span>
+      ) : (
+        <button
+          type="button"
+          onClick={handleTopup}
+          disabled={busy || (pending !== null && (pending as string) !== "topup")}
+          className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-60"
+          style={inkShadow}
+        >
+          {busy ? "Opening…" : "Top up — €2"}
+        </button>
+      )}
+    </div>
   );
 }
 

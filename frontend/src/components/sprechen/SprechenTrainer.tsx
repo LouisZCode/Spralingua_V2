@@ -10,6 +10,8 @@ import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import type { GlossInfo } from "../satzschmiede/api";
 import { diffWords, segmentTranscript } from "./slipDiff";
 import { playSound } from "../shared/sound";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 
 type Phase = "drill" | "done";
 
@@ -78,6 +80,7 @@ export default function SprechenTrainer({
   const [elapsed, setElapsed] = useState(0);
   const [verdict, setVerdict] = useState<SprechenVerdict | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
   // Latest verdict per task (a retry replaces it) — the summary counts these.
   const [results, setResults] = useState<(SprechenVerdict | null)[]>(() =>
     round.map(() => null)
@@ -205,11 +208,16 @@ export default function SprechenTrainer({
         return next;
       });
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setChecking(false);
     }
@@ -333,6 +341,11 @@ export default function SprechenTrainer({
 
   return (
     <div>
+      {insufficient && (
+        <div className="mb-4">
+          <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+        </div>
+      )}
       {/* FLOW-001: the Flow page shows its own progress — hide this round's. */}
       {!flow && (
         <div className="mb-3 flex items-center justify-between">

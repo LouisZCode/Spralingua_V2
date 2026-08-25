@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import LevelPickerModal from "./LevelPickerModal";
+import { CoinPill, useCoinBalance } from "./shared/Coins";
 import {
   fetchRecommendation,
   fetchStats,
@@ -225,6 +226,8 @@ export default function PracticeMenu() {
           </Link>
 
           <div className="flex items-center gap-4">
+            {/* PAY-002: balance chip — informative even at 0, hidden when signed out */}
+            <PracticeMenuCoinChip />
             {/* PAY-001: the signed-in door to /pricing — upgrade for free
                 users, plan management (portal) for paying ones. */}
             <Link
@@ -783,4 +786,12 @@ function ModeIcon({ name }: { name: ModeIconName }) {
       <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
     </svg>
   );
+}
+
+// PAY-002: header coin chip — signed-out sees nothing; signed-in always sees
+// the pill (even at 0) so the currency is discoverable.
+function PracticeMenuCoinChip() {
+  const bal = useCoinBalance();
+  if (!bal) return null;
+  return <CoinPill balance={bal.balance} nextResetAt={bal.nextResetAt} />;
 }

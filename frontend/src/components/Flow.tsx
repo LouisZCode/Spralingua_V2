@@ -568,10 +568,10 @@ type StoredRoundChoice = RoundPreset | number;
 
 const ROUND_STORAGE_KEY = "flow-rounds-v1";
 
-const ROUND_PRESETS: { key: RoundPreset; label: string }[] = [
-  { key: "10", label: "10" },
-  { key: "20", label: "20" },
-  { key: "inf", label: "∞" },
+const ROUND_PRESETS: { key: RoundPreset; label: string; costLabel: string }[] = [
+  { key: "10", label: "10", costLabel: "≈ 50 coins" },
+  { key: "20", label: "20", costLabel: "≈ 100 coins" },
+  { key: "inf", label: "∞", costLabel: "plays while your coins last" },
 ];
 
 function clampRounds(n: number): number {
@@ -1772,7 +1772,7 @@ function RoundPicker({
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        {ROUND_PRESETS.map(({ key, label }) => {
+        {ROUND_PRESETS.map(({ key, label, costLabel }) => {
           const selected = !customActive && presetChoice === key;
           return (
             <button
@@ -1780,14 +1780,15 @@ function RoundPicker({
               type="button"
               aria-pressed={selected}
               onClick={() => onPickPreset(key)}
-              className={`btn-3d rounded-3xl border-[3px] border-ink px-6 py-6 text-center font-display text-[28px] font-black transition ${
-                selected
-                  ? "bg-ink text-white"
-                  : "bg-white text-ink hover:bg-paper-warm"
+              className={`btn-3d rounded-3xl border-[3px] border-ink px-6 py-6 text-center transition ${
+                selected ? "bg-ink text-white" : "bg-white text-ink hover:bg-paper-warm"
               }`}
               style={inkShadow}
             >
-              {label}
+              <span className="font-display text-[28px] font-black">{label}</span>
+              <span className="mt-1 block font-body text-[11px] font-bold uppercase tracking-[0.14em] opacity-70">
+                {costLabel}
+              </span>
             </button>
           );
         })}

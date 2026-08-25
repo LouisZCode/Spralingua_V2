@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useRecorder } from "../shared/recorder";
 import { diffTokens, MarkedText } from "../shared/feedback";
 import { diffWords, segmentTranscript } from "../sprechen/slipDiff";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 import type {
   AnswerResult,
   Brief,
@@ -51,6 +53,7 @@ export default function Round2Panel({
   const [submitting, setSubmitting] = useState(false);
   const [softError, setSoftError] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
   const [result, setResult] = useState<AnsweredResult | null>(null);
 
   async function handleStop(blob: Blob) {
@@ -65,11 +68,16 @@ export default function Round2Panel({
       }
       setResult(res);
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -170,6 +178,11 @@ export default function Round2Panel({
                 : "answer out loud, in German"}
             </p>
           </>
+        )}
+        {insufficient && (
+          <div className="mt-3">
+            <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+          </div>
         )}
         {(recorder.error || failed || softError) && (
           <p className="text-center font-body text-[13px] font-semibold text-flag-red-deep">

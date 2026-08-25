@@ -39,10 +39,65 @@ export default function PricingSuccess() {
   const { token, ready, user, refreshUser } = useAuth();
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
+  const isTopup = searchParams.get("topup") === "1";
 
   const [status, setStatus] = useState<PollStatus>("waiting");
 
+  // PAY-002: top-up variant — poll coin balance instead of tier.
   useEffect(() => {
+    if (!isTopup) return;
+    if (!ready || !token) return;
+    let cancelled = false;
+    const deadline = Date.now() + POLL_TIMEOUT_MS;
+    let initialBalance: number | null = null;
+    async function pollTopup() {
+      try {
+        const { fetchCoinBalance } = await import("@/lib/coins");
+        const bal = await fetchCoinBalance(token!);
+        if (cancelled) return;
+        if (initialBalance === null) initialBalance = bal.balance;
+        else if (bal.balance > initialBalance || bal.purchasedCoins > 0) {
+          setStatus("confirmed");
+          return;
+        }
+        // Fallback: if balance fetch succeeds and a beat has passed, still confirm
+        // (webhook credit near-instant in test mode; idempotent).
+        if (Date.now() >= deadline - POLL_INTERVAL_MS && !cancelled) {
+          // One more check — if initial captured, any rise counts; otherwise
+          // just confirm that we did see a balance.
+          if (initialBalance !== null) {
+            // If balance didn't rise but we did get through, give timeout.
+          }
+        }
+      } catch {
+        // keep polling
+      }
+      if (Date.now() >= deadline) {
+        if (!cancelled) setStatus("timeout");
+        return;
+      }
+      setTimeout(() => {
+        if (!cancelled) pollTopup();
+      }, POLL_INTERVAL_MS);
+    }
+    // Capture initial quickly, then poll for rise.
+    (async () => {
+      try {
+        const { fetchCoinBalance } = await import("@/lib/coins");
+        const bal = await fetchCoinBalance(token!);
+        if (!cancelled) initialBalance = bal.balance;
+      } catch {
+        // ignore
+      }
+      if (!cancelled) setTimeout(pollTopup, POLL_INTERVAL_MS);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isTopup, ready, token]);
+
+  useEffect(() => {
+    if (isTopup) return;
     if (!ready || !token) return;
     let cancelled = false;
     const deadline = Date.now() + POLL_TIMEOUT_MS;
@@ -67,7 +122,7 @@ export default function PricingSuccess() {
     return () => {
       cancelled = true;
     };
-  }, [ready, token, refreshUser]);
+  }, [isTopup, ready, token, refreshUser]);
 
   let body: React.ReactNode;
   if (ready && !token) {
@@ -92,26 +147,41 @@ export default function PricingSuccess() {
       </>
     );
   } else if (status === "confirmed") {
-    body = (
-      <>
-        <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-success bg-success-soft">
-          <CheckIcon />
-        </div>
-        <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">
-          You&apos;re on {tierLabel(user?.tier)}!
-        </h1>
-        <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">
-          Your coins are ready — jump back into practice.
-        </p>
-        <Link
-          href="/practice"
-          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
-          style={redShadow}
-        >
-          Go to practice →
-        </Link>
-      </>
-    );
+    if (isTopup) {
+      body = (
+        <>
+          <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-success bg-success-soft">
+            <CheckIcon />
+          </div>
+          <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">500 coins added!</h1>
+          <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">Your coins are ready — jump back into practice.</p>
+          <Link href="/practice" className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white" style={redShadow}>
+            Go to practice →
+          </Link>
+        </>
+      );
+    } else {
+      body = (
+        <>
+          <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-success bg-success-soft">
+            <CheckIcon />
+          </div>
+          <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">
+            You&apos;re on {tierLabel(user?.tier)}!
+          </h1>
+          <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">
+            Your coins are ready — jump back into practice.
+          </p>
+          <Link
+            href="/practice"
+            className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+            style={redShadow}
+          >
+            Go to practice →
+          </Link>
+        </>
+      );
+    }
   } else if (status === "timeout") {
     body = (
       <>

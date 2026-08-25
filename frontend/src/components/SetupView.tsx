@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuth } from "./auth/AuthContext";
 import QuietRoomModal from "./QuietRoomModal";
+import { useCoinBalance } from "./shared/Coins";
 
 type PathKey = "A1" | "B1" | "DEV";
 
@@ -355,6 +357,9 @@ export default function SetupView({
           </div>
         </section>
 
+        {/* PAY-002: cost hint + balance line */}
+        <SetupCostNote />
+
         {/* CTA */}
         <button
           onClick={handleStart}
@@ -451,6 +456,22 @@ function NodeTile({
         </span>
       </button>
     </div>
+  );
+}
+
+// PAY-002: voice session cost note — max_exchanges is lesson-dependent and
+// not carried in the lesson list here, so show the generic per-exchange cost.
+function SetupCostNote() {
+  const bal = useCoinBalance();
+  if (!bal) return null;
+  return (
+    <p className="rise-in mt-4 text-center font-body text-[12px] text-ink-muted" style={{ animationDelay: "260ms" }}>
+      Voice sessions spend 15 coins per exchange · 🪙 {bal.balance} coins available
+      {" — "}
+      <Link href="/pricing" className="font-bold text-flag-red underline underline-offset-2">
+        Get more coins
+      </Link>
+    </p>
   );
 }
 

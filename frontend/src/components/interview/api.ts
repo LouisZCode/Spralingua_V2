@@ -11,6 +11,7 @@
 // raw snake_case JSON into a camelCase type at the boundary, same job any
 // api.ts would do facing a third-party API.
 import { HTTP_BASE } from "@/lib/api";
+import { InsufficientCoinsError } from "@/lib/coins";
 import { UnauthorizedError } from "../satzschmiede/api";
 
 export { UnauthorizedError };
@@ -176,6 +177,17 @@ async function request<T>(
   });
   if (res.status === 401) {
     throw new UnauthorizedError(path);
+  }
+  if (res.status === 402) {
+    const body = await res.clone().json().catch(() => null);
+    const detail = (body as { detail?: unknown })?.detail;
+    if (detail && typeof detail === "object") {
+      const d = detail as { code?: unknown; needed?: unknown; available?: unknown };
+      if (d.code === "insufficient_coins" && typeof d.needed === "number" && typeof d.available === "number") {
+        
+        throw new InsufficientCoinsError(d.needed, d.available);
+      }
+    }
   }
   if (!res.ok) {
     const detail = (await res.json().catch(() => null))?.detail;

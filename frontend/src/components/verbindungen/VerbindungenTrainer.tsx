@@ -7,6 +7,8 @@ import Glossable from "../shared/Glossable";
 import type { GlossInfo } from "../satzschmiede/api";
 import { FeedbackCard } from "../shared/feedback";
 import { playSound } from "../shared/sound";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer. `retry` marks the copy.
@@ -82,6 +84,7 @@ export default function VerbindungenTrainer({
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
   const [verdict, setVerdict] = useState<ChunkVerdict | null>(null);
   // The English gloss primes L1 interference ("from" → von where the chunk
   // wants bei), so it stays hidden until asked; grading always reveals it.
@@ -164,11 +167,16 @@ export default function VerbindungenTrainer({
         if (!flow) setQueue((q) => [...q, { ...item, retry: true }]);
       }
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -188,11 +196,16 @@ export default function VerbindungenTrainer({
       setVerdict(res);
       if (!item.retry) setMissed((m) => [...m, { item, chunk: res.chunk }]);
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -376,6 +389,11 @@ export default function VerbindungenTrainer({
                 {busy ? "Checking…" : "Check"}
               </button>
             </div>
+            {insufficient && (
+              <div className="mt-3">
+                <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+              </div>
+            )}
             {failed && (
               <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
                 {failed}

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useAuth } from "./auth/AuthContext";
 import { fetchStats, UnauthorizedError, type FocusPattern } from "./development/api";
 import { TEACHER_NAME } from "./shared/teacher";
+import { useCoinBalance } from "./shared/Coins";
 
 // AGENT-001 note 5: Clara's pre-session picker, the teacher counterpart to
 // TopicScreen. Instead of a topic pool, the cards are the learner's own error
@@ -17,12 +18,39 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-ink)",
 } as React.CSSProperties;
 
+// PAY-002: length picker costs (15 coins/exchange, same as tandem).
+const TEACHER_EXCHANGES_KEY = "teacher-exchanges-v1";
+const TEACHER_EXCHANGE_OPTIONS = [
+  { value: 5, label: "Short · 5 · 75 coins" },
+  { value: 10, label: "Classic · 10 · 150 coins" },
+  { value: 15, label: "Long · 15 · 225 coins" },
+] as const;
+
+function readTeacherExchanges(): number {
+  try {
+    const raw = parseInt(localStorage.getItem(TEACHER_EXCHANGES_KEY) ?? "", 10);
+    return raw === 5 || raw === 10 || raw === 15 ? raw : 10;
+  } catch {
+    return 10;
+  }
+}
+
 export default function TeacherTopicScreen({
   onStart,
 }: {
-  onStart: (topic: string) => void;
+  onStart: (topic: string, exchanges?: number) => void;
 }) {
-  const { token, signOut } = useAuth();
+  const { token, signOut, user } = useAuth();
+  // PAY-002: free tier cannot open Clara (developer bypasses).
+  const isFreeLocked = user?.tier === "free" && user?.role !== "developer";
+  const [teacherExchanges, setTeacherExchanges] = useState<number>(10);
+  useEffect(() => {
+    const stored = readTeacherExchanges();
+    if (stored !== 10) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTeacherExchanges(stored);
+    }
+  }, []);
   const [focus, setFocus] = useState<FocusPattern[]>([]);
   const [custom, setCustom] = useState<string>("");
   const [selectedCard, setSelectedCard] = useState<FocusPattern | null>(null);
@@ -169,44 +197,136 @@ export default function TeacherTopicScreen({
           />
         </div>
 
-        {/* Start, plus the low-key escape hatch that preserves today's
-            behaviour (Clara asks what you'd like to understand) — the only
-            path for a brand-new user with an empty ledger and nothing typed. */}
+        {/* PAY-002: free-tier lock panel — keep topic cards visible above */}
+        {isFreeLocked && (
+          <div className="rise-in mt-7 rounded-2xl border-[3px] border-ink bg-flag-gold-soft px-6 py-5" style={{ animationDelay: "240ms" }}>
+            <p className="font-display text-[16px] font-black text-ink">Clara is a Basic feature</p>
+            <p className="mt-1 font-body text-[14px] text-ink-soft">
+              Upgrade to chat with Clara — your grammar teacher who explains in English.
+            </p>
+            <Link
+              href="/pricing"
+              className="btn-3d mt-4 inline-flex rounded-2xl border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+              style={inkShadow}
+            >
+              See pricing →
+            </Link>
+          </div>
+        )}
+
+        {/* PAY-002: length picker (mirrors TopicScreen) — hidden when locked */}
+        {!isFreeLocked && (
+          <div className="rise-in mt-7 flex items-center gap-3" style={{ animationDelay: "240ms" }}>
+            <span className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
+              Length
+            </span>
+            <div className="inline-flex overflow-hidden rounded-full border-[3px] border-ink">
+              {TEACHER_EXCHANGE_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => {
+                    if (value === teacherExchanges) return;
+                    setTeacherExchanges(value);
+                    try {
+                      localStorage.setItem(TEACHER_EXCHANGES_KEY, String(value));
+                    } catch {}
+                  }}
+                  className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
+                    value === teacherExchanges ? "bg-ink text-white" : "bg-white text-ink hover:text-flag-red"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        {!isFreeLocked && <TeacherBalanceNote exchanges={teacherExchanges} />}
+
+        {/* Start — disabled when locked or insufficient coins */}
         <div
           className="rise-in mt-9 flex flex-col items-start gap-4"
           style={{ animationDelay: "260ms" }}
         >
-          <button
-            type="button"
-            onClick={() => onStart(effectiveTopic)}
-            disabled={!effectiveTopic}
-            className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-            style={inkShadow}
-          >
-            Start with {TEACHER_NAME}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.5}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              className="h-4 w-4"
-            >
-              <path d="M5 12h14M13 6l6 6-6 6" />
-            </svg>
-          </button>
+          {isFreeLocked ? (
+            <span className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-paper-warm px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-ink-muted sm:w-auto">
+              Locked — Basic required
+            </span>
+          ) : (
+            <TeacherStartButton
+              effectiveTopic={effectiveTopic}
+              exchanges={teacherExchanges}
+              onStart={onStart}
+            />
+          )}
 
-          <button
-            type="button"
-            onClick={() => onStart("")}
-            className="font-body text-[13px] font-bold text-ink-soft hover:text-ink"
-          >
-            I just want to talk →
-          </button>
+          {!isFreeLocked && (
+            <button
+              type="button"
+              onClick={() => onStart("", teacherExchanges)}
+              className="font-body text-[13px] font-bold text-ink-soft hover:text-ink"
+            >
+              I just want to talk →
+            </button>
+          )}
         </div>
       </main>
     </div>
+  );
+}
+
+// PAY-002: balance note below the teacher length picker.
+function TeacherBalanceNote({ exchanges }: { exchanges: number }) {
+  const bal = useCoinBalance();
+  if (!bal) return null;
+  const cost = exchanges * 15;
+  return (
+    <p className="rise-in mt-3 font-body text-[12px] text-ink-muted" style={{ animationDelay: "250ms" }}>
+      🪙 {bal.balance} coins · this chat costs {cost} coins
+      {bal.balance < cost && (
+        <>
+          {" "}
+          — <Link href="/pricing" className="font-bold text-flag-red underline underline-offset-2">Get more coins</Link>
+        </>
+      )}
+    </p>
+  );
+}
+
+function TeacherStartButton({
+  effectiveTopic,
+  exchanges,
+  onStart,
+}: {
+  effectiveTopic: string;
+  exchanges: number;
+  onStart: (topic: string, exchanges?: number) => void;
+}) {
+  const bal = useCoinBalance();
+  const cost = exchanges * 15;
+  const insufficient = bal !== null && bal.balance < cost;
+  const disabled = !effectiveTopic || insufficient;
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onStart(effectiveTopic, exchanges)}
+        disabled={disabled}
+        className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+        style={inkShadow}
+      >
+        Start with {TEACHER_NAME}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+          <path d="M5 12h14M13 6l6 6-6 6" />
+        </svg>
+      </button>
+      {insufficient && (
+        <p className="font-body text-[13px] font-semibold text-flag-red-deep">
+          Not enough coins — <Link href="/pricing" className="underline underline-offset-2">get more coins</Link> or pick a shorter chat.
+        </p>
+      )}
+    </>
   );
 }
 

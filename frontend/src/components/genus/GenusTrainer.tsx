@@ -13,6 +13,8 @@ import type {
 import VocabNudgePill, { type NudgeWord } from "../shared/VocabNudge";
 import { FeedbackCard } from "../shared/feedback";
 import { playSound } from "../shared/sound";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as ZeitfaerbungTrainer. `retry` marks the copy. An item counts as
@@ -131,6 +133,7 @@ export default function GenusTrainer({
   const [index, setIndex] = useState(0);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
 
   // Beat 1 — the drag. `drop` holds the CORRECT-drop verdict (wrong drops
   // only shake); `trapNote` shows "Falle!" when a trap just caught them.
@@ -243,11 +246,16 @@ export default function GenusTrainer({
         playSound("fail");
       }
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -271,11 +279,16 @@ export default function GenusTrainer({
       firstSlip();
       setDrop(res);
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -351,11 +364,16 @@ export default function GenusTrainer({
         }
       }
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setBusy(false);
     }
@@ -656,7 +674,12 @@ export default function GenusTrainer({
                     {guidance}
                   </p>
                 )}
-                {failed && (
+                {insufficient && (
+              <div className="mt-3">
+                <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+              </div>
+            )}
+            {failed && (
                   <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
                     {failed}
                   </p>

@@ -7,6 +7,8 @@ import GermanWay from "../shared/GermanWay";
 import Glossable from "../shared/Glossable";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { WordRejectedError, type GlossInfo } from "../satzschmiede/api";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 
 type Phase = "intro" | "scene" | "result";
 
@@ -123,6 +125,7 @@ export default function SzenarioTrainer({
   const [elapsed, setElapsed] = useState(0);
   const [verdict, setVerdict] = useState<StructureResult | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
   // SZEN-002: transcript / sentence weights / skeleton hide behind Details.
   const [showDetails, setShowDetails] = useState(false);
 
@@ -232,7 +235,10 @@ export default function SzenarioTrainer({
       setVerdict(res);
       setPhase("result");
     } catch (err) {
-      if (err instanceof WordRejectedError) {
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else if (err instanceof WordRejectedError) {
         // Learner-facing message from the backend ("We couldn't hear
         // anything…") — stay on "scene" so the learner can re-record.
         setFailed(err.message);
@@ -260,11 +266,16 @@ export default function SzenarioTrainer({
       setVerdict(res);
       setPhase("result");
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setChecking(false);
     }
@@ -690,7 +701,12 @@ export default function SzenarioTrainer({
               )}
             </>
           )}
-          {failed && (
+          {insufficient && (
+              <div className="mt-3">
+                <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+              </div>
+            )}
+            {failed && (
             <p className="text-center font-body text-[13px] font-semibold text-flag-red-deep">
               {failed}
             </p>

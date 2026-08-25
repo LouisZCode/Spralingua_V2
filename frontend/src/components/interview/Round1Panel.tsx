@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { useRecorder } from "../shared/recorder";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 import type { ComprehensionResult } from "./api";
 
 const redShadow = {
@@ -54,7 +56,8 @@ export default function Round1Panel({
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [softError, setSoftError] = useState<string | null>(null); // no_speech
-  const [failed, setFailed] = useState<string | null>(null); // network/HTTP failure
+  const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null); // network/HTTP failure
 
   const [attemptCount, setAttemptCount] = useState(0);
   const [outcome, setOutcome] = useState<Outcome>(null);
@@ -95,11 +98,16 @@ export default function Round1Panel({
         if (nextCount >= MAX_ATTEMPTS) setPendingPassed(false);
       }
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -170,6 +178,11 @@ export default function Round1Panel({
               </p>
             )}
           </>
+        )}
+        {insufficient && (
+          <div className="mt-3">
+            <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+          </div>
         )}
         {(recorder.error || failed || softError) && (
           <p className="text-center font-body text-[13px] font-semibold text-flag-red-deep">

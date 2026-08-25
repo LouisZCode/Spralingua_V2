@@ -16,6 +16,8 @@ import Glossable from "../shared/Glossable";
 import { useAuth } from "../auth/AuthContext";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { playSound } from "../shared/sound";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -270,6 +272,8 @@ export default function VocabTrainer({
   const [cues, setCues] = useState<Record<"der" | "die" | "das", string[]> | null>(null);
   const [showCues, setShowCues] = useState(false);
   const wrongTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // PAY-002: insufficient coins for this attempt
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
 
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
@@ -561,7 +565,10 @@ export default function VocabTrainer({
       if (isRehearsal && err instanceof UnauthorizedError) {
         authSignOut();
       }
-      if (err instanceof WordRejectedError) {
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else if (err instanceof WordRejectedError) {
         // Learner-facing sentence from the backend ("We couldn't hear
         // anything…") — show it verbatim.
         setAttemptError(err.message);
@@ -913,6 +920,12 @@ export default function VocabTrainer({
 
   return (
     <div className="mx-auto w-full max-w-xl">
+      {/* PAY-002: out-of-coins panel */}
+      {insufficient && (
+        <div className="mb-4">
+          <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+        </div>
+      )}
       {/* Progress + navigation. Practice counts down today's queue; browse
           keeps the old free walk over the whole pool. */}
       <div className="mb-2 flex items-center justify-between">

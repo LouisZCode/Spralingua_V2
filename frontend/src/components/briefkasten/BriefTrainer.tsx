@@ -14,6 +14,8 @@ import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
 import GermanWay from "../shared/GermanWay";
 import type { GlossInfo } from "../satzschmiede/api";
+import { InsufficientCoinsError } from "@/lib/coins";
+import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 
 type Phase = "writing" | "hints" | "feedback";
 
@@ -348,6 +350,7 @@ export default function BriefTrainer({
   );
   const [submitting, setSubmitting] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
+  const [insufficient, setInsufficient] = useState<{ needed: number; available: number } | null>(null);
 
   const words = wordCount(text);
   const inRange = words >= letter.wordTarget.min && words <= letter.wordTarget.max;
@@ -370,11 +373,16 @@ export default function BriefTrainer({
         setPhase("hints");
       }
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -397,11 +405,16 @@ export default function BriefTrainer({
         setPhase("feedback");
       }
     } catch (err) {
-      setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
-      );
+      if (err instanceof InsufficientCoinsError) {
+        setInsufficient({ needed: err.needed, available: err.available });
+        refreshCoins();
+      } else {
+        setFailed(
+          err instanceof Error && err.message && !err.message.includes("failed (")
+            ? err.message
+            : "Couldn't check that — try again in a moment."
+        );
+      }
     } finally {
       setSubmitting(false);
     }
@@ -620,7 +633,12 @@ export default function BriefTrainer({
             </p>
           </div>
 
-          {failed && (
+          {insufficient && (
+              <div className="mt-3">
+                <OutOfCoinsPanel needed={insufficient.needed} available={insufficient.available} onDismiss={() => setInsufficient(null)} />
+              </div>
+            )}
+            {failed && (
             <p className="mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
               {failed}
             </p>
