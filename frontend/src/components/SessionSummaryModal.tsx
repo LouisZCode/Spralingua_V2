@@ -124,7 +124,7 @@ const STATUS_STYLES: Record<
   { dot: string; text: string }
 > = {
   success: { dot: "bg-success", text: "text-success" },
-  info: { dot: "bg-ink", text: "text-ink" },
+  info: { dot: "bg-ink-fill", text: "text-ink" },
   warning: { dot: "bg-flag-gold-deep", text: "text-flag-gold-deep" },
 };
 
@@ -231,7 +231,7 @@ export default function SessionSummaryModal({
     // Backdrop locks the chat underneath. No click-through, no Esc, no
     // X icon — single explicit action below.
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 p-4 backdrop-blur-[2px]">
-      <div className="lift-panel max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-ink bg-elevated">
+      <div className="lift-panel max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-line bg-elevated">
         <div className="px-7 py-8">
           {lessonTitle && (
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink-muted">
@@ -263,10 +263,10 @@ export default function SessionSummaryModal({
 
           <button
             onClick={onClose}
-            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-on-fill"
+            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-on-fill"
             style={
               {
-                ["--shadow-color"]: "var(--color-flag-red-deep)",
+                ["--shadow-color"]: "var(--color-red-line)",
               } as React.CSSProperties
             }
           >
@@ -291,9 +291,9 @@ function EvalSection({
 }) {
   if (status === "loading") {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
+      <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4">
         <div className="flex items-center gap-3 font-body text-[14px] text-ink-soft">
-          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-ink" />
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-line" />
           {slowLoading
             ? "Still analyzing — this can take a minute…"
             : "Analyzing your session…"}
@@ -304,7 +304,7 @@ function EvalSection({
 
   if (status === "no-id" || status === "timeout") {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4 font-body text-[14px] text-ink-muted">
+      <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4 font-body text-[14px] text-ink-muted">
         Results unavailable right now.
       </div>
     );
@@ -323,7 +323,7 @@ function EvalSection({
           briefingGoal={briefingGoal}
         />
       ) : (
-        <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
+        <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4">
           <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
             Evaluation
           </p>
@@ -344,7 +344,7 @@ function EvalSection({
         // `goals` also carries `locale`, while unscored lessons (lesson_zero,
         // welcome) have neither and should show nothing here.
         hasGoals && (
-          <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
+          <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4">
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
               Pronunciation
             </p>
@@ -390,7 +390,7 @@ function GoalEvalBlock({
   };
 
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-5">
+    <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-5">
       <div className="flex items-center gap-3">
         <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
           Goal evaluation
@@ -430,8 +430,8 @@ function GoalEvalBlock({
                   aria-hidden
                   className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
                     g.passed
-                      ? "bg-success text-on-fill"
-                      : "bg-flag-red text-on-fill"
+                      ? "bg-success-fill text-on-fill"
+                      : "bg-flag-red-fill text-on-fill"
                   }`}
                 >
                   {g.passed ? "✓" : "✗"}
@@ -459,8 +459,8 @@ function PassBadge({ passed }: { passed: boolean }) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 font-display text-[11px] font-black uppercase tracking-[0.2em] ${
         passed
-          ? "border-success bg-success text-on-fill"
-          : "border-flag-red bg-flag-red text-on-fill"
+          ? "border-success bg-success-fill text-on-fill"
+          : "border-flag-red bg-flag-red-fill text-on-fill"
       }`}
     >
       <span className="inline-block h-1.5 w-1.5 rounded-full bg-card" />
@@ -495,7 +495,7 @@ function PronEvalBlock({
   const score = Math.round(agg.accuracy_score);
 
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-5">
+    <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-5">
       <div className="flex items-center gap-3">
         <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
           Pronunciation

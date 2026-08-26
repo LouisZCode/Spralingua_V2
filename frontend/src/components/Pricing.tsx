@@ -66,7 +66,7 @@ const PLANS: Plan[] = [
 ];
 
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 export default function Pricing() {
@@ -126,7 +126,7 @@ export default function Pricing() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href={signedIn ? "/practice" : "/"} className="flex items-center gap-2.5">
             <Image
@@ -179,7 +179,7 @@ export default function Pricing() {
 
         {notConfigured && (
           <div
-            className="rise-in mx-auto mt-8 max-w-lg rounded-2xl border-[3px] border-ink bg-paper-warm px-5 py-3 text-center font-body text-[13px] font-semibold text-ink-soft"
+            className="rise-in mx-auto mt-8 max-w-lg rounded-2xl border-[3px] border-line bg-paper-warm px-5 py-3 text-center font-body text-[13px] font-semibold text-ink-soft"
             style={{ animationDelay: "40ms" }}
           >
             Payments are not live yet — check back soon.
@@ -263,10 +263,10 @@ function PricingCard({
 
   return (
     <div
-      className={`flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
+      className={`flex flex-col rounded-[28px] border-[3px] border-line p-7 ${
         isCurrent ? "bg-flag-gold-soft" : "bg-card"
       }`}
-      style={{ boxShadow: "0 5px 0 var(--color-ink)" }}
+      style={{ boxShadow: "0 5px 0 var(--color-line)" }}
     >
       <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
         {plan.kicker}
@@ -308,9 +308,9 @@ function PricingCard({
 }
 
 const activeBtn =
-  "btn-3d w-full rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:cursor-default disabled:opacity-60";
+  "btn-3d w-full rounded-[16px] border-[3px] border-line bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:cursor-default disabled:opacity-60";
 const inertBtn =
-  "block w-full rounded-[16px] border-[3px] border-ink bg-paper-warm px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted";
+  "block w-full rounded-[16px] border-[3px] border-line bg-paper-warm px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted";
 const noteText =
   "block text-center font-body text-[12px] font-semibold text-ink-muted";
 
@@ -429,8 +429,8 @@ function TopupBanner({
   }
   return (
     <div
-      className="rise-in mt-6 flex flex-col items-start gap-4 rounded-[28px] border-[3px] border-ink bg-paper-warm p-6 sm:flex-row sm:items-center sm:justify-between"
-      style={{ boxShadow: "0 5px 0 var(--color-ink)", animationDelay: "120ms" }}
+      className="rise-in mt-6 flex flex-col items-start gap-4 rounded-[28px] border-[3px] border-line bg-paper-warm p-6 sm:flex-row sm:items-center sm:justify-between"
+      style={{ boxShadow: "0 5px 0 var(--color-line)", animationDelay: "120ms" }}
     >
       <div>
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Top-up</p>
@@ -438,11 +438,11 @@ function TopupBanner({
         <p className="mt-1 font-body text-[14px] text-ink-soft">€2 for a full extra day of coins — 500 coins, whenever you need them.</p>
       </div>
       {!signedIn ? (
-        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+        <span className="block shrink-0 rounded-[16px] border-[3px] border-line bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
           Sign in to top up
         </span>
       ) : notConfigured ? (
-        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+        <span className="block shrink-0 rounded-[16px] border-[3px] border-line bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
           Not live yet
         </span>
       ) : (
@@ -450,7 +450,7 @@ function TopupBanner({
           type="button"
           onClick={handleTopup}
           disabled={busy || (pending !== null && (pending as string) !== "topup")}
-          className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-60"
+          className="btn-3d shrink-0 rounded-[16px] border-[3px] border-line bg-card px-5 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-60"
           style={inkShadow}
         >
           {busy ? "Opening…" : "Top up — €2"}

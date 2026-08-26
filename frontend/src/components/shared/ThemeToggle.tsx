@@ -7,7 +7,7 @@ import { useEffect, useState } from "react";
 import { activeTheme, applyTheme, type Theme } from "./theme";
 
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 export default function ThemeToggle() {
@@ -37,7 +37,7 @@ export default function ThemeToggle() {
       onClick={toggle}
       aria-pressed={dark}
       title={dark ? "Switch to light mode" : "Switch to dark mode"}
-      className="btn-3d inline-flex h-10 w-10 items-center justify-center rounded-2xl border-[3px] border-ink bg-card text-ink"
+      className="btn-3d inline-flex h-10 w-10 items-center justify-center rounded-2xl border-[3px] border-line bg-card text-ink"
       style={inkShadow}
     >
       {dark ? (

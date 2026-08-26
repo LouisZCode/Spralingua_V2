@@ -98,7 +98,7 @@ export default function Development() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -208,7 +208,7 @@ function AllExercisesCard() {
           <Link
             key={ex.href}
             href={ex.href}
-            className="flex items-baseline justify-between gap-3 rounded-2xl border-[3px] border-ink bg-card px-4 py-2.5 transition-colors hover:bg-flag-gold-soft"
+            className="flex items-baseline justify-between gap-3 rounded-2xl border-[3px] border-line bg-card px-4 py-2.5 transition-colors hover:bg-flag-gold-soft"
           >
             <span className="font-display text-[14px] font-black tracking-tight text-ink">
               {ex.name}
@@ -301,13 +301,13 @@ function FocusCard({ focus }: { focus: FocusPattern[] }) {
           {focus.map((f) => (
             <li
               key={f.patternId}
-              className="rounded-[20px] border-[3px] border-ink bg-card p-4"
+              className="rounded-[20px] border-[3px] border-line bg-card p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="font-display text-[16px] font-black leading-tight text-ink">
                   {f.label}
                 </p>
-                <span className="shrink-0 rounded-full border-2 border-ink bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-ink">
+                <span className="shrink-0 rounded-full border-2 border-line bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-ink">
                   {f.count7d > 0
                     ? `${f.count7d}× this week`
                     : `${f.lifetime}× overall`}
@@ -331,7 +331,7 @@ function FocusCard({ focus }: { focus: FocusPattern[] }) {
 
 function ErrorsCard({ errors }: { errors: TopError[] }) {
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7">
+    <section className="rounded-[28px] border-[3px] border-line bg-card p-7">
       <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
         Biggest errors
       </h2>
@@ -353,12 +353,12 @@ function ErrorsCard({ errors }: { errors: TopError[] }) {
 
 function ErrorRow({ error }: { error: TopError }) {
   return (
-    <li className="rounded-[16px] border-[3px] border-ink bg-card px-4 py-3">
+    <li className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className="font-body text-[14px] font-bold text-ink">
           {error.label}
         </span>
-        <span className="shrink-0 rounded-full border-2 border-ink bg-flag-red-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-flag-red-deep">
+        <span className="shrink-0 rounded-full border-2 border-line bg-flag-red-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-flag-red-deep">
           {error.count}×
         </span>
       </div>
@@ -411,7 +411,7 @@ function sessionDate(iso: string): string {
 function RecentSessionsCard({ sessions }: { sessions: RecentSession[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7">
+    <section className="rounded-[28px] border-[3px] border-line bg-card p-7">
       <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
         Recent sessions
       </h2>
@@ -449,7 +449,7 @@ function SessionRow({
     retired.length > 0 || practiced.length > 0 || newErrors.length > 0;
 
   return (
-    <li className="rounded-[16px] border-[3px] border-ink bg-card">
+    <li className="rounded-[16px] border-[3px] border-line bg-card">
       <button
         type="button"
         onClick={onToggle}
@@ -466,7 +466,7 @@ function SessionRow({
         </span>
         {hasNotes ? (
           <span className="flex shrink-0 items-center gap-2">
-            <span className="rounded-full border-2 border-ink bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-ink">
+            <span className="rounded-full border-2 border-line bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] text-ink">
               {newErrors.length > 0
                 ? `${newErrors.length} to work on`
                 : "notes"}
@@ -603,19 +603,19 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
   const empty = buckets.every((b) => b.attempts === 0);
 
   return (
-    <section className="card-lift rounded-[28px] border-[3px] border-ink bg-card p-7">
+    <section className="rounded-[28px] border-[3px] border-line bg-card p-7">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
           Your attempts
         </h2>
-        <div className="inline-flex overflow-hidden rounded-full border-[3px] border-ink">
+        <div className="inline-flex overflow-hidden rounded-full border-[3px] border-line">
           {(["day", "week"] as const).map((v) => (
             <button
               key={v}
               type="button"
               onClick={() => setView(v)}
               className={`px-3.5 py-1 font-display text-[11px] font-black uppercase tracking-[0.14em] transition-colors ${
-                v === view ? "bg-ink text-on-fill" : "bg-card text-ink hover:text-flag-red"
+                v === view ? "bg-ink-fill text-on-fill" : "bg-card text-ink hover:text-flag-red"
               }`}
             >
               {v === "day" ? "Days" : "Weeks"}
@@ -627,8 +627,8 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
       <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
         {(
           [
-            ["bg-ink", "Attempts"],
-            ["bg-flag-red", "Mistakes"],
+            ["bg-ink-fill", "Attempts"],
+            ["bg-flag-red-fill", "Mistakes"],
             ["bg-success", "First-try correct"],
           ] as const
         ).map(([dot, label]) => (
@@ -651,11 +651,11 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
                   with no gap between buckets they join into one continuous
                   baseline, so zero days read as flat ground instead of
                   floating nubs. */}
-              <div className="flex h-32 w-full items-end justify-center gap-[3px] border-b-2 border-ink">
+              <div className="flex h-32 w-full items-end justify-center gap-[3px] border-b-2 border-line">
                 {(
                   [
-                    [b.attempts, "bg-ink"],
-                    [b.mistakes, "bg-flag-red"],
+                    [b.attempts, "bg-ink-fill"],
+                    [b.mistakes, "bg-flag-red-fill"],
                     [b.firstTryCorrect, "bg-success"],
                   ] as const
                 ).map(([value, color], j) =>
@@ -688,7 +688,7 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
 
 function EmptyActivityCard() {
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center">
+    <section className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center">
       <p className="font-display text-[18px] font-black tracking-tight text-ink">
         No activity yet
       </p>
@@ -697,8 +697,8 @@ function EmptyActivityCard() {
       </p>
       <Link
         href="/practice"
-        className="btn-3d mt-5 inline-flex items-center gap-2 rounded-[16px] border-[3px] border-ink bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-fixed"
-        style={{ ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties}
+        className="btn-3d mt-5 inline-flex items-center gap-2 rounded-[16px] border-[3px] border-line bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-fixed"
+        style={{ ["--shadow-color"]: "var(--color-line)" } as React.CSSProperties}
       >
         Go practice
       </Link>

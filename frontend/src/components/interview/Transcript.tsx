@@ -62,7 +62,7 @@ export default function Transcript({
 
   if (!segments.length) {
     return fallbackText ? (
-      <div className="max-h-[220px] overflow-y-auto rounded-[18px] border-[3px] border-ink bg-card px-5 py-4">
+      <div className="max-h-[220px] overflow-y-auto rounded-[18px] border-[3px] border-line bg-card px-5 py-4">
         <p className="font-body text-[15px] leading-relaxed text-ink">{fallbackText}</p>
       </div>
     ) : (
@@ -73,7 +73,7 @@ export default function Transcript({
   }
 
   return (
-    <div className="max-h-[220px] overflow-y-auto rounded-[18px] border-[3px] border-ink bg-card px-5 py-4">
+    <div className="max-h-[220px] overflow-y-auto rounded-[18px] border-[3px] border-line bg-card px-5 py-4">
       {segments.map((seg, i) => {
         const isCenter = center?.idx === i;
         const isActive = isCenter && center?.active;

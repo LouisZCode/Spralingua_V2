@@ -16,10 +16,10 @@ import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 type Phase = "drill" | "done";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // Multi-sentence answers need more room than Satzschmiede's one-sentence cap,
@@ -272,7 +272,7 @@ export default function SprechenTrainer({
     const clean = results.filter((r) => r?.passed).length;
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center"
         style={inkShadow}
       >
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -307,7 +307,7 @@ export default function SprechenTrainer({
           <button
             type="button"
             onClick={onNewRound}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             New round
@@ -334,7 +334,7 @@ export default function SprechenTrainer({
       )
     : null;
   const tint = !solved
-    ? "border-ink bg-card"
+    ? "border-line bg-card"
     : verdict.passed
       ? "border-success bg-success-soft"
       : "border-flag-red bg-flag-red-soft";
@@ -394,8 +394,8 @@ export default function SprechenTrainer({
                     onClick={recording ? stopRecording : startRecording}
                     className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] ${
                       recording
-                        ? "animate-pulse border-flag-red-deep bg-card text-flag-red"
-                        : "border-flag-red-deep bg-flag-red text-on-fill"
+                        ? "animate-pulse border-red-line bg-card text-flag-red"
+                        : "border-red-line bg-flag-red-fill text-on-fill"
                     }`}
                     style={redShadow}
                   >
@@ -409,7 +409,7 @@ export default function SprechenTrainer({
                       onClick={discardRecording}
                       aria-label="Discard recording"
                       title="Discard recording"
-                      className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-card font-display text-[18px] font-black text-ink"
+                      className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-line bg-card font-display text-[18px] font-black text-ink"
                       style={inkShadow}
                     >
                       ✕
@@ -458,7 +458,7 @@ export default function SprechenTrainer({
               <button
                 type="button"
                 onClick={next}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
@@ -469,7 +469,7 @@ export default function SprechenTrainer({
           <div className="mt-6">
             {/* The raw transcript IS part of the exercise — what you actually
                 said, not what you meant to say. */}
-            <div className="rounded-[18px] border-[3px] border-ink bg-card px-4 py-3">
+            <div className="rounded-[18px] border-[3px] border-line bg-card px-4 py-3">
               <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                 What we heard
               </p>
@@ -483,7 +483,7 @@ export default function SprechenTrainer({
                         className="rounded-[6px] bg-success-soft px-1 py-0.5 box-decoration-clone"
                       >
                         {seg.text}
-                        <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-success font-body text-[9px] font-black text-on-fill">
+                        <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-success-fill font-body text-[9px] font-black text-on-fill">
                           ✓
                         </sup>
                       </span>
@@ -495,7 +495,7 @@ export default function SprechenTrainer({
                       className="rounded-[6px] bg-flag-red-soft px-1 py-0.5 box-decoration-clone"
                     >
                       {seg.text}
-                      <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-flag-red font-body text-[9px] font-black text-on-fill">
+                      <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-flag-red-fill font-body text-[9px] font-black text-on-fill">
                         {(seg.index ?? 0) + 1}
                       </sup>
                     </span>
@@ -515,7 +515,7 @@ export default function SprechenTrainer({
                 {verdict.constraintMet ? "✓ Task done" : "✕ Task"}
               </span>
               {verdict.hits > 0 && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border-[2px] border-ink bg-card px-3 py-1 font-body text-[11px] font-black uppercase tracking-[0.14em] text-ink">
+                <span className="inline-flex items-center gap-1.5 rounded-full border-[2px] border-line bg-card px-3 py-1 font-body text-[11px] font-black uppercase tracking-[0.14em] text-ink">
                   structure fired ×{verdict.hits}
                 </span>
               )}
@@ -531,10 +531,10 @@ export default function SprechenTrainer({
                 {verdict.slips.map((s, i) => (
                   <li
                     key={i}
-                    className="rounded-[16px] border-[3px] border-ink bg-card px-4 py-3"
+                    className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3"
                   >
                     <div className="flex items-start gap-2.5">
-                      <span className="mt-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-flag-red font-body text-[10px] font-black text-on-fill">
+                      <span className="mt-1 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-flag-red-fill font-body text-[10px] font-black text-on-fill">
                         {i + 1}
                       </span>
                       <div>
@@ -607,7 +607,7 @@ export default function SprechenTrainer({
               <button
                 type="button"
                 onClick={next}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}

@@ -83,14 +83,14 @@ export function LegalTable({
   rows: React.ReactNode[][];
 }) {
   return (
-    <div className="mt-4 overflow-x-auto rounded-[16px] border-[3px] border-ink">
+    <div className="mt-4 overflow-x-auto rounded-[16px] border-[3px] border-line">
       <table className="w-full min-w-[560px] border-collapse font-body text-[14px] leading-relaxed">
         <thead>
           <tr className="bg-paper-warm">
             {headers.map((h, i) => (
               <th
                 key={i}
-                className="border-b-[3px] border-ink px-4 py-3 text-left font-display text-[12px] font-black uppercase tracking-[0.06em] text-ink"
+                className="border-b-[3px] border-line px-4 py-3 text-left font-display text-[12px] font-black uppercase tracking-[0.06em] text-ink"
               >
                 {h}
               </th>

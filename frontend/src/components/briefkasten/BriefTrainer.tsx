@@ -25,10 +25,10 @@ import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 type Phase = "writing" | "hints" | "feedback";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 const CATEGORY_LABEL: Record<HintItem["category"], string> = {
@@ -172,9 +172,9 @@ function PointsChecklist({
               aria-hidden
               className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-[2px] font-black text-[11px] ${
                 !known
-                  ? "border-ink/25 text-transparent"
+                  ? "border-line/25 text-transparent"
                   : isCovered
-                    ? "border-success bg-success text-on-fill"
+                    ? "border-success bg-success-fill text-on-fill"
                     : "border-flag-red bg-card text-flag-red"
               }`}
             >
@@ -249,14 +249,14 @@ function LetterPanel({
 }) {
   return (
     <div
-      className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+      className="rounded-[28px] border-[3px] border-line bg-card p-7"
       style={inkShadow}
     >
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
           From {letter.sender.name} · {letter.sender.relation}
         </p>
-        <span className="inline-flex items-center rounded-full border-[2px] border-ink bg-card px-3 py-0.5 font-body text-[10px] font-black uppercase tracking-[0.16em] text-ink-muted">
+        <span className="inline-flex items-center rounded-full border-[2px] border-line bg-card px-3 py-0.5 font-body text-[10px] font-black uppercase tracking-[0.16em] text-ink-muted">
           {letter.level.toUpperCase()} · {letter.register}
         </span>
       </div>
@@ -311,7 +311,7 @@ function Footer({
         <button
           type="button"
           onClick={onNewLetter}
-          className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
+          className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
           style={redShadow}
         >
           {label}
@@ -497,7 +497,7 @@ export default function BriefTrainer({
         onAdd={onAdd}
       />
     ) : (
-      <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-center">
+      <div className="mt-6 rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3 text-center">
         <p className="font-body text-[13px] leading-snug text-ink-soft">
           {feedbackResult.score >= 90
             ? "Nothing to Germanize — this letter was German through and through. Perfect!"
@@ -511,11 +511,11 @@ export default function BriefTrainer({
     return (
       <div>
         <div
-          className="mx-auto max-w-[560px] rounded-[28px] border-[3px] border-ink bg-card p-7"
+          className="mx-auto max-w-[560px] rounded-[28px] border-[3px] border-line bg-card p-7"
           style={inkShadow}
         >
           <div className="text-center">
-            <span className="inline-flex items-center rounded-full border-[2px] border-ink bg-ink px-4 py-1.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill">
+            <span className="inline-flex items-center rounded-full border-[2px] border-line bg-ink-fill px-4 py-1.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill">
               {feedbackResult.score}/100
             </span>
             <p className="mt-3 font-display text-[18px] font-black leading-snug text-ink">
@@ -529,7 +529,7 @@ export default function BriefTrainer({
           </div>
 
           <div className="mt-6 space-y-4">
-            <div className="rounded-[18px] border-[3px] border-ink bg-card px-4 py-3">
+            <div className="rounded-[18px] border-[3px] border-line bg-card px-4 py-3">
               <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                 What you wrote
               </p>
@@ -538,13 +538,13 @@ export default function BriefTrainer({
               </div>
             </div>
             {nothingToCorrect ? (
-              <div className="rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
+              <div className="rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3">
                 <p className="font-body text-[13px] leading-snug text-ink-soft">
                   Nothing to correct — this letter is grammatically clean.
                 </p>
               </div>
             ) : (
-              <div className="rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
+              <div className="rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3">
                 <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                   Corrected
                 </p>
@@ -571,7 +571,7 @@ export default function BriefTrainer({
                 {feedbackResult.explanations.map((e: Explanation, i: number) => (
                   <li
                     key={i}
-                    className="rounded-[16px] border-[3px] border-ink bg-card px-4 py-3"
+                    className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3"
                   >
                     <p className="font-body text-[13px] font-semibold text-flag-red-deep">
                       {e.error}
@@ -589,7 +589,7 @@ export default function BriefTrainer({
           )}
 
           {feedbackResult.focusPoints.length > 0 && (
-            <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-card px-4 py-4">
+            <div className="mt-6 rounded-[18px] border-[3px] border-line bg-card px-4 py-4">
               <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                 Focus for next time
               </p>
@@ -619,7 +619,7 @@ export default function BriefTrainer({
         <LetterPanel letter={letter} onGloss={onGloss} onAdd={onAdd} />
 
         <div
-          className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+          className="rounded-[28px] border-[3px] border-line bg-card p-7"
           style={inkShadow}
         >
           {/* The writing brief. Present in both phases — attempt 1 shows it
@@ -644,7 +644,7 @@ export default function BriefTrainer({
               onChange={(e) => setText(e.target.value)}
               rows={11}
               placeholder="Schreib deine Antwort auf Deutsch…"
-              className="w-full resize-y rounded-[18px] border-[3px] border-ink bg-card p-4 font-body text-[15px] leading-relaxed text-ink outline-none focus:border-flag-red-deep"
+              className="w-full resize-y rounded-[18px] border-[3px] border-line bg-card p-4 font-body text-[15px] leading-relaxed text-ink outline-none focus:border-red-line"
             />
             <p
               className={`mt-2 font-body text-[11px] font-bold uppercase tracking-[0.16em] ${
@@ -673,7 +673,7 @@ export default function BriefTrainer({
                 type="button"
                 disabled={!canSubmit}
                 onClick={submitFirst}
-                className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
+                className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
                 style={redShadow}
               >
                 {submitting ? "Sending…" : "Send letter"}
@@ -683,7 +683,7 @@ export default function BriefTrainer({
                 type="button"
                 disabled={!canSubmit}
                 onClick={submitSecond}
-                className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
+                className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
                 style={redShadow}
               >
                 {submitting ? "Sending…" : "Send the improved version"}
@@ -698,7 +698,7 @@ export default function BriefTrainer({
           where the learner's own letter was about to go back in. */}
       {phase === "hints" && hintResult && (
         <div
-          className="mt-6 rounded-[28px] border-[3px] border-ink bg-card p-7"
+          className="mt-6 rounded-[28px] border-[3px] border-line bg-card p-7"
           style={inkShadow}
         >
           <p className="font-display text-[15px] font-black leading-snug text-ink">
@@ -733,7 +733,7 @@ export default function BriefTrainer({
                 return (
                   <div
                     key={cat}
-                    className="rounded-[16px] border-[3px] border-ink bg-card px-4 py-3"
+                    className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3"
                   >
                     <p className="font-body text-[10px] font-black uppercase tracking-[0.2em] text-flag-red">
                       {CATEGORY_LABEL[cat]}

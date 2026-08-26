@@ -9,7 +9,7 @@ import { PARTNERS, type PartnerId } from "./shared/tandem";
 // to): paper grid, ink borders, btn-3d cards. One card per registry entry,
 // so partner #3 is a data edit in shared/tandem.ts.
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // Letter-avatar accents per partner — Lena gold (her chat-bubble world),
@@ -31,7 +31,7 @@ export default function PartnerScreen({
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/practice" className="flex items-center gap-2.5">
             <Image
@@ -75,11 +75,11 @@ export default function PartnerScreen({
               key={p.id}
               type="button"
               onClick={() => onPick(p.id)}
-              className="btn-3d flex flex-col items-start gap-4 rounded-3xl border-[3px] border-ink bg-card px-6 py-6 text-left transition hover:bg-paper-warm"
+              className="btn-3d flex flex-col items-start gap-4 rounded-3xl border-[3px] border-line bg-card px-6 py-6 text-left transition hover:bg-paper-warm"
               style={inkShadow}
             >
               <span
-                className={`flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-ink font-display text-[28px] font-black text-ink ${AVATAR_BG[p.id]}`}
+                className={`flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-line font-display text-[28px] font-black text-ink ${AVATAR_BG[p.id]}`}
               >
                 {p.name[0]}
               </span>

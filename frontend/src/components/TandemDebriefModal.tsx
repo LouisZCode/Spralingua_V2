@@ -72,7 +72,7 @@ const messageCrash = (name: string) =>
 
 const STATUS_STYLES: Record<CompletionStatus, { dot: string; text: string }> = {
   success: { dot: "bg-success", text: "text-success" },
-  info: { dot: "bg-ink", text: "text-ink" },
+  info: { dot: "bg-ink-fill", text: "text-ink" },
   warning: { dot: "bg-flag-gold-deep", text: "text-flag-gold-deep" },
 };
 
@@ -187,7 +187,7 @@ export default function TandemDebriefModal({
     // Backdrop locks the chat underneath. No click-through, no Esc, no X icon —
     // single explicit action below (mirrors SessionSummaryModal).
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 p-4 backdrop-blur-[2px]">
-      <div className="lift-panel max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-ink bg-elevated">
+      <div className="lift-panel max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-line bg-elevated">
         <div className="px-7 py-8">
           {lessonTitle && (
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink-muted">
@@ -219,10 +219,10 @@ export default function TandemDebriefModal({
 
           <button
             onClick={onClose}
-            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-on-fill"
+            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-on-fill"
             style={
               {
-                ["--shadow-color"]: "var(--color-flag-red-deep)",
+                ["--shadow-color"]: "var(--color-red-line)",
               } as React.CSSProperties
             }
           >
@@ -247,9 +247,9 @@ function DebriefSection({
 }) {
   if (status === "loading") {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
+      <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4">
         <div className="flex items-center gap-3 font-body text-[14px] text-ink-soft">
-          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-ink" />
+          <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-line" />
           {slowLoading
             ? "Still looking — this can take a minute…"
             : `${partnerName} is looking over your chat…`}
@@ -260,7 +260,7 @@ function DebriefSection({
 
   if (status === "no-id" || status === "timeout") {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4 font-body text-[14px] text-ink-muted">
+      <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4 font-body text-[14px] text-ink-muted">
         Notes unavailable right now.
       </div>
     );
@@ -273,7 +273,7 @@ function DebriefSection({
   // say nothing clinical.
   if (!debrief) {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4 font-body text-[14px] text-ink-soft">
+      <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4 font-body text-[14px] text-ink-soft">
         {partnerName} enjoyed the conversation — no notes this time.
       </div>
     );
@@ -291,7 +291,7 @@ function DebriefSection({
 
   if (nothing) {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4 font-body text-[15px] text-ink-soft">
+      <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-4 font-body text-[15px] text-ink-soft">
         A clean, easy chat — nothing to flag today. Keep it up. 🎉
       </div>
     );
@@ -345,7 +345,7 @@ function RetiredBanner({
 
 function PracticedBlock({ patterns }: { patterns: DebriefPattern[] }) {
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-5">
+    <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-5">
       <div className="flex items-center gap-3">
         <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
           Grammar you practiced
@@ -369,7 +369,7 @@ function PracticedBlock({ patterns }: { patterns: DebriefPattern[] }) {
                 <span
                   aria-hidden
                   className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-on-fill ${
-                    p.produced_correctly ? "bg-success" : "bg-flag-gold-deep"
+                    p.produced_correctly ? "bg-success-fill" : "bg-flag-gold-deep"
                   }`}
                 >
                   {p.produced_correctly ? "✓" : "↻"}
@@ -412,7 +412,7 @@ function PracticedBlock({ patterns }: { patterns: DebriefPattern[] }) {
 
 function NewErrorsBlock({ errors }: { errors: DebriefNewError[] }) {
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-5">
+    <div className="rounded-[22px] border-[3px] border-line bg-card px-5 py-5">
       <div className="flex items-center gap-3">
         <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
           New to work on

@@ -7,10 +7,10 @@ import Transcript from "./Transcript";
 import type { AnswerResult, ComprehensionResult, InterviewItem } from "./api";
 
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 
 const KIND_LABEL: Record<string, string> = {
@@ -266,14 +266,14 @@ export default function InterviewPlayer({
         onSeeked={resyncListenTime}
       />
 
-      <div className="rounded-[20px] border-[3px] border-ink bg-card px-5 py-4">
+      <div className="rounded-[20px] border-[3px] border-line bg-card px-5 py-4">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={togglePlay}
             disabled={!audioUrl}
             aria-label={playing ? "Pause" : "Play"}
-            className="btn-3d flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-ink bg-card font-display text-[16px] font-black text-ink disabled:opacity-40"
+            className="btn-3d flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-[3px] border-line bg-card font-display text-[16px] font-black text-ink disabled:opacity-40"
             style={inkShadow}
           >
             {playing ? "❚❚" : "▶"}
@@ -352,7 +352,7 @@ export default function InterviewPlayer({
           type="button"
           disabled={chunkIndex <= 0}
           onClick={() => setChunkIndex((i) => i - 1)}
-          className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-ink bg-card px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-line bg-card px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink disabled:cursor-not-allowed disabled:opacity-40"
           style={inkShadow}
         >
           ← Prev
@@ -361,7 +361,7 @@ export default function InterviewPlayer({
           type="button"
           disabled={chunkIndex >= item.chunks.length - 1}
           onClick={() => setChunkIndex((i) => i + 1)}
-          className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-red-line bg-flag-red-fill px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
           style={redShadow}
         >
           Next →

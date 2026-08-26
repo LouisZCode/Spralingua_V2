@@ -13,10 +13,10 @@ import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 type Phase = "intro" | "scene" | "result";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // One spoken answer to a scene question — same recording cap as Sprechen
@@ -31,7 +31,7 @@ const SENTENCE_WEIGHT_DOT: Record<"light" | "medium" | "heavy", string> = {
   light: "bg-success",
   // No flag-yellow design token exists yet — plain Tailwind amber stands in.
   medium: "bg-flag-gold",
-  heavy: "bg-flag-red",
+  heavy: "bg-flag-red-fill",
 };
 
 // Shown once, before the first question — same one-time-rules convention as
@@ -310,7 +310,7 @@ export default function SzenarioTrainer({
   if (phase === "intro") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7"
         style={inkShadow}
       >
         <h2 className="font-display text-[20px] font-black tracking-tight text-ink">
@@ -334,7 +334,7 @@ export default function SzenarioTrainer({
             onStart();
             setPhase("scene");
           }}
-          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
+          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
           style={redShadow}
         >
           Start
@@ -356,7 +356,7 @@ export default function SzenarioTrainer({
           </p>
         </div>
         <div
-          className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
+          className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center"
           style={inkShadow}
         >
           <p className="font-body text-[14px] font-semibold text-flag-red-deep">
@@ -366,7 +366,7 @@ export default function SzenarioTrainer({
             <button
               type="button"
               onClick={next}
-              className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+              className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
               style={inkShadow}
             >
               Next
@@ -391,14 +391,14 @@ export default function SzenarioTrainer({
       StructureResult["verdict"],
       { label: string; cls: string }
     > = {
-      clear: { label: "✓ Clear", cls: "border-success bg-success text-on-fill" },
+      clear: { label: "✓ Clear", cls: "border-success bg-success-fill text-on-fill" },
       a_bit_heavy: {
         label: "A bit heavy",
         cls: "border-flag-gold-deep bg-flag-gold text-ink-fixed",
       },
       overcomplicated: {
         label: "Overcomplicated",
-        cls: "border-flag-red-deep bg-flag-red text-on-fill",
+        cls: "border-red-line bg-flag-red-fill text-on-fill",
       },
     };
     const badge = VERDICT_BADGE[verdict.verdict];
@@ -417,7 +417,7 @@ export default function SzenarioTrainer({
         </div>
 
         <div
-          className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+          className="rounded-[28px] border-[3px] border-line bg-card p-7"
           style={inkShadow}
         >
           {/* SZEN-002: the instant verdict IS the screen — badge, coach
@@ -432,7 +432,7 @@ export default function SzenarioTrainer({
               >
                 {badge.label}
               </span>
-              <span className="inline-flex items-center rounded-full border-[2px] border-ink bg-card px-3 py-1 font-body text-[10px] font-black uppercase tracking-[0.18em] text-ink-muted">
+              <span className="inline-flex items-center rounded-full border-[2px] border-line bg-card px-3 py-1 font-body text-[10px] font-black uppercase tracking-[0.18em] text-ink-muted">
                 {verdict.levelRead}
               </span>
             </div>
@@ -440,7 +440,7 @@ export default function SzenarioTrainer({
               {verdict.coachMessage}
             </p>
             {bestSimpler?.simpler && (
-              <div className="mt-4 rounded-[14px] border-[2px] border-ink/20 bg-card px-4 py-3 text-left">
+              <div className="mt-4 rounded-[14px] border-[2px] border-line/20 bg-card px-4 py-3 text-left">
                 <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                   Try it lighter
                 </p>
@@ -468,7 +468,7 @@ export default function SzenarioTrainer({
             <button
               type="button"
               onClick={() => setShowDetails((v) => !v)}
-              className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+              className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
               style={inkShadow}
             >
               {showDetails ? "Hide details ▴" : "Details ▾"}
@@ -479,7 +479,7 @@ export default function SzenarioTrainer({
             <>
               {/* The raw transcript IS part of the exercise — what you actually
                   said, not what you meant to say. */}
-              <div className="mt-4 rounded-[18px] border-[3px] border-ink bg-card px-4 py-3">
+              <div className="mt-4 rounded-[18px] border-[3px] border-line bg-card px-4 py-3">
                 <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                   What we heard
                 </p>
@@ -500,7 +500,7 @@ export default function SzenarioTrainer({
                     {verdict.sentences.map((s, i) => (
                       <li
                         key={i}
-                        className="rounded-[16px] border-[3px] border-ink bg-card px-4 py-3"
+                        className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3"
                       >
                         <div className="flex items-start gap-2.5">
                           <span
@@ -525,7 +525,7 @@ export default function SzenarioTrainer({
               {/* Skeleton — the extracted shape of the answer: the core claim,
                   the supporting points, where it jumped off track, and the
                   vocabulary it anchored on. */}
-              <div className="mt-6 rounded-[18px] border-[3px] border-ink bg-card px-4 py-4">
+              <div className="mt-6 rounded-[18px] border-[3px] border-line bg-card px-4 py-4">
                 <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                   Skeleton
                 </p>
@@ -572,7 +572,7 @@ export default function SzenarioTrainer({
                       {verdict.skeleton.vokabelAnker.map((w) => (
                         <span
                           key={w}
-                          className="rounded-full border-[2px] border-ink bg-card px-4 py-1.5 font-body text-[13px] font-black tracking-wide text-ink"
+                          className="rounded-full border-[2px] border-line bg-card px-4 py-1.5 font-body text-[13px] font-black tracking-wide text-ink"
                         >
                           {w}
                         </span>
@@ -599,7 +599,7 @@ export default function SzenarioTrainer({
             <button
               type="button"
               onClick={next}
-              className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
+              className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
               style={redShadow}
             >
               {flow ? "Next" : "New question"}
@@ -628,7 +628,7 @@ export default function SzenarioTrainer({
       </div>
 
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7"
         style={inkShadow}
       >
         <p className="mx-auto max-w-[480px] text-center font-body text-[14px] italic leading-relaxed text-ink-muted">
@@ -655,8 +655,8 @@ export default function SzenarioTrainer({
                   onClick={recording ? stopRecording : startRecording}
                   className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] ${
                     recording
-                      ? "animate-pulse border-flag-red-deep bg-card text-flag-red"
-                      : "border-flag-red-deep bg-flag-red text-on-fill"
+                      ? "animate-pulse border-red-line bg-card text-flag-red"
+                      : "border-red-line bg-flag-red-fill text-on-fill"
                   }`}
                   style={redShadow}
                 >
@@ -670,7 +670,7 @@ export default function SzenarioTrainer({
                     onClick={discardRecording}
                     aria-label="Discard recording"
                     title="Discard recording"
-                    className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-card font-display text-[18px] font-black text-ink"
+                    className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-line bg-card font-display text-[18px] font-black text-ink"
                     style={inkShadow}
                   >
                     ✕

@@ -28,7 +28,7 @@ export type ExerciseVerdict = {
 };
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 
 export default function ExerciseCard({
@@ -77,7 +77,7 @@ export default function ExerciseCard({
     <div
       role="dialog"
       aria-label="Practice exercise"
-      className="pointer-events-auto w-full max-w-[400px] rounded-[24px] border-[3px] border-ink bg-paper-warm p-5 shadow-[0_8px_0_var(--color-ink)]"
+      className="pointer-events-auto w-full max-w-[400px] rounded-[24px] border-[3px] border-line bg-paper-warm p-5 shadow-[0_8px_0_var(--color-line)]"
     >
       <div className="flex items-center justify-between gap-3">
         <span className="font-body text-[10px] font-black uppercase tracking-[0.28em] text-ink-muted">
@@ -126,13 +126,13 @@ export default function ExerciseCard({
               autoCorrect="off"
               spellCheck={false}
               maxLength={200}
-              className="min-w-0 flex-1 rounded-[16px] border-[3px] border-ink bg-card px-3.5 py-2.5 font-body text-[15px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red disabled:opacity-60"
+              className="min-w-0 flex-1 rounded-[16px] border-[3px] border-line bg-card px-3.5 py-2.5 font-body text-[15px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red disabled:opacity-60"
             />
             <button
               type="button"
               onClick={check}
               disabled={busy || !answer.trim()}
-              className="btn-3d inline-flex items-center justify-center gap-2 rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
+              className="btn-3d inline-flex items-center justify-center gap-2 rounded-[16px] border-[3px] border-red-line bg-flag-red-fill px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
               style={redShadow}
             >
               {busy && (

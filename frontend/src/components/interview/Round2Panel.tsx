@@ -15,10 +15,10 @@ import type {
 } from "./api";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 type AnsweredResult = Extract<AnswerResult, { kind: "answered" }>;
@@ -103,7 +103,7 @@ export default function Round2Panel({
 
   return (
     <div
-      className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+      className="rounded-[28px] border-[3px] border-line bg-card p-7"
       style={inkShadow}
     >
       <p className="text-center font-body text-[11px] font-bold uppercase tracking-[0.24em] text-flag-red">
@@ -115,7 +115,7 @@ export default function Round2Panel({
       </p>
 
       {showQuestionCard && (
-        <div className="mt-4 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
+        <div className="mt-4 rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3">
           <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
             Question
           </p>
@@ -152,8 +152,8 @@ export default function Round2Panel({
                 onClick={recorder.recording ? recorder.stop : startRecording}
                 className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] ${
                   recorder.recording
-                    ? "animate-pulse border-flag-red-deep bg-card text-flag-red"
-                    : "border-flag-red-deep bg-flag-red text-on-fill"
+                    ? "animate-pulse border-red-line bg-card text-flag-red"
+                    : "border-red-line bg-flag-red-fill text-on-fill"
                 }`}
                 style={redShadow}
               >
@@ -165,7 +165,7 @@ export default function Round2Panel({
                   onClick={recorder.cancel}
                   aria-label="Discard recording"
                   title="Discard recording"
-                  className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-card font-display text-[18px] font-black text-ink"
+                  className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-line bg-card font-display text-[18px] font-black text-ink"
                   style={inkShadow}
                 >
                   ✕
@@ -236,9 +236,9 @@ function GoalsChecklist({
               aria-hidden
               className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border-[2px] font-black text-[11px] ${
                 !known
-                  ? "border-ink/25 text-transparent"
+                  ? "border-line/25 text-transparent"
                   : item?.covered
-                    ? "border-success bg-success text-on-fill"
+                    ? "border-success bg-success-fill text-on-fill"
                     : "border-flag-red bg-card text-flag-red"
               }`}
             >
@@ -282,7 +282,7 @@ function GrammarCard({
   const { segments } = segmentTranscript(transcript, slipQuotes, []);
 
   return (
-    <div className="rounded-[18px] border-[3px] border-ink bg-card px-4 py-3">
+    <div className="rounded-[18px] border-[3px] border-line bg-card px-4 py-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
           Grammar
@@ -314,7 +314,7 @@ function GrammarCard({
                   className="rounded-[6px] bg-flag-red-soft px-1 py-0.5 box-decoration-clone"
                 >
                   {seg.text}
-                  <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-flag-red font-body text-[9px] font-black text-on-fill">
+                  <sup className="ml-1 inline-flex h-[15px] w-[15px] items-center justify-center rounded-full bg-flag-red-fill font-body text-[9px] font-black text-on-fill">
                     {(seg.index ?? 0) + 1}
                   </sup>
                 </span>
@@ -326,10 +326,10 @@ function GrammarCard({
               {grammar.slips.map((s, i) => (
                 <li
                   key={i}
-                  className="rounded-[14px] border-[2px] border-ink/15 bg-paper-warm px-3 py-2.5"
+                  className="rounded-[14px] border-[2px] border-line/15 bg-paper-warm px-3 py-2.5"
                 >
                   <div className="flex items-start gap-2">
-                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-flag-red font-body text-[10px] font-black text-on-fill">
+                    <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-flag-red-fill font-body text-[10px] font-black text-on-fill">
                       {i + 1}
                     </span>
                     <div>
@@ -395,7 +395,7 @@ function IdiomCard({
   const hasChanges = diff ? diff.corrected.some((t) => t.changed) : false;
 
   return (
-    <div className="rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3">
+    <div className="rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3">
       <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
         How would a German say it?
       </p>
@@ -419,7 +419,7 @@ function IdiomCard({
                 {idiom.suggestions.map((s, i) => (
                   <li
                     key={i}
-                    className="rounded-[14px] border-[2px] border-ink/15 bg-card px-3 py-2.5"
+                    className="rounded-[14px] border-[2px] border-line/15 bg-card px-3 py-2.5"
                   >
                     <p className="font-body text-[13px] italic leading-snug text-ink-soft">
                       &ldquo;{s.original}&rdquo;

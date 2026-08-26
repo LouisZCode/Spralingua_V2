@@ -3,7 +3,7 @@
 import type { InterviewItemSummary } from "./api";
 
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // Item picker — one card per recording in the learner's personal audio pool.
@@ -59,7 +59,7 @@ export default function ItemPicker({
               key={item.id}
               type="button"
               onClick={() => onPick(item.id)}
-              className="btn-3d flex flex-col items-start gap-3 rounded-3xl border-[3px] border-ink bg-card px-6 py-6 text-left transition hover:bg-paper-warm"
+              className="btn-3d flex flex-col items-start gap-3 rounded-3xl border-[3px] border-line bg-card px-6 py-6 text-left transition hover:bg-paper-warm"
               style={inkShadow}
             >
               <div className="flex w-full items-start justify-between gap-3">
@@ -67,7 +67,7 @@ export default function ItemPicker({
                   {item.company}
                 </span>
                 {item.level && (
-                  <span className="shrink-0 rounded-full border-2 border-ink bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-black uppercase tracking-[0.1em] text-ink">
+                  <span className="shrink-0 rounded-full border-2 border-line bg-flag-gold-soft px-2.5 py-0.5 font-body text-[11px] font-black uppercase tracking-[0.1em] text-ink">
                     {item.level}
                   </span>
                 )}

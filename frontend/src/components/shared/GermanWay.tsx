@@ -32,7 +32,7 @@ import type { GlossInfo } from "../satzschmiede/api";
 type Rephrase = { natural: string | null };
 
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 export default function GermanWay({
@@ -186,13 +186,13 @@ export default function GermanWay({
     open &&
     (result?.natural && naturalDiff ? (
       variant === "card" ? (
-        <div className="mt-3 rounded-[18px] border-[3px] border-ink bg-paper-warm px-4 py-3 text-left">
+        <div className="mt-3 rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3 text-left">
           <p className="font-body text-[15px] leading-relaxed text-ink">
             <MarkedText tokens={naturalDiff} mark="blue" renderToken={renderToken} />
           </p>
         </div>
       ) : (
-        <div className="mt-1.5 max-w-[420px] rounded-[14px] border-[2px] border-ink/40 bg-paper-warm px-3 py-2 text-left">
+        <div className="mt-1.5 max-w-[420px] rounded-[14px] border-[2px] border-line/40 bg-paper-warm px-3 py-2 text-left">
           <p className="font-body text-[13px] leading-snug text-ink">
             <MarkedText tokens={naturalDiff} mark="blue" renderToken={renderToken} />
           </p>
@@ -217,7 +217,7 @@ export default function GermanWay({
           type="button"
           onClick={ask}
           disabled={state === "loading"}
-          className="btn-3d inline-flex items-center rounded-full border-[2px] border-ink bg-card px-3 py-1 font-display text-[10px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-50"
+          className="btn-3d inline-flex items-center rounded-full border-[2px] border-line bg-card px-3 py-1 font-display text-[10px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-50"
           style={inkShadow}
         >
           {state === "loading"
@@ -239,7 +239,7 @@ export default function GermanWay({
         type="button"
         onClick={ask}
         disabled={state === "loading"}
-        className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-60"
+        className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-60"
         style={inkShadow}
       >
         {state === "loading"

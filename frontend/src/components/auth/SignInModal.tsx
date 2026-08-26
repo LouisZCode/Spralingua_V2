@@ -30,14 +30,14 @@ export default function SignInModal({
       onClick={onClose}
     >
       <div
-        className="lift-panel relative w-full max-w-sm rounded-[28px] border-[3px] border-ink bg-elevated p-8 text-center"
+        className="lift-panel relative w-full max-w-sm rounded-[28px] border-[3px] border-line bg-elevated p-8 text-center"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-[2px] border-ink text-ink transition-colors hover:bg-ink hover:text-on-fill"
+          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-[2px] border-line text-ink transition-colors hover:bg-ink-fill hover:text-on-fill"
         >
           <svg
             viewBox="0 0 24 24"

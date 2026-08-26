@@ -14,10 +14,10 @@ export default function QuietRoomModal({ onClose }: { onClose: () => void }) {
       onClick={onClose}
     >
       <div
-        className="lift-panel relative w-full max-w-sm rounded-[28px] border-[3px] border-ink bg-elevated p-8 text-center"
+        className="lift-panel relative w-full max-w-sm rounded-[28px] border-[3px] border-line bg-elevated p-8 text-center"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border-[3px] border-ink bg-flag-gold">
+        <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border-[3px] border-line bg-flag-gold">
           <svg
             viewBox="0 0 24 24"
             fill="none"
@@ -62,10 +62,10 @@ export default function QuietRoomModal({ onClose }: { onClose: () => void }) {
         <button
           type="button"
           onClick={onClose}
-          className="btn-3d mt-7 w-full rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[15px] font-black uppercase tracking-[0.18em] text-on-fill"
+          className="btn-3d mt-7 w-full rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-6 py-4 font-display text-[15px] font-black uppercase tracking-[0.18em] text-on-fill"
           style={
             {
-              ["--shadow-color"]: "var(--color-flag-red-deep)",
+              ["--shadow-color"]: "var(--color-red-line)",
             } as React.CSSProperties
           }
         >

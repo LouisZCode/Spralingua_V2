@@ -184,7 +184,7 @@ export default function Szenario() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -222,7 +222,7 @@ export default function Szenario() {
               fake it here. Same pill styling family as the removed
               SZEN-005 toggle. */}
           <div
-            className="mt-3 inline-flex items-center gap-1.5 rounded-full border-[3px] border-ink bg-card px-4 py-1.5"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-full border-[3px] border-line bg-card px-4 py-1.5"
             title="Set your level on the practice menu"
           >
             <span className="font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink">

@@ -18,7 +18,7 @@ import { explainAttempt, flagVerdict } from "./satzschmiede/api";
 import type { DeckCard } from "./satzschmiede/deck";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 
 // Verbformen — GRAM-002 Exercise C: the verb principal-parts drill. The
@@ -179,7 +179,7 @@ export default function Verbformen() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -233,7 +233,7 @@ export default function Verbformen() {
             </p>
             <Link
               href="/satzschmiede"
-              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
+              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
               style={redShadow}
             >
               Open Satzschmiede

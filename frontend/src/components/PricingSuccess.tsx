@@ -21,10 +21,10 @@ const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 20000;
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 type PollStatus = "waiting" | "confirmed" | "timeout";
@@ -137,7 +137,7 @@ export default function PricingSuccess() {
         </p>
         <Link
           href="/"
-          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-card px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
+          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-line bg-card px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
           style={inkShadow}
         >
           Go to Spralingua
@@ -153,7 +153,7 @@ export default function PricingSuccess() {
           </div>
           <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">500 coins added!</h1>
           <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">Your coins are ready — jump back into practice.</p>
-          <Link href="/practice" className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill" style={redShadow}>
+          <Link href="/practice" className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill" style={redShadow}>
             Go to practice →
           </Link>
         </>
@@ -172,7 +172,7 @@ export default function PricingSuccess() {
           </p>
           <Link
             href="/practice"
-            className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
+            className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             Go to practice →
@@ -183,7 +183,7 @@ export default function PricingSuccess() {
   } else if (status === "timeout") {
     body = (
       <>
-        <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-ink bg-paper-warm">
+        <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-line bg-paper-warm">
           <ClockIcon />
         </div>
         <h1 className="mt-6 font-display text-[24px] font-black leading-tight text-ink">
@@ -196,7 +196,7 @@ export default function PricingSuccess() {
         </p>
         <Link
           href="/practice"
-          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-card px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
+          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-line bg-card px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
           style={inkShadow}
         >
           Go to practice →
@@ -206,8 +206,8 @@ export default function PricingSuccess() {
   } else {
     body = (
       <>
-        <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-ink bg-flag-gold-soft">
-          <span className="inline-block h-7 w-7 animate-spin rounded-full border-[3px] border-ink-faint border-t-ink" />
+        <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-line bg-flag-gold-soft">
+          <span className="inline-block h-7 w-7 animate-spin rounded-full border-[3px] border-ink-faint border-t-line" />
         </div>
         <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">
           Payment received
@@ -231,7 +231,7 @@ export default function PricingSuccess() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="relative border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="relative border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center px-6 py-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Image

@@ -31,7 +31,7 @@ export function CoinPill({
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-ink bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink"
+      className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-line bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink"
       title={
         resetLabel ? `Coins return at ${resetLabel}` : undefined
       }
@@ -61,7 +61,7 @@ export function OutOfCoinsPanel({
   return (
     <div
       role="status"
-      className="rounded-2xl border-[3px] border-ink bg-paper-warm px-5 py-4"
+      className="rounded-2xl border-[3px] border-line bg-paper-warm px-5 py-4"
     >
       <p className="font-body text-[14px] font-semibold leading-relaxed text-ink">
         You need <span className="font-black">{needed} coins</span> for this,

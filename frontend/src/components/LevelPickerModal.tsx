@@ -64,7 +64,7 @@ export default function LevelPickerModal({
 
   return createPortal(
     <div className="fixed inset-0 z-[100] grid place-items-center bg-scrim/60 p-6 backdrop-blur-sm">
-      <div className="lift-panel relative w-full max-w-md rounded-[28px] border-[3px] border-ink bg-elevated p-8 text-center">
+      <div className="lift-panel relative w-full max-w-md rounded-[28px] border-[3px] border-line bg-elevated p-8 text-center">
         <h2 className="font-display text-[24px] font-black leading-tight text-ink">
           Where are you with German?
         </h2>
@@ -80,7 +80,7 @@ export default function LevelPickerModal({
               type="button"
               disabled={saving !== null}
               onClick={() => choose(o.level)}
-              className="btn-3d rounded-[20px] border-[3px] border-ink bg-paper px-5 py-4 text-left disabled:opacity-60"
+              className="btn-3d rounded-[20px] border-[3px] border-line bg-paper px-5 py-4 text-left disabled:opacity-60"
             >
               <span className="block font-display text-[15px] font-black uppercase tracking-[0.12em] text-ink">
                 {saving === o.level ? "Saving…" : o.title}

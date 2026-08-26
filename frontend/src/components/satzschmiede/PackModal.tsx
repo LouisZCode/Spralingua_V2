@@ -28,14 +28,14 @@ export default function PackModal({
       onClick={onClose}
     >
       <div
-        className="lift-panel relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-[3px] border-ink bg-elevated p-8"
+        className="lift-panel relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-[3px] border-line bg-elevated p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-[2px] border-ink text-ink transition-colors hover:bg-ink hover:text-on-fill"
+          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-[2px] border-line text-ink transition-colors hover:bg-ink-fill hover:text-on-fill"
         >
           <svg
             viewBox="0 0 24 24"
@@ -64,7 +64,7 @@ export default function PackModal({
             onUnauthorized={onUnauthorized}
           />
 
-          <div className="mt-8 border-t-[3px] border-ink pt-6">
+          <div className="mt-8 border-t-[3px] border-line pt-6">
             <h3 className="text-center font-display text-[18px] font-black leading-tight text-ink">
               Or add a whole pack
             </h3>

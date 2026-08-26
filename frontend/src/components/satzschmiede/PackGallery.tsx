@@ -13,14 +13,14 @@ import {
 // packs (shared canonical cards) simply top up what's missing.
 const KIND_CHIP: Record<PackSummary["kind"], string> = {
   level: "bg-flag-gold text-ink-fixed",
-  situation: "bg-flag-red text-on-fill",
+  situation: "bg-flag-red-fill text-on-fill",
 };
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 export default function PackGallery({
@@ -109,14 +109,14 @@ export default function PackGallery({
           return (
             <div
               key={pack.id}
-              className="flex flex-col rounded-[24px] border-[3px] border-ink bg-card p-5 shadow-[0_5px_0_var(--color-ink)]"
+              className="flex flex-col rounded-[24px] border-[3px] border-line bg-card p-5 shadow-[0_5px_0_var(--color-line)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-display text-[20px] font-black leading-tight tracking-tight text-ink">
                   {pack.title}
                 </h3>
                 <span
-                  className={`inline-flex shrink-0 items-center rounded-full border-[2px] border-ink px-2.5 py-0.5 font-body text-[10px] font-black uppercase tracking-[0.16em] ${KIND_CHIP[pack.kind]}`}
+                  className={`inline-flex shrink-0 items-center rounded-full border-[2px] border-line px-2.5 py-0.5 font-body text-[10px] font-black uppercase tracking-[0.16em] ${KIND_CHIP[pack.kind]}`}
                 >
                   {pack.level ?? pack.kind}
                 </span>
@@ -132,7 +132,7 @@ export default function PackGallery({
                   {partial && ` · ${pack.ownedCount} in your pool`}
                 </span>
                 {owned ? (
-                  <span className="inline-flex items-center rounded-[16px] border-[3px] border-ink bg-success-soft px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-success">
+                  <span className="inline-flex items-center rounded-[16px] border-[3px] border-line bg-success-soft px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-success">
                     Added ✓
                   </span>
                 ) : (
@@ -140,7 +140,7 @@ export default function PackGallery({
                     type="button"
                     onClick={() => handleAdd(pack)}
                     disabled={busy !== null}
-                    className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
+                    className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-red-line bg-flag-red-fill px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
                     style={redShadow}
                   >
                     {busy === pack.id
@@ -161,7 +161,7 @@ export default function PackGallery({
           <button
             type="button"
             onClick={onPractice}
-            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-line bg-card px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
             style={inkShadow}
           >
             Practice your pool →

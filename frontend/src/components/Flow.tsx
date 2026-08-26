@@ -113,10 +113,10 @@ import {
 import { postModeComplete } from "./development/api";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // FLOW-001/FLOW-006: the nine drills this mode draws from, plus Szenario
@@ -1456,7 +1456,7 @@ export default function Flow() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -1519,7 +1519,7 @@ export default function Flow() {
                     <button
                       type="button"
                       onClick={() => setFinished(true)}
-                      className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+                      className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
                       style={inkShadow}
                     >
                       Finish
@@ -1738,7 +1738,7 @@ function SummaryCard({
   const rows = ALL_KINDS.filter((k) => perExercise[k].done > 0);
   return (
     <div
-      className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
+      className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center"
       style={inkShadow}
     >
       <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -1766,7 +1766,7 @@ function SummaryCard({
       <div className="mt-7 flex items-center justify-center">
         <Link
           href="/practice"
-          className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+          className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-line bg-card px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
           style={inkShadow}
         >
           ← Back to menu
@@ -1817,9 +1817,9 @@ function RoundPicker({
               type="button"
               aria-pressed={selected}
               onClick={() => onPickPreset(key)}
-              className={`btn-3d rounded-3xl border-[3px] border-ink px-6 py-6 text-center transition ${
+              className={`btn-3d rounded-3xl border-[3px] border-line px-6 py-6 text-center transition ${
                 selected
-                  ? "bg-ink text-on-fill"
+                  ? "bg-ink-fill text-on-fill"
                   : "bg-card text-ink hover:bg-paper-warm"
               }`}
               style={inkShadow}
@@ -1849,7 +1849,7 @@ function RoundPicker({
           value={customText}
           onChange={(e) => onCustomChange(e.target.value)}
           placeholder="1–50"
-          className="w-24 rounded-2xl border-[3px] border-ink bg-card px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+          className="w-24 rounded-2xl border-[3px] border-line bg-card px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
         />
       </div>
 
@@ -1857,7 +1857,7 @@ function RoundPicker({
         <button
           type="button"
           onClick={onStart}
-          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill"
+          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-red-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill"
           style={redShadow}
         >
           Start

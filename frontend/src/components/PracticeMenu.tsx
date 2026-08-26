@@ -21,7 +21,7 @@ import {
 // trainer (/satzschmiede). Both destinations run their own auth guard, so this
 // page is purely a chooser.
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // REC-001: where each recommended pillar sends the learner.
@@ -211,7 +211,7 @@ export default function PracticeMenu() {
       />
 
       {/* Top bar — same wordmark as the landing header */}
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -248,7 +248,7 @@ export default function PracticeMenu() {
             <button
               type="button"
               onClick={() => setAskLevel(true)}
-              className="rounded-full border-[3px] border-ink bg-paper-warm px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink"
+              className="rounded-full border-[3px] border-line bg-paper-warm px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-ink"
               title="Change your level"
             >
               {user?.level ?? "Set level"}
@@ -282,7 +282,7 @@ export default function PracticeMenu() {
             style={{ animationDelay: "40ms" }}
           >
             <div
-              className={`flex items-center gap-2 rounded-2xl border-[3px] border-ink px-4 py-2 ${
+              className={`flex items-center gap-2 rounded-2xl border-[3px] border-line px-4 py-2 ${
                 streak.practicedToday
                   ? "bg-flag-gold text-ink-fixed"
                   : "bg-card text-ink"
@@ -321,7 +321,7 @@ export default function PracticeMenu() {
               {Array.from({ length: streak.modesRequired }, (_, i) => (
                 <div
                   key={i}
-                  className={`h-3 flex-1 rounded-full border-[3px] border-ink transition-colors duration-300 ease-out ${
+                  className={`h-3 flex-1 rounded-full border-[3px] border-line transition-colors duration-300 ease-out ${
                     i < meterDisplay
                       ? meterDisplay >= streak.modesRequired
                         ? "bg-success"
@@ -451,7 +451,7 @@ export default function PracticeMenu() {
             </div>
             <Link
               href={REC_TARGETS[rec.pillar].href}
-              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-line bg-card px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
               style={inkShadow}
             >
               {REC_TARGETS[rec.pillar].cta} →
@@ -461,10 +461,10 @@ export default function PracticeMenu() {
 
         <Link
           href="/development"
-          className="rise-in btn-3d mt-6 flex items-center gap-5 rounded-[24px] border-[3px] border-ink bg-paper-warm px-6 py-5"
+          className="rise-in btn-3d mt-6 flex items-center gap-5 rounded-[24px] border-[3px] border-line bg-paper-warm px-6 py-5"
           style={{ ...inkShadow, animationDelay: "200ms" }}
         >
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-[3px] border-ink bg-ink text-on-fill">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-[3px] border-line bg-ink-fill text-on-fill">
             <ChartIcon />
           </div>
           <div className="flex-1">
@@ -573,9 +573,9 @@ const MODE_ACCENT_STYLES: Record<
   "red" | "gold" | "ink",
   { chip: string; wash: string }
 > = {
-  red: { chip: "bg-flag-red text-on-fill", wash: "wash-red" },
+  red: { chip: "bg-flag-red-fill text-on-fill", wash: "wash-red" },
   gold: { chip: "bg-flag-gold text-ink-fixed", wash: "wash-gold" },
-  ink: { chip: "bg-ink text-on-fill", wash: "wash-ink" },
+  ink: { chip: "bg-ink-fill text-on-fill", wash: "wash-ink" },
 };
 
 function ModeCard({
@@ -606,7 +606,7 @@ function ModeCard({
   return (
     <Link
       href={href}
-      className={`btn-3d card-lift flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
+      className={`btn-3d flex flex-col rounded-[28px] border-[3px] border-line p-7 ${
         done ? "bg-flag-gold-soft" : `bg-card ${wash}`
       }`}
       style={inkShadow}
@@ -614,7 +614,7 @@ function ModeCard({
       <div className="flex items-center justify-between">
         <div className="relative">
           <div
-            className={`grid h-14 w-14 place-items-center rounded-2xl border-[3px] border-ink ${chip}`}
+            className={`grid h-14 w-14 place-items-center rounded-2xl border-[3px] border-line ${chip}`}
           >
             <ModeIcon name={icon} />
           </div>
@@ -622,7 +622,7 @@ function ModeCard({
               white check reads against every chip color, unlike a colored
               badge which would wash out on the gold/red tiles. */}
           {done && (
-            <div className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border-[3px] border-ink bg-ink">
+            <div className="absolute -right-2 -top-2 grid h-6 w-6 place-items-center rounded-full border-[3px] border-line bg-ink-fill">
               <svg
                 viewBox="0 0 24 24"
                 fill="none"

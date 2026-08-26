@@ -10,7 +10,7 @@ import {
 import type { Card } from "./deck";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 
 // "Forge your own word" (SATZ-002 Phase 2) — the learner types any German
@@ -92,12 +92,12 @@ export default function AddWordForm({
           onChange={(e) => setWord(e.target.value)}
           disabled={busy}
           placeholder="e.g. Feierabend"
-          className="min-w-0 flex-1 rounded-2xl border-[3px] border-ink bg-paper-warm px-4 py-2.5 font-body text-[15px] text-ink placeholder:text-ink-faint focus:border-flag-red focus:outline-none disabled:opacity-60"
+          className="min-w-0 flex-1 rounded-2xl border-[3px] border-line bg-paper-warm px-4 py-2.5 font-body text-[15px] text-ink placeholder:text-ink-faint focus:border-flag-red focus:outline-none disabled:opacity-60"
         />
         <button
           type="submit"
           disabled={busy || !word.trim()}
-          className="btn-3d inline-flex shrink-0 items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
+          className="btn-3d inline-flex shrink-0 items-center rounded-[16px] border-[3px] border-red-line bg-flag-red-fill px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
           style={redShadow}
         >
           {busy ? "Forging…" : "Add word"}
@@ -110,7 +110,7 @@ export default function AddWordForm({
         </p>
       )}
       {suggestion && (
-        <div className="mt-3 rounded-2xl border-[3px] border-ink bg-paper-warm px-4 py-3">
+        <div className="mt-3 rounded-2xl border-[3px] border-line bg-paper-warm px-4 py-3">
           <p className="text-center font-body text-[13px] leading-relaxed text-ink">
             {`That looks like ${suggestion.sourceLanguage ?? "another language"}. `}
             Add the German word{" "}
@@ -122,7 +122,7 @@ export default function AddWordForm({
               type="button"
               onClick={() => link(suggestion.word)}
               disabled={busy}
-              className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
+              className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-red-line bg-flag-red-fill px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
               style={redShadow}
             >
               {busy ? "Adding…" : "Yes, add it"}
@@ -131,7 +131,7 @@ export default function AddWordForm({
               type="button"
               onClick={() => setSuggestion(null)}
               disabled={busy}
-              className="inline-flex items-center rounded-[16px] border-[3px] border-ink bg-transparent px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:pointer-events-none disabled:opacity-40"
+              className="inline-flex items-center rounded-[16px] border-[3px] border-line bg-transparent px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:pointer-events-none disabled:opacity-40"
             >
               No
             </button>

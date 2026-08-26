@@ -197,16 +197,16 @@ export default function SetupView({
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rotate-6 bg-flag-red/85"
+        className="pointer-events-none absolute -bottom-24 -left-24 h-72 w-72 rotate-6 bg-flag-red-fill/85"
         style={{ clipPath: "polygon(0 0, 100% 0, 0 100%)" }}
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute top-[42%] -right-2 h-4 w-44 rotate-[18deg] bg-ink"
+        className="geo-decor-fill pointer-events-none absolute top-[42%] -right-2 h-4 w-44 rotate-[18deg] bg-ink-fill"
       />
       <div
         aria-hidden
-        className="pointer-events-none absolute top-24 -left-6 h-24 w-24 rotate-12 border-[3px] border-ink"
+        className="geo-decor pointer-events-none absolute top-24 -left-6 h-24 w-24 rotate-12 border-[3px] border-line"
       />
       <div
         aria-hidden
@@ -238,14 +238,14 @@ export default function SetupView({
                 key={p.key}
                 onClick={() => switchPath(p.key)}
                 aria-pressed={active}
-                className={`group flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
+                className={`group flex-1 rounded-2xl border-[3px] border-line px-3 py-3 text-left transition-colors ${
                   active
-                    ? "cursor-default bg-ink text-on-fill"
-                    : "btn-3d bg-card text-ink hover:bg-ink hover:text-on-fill"
+                    ? "cursor-default bg-ink-fill text-on-fill"
+                    : "btn-3d bg-card text-ink hover:bg-ink-fill hover:text-on-fill"
                 }`}
                 style={
                   {
-                    ["--shadow-color"]: "var(--color-ink)",
+                    ["--shadow-color"]: "var(--color-line)",
                   } as React.CSSProperties
                 }
               >
@@ -315,7 +315,7 @@ export default function SetupView({
 
         {/* Voice picker */}
         <section
-          className="rise-in mt-16 rounded-[28px] border-[3px] border-ink bg-paper-warm p-5"
+          className="rise-in mt-16 rounded-[28px] border-[3px] border-line bg-paper-warm p-5"
           style={{ animationDelay: "220ms" }}
         >
           <div className="flex items-center justify-between">
@@ -333,14 +333,14 @@ export default function SetupView({
                 <button
                   key={key}
                   onClick={() => setVoice(key)}
-                  className={`rounded-2xl border-[3px] border-ink px-2 py-3 transition-colors ${
+                  className={`rounded-2xl border-[3px] border-line px-2 py-3 transition-colors ${
                     active
                       ? "cursor-default bg-flag-gold text-ink-fixed"
                       : "btn-3d bg-card text-ink hover:bg-flag-gold hover:text-ink-fixed"
                   }`}
                   style={
                     {
-                      ["--shadow-color"]: "var(--color-ink)",
+                      ["--shadow-color"]: "var(--color-line)",
                     } as React.CSSProperties
                   }
                 >
@@ -362,10 +362,10 @@ export default function SetupView({
         {/* CTA */}
         <button
           onClick={handleStart}
-          className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-on-fill"
+          className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-red-line bg-flag-red-fill px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-on-fill"
           style={
             {
-              ["--shadow-color"]: "var(--color-flag-red-deep)",
+              ["--shadow-color"]: "var(--color-red-line)",
               animationDelay: "300ms",
             } as React.CSSProperties
           }
@@ -394,10 +394,10 @@ function UserChip() {
           src={user.picture}
           alt=""
           referrerPolicy="no-referrer"
-          className="h-9 w-9 shrink-0 rounded-full border-[2px] border-ink object-cover"
+          className="h-9 w-9 shrink-0 rounded-full border-[2px] border-line object-cover"
         />
       ) : (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-[2px] border-ink bg-flag-gold font-display text-[14px] font-black text-ink-fixed">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-[2px] border-line bg-flag-gold font-display text-[14px] font-black text-ink-fixed">
           {name.charAt(0).toUpperCase()}
         </span>
       )}
@@ -407,7 +407,7 @@ function UserChip() {
       <button
         type="button"
         onClick={signOut}
-        className="shrink-0 rounded-full border-[2px] border-ink px-3 py-1 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:bg-ink hover:text-on-fill"
+        className="shrink-0 rounded-full border-[2px] border-line px-3 py-1 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:bg-ink-fill hover:text-on-fill"
       >
         Sign out
       </button>
@@ -429,7 +429,7 @@ function NodeTile({
       {selected && (
         <span
           aria-hidden
-          className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border-2 border-ink bg-flag-gold px-2 py-0.5 font-body text-[9px] font-bold uppercase tracking-[0.22em] text-ink-fixed"
+          className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border-2 border-line bg-flag-gold px-2 py-0.5 font-body text-[9px] font-bold uppercase tracking-[0.22em] text-ink-fixed"
         >
           Selected
         </span>
@@ -439,14 +439,14 @@ function NodeTile({
         aria-pressed={selected}
         className={`btn-3d relative grid h-24 w-24 place-items-center rounded-full border-[4px] transition-colors ${
           selected
-            ? "border-flag-red-deep bg-flag-red text-on-fill"
-            : "border-ink bg-card text-ink hover:bg-paper-warm"
+            ? "border-red-line bg-flag-red-fill text-on-fill"
+            : "border-line bg-card text-ink hover:bg-paper-warm"
         }`}
         style={
           {
             ["--shadow-color"]: selected
-              ? "var(--color-flag-red-deep)"
-              : "var(--color-ink)",
+              ? "var(--color-red-line)"
+              : "var(--color-line)",
           } as React.CSSProperties
         }
       >

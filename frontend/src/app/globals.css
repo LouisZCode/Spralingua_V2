@@ -34,10 +34,23 @@
   --color-ink-muted: #7a7973;
   --color-ink-faint: #bfbeb6;
 
+  /* DARK-004: keylines + hard-offset "sticker" shadows — borders,
+     box-shadow/drop-shadow offsets. Split off --color-ink because dark
+     mode wants these pure black while --color-ink itself keeps flipping
+     to a warm off-white for TEXT; one token can't serve both jobs once
+     the two diverge. Identical to --color-ink in light mode. */
+  --color-line: #0f0f10;
+  /* Inverted dark chip/band FILL — a background that reads as "ink used
+     as a surface" (the closing CTA band, dark chips). Split off
+     --color-ink for the same reason as --color-line: this needs to stay
+     a raised dark surface in dark mode instead of following ink's flip
+     to cream. Identical to --color-ink in light mode. */
+  --color-ink-fill: #0f0f10;
+
   /* Text that sits ON a saturated fill (red / success / ink buttons).
-     Flips to near-black in dark mode, because the dark palette lifts the
-     fills into light tones — Material's "on-primary" convention. White on
-     the lifted red is 2.8:1; near-black on it is 6.7:1. */
+     White in both themes — dark mode's fills (--color-flag-red-fill,
+     --color-ink-fill, etc.) stay fully saturated rather than lifting
+     into light tones, so white text keeps working contrast in both. */
   --color-on-fill: #ffffff;
   /* Near-black that does NOT flip — for text on gold, which is a light
      fill in both themes. */
@@ -54,6 +67,17 @@
   --color-flag-red: #dc2626;
   --color-flag-red-deep: #7f1d1d;
   --color-flag-red-soft: #fde2e2;
+  /* Edge/lip around saturated red FILLS — borders, sticker-shadow offsets.
+     Split off --color-flag-red-deep, which keeps its TEXT role (e.g. the
+     "how it works" step numbers) and keeps lifting for readability in
+     dark mode. Identical to --color-flag-red-deep in light mode. */
+  --color-red-line: #7f1d1d;
+  /* Saturated red FILL — buttons, chips, the closing CTA panel. Split off
+     --color-flag-red, which keeps its TEXT/icon/border role and keeps
+     lifting in dark mode, so dark-mode fills can stay at full saturation
+     (the mockup's sticker look) while red-as-text still lifts for
+     contrast. Identical to --color-flag-red in light mode. */
+  --color-flag-red-fill: #dc2626;
   --color-flag-gold: #f2b705;
   --color-flag-gold-deep: #b8860b;
   --color-flag-gold-soft: #fef3c7;
@@ -63,6 +87,10 @@
   --color-success: #16a34a;
   --color-success-deep: #166534;
   --color-success-soft: #dcfce7;
+  /* Solid success FILL carrying white text (pass badges, checkmarks).
+     Split off --color-success for the same fill/text reason as red above.
+     Identical to --color-success in light mode. */
+  --color-success-fill: #16a34a;
 
   /* The der/die/das mnemonic's blue. The flag palette has no blue, so this
      is a functional one-off — it was hardcoded as #2563eb in nine places
@@ -71,6 +99,10 @@
   --color-gender-blue: #2563eb;
   --color-gender-blue-deep: #1e40af;
   --color-gender-blue-soft: #dbeafe;
+  /* Solid blue FILL carrying white text (the "das" chip). Split off
+     --color-gender-blue for the same fill/text reason as red and success
+     above. Identical to --color-gender-blue in light mode. */
+  --color-gender-blue-fill: #2563eb;
 }
 
 @theme inline {
@@ -88,65 +120,90 @@
    `prefers-color-scheme` copy of these values and they live in exactly
    one place. No JS -> no stamp -> light, which is today's experience.
 
-   The palette keeps R > G > B on every surface: the light theme's
-   surfaces are cream (#fafaf7 / #fefcf6), so a cold blue-black night
-   mode would read as a different product. Nothing is pure black and
-   nothing is pure white — maximum contrast is what makes dark themes
-   cause halation, especially for readers with astigmatism. */
+   DARK-004: the ramp below is sampled from the approved mockup — a
+   neutral charcoal ground (the old warm cream-descended R > G > B ramp is
+   gone), PURE BLACK keylines and hard-offset "sticker" shadows carrying
+   the light-mode neubrutalist identity into dark, and full-saturation
+   fills (red / ink / success / blue) with white text restored — the
+   "lift the fill, darken the text" convention DARK-002/DARK-003 used is
+   gone; the mockup wants saturated color instead. That's why tokens that
+   used to do double duty (border+text, fill+text) are now two: a
+   `-line`/`-fill` pair that stays black/saturated for depth, alongside
+   the original token, which still carries text and keeps lifting for
+   legibility on the new ground. */
 :root[data-theme="dark"] {
-  --color-paper: #131210;      /* page ground   L  6.9% */
-  --color-paper-warm: #24211d; /* raised/nested L 12.7% */
-  --color-card: #1c1a17;       /* card surface  L 10.0% */
-  --color-elevated: #2e2a24;   /* modal/popover L 16.5% — one step above paper-warm */
-  /* DARK-002: alpha-white, not a fixed hex. A flat #34302a only reads as
-     an edge against #1c1a17 (~1.3:1) — on paper-warm or elevated it nearly
-     vanishes. An alpha-white hairline self-corrects on every surface it's
-     drawn against instead of needing a token per elevation level. */
-  --color-rule: rgba(240, 237, 230, 0.14);
+  --color-paper: #121212;      /* page ground   L  5.5% */
+  --color-paper-warm: #2e2e2e; /* raised/nested L 18.9% */
+  --color-card: #262626;       /* card surface  L 15.2% */
+  --color-elevated: #383838;   /* modal/popover L 23.5% — one step above paper-warm */
+  /* DARK-002: alpha-white, not a fixed hex — still true on the new ramp.
+     A flat hex only reads as an edge against one surface and nearly
+     vanishes against the others; an alpha-white hairline self-corrects on
+     every surface it's drawn against instead of needing a token per
+     elevation level. Neutralized (was warm #f0ede6-tinted) to match the
+     neutral ramp above. */
+  --color-rule: rgba(235, 235, 235, 0.12);
 
-  --color-ink: #f0ede6;        /* 14.9:1 on card */
-  --color-ink-soft: #d6d2c9;   /* 11.5:1 */
-  --color-ink-muted: #a19c91;  /*  6.4:1 */
-  --color-ink-faint: #6b665d;  /*  3.1:1 — decorative only */
+  --color-ink: #f0ede6;        /* 12.9:1 on card — unchanged, matches the mockup's text */
+  --color-ink-soft: #d3d1cb;   /*  9.9:1 */
+  --color-ink-muted: #a3a19c;  /*  5.9:1 */
+  --color-ink-faint: #6c6b67;  /*  2.8:1 — decorative only */
+  --color-ink-fixed: #121212;
 
-  --color-on-fill: #131210;
-  --color-ink-fixed: #131210;
+  /* Pure black keyline — borders, box-shadow/drop-shadow offsets. The
+     mockup's depth language is a black-on-charcoal sticker stack, not a
+     softened one; a keyline drawn in --color-ink here would be a pale
+     line on a dark card instead of the crisp cut the mockup shows. */
+  --color-line: #000000;
+  /* Edge/lip around saturated red fills — same black-keyline logic,
+     scoped to red. --color-flag-red-deep (below) keeps lifting for its
+     TEXT role instead. */
+  --color-red-line: #000000;
+  /* Saturated red FILL — buttons, chips, panel edges. The mockup wants
+     full-saturation red carrying white text again, not the lifted/
+     desaturated red DARK-002 shipped. White text on it is 4.8:1. */
+  --color-flag-red-fill: #dc2626;
+  /* Inverted dark chip/band FILL — "ink used as a surface" (the closing
+     CTA band). Steps up off the page instead of following --color-ink's
+     flip to cream, so an ink-filled band still reads as a raised dark
+     surface. White text on it is 11.7:1. */
+  --color-ink-fill: #383838;
 
   /* Stays dark rather than tracking --color-ink's flip to cream — a scrim
-     must darken the page underneath in both themes. Slightly deeper than
-     light mode's value since it's dimming an already-dark page. */
-  --color-scrim: #0a0908;
+     must darken the page underneath in both themes. Deeper than paper
+     since it's dimming an already-dark page. */
+  --color-scrim: #080808;
 
-  /* Red moves furthest of anything here. Long-wavelength red focuses
-     behind the retina while the pupil is dilated for a dark screen, so
-     saturated red on near-black visibly vibrates. #dc2626 is also only
-     4.4:1 there; lifted and desaturated it reaches 6.2:1 and stops
-     shimmering, while staying recognisably the same red. */
+  /* Red-as-TEXT/icon/border still lifts: long-wavelength red on
+     near-black visibly vibrates at full saturation, so text/icon uses of
+     red keep the DARK-002 lift even though red FILLS (above) are back to
+     full saturation for the mockup's sticker look. */
   --color-flag-red: #f4736b;
   --color-flag-red-deep: #8f2c28;
   --color-flag-red-soft: #3a1d1c;
-  /* DARK-003: gold moved too, in the other direction. #f0c24a sat at
-     10.35:1 on card — close to --color-ink's own 14.9:1 — so gold read as
-     near-text-bright while red's 6.2:1 read as a calm accent: the flag's
-     two brand colors carried wildly uneven visual weight. Yellow is
-     inherently high-luminance, so the fix is a lightness trim only (same
-     hue/saturation as the light-mode gold, just darker) to land in the
-     same 6.5-7.5:1 neighborhood as red — parity, not a different color.
-     7.19:1 on card, 7.76:1 for --color-ink-fixed text set on this gold. */
-  --color-flag-gold: #d49e12;
+  /* DARK-004: nudged toward the mockup's sampled gold. Still a lightness
+     trim off the light-mode hue/saturation, same parity-with-red logic
+     DARK-003 established — 8.2:1 for --color-ink-fixed text set on this
+     gold. */
+  --color-flag-gold: #d5a41a;
   --color-flag-gold-deep: #8a6510;
   --color-flag-gold-soft: #3b3115;
 
   --color-success: #4ade80;
   --color-success-deep: #1f7a45;
   --color-success-soft: #14301f;
+  /* Solid success FILL (pass badges/checkmarks). White text on it is 5.0:1. */
+  --color-success-fill: #15803d;
 
   --color-gender-blue: #7ba7f5;
   --color-gender-blue-deep: #2d4a8f;
   --color-gender-blue-soft: #16233a;
+  /* Solid blue FILL (the "das" chip). White text on it is 8.4:1. */
+  --color-gender-blue-fill: #2d4a8f;
 
-  /* the paper-grain dot grid inverts, or it disappears entirely */
-  --grid-dot: rgba(240, 237, 230, 0.11);
+  /* the paper-grain dot grid inverts, or it disappears entirely.
+     Neutralized to match the ramp above (was warm #f0ede6-tinted). */
+  --grid-dot: rgba(235, 235, 235, 0.10);
 
   /* Soft ambient shadow color (not a fill, so it stays outside @theme).
      Light mode has no entry here — the var() fallback at each call site
@@ -207,48 +264,22 @@ body {
    Uses box-shadow (not ::after) so the hover transform's stacking
    context can't put the shadow on top of the button's own bg. */
 .btn-3d {
-  box-shadow: 0 6px 0 var(--shadow-color, var(--color-flag-red-deep));
+  box-shadow: 0 6px 0 var(--shadow-color, var(--color-red-line));
   transition: transform 110ms ease, box-shadow 110ms ease;
 }
 .btn-3d:hover {
   transform: translateY(-1px);
-  box-shadow: 0 7px 0 var(--shadow-color, var(--color-flag-red-deep));
+  box-shadow: 0 7px 0 var(--shadow-color, var(--color-red-line));
 }
 .btn-3d:active {
   transform: translateY(4px);
-  box-shadow: 0 2px 0 var(--shadow-color, var(--color-flag-red-deep));
-}
-
-/* DARK-002: cards catch a sliver of light on their top edge — the depth
-   cue that replaces drop shadows on dark surfaces. Light mode: none. */
-[data-theme="dark"] .card-lift {
-  box-shadow: inset 0 1px 0 rgba(240, 237, 230, 0.06);
-}
-/* .btn-3d already owns box-shadow for its hard-offset sticker lip at every
-   state (base/hover/active) — a plain `.card-lift` rule would be overridden
-   by whichever `.btn-3d` state rule comes later in the cascade, and either
-   way only one box-shadow value can win. Restate each state here with both
-   shadows listed so the two compose instead of one clobbering the other. */
-[data-theme="dark"] .btn-3d.card-lift {
-  box-shadow:
-    0 6px 0 var(--shadow-color, var(--color-flag-red-deep)),
-    inset 0 1px 0 rgba(240, 237, 230, 0.06);
-}
-[data-theme="dark"] .btn-3d.card-lift:hover {
-  box-shadow:
-    0 7px 0 var(--shadow-color, var(--color-flag-red-deep)),
-    inset 0 1px 0 rgba(240, 237, 230, 0.06);
-}
-[data-theme="dark"] .btn-3d.card-lift:active {
-  box-shadow:
-    0 2px 0 var(--shadow-color, var(--color-flag-red-deep)),
-    inset 0 1px 0 rgba(240, 237, 230, 0.06);
+  box-shadow: 0 2px 0 var(--shadow-color, var(--color-red-line));
 }
 
 /* DARK-003: practice cards carry a breath of their accent in dark — light
    mode keeps its white cards untouched (no rule outside the [data-theme]
    scope). A background-image layered over --color-card, not a background-
-   color swap, so it composes with .card-lift's own box-shadow rules above
+   color swap, so it composes with the card's own border/box-shadow rules
    without any specificity fight. Kept quiet on purpose: 7-9% at the bright
    corner fading to transparent by mid-card — a tint, not a banner. */
 [data-theme="dark"] .wash-red {
@@ -273,42 +304,50 @@ body {
   );
 }
 
-/* DARK-003: one ambient glow, hero only — a hint of atmosphere behind the
-   landing page's opening section, not a treatment repeated across the app.
-   Two single-hue radials rather than one gradient blended red-to-gold:
-   interpolating between hues in oklch would still pass through a muddy
-   band, so each color gets its own radial and they never touch. */
-[data-theme="dark"] .hero-glow {
-  background-image:
-    radial-gradient(
-      55% 45% at 50% -8%,
-      color-mix(in oklch, var(--color-flag-red) 10%, transparent),
-      transparent 70%
-    ),
-    radial-gradient(
-      40% 35% at 88% 12%,
-      color-mix(in oklch, var(--color-flag-gold) 7%, transparent),
-      transparent 70%
-    );
+/* DARK-004: the hero's one decorative shape is the demo card's own gold
+   halo (see .demo-halo below) — section-level shapes were tried and cut:
+   clipping against the section's invisible padding box paints flat edges
+   floating mid-air, and a second free-floating disc doubled up with the
+   halo the demo card always had. */
+/* The demo card's decorative gold halo (HeroDemo.tsx). Light keeps its
+   original top-right glow untouched; dark moves it to the card's lower-left
+   corner and scales it up — on charcoal the gold reads as a flat mockup-style
+   disc rather than a glow, and the card in front occludes part of it, which
+   is the one edge treatment that works on a live page. */
+[data-theme="dark"] .demo-halo {
+  top: auto;
+  right: auto;
+  bottom: -3rem;
+  left: -3.5rem;
+  width: 13rem;
+  height: 13rem;
+  background: color-mix(in srgb, var(--color-flag-gold) 40%, transparent);
 }
 
-/* Panels that pair the sticker shadow with the dark top-edge highlight.
-   The shadow must live here, not in a utility: these rules are unlayered,
-   so a Tailwind shadow-[...] utility on the same element would lose. */
-.lift-panel { box-shadow: 0 8px 0 var(--color-ink); }
-[data-theme="dark"] .lift-panel {
-  box-shadow: 0 8px 0 var(--color-ink), inset 0 1px 0 rgba(240, 237, 230, 0.06);
+/* Decorative background geometry (the Bauhaus squares/bars floating
+   behind hero/setup screens). In light they're drawn with the near-black
+   keyline and ink fills; on charcoal that makes them invisible. Dark flips
+   ONLY the decor to the light ink at reduced opacity — real keylines on
+   cards and buttons stay black. geo-decor = outlined shapes (border flips),
+   geo-decor-fill = solid bars (fill flips). */
+[data-theme="dark"] .geo-decor {
+  border-color: var(--color-ink);
+  opacity: 0.4;
+}
+[data-theme="dark"] .geo-decor-fill {
+  background-color: var(--color-ink);
+  opacity: 0.4;
 }
 
-.lift-card { box-shadow: 0 5px 0 var(--color-ink); }
-[data-theme="dark"] .lift-card {
-  box-shadow: 0 5px 0 var(--color-ink), inset 0 1px 0 rgba(240, 237, 230, 0.06);
-}
+/* Panels carrying the hard-offset sticker shadow — black in both themes
+   now that --color-line stops flipping. The shadow must live here, not in
+   a utility: these rules are unlayered, so a Tailwind shadow-[...] utility
+   on the same element would lose. */
+.lift-panel { box-shadow: 0 8px 0 var(--color-line); }
+
+.lift-card { box-shadow: 0 5px 0 var(--color-line); }
 
 .lift-sheet { box-shadow: 0 -12px 30px var(--shadow-ambient, rgba(15, 15, 16, 0.18)); }
-[data-theme="dark"] .lift-sheet {
-  box-shadow: 0 -12px 30px var(--shadow-ambient, rgba(15, 15, 16, 0.18)), inset 0 1px 0 rgba(240, 237, 230, 0.06);
-}
 
 /* Selected node beacon pulse */
 @keyframes beacon {
@@ -386,16 +425,16 @@ body {
    compose across rules — the last declaration wins outright. */
 [data-theme="dark"] .mascot-keyline {
   filter:
-    drop-shadow(0 0 1.5px var(--color-ink))
-    drop-shadow(0 0 1.5px var(--color-ink))
-    drop-shadow(0 0 1px var(--color-ink));
+    drop-shadow(0 0 1.5px var(--color-line))
+    drop-shadow(0 0 1.5px var(--color-line))
+    drop-shadow(0 0 1px var(--color-line));
 }
 [data-theme="dark"] .mascot-keyline.mascot-droop {
   filter:
     saturate(0.7) opacity(0.85)
-    drop-shadow(0 0 1.5px var(--color-ink))
-    drop-shadow(0 0 1.5px var(--color-ink))
-    drop-shadow(0 0 1px var(--color-ink));
+    drop-shadow(0 0 1.5px var(--color-line))
+    drop-shadow(0 0 1.5px var(--color-line))
+    drop-shadow(0 0 1px var(--color-line));
 }
 
 /* DARK-003: hero-scale mascots stand on a soft warm halo in dark —
@@ -446,7 +485,7 @@ body {
   width: 200px;
   height: 200px;
   border-radius: 9999px;
-  border: 5px solid var(--color-ink);
+  border: 5px solid var(--color-line);
   position: relative;
   display: grid;
   place-items: center;
@@ -461,12 +500,12 @@ body {
   animation: orb-breath 4.2s ease-in-out infinite;
 }
 .orb-your-turn {
-  background: var(--color-flag-red);
+  background: var(--color-flag-red-fill);
   color: var(--color-on-fill);
   animation: orb-pulse 1.3s ease-in-out infinite;
 }
 .orb-thinking {
-  background: var(--color-ink);
+  background: var(--color-ink-fill);
   color: var(--color-on-fill);
 }
 /* DARK-001: the thinking orb is an INVERTED surface — near-black on the
@@ -521,14 +560,14 @@ body {
 /* ─── Chat bubbles ────────────────────────────────────────────── */
 
 .bubble {
-  border: 3px solid var(--color-ink);
+  border: 3px solid var(--color-line);
   border-radius: 22px;
   padding: 12px 16px;
   max-width: 78%;
   font-family: var(--font-body);
   font-size: 15px;
   line-height: 1.45;
-  box-shadow: 0 4px 0 var(--color-ink);
+  box-shadow: 0 4px 0 var(--color-line);
 }
 .bubble-them {
   background: var(--color-card);

@@ -29,7 +29,7 @@ import SoundToggle from "./shared/SoundToggle";
 import ThemeToggle from "./shared/ThemeToggle";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 
 // The review-queue cap VocabTrainer's buildQueue applies, most-overdue
@@ -320,7 +320,7 @@ export default function Satzschmiede() {
           className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
         />
 
-        <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+        <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image
@@ -362,7 +362,7 @@ export default function Satzschmiede() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -432,7 +432,7 @@ export default function Satzschmiede() {
             <button
               type="button"
               onClick={() => setPacksOpen(true)}
-              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
+              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
               style={redShadow}
             >
               + Add Cards

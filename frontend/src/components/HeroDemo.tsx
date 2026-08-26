@@ -332,16 +332,16 @@ export default function HeroDemo() {
     <div className="relative mx-auto w-full max-w-[420px]">
       <div
         aria-hidden
-        className="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-flag-gold/30"
+        className="demo-halo pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-flag-gold/30"
       />
-      <div className="relative rounded-[36px] border-[3px] border-ink bg-paper-warm p-8 shadow-[0_8px_0_var(--color-ink)]">
+      <div className="relative rounded-[36px] border-[3px] border-line bg-paper-warm p-8 shadow-[0_8px_0_var(--color-line)]">
         {(mode === "connecting" || mode === "live") && (
           <button
             type="button"
             onClick={() => void stop()}
             aria-label="End demo"
             title="End demo"
-            className="absolute right-5 top-5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-ink bg-card text-ink transition-colors hover:border-flag-red-deep hover:bg-flag-red hover:text-on-fill"
+            className="absolute right-5 top-5 z-10 inline-flex h-9 w-9 items-center justify-center rounded-full border-[3px] border-line bg-card text-ink transition-colors hover:border-red-line hover:bg-flag-red-fill hover:text-on-fill"
           >
             <svg
               viewBox="0 0 24 24"
@@ -429,7 +429,7 @@ export default function HeroDemo() {
             }
           }}
         >
-          <div className="type-overlay lift-sheet w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-elevated px-5 pt-5 pb-6">
+          <div className="type-overlay lift-sheet w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-line bg-elevated px-5 pt-5 pb-6">
             <div className="flex items-center justify-between">
               <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
                 Dev · type a turn
@@ -448,15 +448,15 @@ export default function HeroDemo() {
                   if (e.key === "Enter") void sendText();
                 }}
                 placeholder="Hi! What is Spralingua?"
-                className="flex-1 rounded-2xl border-[3px] border-ink bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+                className="flex-1 rounded-2xl border-[3px] border-line bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
               />
               <button
                 onClick={() => void sendText()}
                 disabled={!draft.trim()}
-                className="btn-3d rounded-2xl border-[3px] border-ink bg-ink px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.18em] text-on-fill disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-3d rounded-2xl border-[3px] border-line bg-ink-fill px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.18em] text-on-fill disabled:cursor-not-allowed disabled:opacity-50"
                 style={
                   {
-                    ["--shadow-color"]: "var(--color-ink)",
+                    ["--shadow-color"]: "var(--color-line)",
                   } as React.CSSProperties
                 }
               >

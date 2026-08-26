@@ -15,10 +15,10 @@ type QueueItem = ZeitItem & { retry?: boolean };
 type Phase = "intro" | "drill" | "done";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // The drill rules, shown once up front — same convention as the other typed
@@ -217,7 +217,7 @@ export default function ZeitfaerbungTrainer({
   if (phase === "intro") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7"
         style={inkShadow}
       >
         <h2 className="font-display text-[20px] font-black tracking-tight text-ink">
@@ -238,7 +238,7 @@ export default function ZeitfaerbungTrainer({
         <button
           type="button"
           onClick={() => setPhase("drill")}
-          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
+          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
           style={redShadow}
         >
           Start · {round.length} sentences
@@ -250,7 +250,7 @@ export default function ZeitfaerbungTrainer({
   if (phase === "done") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center"
         style={inkShadow}
       >
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -281,7 +281,7 @@ export default function ZeitfaerbungTrainer({
           <button
             type="button"
             onClick={onNewRound}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             New round
@@ -302,7 +302,7 @@ export default function ZeitfaerbungTrainer({
   // "form" (right verb, wrong conjugation) reads as amber — a smaller miss
   // than "verb" (wrong verb entirely), which stays full red.
   const tint = !solved
-    ? "border-ink bg-card"
+    ? "border-line bg-card"
     : verdict.correct
       ? "border-success bg-success-soft"
       : verdict.kind === "form"
@@ -343,7 +343,7 @@ export default function ZeitfaerbungTrainer({
           ) : (
             <span
               aria-label="gap"
-              className="mx-1 inline-block min-w-[110px] border-b-[3px] border-ink align-baseline"
+              className="mx-1 inline-block min-w-[110px] border-b-[3px] border-line align-baseline"
             >
               &nbsp;
             </span>
@@ -373,12 +373,12 @@ export default function ZeitfaerbungTrainer({
                 autoCorrect="off"
                 spellCheck={false}
                 maxLength={120}
-                className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
+                className="min-w-0 flex-1 rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
               />
               <button
                 type="submit"
                 disabled={busy || !value.trim()}
-                className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
+                className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-red-line bg-flag-red-fill px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
                 style={redShadow}
               >
                 {busy ? "Checking…" : "Check"}
@@ -451,7 +451,7 @@ export default function ZeitfaerbungTrainer({
               <button
                 type="button"
                 onClick={advance}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
@@ -473,7 +473,7 @@ export default function ZeitfaerbungTrainer({
               <button
                 type="button"
                 onClick={advance}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}

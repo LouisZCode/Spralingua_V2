@@ -17,10 +17,10 @@ type QueueItem = ClauseItem & { retry?: boolean };
 type Phase = "intro" | "drill" | "done";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // The drill rules, shown once up front — same convention as the sibling
@@ -240,7 +240,7 @@ export default function SatzbauTrainer({
   if (phase === "intro") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7"
         style={inkShadow}
       >
         <h2 className="font-display text-[20px] font-black tracking-tight text-ink">
@@ -261,7 +261,7 @@ export default function SatzbauTrainer({
         <button
           type="button"
           onClick={() => setPhase("drill")}
-          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
+          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
           style={redShadow}
         >
           Start · {round.length} Sätze
@@ -273,7 +273,7 @@ export default function SatzbauTrainer({
   if (phase === "done") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
+        className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center"
         style={inkShadow}
       >
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -303,7 +303,7 @@ export default function SatzbauTrainer({
           <button
             type="button"
             onClick={onNewRound}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             New round
@@ -320,7 +320,7 @@ export default function SatzbauTrainer({
   }
 
   const tint = !solved
-    ? "border-ink bg-card"
+    ? "border-line bg-card"
     : verdict.correct
       ? "border-success bg-success-soft"
       : "border-flag-red bg-flag-red-soft";
@@ -390,7 +390,7 @@ export default function SatzbauTrainer({
                   key={chipI}
                   type="button"
                   onClick={() => removeChip(pos)}
-                  className="btn-3d rounded-[14px] border-[3px] border-flag-red-deep bg-flag-red px-3.5 py-1.5 font-display text-[16px] font-black text-on-fill"
+                  className="btn-3d rounded-[14px] border-[3px] border-red-line bg-flag-red-fill px-3.5 py-1.5 font-display text-[16px] font-black text-on-fill"
                 >
                   {item.chips[chipI]}
                 </button>
@@ -404,7 +404,7 @@ export default function SatzbauTrainer({
                   key={chipI}
                   type="button"
                   onClick={() => placeChip(chipI)}
-                  className="btn-3d rounded-[14px] border-[3px] border-ink bg-card px-3.5 py-1.5 font-display text-[16px] font-black text-ink hover:bg-paper-warm"
+                  className="btn-3d rounded-[14px] border-[3px] border-line bg-card px-3.5 py-1.5 font-display text-[16px] font-black text-ink hover:bg-paper-warm"
                 >
                   {item.chips[chipI]}
                 </button>
@@ -448,7 +448,7 @@ export default function SatzbauTrainer({
               type="button"
               onClick={check}
               disabled={busy || trayIdx.length > 0}
-              className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
+              className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
               style={redShadow}
             >
               {busy ? "Checking…" : "Check"}
@@ -508,7 +508,7 @@ export default function SatzbauTrainer({
               <button
                 type="button"
                 onClick={advance}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}

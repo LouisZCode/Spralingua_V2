@@ -7,10 +7,10 @@ import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 import type { ComprehensionResult } from "./api";
 
 const redShadow = {
-  ["--shadow-color"]: "var(--color-flag-red-deep)",
+  ["--shadow-color"]: "var(--color-red-line)",
 } as React.CSSProperties;
 const inkShadow = {
-  ["--shadow-color"]: "var(--color-ink)",
+  ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
 // Round 1 ("listen & retell") — ported from interview_local/web/round1.js.
@@ -127,7 +127,7 @@ export default function Round1Panel({
 
   return (
     <div
-      className="rounded-[28px] border-[3px] border-ink bg-card p-7"
+      className="rounded-[28px] border-[3px] border-line bg-card p-7"
       style={inkShadow}
     >
       <p className="text-center font-body text-[14px] leading-relaxed text-ink-soft">
@@ -152,8 +152,8 @@ export default function Round1Panel({
                 onClick={recorder.recording ? recorder.stop : startRecording}
                 className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-40 ${
                   recorder.recording
-                    ? "animate-pulse border-flag-red-deep bg-card text-flag-red"
-                    : "border-flag-red-deep bg-flag-red text-on-fill"
+                    ? "animate-pulse border-red-line bg-card text-flag-red"
+                    : "border-red-line bg-flag-red-fill text-on-fill"
                 }`}
                 style={redShadow}
               >
@@ -165,7 +165,7 @@ export default function Round1Panel({
                   onClick={recorder.cancel}
                   aria-label="Discard recording"
                   title="Discard recording"
-                  className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-card font-display text-[18px] font-black text-ink"
+                  className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-line bg-card font-display text-[18px] font-black text-ink"
                   style={inkShadow}
                 >
                   ✕
@@ -194,7 +194,7 @@ export default function Round1Panel({
       {outcome && (
         <div className="mt-6">
           {transcript && (
-            <div className="rounded-[18px] border-[3px] border-ink bg-card px-4 py-3">
+            <div className="rounded-[18px] border-[3px] border-line bg-card px-4 py-3">
               <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
                 What we heard
               </p>
@@ -244,7 +244,7 @@ export default function Round1Panel({
               setSettled(true);
               onDone(pendingPassed);
             }}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill disabled:opacity-60"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill disabled:opacity-60"
             style={redShadow}
           >
             Continue →
