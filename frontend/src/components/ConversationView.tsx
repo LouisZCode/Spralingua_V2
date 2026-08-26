@@ -610,7 +610,7 @@ export default function ConversationView({
   const recorder = useRecorder(handlePracticeStop);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-card text-ink">
+    <main className="relative min-h-screen overflow-hidden bg-paper text-ink">
       {/* Bauhaus decorations — quieter than SetupView so chat reads cleanly */}
       <div
         aria-hidden
@@ -664,7 +664,7 @@ export default function ConversationView({
       {/* Type-a-turn overlay (press /) — slides up from bottom */}
       {phase === "live" && typeOpen && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/40 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-scrim/40 backdrop-blur-[1px]"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setTypeOpen(false);
@@ -672,7 +672,7 @@ export default function ConversationView({
             }
           }}
         >
-          <div className="type-overlay w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-paper-warm px-5 pt-5 pb-6 shadow-[0_-12px_30px_rgba(15,15,16,0.18)]">
+          <div className="type-overlay lift-sheet w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-elevated px-5 pt-5 pb-6">
             <div className="flex items-center justify-between">
               <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
                 {typedInput ? "Type a message" : "Dev · type a turn"}
@@ -732,8 +732,8 @@ export default function ConversationView({
         ))}
 
       {showFinishConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-[2px]">
-          <div className="w-full max-w-[420px] rounded-[28px] border-[3px] border-ink bg-paper-warm px-7 py-8 shadow-[0_8px_0_var(--color-ink)]">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 p-4 backdrop-blur-[2px]">
+          <div className="lift-panel w-full max-w-[420px] rounded-[28px] border-[3px] border-ink bg-elevated px-7 py-8">
             <h2 className="font-display text-[26px] font-black leading-tight text-ink">
               Finish the lesson?
             </h2>

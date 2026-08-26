@@ -186,7 +186,7 @@ export default function SetupView({
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-card text-ink">
+    <main className="relative min-h-screen overflow-hidden bg-paper text-ink">
       {showReminder && (
         <QuietRoomModal onClose={() => setShowReminder(false)} />
       )}

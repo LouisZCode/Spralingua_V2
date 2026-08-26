@@ -63,8 +63,8 @@ export default function LevelPickerModal({
   }
 
   return createPortal(
-    <div className="fixed inset-0 z-[100] grid place-items-center bg-ink/60 p-6 backdrop-blur-sm">
-      <div className="relative w-full max-w-md rounded-[28px] border-[3px] border-ink bg-paper-warm p-8 text-center shadow-[0_8px_0_var(--color-ink)]">
+    <div className="fixed inset-0 z-[100] grid place-items-center bg-scrim/60 p-6 backdrop-blur-sm">
+      <div className="lift-panel relative w-full max-w-md rounded-[28px] border-[3px] border-ink bg-elevated p-8 text-center">
         <h2 className="font-display text-[24px] font-black leading-tight text-ink">
           Where are you with German?
         </h2>

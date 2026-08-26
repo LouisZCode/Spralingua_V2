@@ -75,7 +75,7 @@ const redShadow = {
 
 export default function LandingPage() {
   return (
-    <div className="relative min-h-screen bg-card text-ink">
+    <div className="relative min-h-screen bg-paper text-ink">
       {/* Paper grain — spans the full document, scrolls with content */}
       <div
         aria-hidden
@@ -118,7 +118,18 @@ export default function LandingPage() {
       <main className="relative overflow-x-clip">
         <div className="mx-auto max-w-6xl px-6">
           {/* ─── Hero ─────────────────────────────────────────────── */}
-          <section className="relative grid items-center gap-12 py-16 lg:grid-cols-2 lg:py-24">
+          <section className="relative isolate grid items-center gap-12 py-16 lg:grid-cols-2 lg:py-24">
+            {/* DARK-003: one restrained ambient glow, dark mode only — a red
+                wash from the top plus a faint gold one over where the demo
+                sits on wide screens. -z-10 keeps it under the in-flow text
+                and buttons; `isolate` on the section is load-bearing —
+                without a stacking context here, the negative z-index escapes
+                to the root and the glow paints BEHIND the page's bg-paper
+                fill, i.e. renders nothing. */}
+            <div
+              aria-hidden
+              className="hero-glow pointer-events-none absolute inset-0 -z-10"
+            />
             {/* Bauhaus decor */}
             <div
               aria-hidden
@@ -390,7 +401,7 @@ function FeatureCard({
         ? "bg-flag-gold text-ink-fixed"
         : "bg-ink text-on-fill";
   return (
-    <div className="rounded-[28px] border-[3px] border-ink bg-card p-6 shadow-[0_5px_0_var(--color-ink)]">
+    <div className="lift-card rounded-[28px] border-[3px] border-ink bg-card p-6">
       <div
         className={`grid h-12 w-12 place-items-center rounded-2xl border-[3px] border-ink ${chip}`}
       >

@@ -210,15 +210,24 @@ function TransitionBeat({
 }) {
   return (
     <div className="rise-in flex min-h-[300px] flex-col items-center justify-center gap-1.5">
-      <Image
-        src="/mascot/raven.png"
-        alt=""
-        width={88}
-        height={88}
-        className={`mascot-keyline h-20 w-20 select-none ${
-          mood === "happy" ? "mascot-hop" : mood === "sad" ? "mascot-droop" : ""
-        }`}
-      />
+      {/* DARK-003: this is the only bare, unbordered raven in the app rendered
+          at hero scale (80px, alone in a 300px celebratory beat) — no card or
+          badge fill behind it the way the header logo or the headline's
+          circular waving-hello badge have, so it's the one that actually
+          sinks into a dark surface. mascot-plate sits on the wrapper, not the
+          image, so the halo stays put while mascot-hop/mascot-droop move the
+          bird on top of it. */}
+      <div className="mascot-plate flex h-28 w-28 items-center justify-center">
+        <Image
+          src="/mascot/raven.png"
+          alt=""
+          width={88}
+          height={88}
+          className={`mascot-keyline h-20 w-20 select-none ${
+            mood === "happy" ? "mascot-hop" : mood === "sad" ? "mascot-droop" : ""
+          }`}
+        />
+      </div>
       <p className="font-body text-[13px] font-semibold text-ink-soft">
         {BEAT_CAPTION[mood]}
       </p>
@@ -1441,7 +1450,7 @@ export default function Flow() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-card text-ink">
+    <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"

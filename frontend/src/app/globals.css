@@ -20,6 +20,12 @@
   --color-paper: #fafaf7;
   --color-paper-warm: #fefcf6;
   --color-card: #ffffff;
+  /* One clear step above a card — modal panels, popovers, dropdowns,
+     tooltips: anything floating above the card layer, not sitting in it.
+     Identical to card in light mode; in dark mode it's a visible step up
+     from both paper-warm and card, so a modal reads as elevated instead
+     of blending into the page it's covering. */
+  --color-elevated: #ffffff;
   --color-rule: #e7e5dc;
 
   /* Ink */
@@ -36,6 +42,13 @@
   /* Near-black that does NOT flip — for text on gold, which is a light
      fill in both themes. */
   --color-ink-fixed: #0f0f10;
+
+  /* Fullscreen modal backdrop only. Identical to light-mode ink today, but
+     kept as its own token because a scrim's job is to darken the page
+     underneath regardless of theme — unlike --color-ink, which flips to a
+     cream tone in dark mode and would turn every modal backdrop into a
+     light haze over the dark page instead of a dimmer. */
+  --color-scrim: #0f0f10;
 
   /* Brand — German flag */
   --color-flag-red: #dc2626;
@@ -84,7 +97,12 @@
   --color-paper: #131210;      /* page ground   L  6.9% */
   --color-paper-warm: #24211d; /* raised/nested L 12.7% */
   --color-card: #1c1a17;       /* card surface  L 10.0% */
-  --color-rule: #34302a;
+  --color-elevated: #2e2a24;   /* modal/popover L 16.5% — one step above paper-warm */
+  /* DARK-002: alpha-white, not a fixed hex. A flat #34302a only reads as
+     an edge against #1c1a17 (~1.3:1) — on paper-warm or elevated it nearly
+     vanishes. An alpha-white hairline self-corrects on every surface it's
+     drawn against instead of needing a token per elevation level. */
+  --color-rule: rgba(240, 237, 230, 0.14);
 
   --color-ink: #f0ede6;        /* 14.9:1 on card */
   --color-ink-soft: #d6d2c9;   /* 11.5:1 */
@@ -94,6 +112,11 @@
   --color-on-fill: #131210;
   --color-ink-fixed: #131210;
 
+  /* Stays dark rather than tracking --color-ink's flip to cream — a scrim
+     must darken the page underneath in both themes. Slightly deeper than
+     light mode's value since it's dimming an already-dark page. */
+  --color-scrim: #0a0908;
+
   /* Red moves furthest of anything here. Long-wavelength red focuses
      behind the retina while the pupil is dilated for a dark screen, so
      saturated red on near-black visibly vibrates. #dc2626 is also only
@@ -102,9 +125,15 @@
   --color-flag-red: #f4736b;
   --color-flag-red-deep: #8f2c28;
   --color-flag-red-soft: #3a1d1c;
-  /* Gold barely moves — a warm high-luminance hue is what dark themes
-     are best at. */
-  --color-flag-gold: #f0c24a;
+  /* DARK-003: gold moved too, in the other direction. #f0c24a sat at
+     10.35:1 on card — close to --color-ink's own 14.9:1 — so gold read as
+     near-text-bright while red's 6.2:1 read as a calm accent: the flag's
+     two brand colors carried wildly uneven visual weight. Yellow is
+     inherently high-luminance, so the fix is a lightness trim only (same
+     hue/saturation as the light-mode gold, just darker) to land in the
+     same 6.5-7.5:1 neighborhood as red — parity, not a different color.
+     7.19:1 on card, 7.76:1 for --color-ink-fixed text set on this gold. */
+  --color-flag-gold: #d49e12;
   --color-flag-gold-deep: #8a6510;
   --color-flag-gold-soft: #3b3115;
 
@@ -117,16 +146,39 @@
   --color-gender-blue-soft: #16233a;
 
   /* the paper-grain dot grid inverts, or it disappears entirely */
-  --grid-dot: rgba(240, 237, 230, 0.07);
+  --grid-dot: rgba(240, 237, 230, 0.11);
+
+  /* Soft ambient shadow color (not a fill, so it stays outside @theme).
+     Light mode has no entry here — the var() fallback at each call site
+     carries the light value, same pattern as --grid-dot above. Dark needs
+     more opacity than a straight color-swap: a translucent shadow is only
+     as dark as its alpha, and on a near-black page a light-mode-strength
+     shadow all but disappears, so the alpha goes up instead of the hue
+     changing. */
+  --shadow-ambient: rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
 }
 
 html,
 body {
-  background: var(--color-card);
+  background: var(--color-paper);
   color: var(--color-ink);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
+}
+
+/* Text selection wears the brand: gold wash behind, full ink on top.
+   Tokens flip it for dark (gold-soft #3b3115 under cream ink). */
+::selection {
+  background: var(--color-flag-gold-soft);
+  color: var(--color-ink);
+}
+
+/* The shimmer headline paints its glyphs via -webkit-text-fill-color:
+   transparent (gradient clip-text), and WebKit lets that beat ::selection's
+   `color` — selecting the word would show an empty highlight box. */
+.goal-shimmer::selection {
+  -webkit-text-fill-color: var(--color-ink);
 }
 
 /* Paper grain background (subtle radial dot grid) */
@@ -165,6 +217,97 @@ body {
 .btn-3d:active {
   transform: translateY(4px);
   box-shadow: 0 2px 0 var(--shadow-color, var(--color-flag-red-deep));
+}
+
+/* DARK-002: cards catch a sliver of light on their top edge — the depth
+   cue that replaces drop shadows on dark surfaces. Light mode: none. */
+[data-theme="dark"] .card-lift {
+  box-shadow: inset 0 1px 0 rgba(240, 237, 230, 0.06);
+}
+/* .btn-3d already owns box-shadow for its hard-offset sticker lip at every
+   state (base/hover/active) — a plain `.card-lift` rule would be overridden
+   by whichever `.btn-3d` state rule comes later in the cascade, and either
+   way only one box-shadow value can win. Restate each state here with both
+   shadows listed so the two compose instead of one clobbering the other. */
+[data-theme="dark"] .btn-3d.card-lift {
+  box-shadow:
+    0 6px 0 var(--shadow-color, var(--color-flag-red-deep)),
+    inset 0 1px 0 rgba(240, 237, 230, 0.06);
+}
+[data-theme="dark"] .btn-3d.card-lift:hover {
+  box-shadow:
+    0 7px 0 var(--shadow-color, var(--color-flag-red-deep)),
+    inset 0 1px 0 rgba(240, 237, 230, 0.06);
+}
+[data-theme="dark"] .btn-3d.card-lift:active {
+  box-shadow:
+    0 2px 0 var(--shadow-color, var(--color-flag-red-deep)),
+    inset 0 1px 0 rgba(240, 237, 230, 0.06);
+}
+
+/* DARK-003: practice cards carry a breath of their accent in dark — light
+   mode keeps its white cards untouched (no rule outside the [data-theme]
+   scope). A background-image layered over --color-card, not a background-
+   color swap, so it composes with .card-lift's own box-shadow rules above
+   without any specificity fight. Kept quiet on purpose: 7-9% at the bright
+   corner fading to transparent by mid-card — a tint, not a banner. */
+[data-theme="dark"] .wash-red {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--color-flag-red) 9%, transparent),
+    transparent 55%
+  );
+}
+[data-theme="dark"] .wash-gold {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--color-flag-gold) 8%, transparent),
+    transparent 55%
+  );
+}
+[data-theme="dark"] .wash-ink {
+  background-image: linear-gradient(
+    135deg,
+    color-mix(in oklch, var(--color-ink) 6%, transparent),
+    transparent 55%
+  );
+}
+
+/* DARK-003: one ambient glow, hero only — a hint of atmosphere behind the
+   landing page's opening section, not a treatment repeated across the app.
+   Two single-hue radials rather than one gradient blended red-to-gold:
+   interpolating between hues in oklch would still pass through a muddy
+   band, so each color gets its own radial and they never touch. */
+[data-theme="dark"] .hero-glow {
+  background-image:
+    radial-gradient(
+      55% 45% at 50% -8%,
+      color-mix(in oklch, var(--color-flag-red) 10%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 35% at 88% 12%,
+      color-mix(in oklch, var(--color-flag-gold) 7%, transparent),
+      transparent 70%
+    );
+}
+
+/* Panels that pair the sticker shadow with the dark top-edge highlight.
+   The shadow must live here, not in a utility: these rules are unlayered,
+   so a Tailwind shadow-[...] utility on the same element would lose. */
+.lift-panel { box-shadow: 0 8px 0 var(--color-ink); }
+[data-theme="dark"] .lift-panel {
+  box-shadow: 0 8px 0 var(--color-ink), inset 0 1px 0 rgba(240, 237, 230, 0.06);
+}
+
+.lift-card { box-shadow: 0 5px 0 var(--color-ink); }
+[data-theme="dark"] .lift-card {
+  box-shadow: 0 5px 0 var(--color-ink), inset 0 1px 0 rgba(240, 237, 230, 0.06);
+}
+
+.lift-sheet { box-shadow: 0 -12px 30px var(--shadow-ambient, rgba(15, 15, 16, 0.18)); }
+[data-theme="dark"] .lift-sheet {
+  box-shadow: 0 -12px 30px var(--shadow-ambient, rgba(15, 15, 16, 0.18)), inset 0 1px 0 rgba(240, 237, 230, 0.06);
 }
 
 /* Selected node beacon pulse */
@@ -255,6 +398,12 @@ body {
     drop-shadow(0 0 1px var(--color-ink));
 }
 
+/* DARK-003: hero-scale mascots stand on a soft warm halo in dark —
+   a plate of light behind the bird, not a redraw of it. No-op in light. */
+[data-theme="dark"] .mascot-plate {
+  background: radial-gradient(closest-side, color-mix(in oklch, var(--color-paper-warm) 85%, var(--color-flag-gold)) 0%, transparent 72%);
+}
+
 /* Path connector dotted line */
 .dot-connector {
   background-image: radial-gradient(
@@ -303,7 +452,7 @@ body {
   place-items: center;
   /* Soft ambient float — deliberately NOT the .btn-3d hard offset lip, so the
      orb reads as a living status indicator, not a control you press. */
-  box-shadow: 0 18px 40px -16px rgba(11, 11, 15, 0.32);
+  box-shadow: 0 18px 40px -16px var(--shadow-ambient, rgba(11, 11, 15, 0.32));
   transition: background-color 280ms ease, color 280ms ease;
 }
 .orb-idle {
@@ -499,21 +648,23 @@ body {
 /* ─── GAME-001: streak meter completion celebration ─────────────
    One-shot pulse fired only when the fill-on-return animation carries the
    segmented meter into "full" — a scale/glow beat, not a loop, so it reads
-   as a reward for that specific moment rather than an ambient effect. Green
-   (--color-success as rgb — box-shadow needs an alpha channel the var
-   doesn't carry), matching the segments' done-state color. */
+   as a reward for that specific moment rather than an ambient effect. Green,
+   matching the segments' done-state color — box-shadow needs an alpha
+   channel a bare var() doesn't carry, so color-mix() blends --color-success
+   against transparent instead of a hardcoded rgba() that would never flip
+   in dark mode (--color-success itself does, #16a34a -> #4ade80). */
 @keyframes meter-celebrate {
   0% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 0%, transparent);
   }
   45% {
     transform: scale(1.08);
-    box-shadow: 0 0 16px 4px rgba(22, 163, 74, 0.55);
+    box-shadow: 0 0 16px 4px color-mix(in srgb, var(--color-success) 55%, transparent);
   }
   100% {
     transform: scale(1);
-    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-success) 0%, transparent);
   }
 }
 .meter-celebrate {

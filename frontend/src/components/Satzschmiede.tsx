@@ -314,7 +314,7 @@ export default function Satzschmiede() {
   // Show picker first
   if (phase === "picker") {
     return (
-      <div className="relative flex min-h-screen flex-col bg-card text-ink">
+      <div className="relative flex min-h-screen flex-col bg-paper text-ink">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
@@ -356,7 +356,7 @@ export default function Satzschmiede() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-card text-ink">
+    <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
@@ -406,7 +406,7 @@ export default function Satzschmiede() {
                 <button
                   type="button"
                   onClick={() => setPacksOpen(true)}
-                  className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-flag-red-deep"
+                  className="font-body text-[11px] font-black uppercase tracking-[0.22em] text-flag-red transition-colors hover:text-ink"
                 >
                   + Add Cards
                 </button>

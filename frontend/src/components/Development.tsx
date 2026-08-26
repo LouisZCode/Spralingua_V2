@@ -92,7 +92,7 @@ export default function Development() {
     stats.prevWeek.attemptsTotal === 0;
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-card text-ink">
+    <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
@@ -603,7 +603,7 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
   const empty = buckets.every((b) => b.attempts === 0);
 
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7">
+    <section className="card-lift rounded-[28px] border-[3px] border-ink bg-card p-7">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
           Your attempts

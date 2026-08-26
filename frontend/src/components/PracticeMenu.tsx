@@ -185,7 +185,7 @@ export default function PracticeMenu() {
   const firstName = user?.name?.trim().split(/\s+/)[0] ?? "";
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-card text-ink">
+    <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       {/* LEVEL-001: the one-time level question. Marking it asked BEFORE the
           PUT resolves is deliberate — a failed save shouldn't strand the
           learner behind a modal they can't dismiss; they can set it from the
@@ -566,6 +566,18 @@ function FlameIcon({ muted }: { muted: boolean }) {
   );
 }
 
+// DARK-003: the one place accent -> visual treatment is decided for a
+// ModeCard. Chip stays exactly what it was; `wash` is a no-op class in
+// light mode (see globals.css) and a soft directional brand tint in dark.
+const MODE_ACCENT_STYLES: Record<
+  "red" | "gold" | "ink",
+  { chip: string; wash: string }
+> = {
+  red: { chip: "bg-flag-red text-on-fill", wash: "wash-red" },
+  gold: { chip: "bg-flag-gold text-ink-fixed", wash: "wash-gold" },
+  ink: { chip: "bg-ink text-on-fill", wash: "wash-ink" },
+};
+
 function ModeCard({
   href,
   accent,
@@ -588,17 +600,14 @@ function ModeCard({
   // "nothing left to do here".
   done?: boolean;
 }) {
-  const chip =
-    accent === "red"
-      ? "bg-flag-red text-on-fill"
-      : accent === "gold"
-        ? "bg-flag-gold text-ink-fixed"
-        : "bg-ink text-on-fill";
+  // DARK-003: chip tint and card wash come off the same accent — one
+  // lookup instead of two parallel ternary chains that could drift apart.
+  const { chip, wash } = MODE_ACCENT_STYLES[accent];
   return (
     <Link
       href={href}
-      className={`btn-3d flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
-        done ? "bg-flag-gold-soft" : "bg-card"
+      className={`btn-3d card-lift flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
+        done ? "bg-flag-gold-soft" : `bg-card ${wash}`
       }`}
       style={inkShadow}
     >

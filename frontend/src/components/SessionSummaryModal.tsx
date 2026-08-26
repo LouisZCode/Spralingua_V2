@@ -230,8 +230,8 @@ export default function SessionSummaryModal({
   return (
     // Backdrop locks the chat underneath. No click-through, no Esc, no
     // X icon — single explicit action below.
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-ink/55 p-4 backdrop-blur-[2px]">
-      <div className="max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-ink bg-paper-warm shadow-[0_8px_0_var(--color-ink)]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-scrim/55 p-4 backdrop-blur-[2px]">
+      <div className="lift-panel max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-[28px] border-[3px] border-ink bg-elevated">
         <div className="px-7 py-8">
           {lessonTitle && (
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink-muted">

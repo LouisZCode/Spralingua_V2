@@ -225,7 +225,7 @@ export default function PricingSuccess() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-card text-ink">
+    <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"

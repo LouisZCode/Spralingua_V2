@@ -70,7 +70,7 @@ export function OutOfCoinsPanel({
       <div className="mt-3 flex items-center gap-3">
         <Link
           href="/pricing"
-          className="font-body text-[13px] font-bold text-flag-red underline underline-offset-2 hover:text-flag-red-deep"
+          className="font-body text-[13px] font-bold text-flag-red underline underline-offset-2 hover:text-ink"
         >
           Get more coins →
         </Link>

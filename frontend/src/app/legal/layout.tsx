@@ -18,7 +18,7 @@ export default function LegalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative min-h-screen bg-card text-ink">
+    <div className="relative min-h-screen bg-paper text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"

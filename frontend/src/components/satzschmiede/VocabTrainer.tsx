@@ -1405,7 +1405,7 @@ export default function VocabTrainer({
           type="button"
           onClick={handleRemove}
           disabled={removing || busy}
-          className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-flag-red transition-colors hover:text-flag-red-deep disabled:opacity-40"
+          className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-flag-red transition-colors hover:text-ink disabled:opacity-40"
         >
           {removing ? "Removing…" : "✕ Remove this word from my pool"}
         </button>

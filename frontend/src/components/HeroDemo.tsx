@@ -421,7 +421,7 @@ export default function HeroDemo() {
           voice. */}
       {mode === "live" && typeOpen && (
         <div
-          className="fixed inset-0 z-40 flex items-end justify-center bg-ink/40 backdrop-blur-[1px]"
+          className="fixed inset-0 z-40 flex items-end justify-center bg-scrim/40 backdrop-blur-[1px]"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setTypeOpen(false);
@@ -429,7 +429,7 @@ export default function HeroDemo() {
             }
           }}
         >
-          <div className="type-overlay w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-paper-warm px-5 pt-5 pb-6 shadow-[0_-12px_30px_rgba(15,15,16,0.18)]">
+          <div className="type-overlay lift-sheet w-full max-w-[560px] rounded-t-[28px] border-t-[3px] border-x-[3px] border-ink bg-elevated px-5 pt-5 pb-6">
             <div className="flex items-center justify-between">
               <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
                 Dev · type a turn

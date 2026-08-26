@@ -24,11 +24,11 @@ export default function PackModal({
 }) {
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-ink/60 p-6 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] grid place-items-center bg-scrim/60 p-6 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-[3px] border-ink bg-card p-8 shadow-[0_8px_0_var(--color-ink)]"
+        className="lift-panel relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-[3px] border-ink bg-elevated p-8"
         onClick={(e) => e.stopPropagation()}
       >
         <button

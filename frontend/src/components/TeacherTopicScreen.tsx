@@ -60,7 +60,7 @@ export default function TeacherTopicScreen({
   const [primary, ...rest] = focus;
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-card text-ink">
+    <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50" />
       <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">

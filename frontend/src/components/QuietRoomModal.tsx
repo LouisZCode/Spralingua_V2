@@ -10,11 +10,11 @@ import { createPortal } from "react-dom";
 export default function QuietRoomModal({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div
-      className="fixed inset-0 z-[100] grid place-items-center bg-ink/60 p-6 backdrop-blur-sm"
+      className="fixed inset-0 z-[100] grid place-items-center bg-scrim/60 p-6 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="relative w-full max-w-sm rounded-[28px] border-[3px] border-ink bg-paper-warm p-8 text-center shadow-[0_8px_0_var(--color-ink)]"
+        className="lift-panel relative w-full max-w-sm rounded-[28px] border-[3px] border-ink bg-elevated p-8 text-center"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto grid h-16 w-16 place-items-center rounded-full border-[3px] border-ink bg-flag-gold">
