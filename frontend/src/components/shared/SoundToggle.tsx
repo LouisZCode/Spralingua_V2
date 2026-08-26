@@ -16,6 +16,9 @@ export default function SoundToggle() {
   const [muted, setMutedState] = useState(false);
 
   useEffect(() => {
+    // One-frame hydration: localStorage is client-only, so the real value
+    // can't be read during render without a server/client HTML mismatch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMutedState(isMuted());
   }, []);
 

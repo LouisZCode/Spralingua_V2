@@ -161,6 +161,10 @@ export default function SessionSummaryModal({
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let slowTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
+    // Clear the "still working" copy when the effect re-runs (a new session
+    // id, or a refreshed token). On mount this is free: the state is already
+    // false, so React bails out without a re-render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSlowLoading(false);
 
     const tick = async () => {

@@ -168,7 +168,6 @@ export default function SetupView({
     if (devVisible || pathKey !== "DEV") return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setPathKey("A1");
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLessonId(PATHS[0].lessons[0].id);
   }, [devVisible, pathKey]);
 

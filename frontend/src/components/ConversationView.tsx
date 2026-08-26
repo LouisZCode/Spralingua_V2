@@ -235,14 +235,20 @@ export default function ConversationView({
   // (frontend/src/components/HeroDemo.tsx). Guard the ref — disconnect() on
   // an already-disconnected client is a safe no-op.
   useEffect(() => {
+    // Captured here rather than read in the cleanup (react-hooks/exhaustive-deps):
+    // <audio ref={audioRef}> renders unconditionally, so the ELEMENT is stable
+    // for the component's whole life — only its .srcObject is swapped, in
+    // onTrackStarted. Same element either way; this just satisfies the rule.
+    const audioEl = audioRef.current;
     return () => {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
       void clientRef.current?.disconnect();
-      if (audioRef.current?.srcObject) {
-        (audioRef.current.srcObject as MediaStream)
-          .getTracks()
-          .forEach((t) => t.stop());
-        audioRef.current.srcObject = null;
+      // Stops the bot's incoming audio track (the mic goes down with
+      // disconnect() above). Only ever one stream — each onTrackStarted
+      // replaces srcObject outright.
+      if (audioEl?.srcObject) {
+        (audioEl.srcObject as MediaStream).getTracks().forEach((t) => t.stop());
+        audioEl.srcObject = null;
       }
     };
   }, []);

@@ -73,7 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (parsed?.token && parsed?.user) {
           // SSR-safe hydration: localStorage is client-only, so we set auth
           // state on mount; reading it during render would mismatch server HTML.
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           setToken(parsed.token);
           // PAY-001: a session stored before the tier field existed has none
           // in localStorage — default it to "free" rather than leaving it
