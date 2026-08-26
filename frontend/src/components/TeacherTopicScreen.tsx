@@ -60,12 +60,12 @@ export default function TeacherTopicScreen({
   const [primary, ...rest] = focus;
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50" />
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/practice" className="flex items-center gap-2.5">
-            <Image src="/mascot/raven.png" alt="Spralingua raven mascot" width={40} height={40} priority className="h-9 w-9 select-none" />
+            <Image src="/mascot/raven.png" alt="Spralingua raven mascot" width={40} height={40} priority className="mascot-keyline h-9 w-9 select-none" />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">Spralingua</span>
           </Link>
           <Link href="/practice" className="font-body text-[13px] font-bold text-ink-soft hover:text-ink">← All modes</Link>
@@ -112,14 +112,14 @@ export default function TeacherTopicScreen({
 
         <div className="rise-in mt-7" style={{ animationDelay: "200ms" }}>
           <label htmlFor="teacher-custom-topic" className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Or ask about anything else…</label>
-          <input id="teacher-custom-topic" type="text" value={custom} onChange={(e) => { setCustom(e.target.value); setSelectedCard(null); }} placeholder="e.g. why is it 'dem' and not 'den'?" maxLength={120} className="mt-3 w-full rounded-2xl border-[3px] border-ink bg-white px-5 py-3.5 font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft" />
+          <input id="teacher-custom-topic" type="text" value={custom} onChange={(e) => { setCustom(e.target.value); setSelectedCard(null); }} placeholder="e.g. why is it 'dem' and not 'den'?" maxLength={120} className="mt-3 w-full rounded-2xl border-[3px] border-ink bg-card px-5 py-3.5 font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft" />
         </div>
 
         {isFreeLocked && (
           <div className="rise-in mt-7 rounded-2xl border-[3px] border-ink bg-flag-gold-soft px-6 py-5" style={{ animationDelay: "240ms" }}>
             <p className="font-display text-[16px] font-black text-ink">Clara is a Basic feature</p>
             <p className="mt-1 font-body text-[14px] text-ink-soft">Upgrade to chat with Clara — your grammar teacher who explains in English.</p>
-            <Link href="/pricing" className="btn-3d mt-4 inline-flex rounded-2xl border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink" style={inkShadow}>See pricing →</Link>
+            <Link href="/pricing" className="btn-3d mt-4 inline-flex rounded-2xl border-[3px] border-ink bg-card px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink" style={inkShadow}>See pricing →</Link>
           </div>
         )}
 
@@ -127,7 +127,7 @@ export default function TeacherTopicScreen({
           <div className="rise-in mt-7 rounded-2xl border-[3px] border-ink bg-paper-warm px-6 py-5" style={{ animationDelay: "240ms" }}>
             <p className="font-display text-[16px] font-black text-ink">All talks used today</p>
             <p className="mt-1 font-body text-[14px] text-ink-soft">You&apos;ve used {used} of {limit} today. Come back after 05:00 — or upgrade for more.</p>
-            <Link href="/pricing" className="btn-3d mt-4 inline-flex rounded-2xl border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink" style={inkShadow}>See pricing →</Link>
+            <Link href="/pricing" className="btn-3d mt-4 inline-flex rounded-2xl border-[3px] border-ink bg-card px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink" style={inkShadow}>See pricing →</Link>
           </div>
         )}
 
@@ -137,7 +137,7 @@ export default function TeacherTopicScreen({
           ) : exhausted ? (
             <span className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-paper-warm px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-ink-muted sm:w-auto">Daily limit reached</span>
           ) : (
-            <button type="button" onClick={() => onStart(effectiveTopic)} disabled={!effectiveTopic} className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" style={inkShadow}>
+            <button type="button" onClick={() => onStart(effectiveTopic)} disabled={!effectiveTopic} className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" style={inkShadow}>
               Start with {TEACHER_NAME}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             </button>
@@ -153,14 +153,14 @@ export default function TeacherTopicScreen({
 
 function FocusCard({ focus, selected, onSelect, size }: { focus: FocusPattern; selected: boolean; onSelect: () => void; size: "large" | "normal" }) {
   return (
-    <button type="button" aria-pressed={selected} onClick={onSelect} className={`block w-full rounded-2xl border-[3px] border-ink text-left transition ${size === "large" ? "px-6 py-6" : "px-5 py-4"} ${selected ? "bg-ink text-white" : "bg-flag-gold-soft text-ink hover:bg-white hover:text-flag-red"}`} style={inkShadow}>
+    <button type="button" aria-pressed={selected} onClick={onSelect} className={`block w-full rounded-2xl border-[3px] border-ink text-left transition ${size === "large" ? "px-6 py-6" : "px-5 py-4"} ${selected ? "bg-ink text-on-fill" : "bg-flag-gold-soft text-ink hover:bg-card hover:text-flag-red"}`} style={inkShadow}>
       <div className="flex items-start justify-between gap-3">
         <p className={`font-display font-black leading-tight ${size === "large" ? "text-[22px]" : "text-[16px]"}`}>{focus.label}</p>
         {focus.count7d > 0 && (
-          <span className={`shrink-0 rounded-full border-2 px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] ${selected ? "border-white text-white" : "border-ink text-ink"}`}>{focus.count7d}× this week</span>
+          <span className={`shrink-0 rounded-full border-2 px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] ${selected ? "border-card text-on-fill" : "border-ink text-ink"}`}>{focus.count7d}× this week</span>
         )}
       </div>
-      <p className={`mt-1.5 font-body leading-relaxed ${size === "large" ? "text-[15px]" : "text-[13px]"} ${selected ? "text-white/80" : "text-ink-soft"}`}>{focus.description}</p>
+      <p className={`mt-1.5 font-body leading-relaxed ${size === "large" ? "text-[15px]" : "text-[13px]"} ${selected ? "text-on-fill/80" : "text-ink-soft"}`}>{focus.description}</p>
     </button>
   );
 }

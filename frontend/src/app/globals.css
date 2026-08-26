@@ -1,9 +1,25 @@
 @import "tailwindcss";
 
-@theme inline {
+/* DARK-001: point `dark:` at our own attribute. Tailwind's built-in variant
+   keys off prefers-color-scheme, which would ignore an explicit choice made
+   with the toggle. Almost nothing needs this — the token swap covers the
+   app — but a handful of surfaces are deliberately INVERTED against the page
+   rather than coloured by it, and those need to say so. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  /* DARK-001: colours live under a plain `@theme`, NOT `@theme inline`.
+     `inline` bakes the literal hex into every generated utility
+     (`.bg-ink{background-color:#0f0f10}`), which makes the palette
+     impossible to swap at runtime. Without it the utilities compile to
+     `var(--color-ink)` and the whole app re-themes from the block at the
+     bottom of this file. Fonts still need `inline` (they self-reference
+     Next's font vars) so they keep their own block below. */
+
   /* Surfaces */
   --color-paper: #fafaf7;
   --color-paper-warm: #fefcf6;
+  --color-card: #ffffff;
   --color-rule: #e7e5dc;
 
   /* Ink */
@@ -11,6 +27,15 @@
   --color-ink-soft: #2d2d30;
   --color-ink-muted: #7a7973;
   --color-ink-faint: #bfbeb6;
+
+  /* Text that sits ON a saturated fill (red / success / ink buttons).
+     Flips to near-black in dark mode, because the dark palette lifts the
+     fills into light tones — Material's "on-primary" convention. White on
+     the lifted red is 2.8:1; near-black on it is 6.7:1. */
+  --color-on-fill: #ffffff;
+  /* Near-black that does NOT flip — for text on gold, which is a light
+     fill in both themes. */
+  --color-ink-fixed: #0f0f10;
 
   /* Brand — German flag */
   --color-flag-red: #dc2626;
@@ -23,23 +48,84 @@
   /* Universal status — used only for pass/fail badges. Not a brand
      color, sits outside the German-flag palette by design. */
   --color-success: #16a34a;
+  --color-success-deep: #166534;
   --color-success-soft: #dcfce7;
 
-  /* Typography */
+  /* The der/die/das mnemonic's blue. The flag palette has no blue, so this
+     is a functional one-off — it was hardcoded as #2563eb in nine places
+     before DARK-001 gave it a token, which it needs because raw #2563eb
+     is only 4.1:1 on a dark surface and the mnemonic would stop reading. */
+  --color-gender-blue: #2563eb;
+  --color-gender-blue-deep: #1e40af;
+  --color-gender-blue-soft: #dbeafe;
+}
+
+@theme inline {
+  /* Typography — must stay `inline`: these reference the Next font vars
+     of the same name, so a non-inline block would be a circular ref. */
   --font-display: var(--font-display);
   --font-body: var(--font-body);
   --font-mono: var(--font-mono);
 }
 
-:root {
-  --background: #ffffff;
-  --foreground: #0f0f10;
+/* ─── DARK-001: the dark token set ────────────────────────────────
+   One block, not two. `layout.tsx` runs a tiny pre-paint script that
+   resolves localStorage -> OS preference -> "light" and stamps
+   `data-theme` on <html> before first paint, so the CSS never needs a
+   `prefers-color-scheme` copy of these values and they live in exactly
+   one place. No JS -> no stamp -> light, which is today's experience.
+
+   The palette keeps R > G > B on every surface: the light theme's
+   surfaces are cream (#fafaf7 / #fefcf6), so a cold blue-black night
+   mode would read as a different product. Nothing is pure black and
+   nothing is pure white — maximum contrast is what makes dark themes
+   cause halation, especially for readers with astigmatism. */
+:root[data-theme="dark"] {
+  --color-paper: #131210;      /* page ground   L  6.9% */
+  --color-paper-warm: #24211d; /* raised/nested L 12.7% */
+  --color-card: #1c1a17;       /* card surface  L 10.0% */
+  --color-rule: #34302a;
+
+  --color-ink: #f0ede6;        /* 14.9:1 on card */
+  --color-ink-soft: #d6d2c9;   /* 11.5:1 */
+  --color-ink-muted: #a19c91;  /*  6.4:1 */
+  --color-ink-faint: #6b665d;  /*  3.1:1 — decorative only */
+
+  --color-on-fill: #131210;
+  --color-ink-fixed: #131210;
+
+  /* Red moves furthest of anything here. Long-wavelength red focuses
+     behind the retina while the pupil is dilated for a dark screen, so
+     saturated red on near-black visibly vibrates. #dc2626 is also only
+     4.4:1 there; lifted and desaturated it reaches 6.2:1 and stops
+     shimmering, while staying recognisably the same red. */
+  --color-flag-red: #f4736b;
+  --color-flag-red-deep: #8f2c28;
+  --color-flag-red-soft: #3a1d1c;
+  /* Gold barely moves — a warm high-luminance hue is what dark themes
+     are best at. */
+  --color-flag-gold: #f0c24a;
+  --color-flag-gold-deep: #8a6510;
+  --color-flag-gold-soft: #3b3115;
+
+  --color-success: #4ade80;
+  --color-success-deep: #1f7a45;
+  --color-success-soft: #14301f;
+
+  --color-gender-blue: #7ba7f5;
+  --color-gender-blue-deep: #2d4a8f;
+  --color-gender-blue-soft: #16233a;
+
+  /* the paper-grain dot grid inverts, or it disappears entirely */
+  --grid-dot: rgba(240, 237, 230, 0.07);
+
+  color-scheme: dark;
 }
 
 html,
 body {
-  background: var(--background);
-  color: var(--foreground);
+  background: var(--color-card);
+  color: var(--color-ink);
   font-family: var(--font-body), ui-sans-serif, system-ui, sans-serif;
 }
 
@@ -47,7 +133,7 @@ body {
 .bg-paper-grid {
   background-image: radial-gradient(
     circle,
-    rgba(15, 15, 16, 0.06) 1px,
+    var(--grid-dot, rgba(15, 15, 16, 0.06)) 1px,
     transparent 1.2px
   );
   background-size: 26px 26px;
@@ -145,6 +231,30 @@ body {
   filter: saturate(0.7) opacity(0.85);
 }
 
+/* DARK-001: the die-cut keyline.
+   raven.png is a full-colour raster with navy plumage (#183048), which
+   murks out against the dark ground — and no CSS filter can turn it
+   white: invert() sends the gold beak blue, brightness(0) invert(1)
+   erases the eyes and cap into a blob. So dark mode gives it the sticker
+   keyline every card in this app already wears. drop-shadow follows the
+   PNG's alpha channel, so this needs no second asset and will wrap ANY
+   mascot art dropped in later without re-baking a file.
+   The droop variant re-states the shadows because `filter` doesn't
+   compose across rules — the last declaration wins outright. */
+[data-theme="dark"] .mascot-keyline {
+  filter:
+    drop-shadow(0 0 1.5px var(--color-ink))
+    drop-shadow(0 0 1.5px var(--color-ink))
+    drop-shadow(0 0 1px var(--color-ink));
+}
+[data-theme="dark"] .mascot-keyline.mascot-droop {
+  filter:
+    saturate(0.7) opacity(0.85)
+    drop-shadow(0 0 1.5px var(--color-ink))
+    drop-shadow(0 0 1.5px var(--color-ink))
+    drop-shadow(0 0 1px var(--color-ink));
+}
+
 /* Path connector dotted line */
 .dot-connector {
   background-image: radial-gradient(
@@ -197,22 +307,33 @@ body {
   transition: background-color 280ms ease, color 280ms ease;
 }
 .orb-idle {
-  background: white;
+  background: var(--color-card);
   color: var(--color-ink);
   animation: orb-breath 4.2s ease-in-out infinite;
 }
 .orb-your-turn {
   background: var(--color-flag-red);
-  color: white;
+  color: var(--color-on-fill);
   animation: orb-pulse 1.3s ease-in-out infinite;
 }
 .orb-thinking {
   background: var(--color-ink);
-  color: white;
+  color: var(--color-on-fill);
+}
+/* DARK-001: the thinking orb is an INVERTED surface — near-black on the
+   white page. Letting it flip makes a 200px disc of near-white the
+   brightest thing on a dark screen, mid-conversation, every turn. It
+   stays a raised dark surface instead; the pulsing dots carry the state. */
+[data-theme="dark"] .orb-thinking {
+  background: var(--color-paper-warm);
+  color: var(--color-ink);
+}
+[data-theme="dark"] .orb-thinking .orb-dot {
+  background: var(--color-ink);
 }
 .orb-speaking {
   background: var(--color-flag-gold);
-  color: var(--color-ink);
+  color: var(--color-ink-fixed);
   animation: orb-pulse 1.05s ease-in-out infinite;
 }
 
@@ -232,7 +353,7 @@ body {
   width: 14px;
   height: 14px;
   border-radius: 9999px;
-  background: white;
+  background: var(--color-on-fill);
   animation: dot-bounce 1.1s ease-in-out infinite both;
 }
 .orb-dot:nth-child(2) { animation-delay: 0.15s; }
@@ -261,7 +382,7 @@ body {
   box-shadow: 0 4px 0 var(--color-ink);
 }
 .bubble-them {
-  background: white;
+  background: var(--color-card);
   color: var(--color-ink);
   align-self: flex-start;
   border-bottom-left-radius: 6px;

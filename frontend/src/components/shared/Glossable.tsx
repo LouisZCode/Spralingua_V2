@@ -372,7 +372,7 @@ function GlossableInner({ text, onGloss, onAdd, className, exclude }: GlossableP
               left: coords ? coords.left : -9999,
               visibility: coords ? "visible" : "hidden",
             }}
-            className="z-50 block w-[240px] max-w-[260px] rounded-[14px] border-[3px] border-ink bg-white px-3.5 py-3 text-left font-body normal-case not-italic tracking-normal text-ink shadow-[4px_4px_0_var(--color-ink)]"
+            className="z-50 block w-[240px] max-w-[260px] rounded-[14px] border-[3px] border-ink bg-card px-3.5 py-3 text-left font-body normal-case not-italic tracking-normal text-ink shadow-[4px_4px_0_var(--color-ink)]"
           >
             {glossLoading ? (
               <span className="block text-[12px] text-ink-muted">…</span>
@@ -412,7 +412,7 @@ function GlossableInner({ text, onGloss, onAdd, className, exclude }: GlossableP
                           type="button"
                           onClick={handleAdd}
                           disabled={addState === "pending"}
-                          className="inline-flex items-center rounded-full border-2 border-flag-red-deep bg-flag-red px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-white disabled:opacity-50"
+                          className="inline-flex items-center rounded-full border-2 border-flag-red-deep bg-flag-red px-3 py-1 text-[11px] font-black uppercase tracking-[0.08em] text-on-fill disabled:opacity-50"
                         >
                           {addState === "pending" ? "…" : "＋ Zu meinen Wörtern"}
                         </button>

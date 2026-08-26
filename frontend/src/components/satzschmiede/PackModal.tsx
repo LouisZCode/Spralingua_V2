@@ -28,14 +28,14 @@ export default function PackModal({
       onClick={onClose}
     >
       <div
-        className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-[3px] border-ink bg-white p-8 shadow-[0_8px_0_var(--color-ink)]"
+        className="relative max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-[28px] border-[3px] border-ink bg-card p-8 shadow-[0_8px_0_var(--color-ink)]"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={onClose}
           aria-label="Close"
-          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-[2px] border-ink text-ink transition-colors hover:bg-ink hover:text-white"
+          className="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full border-[2px] border-ink text-ink transition-colors hover:bg-ink hover:text-on-fill"
         >
           <svg
             viewBox="0 0 24 24"

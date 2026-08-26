@@ -31,7 +31,7 @@ export function CoinPill({
 
   return (
     <span
-      className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-ink bg-white px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink"
+      className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-ink bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink"
       title={
         resetLabel ? `Coins return at ${resetLabel}` : undefined
       }

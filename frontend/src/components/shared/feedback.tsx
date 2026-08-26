@@ -97,7 +97,7 @@ export function MarkedText({
     mark === "red"
       ? "font-semibold text-flag-red-deep"
       : mark === "blue"
-        ? "font-semibold text-blue-600"
+        ? "font-semibold text-gender-blue"
         : "text-success";
   return (
     <>

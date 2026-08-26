@@ -52,11 +52,11 @@ const ARTICLE_UI: Record<
     character: "der Held",
   },
   die: {
-    bg: "bg-[#2563eb]",
-    text: "text-[#2563eb]",
-    border: "border-[#2563eb]",
-    soft: "bg-[#dbeafe]",
-    shadowColor: "#1e40af",
+    bg: "bg-gender-blue",
+    text: "text-gender-blue",
+    border: "border-gender-blue",
+    soft: "bg-gender-blue-soft",
+    shadowColor: "var(--color-gender-blue-deep)",
     emoji: "🧚",
     character: "die Fee",
   },
@@ -65,7 +65,7 @@ const ARTICLE_UI: Record<
     text: "text-success",
     border: "border-success",
     soft: "bg-success-soft",
-    shadowColor: "#166534",
+    shadowColor: "var(--color-success-deep)",
     emoji: "👶",
     character: "das Baby",
   },
@@ -384,7 +384,7 @@ export default function GenusTrainer({
     // character owns, one trap warning, start.
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-white p-7"
+        className="rounded-[28px] border-[3px] border-ink bg-card p-7"
         style={inkShadow}
       >
         {pools && pools.length > 1 && (
@@ -403,8 +403,8 @@ export default function GenusTrainer({
                     aria-pressed={active}
                     className={`rounded-full border-[3px] px-3.5 py-1.5 font-body text-[12px] font-bold transition-colors ${
                       active
-                        ? "border-ink bg-ink text-white"
-                        : "border-ink bg-white text-ink hover:bg-paper-warm"
+                        ? "border-ink bg-ink text-on-fill"
+                        : "border-ink bg-card text-ink hover:bg-paper-warm"
                     }`}
                   >
                     {p.title}
@@ -423,7 +423,7 @@ export default function GenusTrainer({
           <button
             type="button"
             onClick={() => setPhase("drill")}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             Start · {round.length} words
@@ -436,7 +436,7 @@ export default function GenusTrainer({
   if (phase === "done") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-white p-7 text-center"
+        className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
         style={inkShadow}
       >
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -467,7 +467,7 @@ export default function GenusTrainer({
           <button
             type="button"
             onClick={onNewRound}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             New round
@@ -485,7 +485,7 @@ export default function GenusTrainer({
 
   const solved = verdict !== null;
   const tint = !solved
-    ? "border-ink bg-white"
+    ? "border-ink bg-card"
     : verdict.correct
       ? "border-success bg-success-soft"
       : "border-flag-red bg-flag-red-soft";
@@ -520,7 +520,7 @@ export default function GenusTrainer({
                   type="button"
                   onPointerDown={(e) => beginDrag(a, e)}
                   aria-label={`drag ${a}`}
-                  className={`grid h-16 w-16 cursor-grab touch-none select-none place-items-center rounded-full border-[3px] border-ink font-display text-[17px] font-black text-white ${ui.bg} ${
+                  className={`grid h-16 w-16 cursor-grab touch-none select-none place-items-center rounded-full border-[3px] border-ink font-display text-[17px] font-black text-on-fill ${ui.bg} ${
                     dragPos?.a === a ? "opacity-30" : ""
                   }`}
                   style={{ boxShadow: `0 5px 0 ${ui.shadowColor}` }}
@@ -544,7 +544,7 @@ export default function GenusTrainer({
               ? overTarget
                 ? "border-dashed border-flag-gold bg-flag-gold-soft"
                 : "border-dashed border-ink bg-paper-warm"
-              : "border-ink bg-white"
+              : "border-ink bg-card"
           }`}
         >
           <p className="font-display text-[clamp(26px,5vw,36px)] font-black tracking-tight text-ink">
@@ -614,7 +614,7 @@ export default function GenusTrainer({
                 <button
                   type="button"
                   onClick={advance}
-                  className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                   style={inkShadow}
                 >
                   Next
@@ -658,12 +658,12 @@ export default function GenusTrainer({
                     autoCorrect="off"
                     spellCheck={false}
                     maxLength={140}
-                    className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
+                    className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
                   />
                   <button
                     type="submit"
                     disabled={busy || !value.trim()}
-                    className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white disabled:pointer-events-none disabled:opacity-40"
+                    className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
                     style={redShadow}
                   >
                     {busy ? "Checking…" : "Check"}
@@ -704,7 +704,7 @@ export default function GenusTrainer({
                   <button
                     type="button"
                     onClick={advance}
-                    className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                    className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                     style={inkShadow}
                   >
                     {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
@@ -727,7 +727,7 @@ export default function GenusTrainer({
             type="button"
             onClick={() => setShowSheet((v) => !v)}
             aria-expanded={showSheet}
-            className="btn-3d inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-white px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.16em] text-ink"
+            className="btn-3d inline-flex items-center gap-2 rounded-full border-[3px] border-ink bg-card px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.16em] text-ink"
             style={inkShadow}
           >
             Endungen
@@ -756,7 +756,7 @@ export default function GenusTrainer({
       {/* The ghost circle riding the pointer mid-drag. */}
       {dragPos && (
         <div
-          className={`pointer-events-none fixed z-[100] grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-ink font-display text-[17px] font-black text-white ${ARTICLE_UI[dragPos.a].bg}`}
+          className={`pointer-events-none fixed z-[100] grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border-[3px] border-ink font-display text-[17px] font-black text-on-fill ${ARTICLE_UI[dragPos.a].bg}`}
           style={{ left: dragPos.x, top: dragPos.y }}
         >
           {dragPos.a}
@@ -790,7 +790,7 @@ function CheatSheet({ endings }: { endings?: EndingSheet | null }) {
               {(endings?.[a] ?? []).map((e) => (
                 <span
                   key={e}
-                  className="rounded-full border-2 border-ink bg-white px-2.5 py-0.5 font-body text-[12px] font-bold text-ink"
+                  className="rounded-full border-2 border-ink bg-card px-2.5 py-0.5 font-body text-[12px] font-bold text-ink"
                 >
                   {e}
                 </span>

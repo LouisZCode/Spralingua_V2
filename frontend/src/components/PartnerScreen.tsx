@@ -25,13 +25,13 @@ export default function PartnerScreen({
   onPick: (partner: PartnerId) => void;
 }) {
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/practice" className="flex items-center gap-2.5">
             <Image
@@ -40,7 +40,7 @@ export default function PartnerScreen({
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -75,7 +75,7 @@ export default function PartnerScreen({
               key={p.id}
               type="button"
               onClick={() => onPick(p.id)}
-              className="btn-3d flex flex-col items-start gap-4 rounded-3xl border-[3px] border-ink bg-white px-6 py-6 text-left transition hover:bg-paper-warm"
+              className="btn-3d flex flex-col items-start gap-4 rounded-3xl border-[3px] border-ink bg-card px-6 py-6 text-left transition hover:bg-paper-warm"
               style={inkShadow}
             >
               <span

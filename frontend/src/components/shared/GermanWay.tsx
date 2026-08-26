@@ -217,7 +217,7 @@ export default function GermanWay({
           type="button"
           onClick={ask}
           disabled={state === "loading"}
-          className="btn-3d inline-flex items-center rounded-full border-[2px] border-ink bg-white px-3 py-1 font-display text-[10px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-50"
+          className="btn-3d inline-flex items-center rounded-full border-[2px] border-ink bg-card px-3 py-1 font-display text-[10px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-50"
           style={inkShadow}
         >
           {state === "loading"
@@ -239,7 +239,7 @@ export default function GermanWay({
         type="button"
         onClick={ask}
         disabled={state === "loading"}
-        className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-60"
+        className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-60"
         style={inkShadow}
       >
         {state === "loading"

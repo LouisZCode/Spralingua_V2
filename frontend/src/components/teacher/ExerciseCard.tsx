@@ -126,19 +126,19 @@ export default function ExerciseCard({
               autoCorrect="off"
               spellCheck={false}
               maxLength={200}
-              className="min-w-0 flex-1 rounded-[16px] border-[3px] border-ink bg-white px-3.5 py-2.5 font-body text-[15px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red disabled:opacity-60"
+              className="min-w-0 flex-1 rounded-[16px] border-[3px] border-ink bg-card px-3.5 py-2.5 font-body text-[15px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red disabled:opacity-60"
             />
             <button
               type="button"
               onClick={check}
               disabled={busy || !answer.trim()}
-              className="btn-3d inline-flex items-center justify-center gap-2 rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.16em] text-white disabled:pointer-events-none disabled:opacity-40"
+              className="btn-3d inline-flex items-center justify-center gap-2 rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
               style={redShadow}
             >
               {busy && (
                 <span
                   aria-hidden
-                  className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white/50 border-t-white"
+                  className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-card/50 border-t-white"
                 />
               )}
               {busy ? "Checking…" : "Check"}

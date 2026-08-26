@@ -120,13 +120,13 @@ export default function Pricing() {
   }
 
   return (
-    <div className="relative min-h-screen bg-white text-ink">
+    <div className="relative min-h-screen bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href={signedIn ? "/practice" : "/"} className="flex items-center gap-2.5">
             <Image
@@ -135,7 +135,7 @@ export default function Pricing() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -264,7 +264,7 @@ function PricingCard({
   return (
     <div
       className={`flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
-        isCurrent ? "bg-flag-gold-soft" : "bg-white"
+        isCurrent ? "bg-flag-gold-soft" : "bg-card"
       }`}
       style={{ boxShadow: "0 5px 0 var(--color-ink)" }}
     >
@@ -308,7 +308,7 @@ function PricingCard({
 }
 
 const activeBtn =
-  "btn-3d w-full rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:cursor-default disabled:opacity-60";
+  "btn-3d w-full rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:cursor-default disabled:opacity-60";
 const inertBtn =
   "block w-full rounded-[16px] border-[3px] border-ink bg-paper-warm px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted";
 const noteText =
@@ -438,11 +438,11 @@ function TopupBanner({
         <p className="mt-1 font-body text-[14px] text-ink-soft">€2 for a full extra day of coins — 500 coins, whenever you need them.</p>
       </div>
       {!signedIn ? (
-        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
           Sign in to top up
         </span>
       ) : notConfigured ? (
-        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
+        <span className="block shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">
           Not live yet
         </span>
       ) : (
@@ -450,7 +450,7 @@ function TopupBanner({
           type="button"
           onClick={handleTopup}
           disabled={busy || (pending !== null && (pending as string) !== "topup")}
-          className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-60"
+          className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-3 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink disabled:opacity-60"
           style={inkShadow}
         >
           {busy ? "Opening…" : "Top up — €2"}

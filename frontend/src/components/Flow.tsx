@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import { playSound } from "./shared/sound";
 import SoundToggle from "./shared/SoundToggle";
+import ThemeToggle from "./shared/ThemeToggle";
 
 import BauteilTrainer from "./bauteil/BauteilTrainer";
 import {
@@ -180,7 +181,8 @@ type Deal =
 // satz deal says so plainly rather than presenting a write-free turn as an
 // ordinary graded one. Everything else still reads straight off KICKER.
 function kickerFor(deal: Deal): string {
-  if (deal.kind === "satz" && deal.rehearsal) return "WORTSCHATZ · WIEDERHOLUNG";
+  if (deal.kind === "satz" && deal.rehearsal)
+    return "WORTSCHATZ · WIEDERHOLUNG";
   return KICKER[deal.kind];
 }
 
@@ -213,7 +215,7 @@ function TransitionBeat({
         alt=""
         width={88}
         height={88}
-        className={`h-20 w-20 select-none ${
+        className={`mascot-keyline h-20 w-20 select-none ${
           mood === "happy" ? "mascot-hop" : mood === "sad" ? "mascot-droop" : ""
         }`}
       />
@@ -288,12 +290,8 @@ type SatzCycle = {
 // one card at a time over a long sitting, not one fixed round, so keeping
 // due strictly first matters more here than in the standalone trainer.
 function buildGradedOrder(deck: DeckCard[], newAllowance: number): string[] {
-  const due = deck
-    .filter((c) => c.srs.status === "due")
-    .map((c) => c.id);
-  const fresh = deck
-    .filter((c) => c.srs.status === "new")
-    .map((c) => c.id);
+  const due = deck.filter((c) => c.srs.status === "due").map((c) => c.id);
+  const fresh = deck.filter((c) => c.srs.status === "new").map((c) => c.id);
   return [...shuffle(due), ...shuffle(fresh).slice(0, newAllowance)];
 }
 
@@ -384,7 +382,7 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
 function pickSource(
   bag: FlowBag,
   prevKind: SourceKind | null,
-  szenarioCap: number
+  szenarioCap: number,
 ): SourceKind | null {
   const avail = ALL_KINDS.filter((k) => {
     if (sourceCount(bag, k) === 0) return false;
@@ -455,7 +453,7 @@ function foldSzenarioSeen(
   tier: Tier,
   items: SzenarioRoundItem[],
   expected: Tier,
-  priorForExpected: string[]
+  priorForExpected: string[],
 ) {
   let running = tier === expected ? priorForExpected : readSeen(tier);
   for (const item of items) {
@@ -481,7 +479,7 @@ function refillIfLow(
   token: string,
   // Only read for the "szenario" branch — the account-level bucket driving
   // its tier guess (SZEN-007). undefined for every other kind.
-  szenarioLevel?: string | null
+  szenarioLevel?: string | null,
 ) {
   if (kind === "bauteil" && bag.bauteil.length <= 1) {
     fetchBauteilRound(token)
@@ -568,11 +566,12 @@ type StoredRoundChoice = RoundPreset | number;
 
 const ROUND_STORAGE_KEY = "flow-rounds-v1";
 
-const ROUND_PRESETS: { key: RoundPreset; label: string; costLabel: string }[] = [
-  { key: "10", label: "10", costLabel: "≈ 50 coins" },
-  { key: "20", label: "20", costLabel: "≈ 100 coins" },
-  { key: "30", label: "30", costLabel: "≈ 150 coins" },
-];
+const ROUND_PRESETS: { key: RoundPreset; label: string; costLabel: string }[] =
+  [
+    { key: "10", label: "10", costLabel: "≈ 50 coins" },
+    { key: "20", label: "20", costLabel: "≈ 100 coins" },
+    { key: "30", label: "30", costLabel: "≈ 150 coins" },
+  ];
 
 function clampRounds(n: number): number {
   return Math.min(50, Math.max(1, Math.trunc(n)));
@@ -732,7 +731,12 @@ export default function Flow() {
           kind === "satzbau" ||
           kind === "szenario")
       ) {
-        refillIfLow(bag, kind, token, kind === "szenario" ? user?.level : undefined);
+        refillIfLow(
+          bag,
+          kind,
+          token,
+          kind === "szenario" ? user?.level : undefined,
+        );
       }
       // FLOW-003: latch this deal's rehearsal flag before it renders — the
       // attempt handler below has no other way to know which order this
@@ -749,7 +753,7 @@ export default function Flow() {
         setDeal(pendingDealRef.current);
       }, BEAT_MS);
     },
-    [token, user?.level, roundTarget]
+    [token, user?.level, roundTarget],
   );
 
   // FLOW-004: never let the beat timer fire into an unmounted component.
@@ -764,7 +768,11 @@ export default function Flow() {
   // Guarded by a ref so it only ever runs once per mount (the initial-load
   // effect below no longer deals directly).
   useEffect(() => {
-    if (phase === "ready" && screen === "playing" && !startedDealingRef.current) {
+    if (
+      phase === "ready" &&
+      screen === "playing" &&
+      !startedDealingRef.current
+    ) {
       startedDealingRef.current = true;
       dealNext(null);
     }
@@ -786,7 +794,7 @@ export default function Flow() {
 
     async function loadOne<T>(
       promise: Promise<T>,
-      assign: (value: T) => void
+      assign: (value: T) => void,
     ): Promise<void> {
       try {
         const value = await promise;
@@ -857,10 +865,16 @@ export default function Flow() {
 
   const handleItemDone = useCallback(
     (kind: SourceKind, correct: boolean) => {
-      setTotals((t) => ({ total: t.total + 1, correct: t.correct + (correct ? 1 : 0) }));
+      setTotals((t) => ({
+        total: t.total + 1,
+        correct: t.correct + (correct ? 1 : 0),
+      }));
       setPerExercise((p) => ({
         ...p,
-        [kind]: { done: p[kind].done + 1, correct: p[kind].correct + (correct ? 1 : 0) },
+        [kind]: {
+          done: p[kind].done + 1,
+          correct: p[kind].correct + (correct ? 1 : 0),
+        },
       }));
       // GAME-001: deliberately silent. Every flow source already plays its own
       // win/fail earcon the moment it grades the attempt; this callback fires
@@ -869,7 +883,7 @@ export default function Flow() {
       // FLOW-004: the outcome shapes the transition beat's mascot mood.
       dealNext(kind, correct ? "happy" : "sad");
     },
-    [dealNext]
+    [dealNext],
   );
 
   // GAME-001: the round-summary card is a bigger moment than any one item —
@@ -936,7 +950,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   // FLOW-002: the deliberate "give up" escape — same auth-guarded shape as
@@ -952,7 +966,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleVerbindungenAttempt = useCallback(
@@ -965,7 +979,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleVerbindungenGiveUp = useCallback(
@@ -978,7 +992,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleFaelleAttempt = useCallback(
@@ -991,7 +1005,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleFaelleGiveUp = useCallback(
@@ -1004,7 +1018,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleSatzbauAttempt = useCallback(
@@ -1017,7 +1031,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleSatzbauGiveUp = useCallback(
@@ -1030,7 +1044,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleZeitfaerbungAttempt = useCallback(
@@ -1043,7 +1057,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleZeitfaerbungGiveUp = useCallback(
@@ -1056,7 +1070,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleSprechenAttempt = useCallback(
@@ -1069,7 +1083,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleSprechenGiveUp = useCallback(
@@ -1082,24 +1096,30 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleSzenarioAttempt = useCallback(
     async (
       scenarioId: string,
       question: string,
-      audio: Blob
+      audio: Blob,
     ): Promise<StructureResult> => {
       if (!token) throw new UnauthorizedError("/szenario/attempts");
       try {
-        return await submitSzenarioAttempt(token, scenarioId, question, audio, sid());
+        return await submitSzenarioAttempt(
+          token,
+          scenarioId,
+          question,
+          audio,
+          sid(),
+        );
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   // FLOW-006: szenario has no backend /give-up route yet — unlike bauteil,
@@ -1120,13 +1140,13 @@ export default function Flow() {
       skeleton: { kern: "", punkte: [], absprung: "", vokabelAnker: [] },
       gaveUp: true,
     }),
-    []
+    [],
   );
 
   const handleGenusArticle = useCallback(
     async (
       itemId: string,
-      article: GenusArticle
+      article: GenusArticle,
     ): Promise<GenusArticleVerdict> => {
       if (!token) throw new UnauthorizedError("/genus/attempts");
       try {
@@ -1136,7 +1156,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleGenusGiveUp = useCallback(
@@ -1149,7 +1169,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   // Never called in flow (the genus item ends at the drag beat) — passed for
@@ -1164,14 +1184,14 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleSatzAttempt = useCallback(
     async (
       cardId: string,
       audio: Blob,
-      sessionId: string
+      sessionId: string,
     ): Promise<AttemptResult> => {
       if (!token) throw new UnauthorizedError("/satz/attempts");
       try {
@@ -1187,21 +1207,21 @@ export default function Flow() {
           cardId,
           audio,
           sessionId,
-          satzRehearsalRef.current
+          satzRehearsalRef.current,
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleVerbformenAttempt = useCallback(
     async (
       cardId: string,
       audio: Blob,
-      sessionId: string
+      sessionId: string,
     ): Promise<AttemptResult> => {
       if (!token) throw new UnauthorizedError("/verbformen/attempts");
       try {
@@ -1211,7 +1231,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleSatzRemove = useCallback(
@@ -1235,7 +1255,7 @@ export default function Flow() {
         rehearsalOrder: bag.satz.rehearsalOrder.filter((id) => id !== cardId),
       };
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleVerbformenRemove = useCallback(
@@ -1255,7 +1275,7 @@ export default function Flow() {
         order: bag.verbformen.order.filter((id) => id !== cardId),
       };
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleSatzReveal = useCallback(
@@ -1269,7 +1289,7 @@ export default function Flow() {
         if (e instanceof UnauthorizedError) signOut();
       });
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
@@ -1283,7 +1303,7 @@ export default function Flow() {
         if (e instanceof UnauthorizedError) signOut();
       });
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // The Artikel item's peekable "Endungen" sheet. GenusTrainer renders the
@@ -1295,7 +1315,8 @@ export default function Flow() {
   const [genusEndings, setGenusEndings] = useState<EndingSheet | null>(null);
   const genusEndingsAskedRef = useRef(false);
   useEffect(() => {
-    if (!token || deal?.kind !== "genus" || genusEndingsAskedRef.current) return;
+    if (!token || deal?.kind !== "genus" || genusEndingsAskedRef.current)
+      return;
     genusEndingsAskedRef.current = true;
     fetchGenusMeta(token)
       .then((m) => setGenusEndings(m.endings))
@@ -1323,7 +1344,7 @@ export default function Flow() {
         if (e instanceof UnauthorizedError) signOut();
       });
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleExplain = useCallback(
@@ -1332,7 +1353,7 @@ export default function Flow() {
       transcript: string,
       corrected: string,
       error: string | null,
-      sessionId?: string
+      sessionId?: string,
     ): Promise<string> => {
       if (!token) throw new UnauthorizedError("/satz/explain");
       try {
@@ -1342,14 +1363,14 @@ export default function Flow() {
           transcript,
           corrected,
           error,
-          sessionId
+          sessionId,
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleFlag = useCallback(
@@ -1358,17 +1379,24 @@ export default function Flow() {
       cardId: string | null,
       transcript: string,
       verdict: string,
-      sessionId?: string
+      sessionId?: string,
     ): Promise<void> => {
       if (!token) throw new UnauthorizedError("/satz/flag");
       try {
-        await flagVerdict(token, traceId, cardId, transcript, verdict, sessionId);
+        await flagVerdict(
+          token,
+          traceId,
+          cardId,
+          transcript,
+          verdict,
+          sessionId,
+        );
       } catch (e) {
         if (e instanceof UnauthorizedError) signOut();
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // UI-009: word-gloss popover wiring. Threaded into every trainer that
@@ -1390,7 +1418,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   const handleAddWord = useCallback(
@@ -1405,7 +1433,7 @@ export default function Flow() {
         throw e;
       }
     },
-    [token, signOut, sid]
+    [token, signOut, sid],
   );
 
   if (!ready || !token) {
@@ -1413,13 +1441,13 @@ export default function Flow() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -1428,7 +1456,7 @@ export default function Flow() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -1477,11 +1505,12 @@ export default function Flow() {
                     {totals.correct} ✓ · {totals.total} / {roundTarget}
                   </p>
                   <div className="flex items-center gap-3">
+                    <ThemeToggle />
                     <SoundToggle />
                     <button
                       type="button"
                       onClick={() => setFinished(true)}
-                      className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
+                      className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-5 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink"
                       style={inkShadow}
                     >
                       Finish
@@ -1510,7 +1539,9 @@ export default function Flow() {
                         onAttempt={handleBauteilAttempt}
                         onNewRound={noopNewRound}
                         flow
-                        onFlowDone={(correct) => handleItemDone("bauteil", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("bauteil", correct)
+                        }
                         allowGiveUp
                         onGiveUp={handleBauteilGiveUp}
                       />
@@ -1554,7 +1585,9 @@ export default function Flow() {
                         onGloss={handleGloss}
                         onAdd={handleAddWord}
                         flow
-                        onFlowDone={(correct) => handleItemDone("sprechen", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("sprechen", correct)
+                        }
                         allowGiveUp
                         onGiveUp={handleSprechenGiveUp}
                         sessionId={sid()}
@@ -1571,7 +1604,9 @@ export default function Flow() {
                         onGloss={handleGloss}
                         onAdd={handleAddWord}
                         flow
-                        onFlowDone={(correct) => handleItemDone("szenario", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("szenario", correct)
+                        }
                         allowGiveUp
                         onGiveUp={handleSzenarioGiveUp}
                         sessionId={sid()}
@@ -1586,7 +1621,9 @@ export default function Flow() {
                         onNewRound={noopNewRound}
                         flow
                         endings={genusEndings}
-                        onFlowDone={(correct) => handleItemDone("genus", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("genus", correct)
+                        }
                         allowGiveUp
                         onGiveUp={handleGenusGiveUp}
                       />
@@ -1600,7 +1637,9 @@ export default function Flow() {
                         onGloss={handleGloss}
                         onAdd={handleAddWord}
                         flow
-                        onFlowDone={(correct) => handleItemDone("faelle", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("faelle", correct)
+                        }
                         allowGiveUp
                         onGiveUp={handleFaelleGiveUp}
                       />
@@ -1614,7 +1653,9 @@ export default function Flow() {
                         onGloss={handleGloss}
                         onAdd={handleAddWord}
                         flow
-                        onFlowDone={(correct) => handleItemDone("satzbau", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("satzbau", correct)
+                        }
                         allowGiveUp
                         onGiveUp={handleSatzbauGiveUp}
                       />
@@ -1630,7 +1671,9 @@ export default function Flow() {
                         onFlag={handleFlag}
                         sessionPrefix="satz"
                         flow
-                        onFlowDone={(correct) => handleItemDone("satz", correct)}
+                        onFlowDone={(correct) =>
+                          handleItemDone("satz", correct)
+                        }
                         sessionId={sid()}
                         onGenderMiss={handleSatzGenderMiss}
                         onGenderCues={handleSatzGenderCues}
@@ -1686,7 +1729,7 @@ function SummaryCard({
   const rows = ALL_KINDS.filter((k) => perExercise[k].done > 0);
   return (
     <div
-      className="rounded-[28px] border-[3px] border-ink bg-white p-7 text-center"
+      className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
       style={inkShadow}
     >
       <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -1714,7 +1757,7 @@ function SummaryCard({
       <div className="mt-7 flex items-center justify-center">
         <Link
           href="/practice"
-          className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+          className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
           style={inkShadow}
         >
           ← Back to menu
@@ -1766,11 +1809,15 @@ function RoundPicker({
               aria-pressed={selected}
               onClick={() => onPickPreset(key)}
               className={`btn-3d rounded-3xl border-[3px] border-ink px-6 py-6 text-center transition ${
-                selected ? "bg-ink text-white" : "bg-white text-ink hover:bg-paper-warm"
+                selected
+                  ? "bg-ink text-on-fill"
+                  : "bg-card text-ink hover:bg-paper-warm"
               }`}
               style={inkShadow}
             >
-              <span className="font-display text-[28px] font-black">{label}</span>
+              <span className="font-display text-[28px] font-black">
+                {label}
+              </span>
               <span className="mt-1 block font-body text-[11px] font-bold uppercase tracking-[0.14em] opacity-70">
                 {costLabel}
               </span>
@@ -1793,7 +1840,7 @@ function RoundPicker({
           value={customText}
           onChange={(e) => onCustomChange(e.target.value)}
           placeholder="1–50"
-          className="w-24 rounded-2xl border-[3px] border-ink bg-white px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+          className="w-24 rounded-2xl border-[3px] border-ink bg-card px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
         />
       </div>
 
@@ -1801,7 +1848,7 @@ function RoundPicker({
         <button
           type="button"
           onClick={onStart}
-          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white"
+          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill"
           style={redShadow}
         >
           Start

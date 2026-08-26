@@ -62,7 +62,7 @@ export default function QuietRoomModal({ onClose }: { onClose: () => void }) {
         <button
           type="button"
           onClick={onClose}
-          className="btn-3d mt-7 w-full rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[15px] font-black uppercase tracking-[0.18em] text-white"
+          className="btn-3d mt-7 w-full rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[15px] font-black uppercase tracking-[0.18em] text-on-fill"
           style={
             {
               ["--shadow-color"]: "var(--color-flag-red-deep)",

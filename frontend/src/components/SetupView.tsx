@@ -187,7 +187,7 @@ export default function SetupView({
   };
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-white text-ink">
+    <main className="relative min-h-screen overflow-hidden bg-card text-ink">
       {showReminder && (
         <QuietRoomModal onClose={() => setShowReminder(false)} />
       )}
@@ -241,8 +241,8 @@ export default function SetupView({
                 aria-pressed={active}
                 className={`group flex-1 rounded-2xl border-[3px] border-ink px-3 py-3 text-left transition-colors ${
                   active
-                    ? "cursor-default bg-ink text-white"
-                    : "btn-3d bg-white text-ink hover:bg-ink hover:text-white"
+                    ? "cursor-default bg-ink text-on-fill"
+                    : "btn-3d bg-card text-ink hover:bg-ink hover:text-on-fill"
                 }`}
                 style={
                   {
@@ -256,8 +256,8 @@ export default function SetupView({
                 <span
                   className={`mt-1 block font-body text-[10px] font-semibold uppercase tracking-[0.18em] ${
                     active
-                      ? "text-white/70"
-                      : "text-ink-muted group-hover:text-white/70"
+                      ? "text-on-fill/70"
+                      : "text-ink-muted group-hover:text-on-fill/70"
                   }`}
                 >
                   {p.sublabel}
@@ -336,8 +336,8 @@ export default function SetupView({
                   onClick={() => setVoice(key)}
                   className={`rounded-2xl border-[3px] border-ink px-2 py-3 transition-colors ${
                     active
-                      ? "cursor-default bg-flag-gold text-ink"
-                      : "btn-3d bg-white text-ink hover:bg-flag-gold"
+                      ? "cursor-default bg-flag-gold text-ink-fixed"
+                      : "btn-3d bg-card text-ink hover:bg-flag-gold hover:text-ink-fixed"
                   }`}
                   style={
                     {
@@ -363,7 +363,7 @@ export default function SetupView({
         {/* CTA */}
         <button
           onClick={handleStart}
-          className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-white"
+          className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-on-fill"
           style={
             {
               ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -398,7 +398,7 @@ function UserChip() {
           className="h-9 w-9 shrink-0 rounded-full border-[2px] border-ink object-cover"
         />
       ) : (
-        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-[2px] border-ink bg-flag-gold font-display text-[14px] font-black text-ink">
+        <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full border-[2px] border-ink bg-flag-gold font-display text-[14px] font-black text-ink-fixed">
           {name.charAt(0).toUpperCase()}
         </span>
       )}
@@ -408,7 +408,7 @@ function UserChip() {
       <button
         type="button"
         onClick={signOut}
-        className="shrink-0 rounded-full border-[2px] border-ink px-3 py-1 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:bg-ink hover:text-white"
+        className="shrink-0 rounded-full border-[2px] border-ink px-3 py-1 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink transition-colors hover:bg-ink hover:text-on-fill"
       >
         Sign out
       </button>
@@ -430,7 +430,7 @@ function NodeTile({
       {selected && (
         <span
           aria-hidden
-          className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border-2 border-ink bg-flag-gold px-2 py-0.5 font-body text-[9px] font-bold uppercase tracking-[0.22em] text-ink"
+          className="absolute -top-3 left-1/2 z-10 -translate-x-1/2 rounded-full border-2 border-ink bg-flag-gold px-2 py-0.5 font-body text-[9px] font-bold uppercase tracking-[0.22em] text-ink-fixed"
         >
           Selected
         </span>
@@ -440,8 +440,8 @@ function NodeTile({
         aria-pressed={selected}
         className={`btn-3d relative grid h-24 w-24 place-items-center rounded-full border-[4px] transition-colors ${
           selected
-            ? "border-flag-red-deep bg-flag-red text-white"
-            : "border-ink bg-white text-ink hover:bg-paper-warm"
+            ? "border-flag-red-deep bg-flag-red text-on-fill"
+            : "border-ink bg-card text-ink hover:bg-paper-warm"
         }`}
         style={
           {

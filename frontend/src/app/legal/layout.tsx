@@ -18,13 +18,13 @@ export default function LegalLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="relative min-h-screen bg-white text-ink">
+    <div className="relative min-h-screen bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="relative border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="relative border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
           <Link
             href="/"

@@ -236,13 +236,13 @@ export default function Briefkasten() {
   // Show picker first
   if (phase === "picker") {
     return (
-      <div className="relative flex min-h-screen flex-col bg-white text-ink">
+      <div className="relative flex min-h-screen flex-col bg-card text-ink">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
         />
 
-        <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+        <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image
@@ -251,7 +251,7 @@ export default function Briefkasten() {
                 width={40}
                 height={40}
                 priority
-                className="h-9 w-9 select-none"
+                className="mascot-keyline h-9 w-9 select-none"
               />
               <span className="font-display text-[22px] font-black tracking-tight text-ink">
                 Spralingua
@@ -274,13 +274,13 @@ export default function Briefkasten() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -289,7 +289,7 @@ export default function Briefkasten() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -333,7 +333,7 @@ export default function Briefkasten() {
             <div className="mt-6 flex items-center justify-center">
               <Link
                 href="/practice"
-                className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
               >
                 ← Back to menu
               </Link>

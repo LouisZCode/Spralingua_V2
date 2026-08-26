@@ -604,7 +604,7 @@ export default function ConversationView({
   const recorder = useRecorder(handlePracticeStop);
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-white text-ink">
+    <main className="relative min-h-screen overflow-hidden bg-card text-ink">
       {/* Bauhaus decorations — quieter than SetupView so chat reads cleanly */}
       <div
         aria-hidden
@@ -685,12 +685,12 @@ export default function ConversationView({
                   if (e.key === "Enter") sendText();
                 }}
                 placeholder={typedInput ? "Ask about German…" : "Hallo, ich heiße…"}
-                className="flex-1 rounded-2xl border-[3px] border-ink bg-white px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+                className="flex-1 rounded-2xl border-[3px] border-ink bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
               />
               <button
                 onClick={sendText}
                 disabled={!draft.trim()}
-                className="btn-3d rounded-2xl border-[3px] border-ink bg-ink px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.18em] text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="btn-3d rounded-2xl border-[3px] border-ink bg-ink px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.18em] text-on-fill disabled:cursor-not-allowed disabled:opacity-50"
                 style={
                   {
                     ["--shadow-color"]: "var(--color-ink)",
@@ -734,7 +734,7 @@ export default function ConversationView({
             <div className="mt-7 flex gap-3">
               <button
                 onClick={() => setShowFinishConfirm(false)}
-                className="btn-3d flex-1 rounded-2xl border-[3px] border-ink bg-white px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.16em] text-ink"
+                className="btn-3d flex-1 rounded-2xl border-[3px] border-ink bg-card px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.16em] text-ink"
                 style={
                   { ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties
                 }
@@ -743,7 +743,7 @@ export default function ConversationView({
               </button>
               <button
                 onClick={confirmFinish}
-                className="btn-3d flex-1 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-5 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
+                className="btn-3d flex-1 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-5 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
                 style={
                   {
                     ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -828,7 +828,7 @@ function BriefingPhase({
       <button
         onClick={onReady}
         disabled={!meta}
-        className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-white disabled:cursor-wait disabled:opacity-60"
+        className="btn-3d rise-in mt-8 flex w-full items-center justify-center gap-3 rounded-[28px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-5 font-display text-[18px] font-black uppercase tracking-[0.18em] text-on-fill disabled:cursor-wait disabled:opacity-60"
         style={
           {
             ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -975,7 +975,7 @@ function LivePhase({
           <button
             onClick={onFinish}
             aria-label="End conversation"
-            className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-ink px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-flag-red hover:border-flag-red-deep"
+            className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-ink px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.18em] text-on-fill transition-colors hover:bg-flag-red hover:border-flag-red-deep"
             style={
               {
                 ["--shadow-color"]: "var(--color-ink)",
@@ -988,7 +988,7 @@ function LivePhase({
           <button
             onClick={onFinish}
             aria-label="Finish lesson"
-            className="btn-3d shrink-0 rounded-2xl border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink hover:bg-flag-red hover:text-white hover:border-flag-red-deep transition-colors"
+            className="btn-3d shrink-0 rounded-2xl border-[3px] border-ink bg-card px-4 py-2 font-display text-[12px] font-bold uppercase tracking-[0.18em] text-ink hover:bg-flag-red hover:text-on-fill hover:border-flag-red-deep transition-colors"
             style={
               {
                 ["--shadow-color"]: "var(--color-ink)",
@@ -1062,8 +1062,8 @@ function LivePhase({
               disabled={recordDisabled}
               className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
                 recording
-                  ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
-                  : "border-flag-red-deep bg-flag-red text-white"
+                  ? "animate-pulse border-flag-red-deep bg-card text-flag-red"
+                  : "border-flag-red-deep bg-flag-red text-on-fill"
               }`}
               style={
                 { ["--shadow-color"]: "var(--color-flag-red-deep)" } as React.CSSProperties
@@ -1079,7 +1079,7 @@ function LivePhase({
                 onClick={onCancelRecording}
                 aria-label="Discard recording"
                 title="Discard recording"
-                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-white font-display text-[18px] font-black text-ink"
+                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-card font-display text-[18px] font-black text-ink"
                 style={{ ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties}
               >
                 ✕
@@ -1112,7 +1112,7 @@ function LivePhase({
           <button
             type="button"
             onClick={onOpenType}
-            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
             style={{ ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties}
           >
             ⌨ Type instead

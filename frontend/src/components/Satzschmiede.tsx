@@ -26,6 +26,7 @@ import type { DeckCard } from "./satzschmiede/deck";
 import { fetchMeta } from "./genus/api";
 import { postModeComplete } from "./development/api";
 import SoundToggle from "./shared/SoundToggle";
+import ThemeToggle from "./shared/ThemeToggle";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -91,13 +92,10 @@ export default function Satzschmiede() {
     }
   }, [phase, refreshDeck]);
 
-  const handlePickerStart = useCallback(
-    (count: number) => {
-      setRoundTarget(count);
-      setPhase("playing");
-    },
-    []
-  );
+  const handlePickerStart = useCallback((count: number) => {
+    setRoundTarget(count);
+    setPhase("playing");
+  }, []);
 
   const handleRemove = useCallback(
     async (cardId: string) => {
@@ -113,7 +111,7 @@ export default function Satzschmiede() {
       }
       refreshDeck();
     },
-    [token, signOut, refreshDeck]
+    [token, signOut, refreshDeck],
   );
 
   // Record a reveal-lapse. Fire-and-forget: the trainer's queue behaviour is
@@ -126,7 +124,7 @@ export default function Satzschmiede() {
         if (e instanceof UnauthorizedError) signOut();
       });
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
@@ -138,7 +136,7 @@ export default function Satzschmiede() {
         if (e instanceof UnauthorizedError) signOut();
       });
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // SATZ-018: word-gloss popover wiring (UI-007/UI-009 machinery) for the
@@ -165,7 +163,7 @@ export default function Satzschmiede() {
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   const handleAddWord = useCallback(
@@ -178,7 +176,7 @@ export default function Satzschmiede() {
           token,
           lemma,
           glossSessionRef.current ?? undefined,
-          "gloss"
+          "gloss",
         );
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
@@ -188,7 +186,7 @@ export default function Satzschmiede() {
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
@@ -209,7 +207,7 @@ export default function Satzschmiede() {
     async (
       cardId: string,
       audio: Blob,
-      sessionId: string
+      sessionId: string,
     ): Promise<AttemptResult> => {
       if (!token) throw new UnauthorizedError("/satz/attempts");
       try {
@@ -221,7 +219,7 @@ export default function Satzschmiede() {
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // SATZ-007: unpack a correction on demand. Auth errors sign out here (same
@@ -233,7 +231,7 @@ export default function Satzschmiede() {
       transcript: string,
       corrected: string,
       error: string | null,
-      sessionId?: string
+      sessionId?: string,
     ): Promise<string> => {
       if (!token) throw new UnauthorizedError("/satz/explain");
       try {
@@ -243,7 +241,7 @@ export default function Satzschmiede() {
           transcript,
           corrected,
           error,
-          sessionId
+          sessionId,
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
@@ -252,7 +250,7 @@ export default function Satzschmiede() {
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // SATZ-008: file a "this verdict seems wrong" flag on the judgement's own
@@ -264,11 +262,18 @@ export default function Satzschmiede() {
       cardId: string | null,
       transcript: string,
       verdict: string,
-      sessionId?: string
+      sessionId?: string,
     ): Promise<void> => {
       if (!token) throw new UnauthorizedError("/satz/flag");
       try {
-        await flagVerdict(token, traceId, cardId, transcript, verdict, sessionId);
+        await flagVerdict(
+          token,
+          traceId,
+          cardId,
+          transcript,
+          verdict,
+          sessionId,
+        );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           signOut();
@@ -276,7 +281,7 @@ export default function Satzschmiede() {
         throw e;
       }
     },
-    [token, signOut]
+    [token, signOut],
   );
 
   // GAME-001: ping the streak the moment the post-round end screen shows —
@@ -309,13 +314,13 @@ export default function Satzschmiede() {
   // Show picker first
   if (phase === "picker") {
     return (
-      <div className="relative flex min-h-screen flex-col bg-white text-ink">
+      <div className="relative flex min-h-screen flex-col bg-card text-ink">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
         />
 
-        <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+        <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
           <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
             <Link href="/" className="flex items-center gap-2.5">
               <Image
@@ -324,13 +329,14 @@ export default function Satzschmiede() {
                 width={40}
                 height={40}
                 priority
-                className="h-9 w-9 select-none"
+                className="mascot-keyline h-9 w-9 select-none"
               />
               <span className="font-display text-[22px] font-black tracking-tight text-ink">
                 Spralingua
               </span>
             </Link>
             <div className="flex items-center gap-4">
+              <ThemeToggle />
               <SoundToggle />
               <Link
                 href="/practice"
@@ -350,13 +356,13 @@ export default function Satzschmiede() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -365,13 +371,14 @@ export default function Satzschmiede() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
             </span>
           </Link>
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <SoundToggle />
             <Link
               href="/practice"
@@ -425,7 +432,7 @@ export default function Satzschmiede() {
             <button
               type="button"
               onClick={() => setPacksOpen(true)}
-              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
               style={redShadow}
             >
               + Add Cards

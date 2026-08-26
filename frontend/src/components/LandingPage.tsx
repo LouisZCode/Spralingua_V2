@@ -1,5 +1,6 @@
 import { Fragment } from "react";
 import Image from "next/image";
+import ThemeToggle from "./shared/ThemeToggle";
 import Link from "next/link";
 import HeroDemo from "./HeroDemo";
 import StartCta from "./auth/StartCta";
@@ -74,7 +75,7 @@ const redShadow = {
 
 export default function LandingPage() {
   return (
-    <div className="relative min-h-screen bg-white text-ink">
+    <div className="relative min-h-screen bg-card text-ink">
       {/* Paper grain — spans the full document, scrolls with content */}
       <div
         aria-hidden
@@ -82,7 +83,7 @@ export default function LandingPage() {
       />
 
       {/* Top bar */}
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-2.5">
             <Image
@@ -91,7 +92,7 @@ export default function LandingPage() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -107,6 +108,9 @@ export default function LandingPage() {
             <StartCta className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red">
               Start →
             </StartCta>
+            {/* DARK-001: reachable before sign-in — the landing page is the
+                first impression, and a visitor on a dark OS lands here first. */}
+            <ThemeToggle />
           </nav>
         </div>
       </header>
@@ -141,7 +145,7 @@ export default function LandingPage() {
                     width={220}
                     height={220}
                     priority
-                    className="pointer-events-none absolute left-1/2 top-[-4%] w-[150%] max-w-none -translate-x-1/2 select-none"
+                    className="mascot-keyline pointer-events-none absolute left-1/2 top-[-4%] w-[150%] max-w-none -translate-x-1/2 select-none"
                   />
                 </span>
               </h1>
@@ -152,7 +156,7 @@ export default function LandingPage() {
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <StartCta
-                  className="btn-3d inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-white"
+                  className="btn-3d inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-on-fill"
                   style={redShadow}
                 >
                   <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
@@ -162,7 +166,7 @@ export default function LandingPage() {
                 </StartCta>
                 <a
                   href="#how"
-                  className="btn-3d inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-white px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-ink"
+                  className="btn-3d inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-card px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-ink"
                   style={inkShadow}
                 >
                   See how it works
@@ -214,10 +218,7 @@ export default function LandingPage() {
 
           {/* ─── Levels ───────────────────────────────────────────── */}
           <section className="py-16 lg:py-24">
-            <SectionHeading
-              eyebrow="Levels"
-              title="Start where you are."
-            />
+            <SectionHeading eyebrow="Levels" title="Start where you are." />
             <div className="mx-auto mt-12 flex max-w-md flex-col">
               {LEVELS.map((lv, i) => (
                 <Fragment key={lv.tag}>
@@ -228,7 +229,7 @@ export default function LandingPage() {
                     />
                   )}
                   <div className="flex items-center gap-5">
-                    <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[4px] border-ink bg-white shadow-[0_5px_0_var(--color-ink)]">
+                    <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[4px] border-ink bg-card shadow-[0_5px_0_var(--color-ink)]">
                       <span className="font-display text-[22px] font-black text-ink">
                         {lv.tag}
                       </span>
@@ -268,7 +269,7 @@ export default function LandingPage() {
 
           {/* ─── Closing CTA ──────────────────────────────────────── */}
           <section className="py-16 lg:py-24">
-            <div className="relative overflow-hidden rounded-[40px] border-[3px] border-ink bg-ink px-8 py-16 text-center shadow-[0_8px_0_var(--color-flag-red-deep)]">
+            <div className="relative overflow-hidden rounded-[40px] border-[3px] border-ink bg-ink px-8 py-16 text-center shadow-[0_8px_0_var(--color-flag-red-deep)] dark:bg-paper-warm">
               <div
                 aria-hidden
                 className="pointer-events-none absolute -left-12 -top-12 h-48 w-48 rounded-full bg-flag-gold/25"
@@ -279,15 +280,15 @@ export default function LandingPage() {
                 style={{ clipPath: "polygon(100% 0, 100% 100%, 0 100%)" }}
               />
               <div className="relative">
-                <h2 className="font-display text-[clamp(28px,5vw,48px)] font-black leading-[1.02] text-white">
+                <h2 className="font-display text-[clamp(28px,5vw,48px)] font-black leading-[1.02] text-on-fill dark:text-ink">
                   Ready to talk?
                 </h2>
-                <p className="mx-auto mt-4 max-w-md font-body text-[16px] leading-relaxed text-white/70">
+                <p className="mx-auto mt-4 max-w-md font-body text-[16px] leading-relaxed text-on-fill/70 dark:text-ink-soft">
                   Pick a scenario and start speaking. Mic on, 15-minute cap,
                   ends naturally when you say goodbye.
                 </p>
                 <StartCta
-                  className="btn-3d mt-8 inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-8 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-white"
+                  className="btn-3d mt-8 inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-8 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-on-fill"
                   style={redShadow}
                 >
                   <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
@@ -302,7 +303,7 @@ export default function LandingPage() {
       </main>
 
       {/* Footer */}
-      <footer className="relative border-t-[3px] border-ink bg-white">
+      <footer className="relative border-t-[3px] border-ink bg-card">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 sm:flex-row">
           <div className="flex items-center gap-2">
             <Image
@@ -310,7 +311,7 @@ export default function LandingPage() {
               alt="Spralingua raven mascot"
               width={32}
               height={32}
-              className="h-7 w-7 select-none"
+              className="mascot-keyline h-7 w-7 select-none"
             />
             <span className="font-display text-[16px] font-black tracking-tight text-ink">
               Spralingua
@@ -384,12 +385,12 @@ function FeatureCard({
 }) {
   const chip =
     accent === "red"
-      ? "bg-flag-red text-white"
+      ? "bg-flag-red text-on-fill"
       : accent === "gold"
-        ? "bg-flag-gold text-ink"
-        : "bg-ink text-white";
+        ? "bg-flag-gold text-ink-fixed"
+        : "bg-ink text-on-fill";
   return (
-    <div className="rounded-[28px] border-[3px] border-ink bg-white p-6 shadow-[0_5px_0_var(--color-ink)]">
+    <div className="rounded-[28px] border-[3px] border-ink bg-card p-6 shadow-[0_5px_0_var(--color-ink)]">
       <div
         className={`grid h-12 w-12 place-items-center rounded-2xl border-[3px] border-ink ${chip}`}
       >

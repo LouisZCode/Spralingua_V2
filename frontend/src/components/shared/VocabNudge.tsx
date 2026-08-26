@@ -56,7 +56,7 @@ export default function VocabNudgePill({
           type="button"
           onClick={() => setShow((v) => !v)}
           aria-expanded={show}
-          className="rounded-full border-2 border-flag-gold-deep bg-flag-gold-soft px-3.5 py-1.5 font-body text-[12px] font-bold text-ink transition-colors hover:bg-flag-gold/30"
+          className="rounded-full border-2 border-flag-gold-deep bg-flag-gold-soft px-3.5 py-1.5 font-body text-[12px] font-bold text-ink-fixed transition-colors hover:bg-flag-gold/30"
         >
           {words.length} {words.length === 1 ? "word" : "words"} from your
           vocabulary would fit here

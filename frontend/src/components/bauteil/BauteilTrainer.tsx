@@ -202,7 +202,7 @@ export default function BauteilTrainer({
   if (phase === "intro") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-white p-7"
+        className="rounded-[28px] border-[3px] border-ink bg-card p-7"
         style={inkShadow}
       >
         <h2 className="font-display text-[20px] font-black tracking-tight text-ink">
@@ -223,7 +223,7 @@ export default function BauteilTrainer({
         <button
           type="button"
           onClick={() => setPhase("drill")}
-          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-white"
+          className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
           style={redShadow}
         >
           Start · {round.length} phrases
@@ -235,7 +235,7 @@ export default function BauteilTrainer({
   if (phase === "done") {
     return (
       <div
-        className="rounded-[28px] border-[3px] border-ink bg-white p-7 text-center"
+        className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center"
         style={inkShadow}
       >
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
@@ -266,7 +266,7 @@ export default function BauteilTrainer({
           <button
             type="button"
             onClick={onNewRound}
-            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+            className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             New round
@@ -285,7 +285,7 @@ export default function BauteilTrainer({
   const [before, after] = item.frame.split("___");
   const solved = verdict !== null;
   const tint = !solved
-    ? "border-ink bg-white"
+    ? "border-ink bg-card"
     : verdict.correct
       ? "border-success bg-success-soft"
       : "border-flag-red bg-flag-red-soft";
@@ -318,7 +318,7 @@ export default function BauteilTrainer({
                   ·
                 </span>
               )}
-              <span className="rounded-[14px] border-[3px] border-ink bg-white px-3.5 py-1.5 font-display text-[18px] font-black text-ink">
+              <span className="rounded-[14px] border-[3px] border-ink bg-card px-3.5 py-1.5 font-display text-[18px] font-black text-ink">
                 {p}
               </span>
             </span>
@@ -363,12 +363,12 @@ export default function BauteilTrainer({
                 autoCorrect="off"
                 spellCheck={false}
                 maxLength={120}
-                className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-white px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
+                className="min-w-0 flex-1 rounded-[18px] border-[3px] border-ink bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
               />
               <button
                 type="submit"
                 disabled={busy || !value.trim()}
-                className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white disabled:pointer-events-none disabled:opacity-40"
+                className="btn-3d inline-flex items-center justify-center rounded-[18px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
                 style={redShadow}
               >
                 {busy ? "Checking…" : "Check"}
@@ -418,7 +418,7 @@ export default function BauteilTrainer({
               <button
                 type="button"
                 onClick={advance}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-white px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-ink bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
@@ -440,7 +440,7 @@ function AxisPill({ label, ok }: { label: string; ok: boolean }) {
       className={`inline-flex items-center gap-1.5 rounded-full border-[2px] px-3 py-1 font-body text-[11px] font-black uppercase tracking-[0.14em] ${
         ok
           ? "border-success bg-success-soft text-success"
-          : "border-flag-red bg-white text-flag-red-deep"
+          : "border-flag-red bg-card text-flag-red-deep"
       }`}
     >
       {ok ? "✓" : "✕"} {label}

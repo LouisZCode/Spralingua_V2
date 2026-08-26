@@ -116,7 +116,7 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
               aria-pressed={selected}
               onClick={() => handlePickPreset(value)}
               className={`btn-3d rounded-3xl border-[3px] border-ink px-6 py-6 text-center transition ${
-                selected ? "bg-ink text-white" : "bg-white text-ink hover:bg-paper-warm"
+                selected ? "bg-ink text-on-fill" : "bg-card text-ink hover:bg-paper-warm"
               }`}
             >
               <span className="font-display text-[28px] font-black">{label}</span>
@@ -142,7 +142,7 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
           value={customText}
           onChange={(e) => handleCustomChange(e.target.value)}
           placeholder={`1–${effectiveMax}`}
-          className="w-24 rounded-2xl border-[3px] border-ink bg-white px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+          className="w-24 rounded-2xl border-[3px] border-ink bg-card px-4 py-2 text-center font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
           disabled={bypassed ? false : bal === null}
         />
       </div>
@@ -173,7 +173,7 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
           type="button"
           onClick={handleStart}
           disabled={disabled}
-          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40"
+          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
         >
           Start
           <svg

@@ -40,10 +40,12 @@ const VERDICT_STYLE: Record<Verdict, { faceBox: string; tone: string }> = {
 
 // Gender colour-coding — the classic learning mnemonic: der=red, die=blue,
 // das=green. Applied to the article only, never to the noun itself. The
-// palette has no blue (flag colours), so `die` gets a functional one-off.
+// palette has no blue (flag colours), so `die` gets a functional one-off —
+// tokenised as `gender-blue` so it lifts in dark mode and stays tellable
+// apart from the other two.
 const ARTICLE_COLOR: Record<string, string> = {
   der: "text-flag-red",
-  die: "text-[#2563eb]",
+  die: "text-gender-blue",
   das: "text-success",
 };
 
@@ -54,8 +56,8 @@ const GENDER_BALL: Record<
   { bg: string; text: string; shadow: string }
 > = {
   der: { bg: "bg-flag-red", text: "text-flag-red", shadow: "var(--color-flag-red-deep)" },
-  die: { bg: "bg-[#2563eb]", text: "text-[#2563eb]", shadow: "#1e40af" },
-  das: { bg: "bg-success", text: "text-success", shadow: "#166534" },
+  die: { bg: "bg-gender-blue", text: "text-gender-blue", shadow: "var(--color-gender-blue-deep)" },
+  das: { bg: "bg-success", text: "text-success", shadow: "var(--color-success-deep)" },
 };
 
 const redShadow = {
@@ -67,11 +69,12 @@ const inkShadow = {
 const goldShadow = {
   ["--shadow-color"]: "var(--color-flag-gold-deep)",
 } as React.CSSProperties;
-// No blue design token in the palette (it's German-flag red/gold + a
-// universal success green) — same one-off #2563eb/#1e40af pair the gender
-// gate's `die` ball and GermanWay's own rewrite diff already wear.
+// Blue sits outside the German-flag palette (red/gold + a universal success
+// green), so it's a functional one-off — but it IS a token now (DARK-001):
+// raw #2563eb is only 4.1:1 on a dark surface and the mnemonic stopped
+// reading. Shared with the gender gate's `die` ball and GermanWay's diff.
 const blueShadow = {
-  ["--shadow-color"]: "#1e40af",
+  ["--shadow-color"]: "var(--color-gender-blue-deep)",
 } as React.CSSProperties;
 
 // One sentence is all we judge — auto-stop keeps a forgotten open mic from
@@ -841,7 +844,7 @@ export default function VocabTrainer({
           <button
             type="button"
             onClick={practiceAhead}
-            className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+            className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             + Ein paar vorziehen
@@ -850,7 +853,7 @@ export default function VocabTrainer({
         <div className="mt-4">
           <Link
             href="/practice"
-            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
             style={inkShadow}
           >
             Zurück zum Menü
@@ -960,7 +963,7 @@ export default function VocabTrainer({
       <div className="flip-scene">
         <div className={`flip-card ${flipped ? "is-flipped" : ""}`}>
           {/* ── Front: nothing but the word to produce ───────────────── */}
-          <div className="flip-face items-center justify-center rounded-[28px] border-[3px] border-ink bg-white p-7 text-center shadow-[0_6px_0_var(--color-ink)]">
+          <div className="flip-face items-center justify-center rounded-[28px] border-[3px] border-ink bg-card p-7 text-center shadow-[0_6px_0_var(--color-ink)]">
             <h2 className="font-display text-[clamp(30px,6vw,44px)] font-black leading-[1.05] tracking-tight text-ink">
               {card.target}
             </h2>
@@ -1179,7 +1182,7 @@ export default function VocabTrainer({
                 <button
                   type="button"
                   onClick={tryAgain}
-                  className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+                  className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
                   style={redShadow}
                 >
                   {"↻"} Try again
@@ -1196,7 +1199,7 @@ export default function VocabTrainer({
                 <button
                   type="button"
                   onClick={startRehearsal}
-                  className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-gold-deep bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-flag-gold-deep bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink-fixed"
                   style={goldShadow}
                 >
                   {"↻"} Try again
@@ -1217,7 +1220,7 @@ export default function VocabTrainer({
                   <button
                     type="button"
                     onClick={startRehearsal}
-                    className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-[#1e40af] bg-[#2563eb] px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-white"
+                    className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-gender-blue-deep bg-gender-blue px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-on-fill"
                     style={blueShadow}
                   >
                     {"↻"} Try again
@@ -1226,7 +1229,7 @@ export default function VocabTrainer({
               <button
                 type="button"
                 onClick={handleNext}
-                className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                className="btn-3d inline-flex flex-1 items-center justify-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
                 style={inkShadow}
               >
                 Next word →
@@ -1259,7 +1262,7 @@ export default function VocabTrainer({
                       type="button"
                       onClick={() => pickGender(a)}
                       disabled={busy || flipped || genderOk || wrongPick !== null}
-                      className={`btn-3d inline-flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink font-display text-[15px] font-black text-white transition-opacity ${ui.bg} ${
+                      className={`btn-3d inline-flex h-14 w-14 items-center justify-center rounded-full border-[3px] border-ink font-display text-[15px] font-black text-on-fill transition-opacity ${ui.bg} ${
                         (genderOk && !picked) || (wrongPick && !missed)
                           ? "opacity-30"
                           : ""
@@ -1312,8 +1315,8 @@ export default function VocabTrainer({
               disabled={recordDisabled}
               className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:pointer-events-none disabled:opacity-40 ${
                 recording
-                  ? "animate-pulse border-flag-red-deep bg-white text-flag-red"
-                  : "border-flag-red-deep bg-flag-red text-white"
+                  ? "animate-pulse border-flag-red-deep bg-card text-flag-red"
+                  : "border-flag-red-deep bg-flag-red text-on-fill"
               }`}
               style={redShadow}
             >
@@ -1327,7 +1330,7 @@ export default function VocabTrainer({
                 onClick={discardRecording}
                 aria-label="Discard recording"
                 title="Discard recording"
-                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-white font-display text-[18px] font-black text-ink"
+                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-ink bg-card font-display text-[18px] font-black text-ink"
                 style={inkShadow}
               >
                 ✕
@@ -1386,7 +1389,7 @@ export default function VocabTrainer({
                 }
               }}
               disabled={flipped || checking || wrongPick !== null}
-              className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-gold-deep bg-flag-gold px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink disabled:pointer-events-none disabled:opacity-40"
+              className="btn-3d inline-flex items-center rounded-[14px] border-[3px] border-flag-gold-deep bg-flag-gold px-4 py-2 font-display text-[11px] font-black uppercase tracking-[0.18em] text-ink-fixed disabled:pointer-events-none disabled:opacity-40"
               style={goldShadow}
             >
               Reveal example

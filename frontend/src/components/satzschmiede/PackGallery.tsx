@@ -12,8 +12,8 @@ import {
 // and add them to your pool. Adding is idempotent server-side, so overlapping
 // packs (shared canonical cards) simply top up what's missing.
 const KIND_CHIP: Record<PackSummary["kind"], string> = {
-  level: "bg-flag-gold text-ink",
-  situation: "bg-flag-red text-white",
+  level: "bg-flag-gold text-ink-fixed",
+  situation: "bg-flag-red text-on-fill",
 };
 
 const redShadow = {
@@ -109,7 +109,7 @@ export default function PackGallery({
           return (
             <div
               key={pack.id}
-              className="flex flex-col rounded-[24px] border-[3px] border-ink bg-white p-5 shadow-[0_5px_0_var(--color-ink)]"
+              className="flex flex-col rounded-[24px] border-[3px] border-ink bg-card p-5 shadow-[0_5px_0_var(--color-ink)]"
             >
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-display text-[20px] font-black leading-tight tracking-tight text-ink">
@@ -140,7 +140,7 @@ export default function PackGallery({
                     type="button"
                     onClick={() => handleAdd(pack)}
                     disabled={busy !== null}
-                    className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-white disabled:pointer-events-none disabled:opacity-40"
+                    className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
                     style={redShadow}
                   >
                     {busy === pack.id
@@ -161,7 +161,7 @@ export default function PackGallery({
           <button
             type="button"
             onClick={onPractice}
-            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-white px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-ink bg-card px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-ink"
             style={inkShadow}
           >
             Practice your pool →

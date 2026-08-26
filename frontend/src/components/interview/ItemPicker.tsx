@@ -59,7 +59,7 @@ export default function ItemPicker({
               key={item.id}
               type="button"
               onClick={() => onPick(item.id)}
-              className="btn-3d flex flex-col items-start gap-3 rounded-3xl border-[3px] border-ink bg-white px-6 py-6 text-left transition hover:bg-paper-warm"
+              className="btn-3d flex flex-col items-start gap-3 rounded-3xl border-[3px] border-ink bg-card px-6 py-6 text-left transition hover:bg-paper-warm"
               style={inkShadow}
             >
               <div className="flex w-full items-start justify-between gap-3">

@@ -259,7 +259,7 @@ export default function SessionSummaryModal({
 
           <button
             onClick={onClose}
-            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-white"
+            className="btn-3d mt-8 flex w-full items-center justify-center gap-3 rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-6 py-4 font-display text-[16px] font-black uppercase tracking-[0.18em] text-on-fill"
             style={
               {
                 ["--shadow-color"]: "var(--color-flag-red-deep)",
@@ -287,7 +287,7 @@ function EvalSection({
 }) {
   if (status === "loading") {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
+      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
         <div className="flex items-center gap-3 font-body text-[14px] text-ink-soft">
           <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-ink-faint border-t-ink" />
           {slowLoading
@@ -300,7 +300,7 @@ function EvalSection({
 
   if (status === "no-id" || status === "timeout") {
     return (
-      <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4 font-body text-[14px] text-ink-muted">
+      <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4 font-body text-[14px] text-ink-muted">
         Results unavailable right now.
       </div>
     );
@@ -319,7 +319,7 @@ function EvalSection({
           briefingGoal={briefingGoal}
         />
       ) : (
-        <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
+        <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
           <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
             Evaluation
           </p>
@@ -340,7 +340,7 @@ function EvalSection({
         // `goals` also carries `locale`, while unscored lessons (lesson_zero,
         // welcome) have neither and should show nothing here.
         hasGoals && (
-          <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-4">
+          <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-4">
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
               Pronunciation
             </p>
@@ -386,7 +386,7 @@ function GoalEvalBlock({
   };
 
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-5">
+    <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-5">
       <div className="flex items-center gap-3">
         <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
           Goal evaluation
@@ -426,8 +426,8 @@ function GoalEvalBlock({
                   aria-hidden
                   className={`mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full ${
                     g.passed
-                      ? "bg-success text-white"
-                      : "bg-flag-red text-white"
+                      ? "bg-success text-on-fill"
+                      : "bg-flag-red text-on-fill"
                   }`}
                 >
                   {g.passed ? "✓" : "✗"}
@@ -455,11 +455,11 @@ function PassBadge({ passed }: { passed: boolean }) {
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 font-display text-[11px] font-black uppercase tracking-[0.2em] ${
         passed
-          ? "border-success bg-success text-white"
-          : "border-flag-red bg-flag-red text-white"
+          ? "border-success bg-success text-on-fill"
+          : "border-flag-red bg-flag-red text-on-fill"
       }`}
     >
-      <span className="inline-block h-1.5 w-1.5 rounded-full bg-white" />
+      <span className="inline-block h-1.5 w-1.5 rounded-full bg-card" />
       {passed ? "Passed" : "Not passed"}
     </span>
   );
@@ -491,7 +491,7 @@ function PronEvalBlock({
   const score = Math.round(agg.accuracy_score);
 
   return (
-    <div className="rounded-[22px] border-[3px] border-ink bg-white px-5 py-5">
+    <div className="rounded-[22px] border-[3px] border-ink bg-card px-5 py-5">
       <div className="flex items-center gap-3">
         <span className="font-body text-[11px] font-bold uppercase tracking-[0.32em] text-ink">
           Pronunciation

@@ -97,7 +97,7 @@ export default function AddWordForm({
         <button
           type="submit"
           disabled={busy || !word.trim()}
-          className="btn-3d inline-flex shrink-0 items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-white disabled:pointer-events-none disabled:opacity-40"
+          className="btn-3d inline-flex shrink-0 items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
           style={redShadow}
         >
           {busy ? "Forging…" : "Add word"}
@@ -122,7 +122,7 @@ export default function AddWordForm({
               type="button"
               onClick={() => link(suggestion.word)}
               disabled={busy}
-              className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-white disabled:pointer-events-none disabled:opacity-40"
+              className="btn-3d inline-flex items-center rounded-[16px] border-[3px] border-flag-red-deep bg-flag-red px-5 py-2 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill disabled:pointer-events-none disabled:opacity-40"
               style={redShadow}
             >
               {busy ? "Adding…" : "Yes, add it"}

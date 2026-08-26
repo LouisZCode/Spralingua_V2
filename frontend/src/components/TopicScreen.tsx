@@ -148,13 +148,13 @@ export default function TopicScreen({
   };
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <Link href="/practice" className="flex items-center gap-2.5">
             <Image
@@ -163,7 +163,7 @@ export default function TopicScreen({
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -226,8 +226,8 @@ export default function TopicScreen({
                   }}
                   className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
                     key === mode
-                      ? "bg-ink text-white"
-                      : "bg-white text-ink hover:text-flag-red"
+                      ? "bg-ink text-on-fill"
+                      : "bg-card text-ink hover:text-flag-red"
                   }`}
                 >
                   {label}
@@ -256,8 +256,8 @@ export default function TopicScreen({
                   }}
                   className={`px-4 py-1.5 font-display text-[12px] font-black uppercase tracking-[0.16em] transition-colors ${
                     value === exchanges
-                      ? "bg-ink text-white"
-                      : "bg-white text-ink hover:text-flag-red"
+                      ? "bg-ink text-on-fill"
+                      : "bg-card text-ink hover:text-flag-red"
                   }`}
                 >
                   {label}
@@ -281,7 +281,7 @@ export default function TopicScreen({
                 type="button"
                 onClick={shuffle}
                 disabled={topics.length <= 3}
-                className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-white px-4 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-40"
+                className="btn-3d shrink-0 rounded-full border-[3px] border-ink bg-card px-4 py-2 font-display text-[12px] font-black uppercase tracking-[0.16em] text-ink disabled:opacity-40"
                 style={inkShadow}
               >
                 Shuffle
@@ -300,8 +300,8 @@ export default function TopicScreen({
                     }
                     className={`rounded-2xl border-[3px] border-ink px-5 py-5 text-left font-display text-[17px] font-black leading-tight transition ${
                       selected
-                        ? "bg-ink text-white"
-                        : "bg-flag-gold-soft text-ink hover:bg-white hover:text-flag-red"
+                        ? "bg-ink text-on-fill"
+                        : "bg-flag-gold-soft text-ink hover:bg-card hover:text-flag-red"
                     }`}
                     style={inkShadow}
                   >
@@ -331,7 +331,7 @@ export default function TopicScreen({
             }}
             placeholder="Type your own topic"
             maxLength={120}
-            className="mt-3 w-full rounded-2xl border-[3px] border-ink bg-white px-5 py-3.5 font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+            className="mt-3 w-full rounded-2xl border-[3px] border-ink bg-card px-5 py-3.5 font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
           />
         </div>
 
@@ -408,7 +408,7 @@ function TopicStartButton({
         type="button"
         onClick={() => onStart(effectiveTopic, mode, exchanges)}
         disabled={disabled}
-        className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-white disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
+        className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-ink bg-flag-red px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
         style={inkShadow}
       >
         Start chatting with {partnerName}

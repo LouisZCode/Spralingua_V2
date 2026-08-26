@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import ThemeToggle from "./shared/ThemeToggle";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -184,7 +185,7 @@ export default function PracticeMenu() {
   const firstName = user?.name?.trim().split(/\s+/)[0] ?? "";
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       {/* LEVEL-001: the one-time level question. Marking it asked BEFORE the
           PUT resolves is deliberate — a failed save shouldn't strand the
           learner behind a modal they can't dismiss; they can set it from the
@@ -210,7 +211,7 @@ export default function PracticeMenu() {
       />
 
       {/* Top bar — same wordmark as the landing header */}
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -219,7 +220,7 @@ export default function PracticeMenu() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -227,6 +228,9 @@ export default function PracticeMenu() {
           </Link>
 
           <div className="flex items-center gap-4">
+            {/* DARK-001: the light/dark switch lives here because /practice is
+                the one header every learner passes through. */}
+            <ThemeToggle />
             {/* PAY-002: balance chip — informative even at 0, hidden when signed out */}
             <PracticeMenuCoinChip />
             {/* PAY-001: the signed-in door to /pricing — upgrade for free
@@ -279,14 +283,16 @@ export default function PracticeMenu() {
           >
             <div
               className={`flex items-center gap-2 rounded-2xl border-[3px] border-ink px-4 py-2 ${
-                streak.practicedToday ? "bg-flag-gold" : "bg-white"
+                streak.practicedToday
+                  ? "bg-flag-gold text-ink-fixed"
+                  : "bg-card text-ink"
               }`}
             >
               <FlameIcon muted={!streak.practicedToday} />
-              <span className="font-display text-[24px] font-black leading-none text-ink">
+              <span className="font-display text-[24px] font-black leading-none">
                 {streak.current}
               </span>
-              <span className="font-body text-[12px] font-bold uppercase tracking-[0.18em] text-ink">
+              <span className="font-body text-[12px] font-bold uppercase tracking-[0.18em]">
                 {streak.current === 1 ? "day" : "days"}
               </span>
             </div>
@@ -320,7 +326,7 @@ export default function PracticeMenu() {
                       ? meterDisplay >= streak.modesRequired
                         ? "bg-success"
                         : "bg-flag-gold"
-                      : "bg-white"
+                      : "bg-card"
                   }`}
                   style={{
                     transitionDelay: `${Math.max(0, i - meterBaseline) * 90}ms`,
@@ -432,7 +438,7 @@ export default function PracticeMenu() {
                 alt=""
                 width={44}
                 height={44}
-                className="h-11 w-11 shrink-0 select-none"
+                className="mascot-keyline h-11 w-11 shrink-0 select-none"
               />
               <div>
                 <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink">
@@ -445,7 +451,7 @@ export default function PracticeMenu() {
             </div>
             <Link
               href={REC_TARGETS[rec.pillar].href}
-              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-white px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+              className="btn-3d shrink-0 rounded-[16px] border-[3px] border-ink bg-card px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
               style={inkShadow}
             >
               {REC_TARGETS[rec.pillar].cta} →
@@ -458,7 +464,7 @@ export default function PracticeMenu() {
           className="rise-in btn-3d mt-6 flex items-center gap-5 rounded-[24px] border-[3px] border-ink bg-paper-warm px-6 py-5"
           style={{ ...inkShadow, animationDelay: "200ms" }}
         >
-          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-[3px] border-ink bg-ink text-white">
+          <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl border-[3px] border-ink bg-ink text-on-fill">
             <ChartIcon />
           </div>
           <div className="flex-1">
@@ -584,15 +590,15 @@ function ModeCard({
 }) {
   const chip =
     accent === "red"
-      ? "bg-flag-red text-white"
+      ? "bg-flag-red text-on-fill"
       : accent === "gold"
-        ? "bg-flag-gold text-ink"
-        : "bg-ink text-white";
+        ? "bg-flag-gold text-ink-fixed"
+        : "bg-ink text-on-fill";
   return (
     <Link
       href={href}
       className={`btn-3d flex flex-col rounded-[28px] border-[3px] border-ink p-7 ${
-        done ? "bg-flag-gold-soft" : "bg-white"
+        done ? "bg-flag-gold-soft" : "bg-card"
       }`}
       style={inkShadow}
     >
@@ -615,7 +621,7 @@ function ModeCard({
                 strokeWidth={3}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                className="h-3 w-3 text-white"
+                className="h-3 w-3 text-on-fill"
               >
                 <path d="M5 13l4 4L19 7" />
               </svg>

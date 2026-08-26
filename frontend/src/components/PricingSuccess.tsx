@@ -137,7 +137,7 @@ export default function PricingSuccess() {
         </p>
         <Link
           href="/"
-          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-white px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
+          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-card px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
           style={inkShadow}
         >
           Go to Spralingua
@@ -153,7 +153,7 @@ export default function PricingSuccess() {
           </div>
           <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">500 coins added!</h1>
           <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">Your coins are ready — jump back into practice.</p>
-          <Link href="/practice" className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white" style={redShadow}>
+          <Link href="/practice" className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill" style={redShadow}>
             Go to practice →
           </Link>
         </>
@@ -172,7 +172,7 @@ export default function PricingSuccess() {
           </p>
           <Link
             href="/practice"
-            className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-white"
+            className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-flag-red-deep bg-flag-red px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
             Go to practice →
@@ -196,7 +196,7 @@ export default function PricingSuccess() {
         </p>
         <Link
           href="/practice"
-          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-white px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
+          className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-ink bg-card px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-ink"
           style={inkShadow}
         >
           Go to practice →
@@ -225,13 +225,13 @@ export default function PricingSuccess() {
   }
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="relative border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="relative border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-3xl items-center px-6 py-6">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -240,7 +240,7 @@ export default function PricingSuccess() {
               width={36}
               height={36}
               priority
-              className="h-8 w-8 select-none"
+              className="mascot-keyline h-8 w-8 select-none"
             />
             <span className="font-display text-[19px] font-black tracking-tight text-ink">
               Spralingua

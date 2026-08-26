@@ -92,13 +92,13 @@ export default function Development() {
     stats.prevWeek.attemptsTotal === 0;
 
   return (
-    <div className="relative flex min-h-screen flex-col bg-white text-ink">
+    <div className="relative flex min-h-screen flex-col bg-card text-ink">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-white/85 backdrop-blur">
+      <header className="sticky top-0 z-50 border-b-[3px] border-ink bg-card/85 backdrop-blur">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center gap-2.5">
             <Image
@@ -107,7 +107,7 @@ export default function Development() {
               width={40}
               height={40}
               priority
-              className="h-9 w-9 select-none"
+              className="mascot-keyline h-9 w-9 select-none"
             />
             <span className="font-display text-[22px] font-black tracking-tight text-ink">
               Spralingua
@@ -208,7 +208,7 @@ function AllExercisesCard() {
           <Link
             key={ex.href}
             href={ex.href}
-            className="flex items-baseline justify-between gap-3 rounded-2xl border-[3px] border-ink bg-white px-4 py-2.5 transition-colors hover:bg-flag-gold-soft"
+            className="flex items-baseline justify-between gap-3 rounded-2xl border-[3px] border-ink bg-card px-4 py-2.5 transition-colors hover:bg-flag-gold-soft"
           >
             <span className="font-display text-[14px] font-black tracking-tight text-ink">
               {ex.name}
@@ -253,7 +253,7 @@ function PositiveCard({
           {retired.map((r) => (
             <span
               key={r.patternId}
-              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-success bg-white px-3.5 py-1.5 font-body text-[13px] font-bold text-ink"
+              className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-success bg-card px-3.5 py-1.5 font-body text-[13px] font-bold text-ink"
             >
               <span className="text-success">✓</span>
               {r.label}
@@ -301,7 +301,7 @@ function FocusCard({ focus }: { focus: FocusPattern[] }) {
           {focus.map((f) => (
             <li
               key={f.patternId}
-              className="rounded-[20px] border-[3px] border-ink bg-white p-4"
+              className="rounded-[20px] border-[3px] border-ink bg-card p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <p className="font-display text-[16px] font-black leading-tight text-ink">
@@ -331,7 +331,7 @@ function FocusCard({ focus }: { focus: FocusPattern[] }) {
 
 function ErrorsCard({ errors }: { errors: TopError[] }) {
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
+    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7">
       <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
         Biggest errors
       </h2>
@@ -353,7 +353,7 @@ function ErrorsCard({ errors }: { errors: TopError[] }) {
 
 function ErrorRow({ error }: { error: TopError }) {
   return (
-    <li className="rounded-[16px] border-[3px] border-ink bg-white px-4 py-3">
+    <li className="rounded-[16px] border-[3px] border-ink bg-card px-4 py-3">
       <div className="flex items-center justify-between gap-3">
         <span className="font-body text-[14px] font-bold text-ink">
           {error.label}
@@ -411,7 +411,7 @@ function sessionDate(iso: string): string {
 function RecentSessionsCard({ sessions }: { sessions: RecentSession[] }) {
   const [openId, setOpenId] = useState<string | null>(null);
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
+    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7">
       <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
         Recent sessions
       </h2>
@@ -449,7 +449,7 @@ function SessionRow({
     retired.length > 0 || practiced.length > 0 || newErrors.length > 0;
 
   return (
-    <li className="rounded-[16px] border-[3px] border-ink bg-white">
+    <li className="rounded-[16px] border-[3px] border-ink bg-card">
       <button
         type="button"
         onClick={onToggle}
@@ -489,7 +489,7 @@ function SessionRow({
               {retired.map((p) => (
                 <span
                   key={p.pattern_id}
-                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-success bg-white px-3 py-1 font-body text-[12px] font-bold text-ink"
+                  className="inline-flex items-center gap-1.5 rounded-full border-2 border-success bg-card px-3 py-1 font-body text-[12px] font-bold text-ink"
                 >
                   <span className="text-success">✓</span>
                   {p.label} — mastered
@@ -603,7 +603,7 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
   const empty = buckets.every((b) => b.attempts === 0);
 
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-white p-7">
+    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
           Your attempts
@@ -615,7 +615,7 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
               type="button"
               onClick={() => setView(v)}
               className={`px-3.5 py-1 font-display text-[11px] font-black uppercase tracking-[0.14em] transition-colors ${
-                v === view ? "bg-ink text-white" : "bg-white text-ink hover:text-flag-red"
+                v === view ? "bg-ink text-on-fill" : "bg-card text-ink hover:text-flag-red"
               }`}
             >
               {v === "day" ? "Days" : "Weeks"}
@@ -688,7 +688,7 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
 
 function EmptyActivityCard() {
   return (
-    <section className="rounded-[28px] border-[3px] border-ink bg-white p-7 text-center">
+    <section className="rounded-[28px] border-[3px] border-ink bg-card p-7 text-center">
       <p className="font-display text-[18px] font-black tracking-tight text-ink">
         No activity yet
       </p>
@@ -697,7 +697,7 @@ function EmptyActivityCard() {
       </p>
       <Link
         href="/practice"
-        className="btn-3d mt-5 inline-flex items-center gap-2 rounded-[16px] border-[3px] border-ink bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
+        className="btn-3d mt-5 inline-flex items-center gap-2 rounded-[16px] border-[3px] border-ink bg-flag-gold px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-fixed"
         style={{ ["--shadow-color"]: "var(--color-ink)" } as React.CSSProperties}
       >
         Go practice
