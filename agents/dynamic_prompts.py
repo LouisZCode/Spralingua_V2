@@ -77,3 +77,8 @@ class Context:
     # "wrap up around N exchanges" guidance tracks the actual cap instead of
     # a number hardcoded in the YAML.
     max_exchanges: int | None = None
+    # AGENT-001 v8: the learner's first name, teacher (`type: teacher`) only —
+    # loaded by `pipeline/factory.py` from `users.name` and reduced to the
+    # first token. None when unset; the teacher middleware branch renders it
+    # into the "Today" section only when set. Unused by every other type.
+    student_name: str | None = None

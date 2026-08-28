@@ -71,6 +71,7 @@ from database.repository import (
     load_pattern_examples,
     load_tandem_notes,
     load_user_level,
+    load_user_name,
     load_vocab_words,
     record_grammar_error,
 )
@@ -453,6 +454,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         grammar_focus: list = []
         session_notes: list = []
         vocab_words: list = []
+        student_name: str | None = None
         snapshot_type = lesson_snapshot.get("type")
         if snapshot_type in ("tandem", "teacher"):
             try:
@@ -474,6 +476,14 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         vocab_limit = 7 if snapshot_type == "teacher" else {5: 4, 10: 7, 15: 10}.get(exchanges_override or 0, 7)
                         vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=vocab_limit)
                     elif snapshot_type == "teacher":
+                        # Greet-by-name (v8 kickoff): first name only, never
+                        # the full name — reduces to None if the name is
+                        # unset or blank after stripping.
+                        raw_name = await load_user_name(db, user_id=db_user_id)
+                        if raw_name:
+                            stripped_name = raw_name.strip()
+                            student_name = stripped_name.split()[0] if stripped_name else None
+
                         # Cold-start slice: an empty ledger means an empty
                         # focus section, which leaves Clara with no legal
                         # `[[ÜBUNG: <id>]]` id at all. Fall back to three
@@ -532,6 +542,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 logger.info(
                     f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
                     f"notes={len(session_notes)} vocab_words={len(vocab_words)} "
+                    f"name={'set' if student_name else 'none'} "
                     f"topic={topic!r} pattern={pattern!r} user={db_user_id}"
                 )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
@@ -575,7 +586,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
         # both passed — the wrapper's own DB/transcript fields need the
         # former, its hand-rolled `llm` span needs the latter.
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override, student_name=student_name)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.

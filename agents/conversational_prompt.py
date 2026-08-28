@@ -470,6 +470,12 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         short = lesson["short_term_template"].format(
             today=date.today().isoformat(), topic_block=topic_block
         )
+        # AGENT-001 v8: greet-by-name. `Context.student_name` is teacher-only
+        # (pipeline/factory.py loads it from `users.name`, first token only)
+        # and None whenever it's unset — appended only when set, so a nameless
+        # account renders exactly like before.
+        if ctx.student_name:
+            short += f"\nYour student's first name is {ctx.student_name}."
         parts = [base, short]
         if ctx.grammar_focus:
             # Cold-start slice: pipeline/factory.py fills an empty ledger

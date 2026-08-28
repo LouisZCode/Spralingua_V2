@@ -1471,6 +1471,16 @@ async def set_user_level(db: AsyncSession, *, user_id: str, level: str | None) -
     await db.commit()
 
 
+async def load_user_name(db: AsyncSession, *, user_id: str) -> str | None:
+    """The learner's display name, or None when it isn't set.
+
+    Read-only — ``_assert_test_user`` guards writes, not reads, so this is
+    safe to call for any user id under ``SPRALINGUA_TEST_GUARD``. Used by
+    the teacher branch of ``pipeline/factory.py`` to greet by first name.
+    """
+    return await db.scalar(select(User.name).where(User.id == user_id))
+
+
 async def load_weak_patterns(db: AsyncSession, *, user_id: str) -> set[str]:
     """Pattern ids the learner demonstrably still gets wrong.
 
