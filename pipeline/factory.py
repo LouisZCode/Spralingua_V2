@@ -68,10 +68,17 @@ from database.repository import (
     complete_daily_mode,
     credit_pattern_success,
     load_grammar_focus,
+    load_pattern_examples,
     load_tandem_notes,
+    load_user_level,
     load_vocab_words,
     record_grammar_error,
 )
+
+# Cold-start slice: curated starter topics for a teacher session whose
+# ledger is empty (see teacher/starters.py). Imported here, not lazily,
+# same as every other prompt-layer dependency above.
+from teacher.starters import starters_for_level
 
 # Live pipeline tasks keyed by user_id. Used by /say/{user_id} in main.py
 # to inject typed turns into an active session. Per-client isolation rule
@@ -236,7 +243,7 @@ async def _kickoff_turn(task: PipelineTask, text: str, user_id: str) -> None:
         )
 
 
-async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None, exchanges: int | None = None):
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None, exchanges: int | None = None, pattern: str | None = None):
     """Builds and runs a full pipeline for a single client connection."""
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
@@ -466,10 +473,66 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # Teacher uses fixed lesson cap (YAML 20), no exchange picker
                         vocab_limit = 7 if snapshot_type == "teacher" else {5: 4, 10: 7, 15: 10}.get(exchanges_override or 0, 7)
                         vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=vocab_limit)
+                    elif snapshot_type == "teacher":
+                        # Cold-start slice: an empty ledger means an empty
+                        # focus section, which leaves Clara with no legal
+                        # `[[ÜBUNG: <id>]]` id at all. Fall back to three
+                        # curated starters for the learner's level bucket,
+                        # shaped like load_grammar_focus's own entries so
+                        # _format_teacher_focus needs no special-casing;
+                        # `seeded: True` lets the prompt layer (below) tell
+                        # "typical for your level" apart from real slips.
+                        if not grammar_focus:
+                            level = await load_user_level(db, user_id=db_user_id)
+                            grammar_focus = [
+                                {
+                                    "pattern_id": s["pattern_id"],
+                                    "label": s["label"],
+                                    "description": s["description"],
+                                    "examples": [],
+                                    "seeded": True,
+                                }
+                                for s in starters_for_level(level)
+                            ]
+                        # `?pattern=`: the topic screen's picked focus/starter
+                        # card, guaranteed onto the page. Without this the
+                        # picked topic can fall outside the top-3 ledger
+                        # ranking (or, pre-cold-start-slice, have nothing
+                        # rendered at all) and leave Clara with no legal id
+                        # for the very topic of the lesson — see
+                        # evals/teacher/2026-08-28-baseline-v6/02-beginner-mara.md.
+                        # main.py forwards `pattern` for every lesson type;
+                        # re-gated to teacher here, and an unknown/absent id
+                        # is ignored silently rather than rejected.
+                        if pattern and pattern in load_taxonomy():
+                            existing = next(
+                                (p for p in grammar_focus if p["pattern_id"] == pattern),
+                                None,
+                            )
+                            if existing is not None:
+                                grammar_focus.remove(existing)
+                                grammar_focus.insert(0, existing)
+                            else:
+                                taxon = load_taxonomy()[pattern]
+                                examples = await load_pattern_examples(
+                                    db, user_id=db_user_id, pattern_id=pattern
+                                )
+                                grammar_focus.insert(
+                                    0,
+                                    {
+                                        "pattern_id": pattern,
+                                        "label": taxon["label"],
+                                        "description": taxon["description"],
+                                        "examples": examples,
+                                        # No `seeded` key — this is the
+                                        # learner's actual choice, not a
+                                        # level-typical suggestion.
+                                    },
+                                )
                 logger.info(
                     f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
                     f"notes={len(session_notes)} vocab_words={len(vocab_words)} "
-                    f"topic={topic!r} user={db_user_id}"
+                    f"topic={topic!r} pattern={pattern!r} user={db_user_id}"
                 )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
                 logger.warning(

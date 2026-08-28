@@ -113,6 +113,12 @@ def cmd_start(args: argparse.Namespace) -> None:
     # to exercise the per-session cap override.
     if args.exchanges is not None:
         qs_params["exchanges"] = args.exchanges
+    # Cold-start slice: the teacher topic screen forwards the picked focus/
+    # starter card's taxonomy pattern id as `?pattern=` (main.py → factory,
+    # re-gated to type: teacher). Only sent when set, so tandem/lesson sims
+    # and pattern-less teacher sims are unchanged.
+    if args.pattern:
+        qs_params["pattern"] = args.pattern
     qs = urllib.parse.urlencode(qs_params)
     url = f"{WS_BASE}/ws/{args.user}?{qs}"
 
@@ -266,6 +272,10 @@ def main() -> None:
     # main.py's ws_endpoint applies. Omitted (None) by default, which leaves
     # the lesson's own YAML max_exchanges in effect.
     s.add_argument("--exchanges", type=int, default=None)
+    # Cold-start slice: teacher-only — the picked topic card's taxonomy
+    # pattern id, forwarded as `?pattern=` exactly like the topic screen
+    # does. Omit for a free-text topic or any non-teacher lesson.
+    s.add_argument("--pattern", default=None)
     s.set_defaults(fn=cmd_start)
 
     s = sub.add_parser("say", help="send a student turn, print Lena's reply")

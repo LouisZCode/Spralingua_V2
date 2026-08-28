@@ -549,6 +549,7 @@ class ClientWrapper:
                 if marker_filter is not None and marker_filter.marker_id is not None:
                     pattern_id = marker_filter.marker_id
                     if _EXERCISE_MARKER_ID_RE.match(pattern_id):
+                        logger.info(f"[EXERCISE] Dealt pattern {pattern_id!r} to the client")
                         if self.rtvi_processor is not None and hasattr(
                             self.rtvi_processor, "send_server_message"
                         ):

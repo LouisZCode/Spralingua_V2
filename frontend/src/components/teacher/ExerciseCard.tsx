@@ -10,8 +10,10 @@ import { FeedbackCard } from "../shared/feedback";
 // renders the verdict TeacherChat hands back.
 //
 // Deliberately not a modal: no backdrop, no focus trap, no Escape handler.
-// TeacherChat floats this over the live chat (see that file) so the
-// learner can keep talking to Clara and simply never look at it.
+// ConversationView renders it inline in the chat flow, after the last
+// bubble (see that file) — single focus is enforced there instead, by
+// hiding the Record button and the typed-input affordance for as long as
+// this card is up, so the learner has exactly one active interaction.
 
 export type ExerciseData = {
   drill: string;
@@ -77,7 +79,7 @@ export default function ExerciseCard({
     <div
       role="dialog"
       aria-label="Practice exercise"
-      className="pointer-events-auto w-full max-w-[400px] rounded-[24px] border-[3px] border-line bg-paper-warm p-5 shadow-[0_8px_0_var(--color-line)]"
+      className="w-full max-w-[400px] rounded-[24px] border-[3px] border-line bg-paper-warm p-5 shadow-[0_8px_0_var(--color-line)]"
     >
       <div className="flex items-center justify-between gap-3">
         <span className="font-body text-[10px] font-black uppercase tracking-[0.28em] text-ink-muted">

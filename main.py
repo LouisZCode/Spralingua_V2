@@ -358,6 +358,7 @@ async def ws_endpoint(
     topic: str = "",
     token: str = "",
     exchanges: str = "",
+    pattern: str = "",
 ):
     """Authenticated learn socket (AUTH-001, P-3, E1).
 
@@ -381,6 +382,15 @@ async def ws_endpoint(
     falls through to the lesson's own YAML cap) and whitelisted to
     ``{5, 10, 15}`` here, so only those three values ever reach the pipeline;
     ``run_pipeline`` re-gates it again on the lesson actually being tandem.
+
+    ``pattern`` (cold-start slice) is Clara's topic screen forwarding the
+    taxonomy pattern id of whichever focus/starter card the learner picked.
+    Unlike ``exchanges`` there's no fixed value set to whitelist against here
+    (no taxonomy import in this module) — it rides through as an opaque
+    string, and ``run_pipeline`` does the real work: re-gating it to
+    ``type: teacher`` sessions and validating it against the taxonomy's known
+    ids, silently ignoring anything else (wrong lesson type, unknown id,
+    absent).
     """
     try:
         sub = decode_session_jwt(token)
@@ -399,7 +409,10 @@ async def ws_endpoint(
     try:
         await websocket.accept()
         # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
-        await run_pipeline(websocket, sub, voice, lesson, topic=topic, exchanges=exchanges_n)
+        await run_pipeline(
+            websocket, sub, voice, lesson, topic=topic,
+            exchanges=exchanges_n, pattern=pattern or None,
+        )
     finally:
         learn_release(sub)
 

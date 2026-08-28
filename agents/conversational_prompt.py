@@ -472,9 +472,17 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         )
         parts = [base, short]
         if ctx.grammar_focus:
-            parts.append(
-                lesson["grammar_focus_header"] + _format_teacher_focus(ctx.grammar_focus)
-            )
+            # Cold-start slice: pipeline/factory.py fills an empty ledger
+            # with curated starter patterns, each carrying `seeded: True`.
+            # When EVERY entry is seeded, use the starter framing instead of
+            # the real-ledger one — `.get` with a fallback keeps this safe
+            # whether or not the YAML has picked up `starter_focus_header`
+            # yet (a parallel v7 rewrite is adding the key).
+            all_seeded = all(p.get("seeded") for p in ctx.grammar_focus)
+            header = lesson["grammar_focus_header"]
+            if all_seeded:
+                header = lesson.get("starter_focus_header") or header
+            parts.append(header + _format_teacher_focus(ctx.grammar_focus))
         assembled = "\n---\n\n".join(parts)
     elif lesson_type == "respond":
         assembled = lesson["persona_prompt"]

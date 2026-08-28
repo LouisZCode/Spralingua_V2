@@ -834,6 +834,30 @@ async def load_grammar_focus(
     return focus
 
 
+async def load_pattern_examples(
+    db: AsyncSession, *, user_id: str, pattern_id: str
+) -> list[dict]:
+    """The learner's own recent slips on ONE pattern, ``[{sentence,
+    corrected}]`` — ``[]`` when no ``user_errors`` row exists for it.
+
+    Single-pattern sibling of ``load_grammar_focus``'s example enrichment,
+    used by ``pipeline/factory.py``'s teacher ``?pattern=`` wiring: a
+    learner's picked topic can fall outside the top-``limit`` ledger
+    ranking (still real, just not in the top 3), so this fetches its
+    examples directly instead of re-running the ranked query. No status
+    filter — a retired pattern's past slips are still real history.
+    """
+    examples = await db.scalar(
+        select(UserError.examples).where(
+            UserError.user_id == user_id, UserError.pattern_id == pattern_id
+        )
+    )
+    return [
+        {"sentence": e.get("sentence"), "corrected": e.get("corrected")}
+        for e in (examples or [])[-_GRAMMAR_FOCUS_EXAMPLES:]
+    ]
+
+
 async def load_tandem_notes(
     db: AsyncSession, *, user_id: str, lesson_id: str = "tandem", limit: int = 5
 ) -> list[str]:

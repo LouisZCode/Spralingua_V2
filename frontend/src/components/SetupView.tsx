@@ -91,6 +91,12 @@ export interface SessionParams {
   // as the `?exchanges=` WS query param (backend whitelists {5,10,15}).
   // Undefined for every other lesson — no query param is appended.
   exchanges?: number;
+  // Cold-start slice: teacher (Clara) only — the taxonomy pattern id of the
+  // focus/starter card the learner picked on TeacherTopicScreen, sent as the
+  // `?pattern=` WS query param (backend re-gates it to teacher sessions and
+  // validates it against the taxonomy). Undefined for a free-text topic or
+  // any other lesson — no query param is appended.
+  pattern?: string;
 }
 
 export default function SetupView({

@@ -620,6 +620,24 @@ body {
   animation: overlay-slide-up 240ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* ─── Clara: exercise card reveal ─────────────────────────────
+   Same slide-up + fade language as rise-in, kept as its own class
+   because this element mounts on its own timer (AGENT-00X, ~2s after
+   Clara finishes speaking) rather than on page load, and needs its own
+   prefers-reduced-motion guard rather than rise-in's much broader one. */
+@keyframes exercise-reveal {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.exercise-reveal {
+  animation: exercise-reveal 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .exercise-reveal {
+    animation: none;
+  }
+}
+
 /* ─── Artikel-Anker: wrong-drop shake ─────────────────────────── */
 
 @keyframes gn-shake {

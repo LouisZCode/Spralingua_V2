@@ -1,13 +1,15 @@
 """HTTP routes for Clara's interactive-exercise loop (AGENT-00X backend
-half). Two endpoints:
+half), plus the cold-start topic-screen endpoint:
 
+- ``GET /teacher/starters`` — three curated starter topics for a learner
+  whose ``user_errors`` ledger is still empty (see ``teacher/starters.py``).
 - ``GET /teacher/exercise?pattern=<taxonomy id>`` — one random item for that
   pattern, normalized into a generic card the frontend can render without
   knowing which of the five underlying drills it came from.
 - ``POST /teacher/exercise/attempts`` — grade one typed/typed-order answer
   using that drill's own deterministic check + judge (see teacher/registry.py).
 
-Both endpoints sit behind the same session-JWT dependency every drill router
+All three sit behind the same session-JWT dependency every drill router
 uses; the POST also shares the drills' per-user rate limiter (the judge calls
 it may fire are exactly as expensive as a normal drill attempt).
 """
@@ -25,9 +27,25 @@ from agents.observability import (
 from auth.deps import get_current_user_id
 from security import drill_try_admit
 from teacher.registry import get_adapter, pick_random_item
+from teacher.starters import starters_for_level
 from drills.copy import JUDGE_UNAVAILABLE
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
+
+
+@router.get("/starters")
+async def teacher_starters(user_id: str = Depends(get_current_user_id)):
+    """Cold-start starter topics for the topic screen (AGENT-00X follow-up).
+
+    Read-only: no writes, no coin/gate interaction — same three ids the
+    factory falls back to when a learner's ``user_errors`` ledger is empty,
+    so what's offered here always matches what Clara can actually deal."""
+    from database.connection import get_sessionmaker
+    from database.repository import load_user_level
+
+    async with get_sessionmaker()() as db:
+        level = await load_user_level(db, user_id=user_id)
+    return {"starters": starters_for_level(level), "seeded": True}
 
 
 @router.get("/balance")

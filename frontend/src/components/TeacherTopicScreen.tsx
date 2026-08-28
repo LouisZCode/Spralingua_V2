@@ -17,7 +17,7 @@ type TeacherBal = { tier: string; limit: number; used: number; remaining: number
 export default function TeacherTopicScreen({
   onStart,
 }: {
-  onStart: (topic: string) => void;
+  onStart: (topic: string, patternId?: string) => void;
 }) {
   const { token, signOut, user } = useAuth();
   const isDeveloper = user?.role === "developer";
@@ -39,6 +39,7 @@ export default function TeacherTopicScreen({
   const exhausted = !isDeveloper && remaining <= 0;
 
   const [focus, setFocus] = useState<FocusPattern[]>([]);
+  const [focusLoaded, setFocusLoaded] = useState(false);
   const [custom, setCustom] = useState<string>("");
   const [selectedCard, setSelectedCard] = useState<FocusPattern | null>(null);
 
@@ -49,12 +50,40 @@ export default function TeacherTopicScreen({
       .then((stats) => {
         if (!alive) return;
         setFocus(stats.focus);
+        setFocusLoaded(true);
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) signOut();
       });
     return () => { alive = false; };
   }, [token, signOut]);
+
+  // Cold-start slice: an empty ledger means an empty `stats.focus` — fetch
+  // the curated starters ONLY once we know that for certain (gated on
+  // focusLoaded, not just focus.length, so this never fires speculatively
+  // while the real focus fetch is still in flight).
+  const [starters, setStarters] = useState<FocusPattern[]>([]);
+  useEffect(() => {
+    if (!token || !focusLoaded || focus.length > 0) return;
+    let alive = true;
+    fetch(`${HTTP_BASE}/teacher/starters`, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (!alive || !j?.starters) return;
+        const mapped: FocusPattern[] = (
+          j.starters as { pattern_id: string; label: string; description: string }[]
+        ).map((s) => ({
+          patternId: s.pattern_id,
+          label: s.label,
+          description: s.description,
+          count7d: 0,
+          lifetime: 0,
+        }));
+        setStarters(mapped);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [token, focusLoaded, focus.length]);
 
   const effectiveTopic = useMemo(() => selectedCard?.label ?? custom.trim(), [selectedCard, custom]);
   const [primary, ...rest] = focus;
@@ -110,6 +139,20 @@ export default function TeacherTopicScreen({
           </div>
         )}
 
+        {/* Cold-start slice: no ledger yet — offer level-typical starters
+            instead of silently dropping the whole picker block. */}
+        {!primary && starters.length > 0 && (
+          <div className="rise-in mt-9" style={{ animationDelay: "80ms" }}>
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Good starting points</p>
+            <p className="mt-1 font-body text-[13px] text-ink-soft">These get personalized as you practice — after a few exercises, {TEACHER_NAME} focuses on your own mistakes.</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {starters.map((s) => (
+                <FocusCard key={s.patternId} focus={s} selected={selectedCard?.patternId === s.patternId} onSelect={() => setSelectedCard((prev) => (prev?.patternId === s.patternId ? null : s))} size="normal" />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="rise-in mt-7" style={{ animationDelay: "200ms" }}>
           <label htmlFor="teacher-custom-topic" className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Or ask about anything else…</label>
           <input id="teacher-custom-topic" type="text" value={custom} onChange={(e) => { setCustom(e.target.value); setSelectedCard(null); }} placeholder="e.g. why is it 'dem' and not 'den'?" maxLength={120} className="mt-3 w-full rounded-2xl border-[3px] border-line bg-card px-5 py-3.5 font-body text-[16px] text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft" />
@@ -137,7 +180,7 @@ export default function TeacherTopicScreen({
           ) : exhausted ? (
             <span className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-line bg-paper-warm px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-ink-muted sm:w-auto">Daily limit reached</span>
           ) : (
-            <button type="button" onClick={() => onStart(effectiveTopic)} disabled={!effectiveTopic} className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" style={inkShadow}>
+            <button type="button" onClick={() => onStart(effectiveTopic, selectedCard?.patternId)} disabled={!effectiveTopic} className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" style={inkShadow}>
               Start with {TEACHER_NAME}
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             </button>

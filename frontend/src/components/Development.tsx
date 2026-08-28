@@ -192,6 +192,7 @@ const HIDDEN_EXERCISES: { href: string; name: string; note: string }[] = [
   { href: "/szenario", name: "Szenario-Sparring", note: "structure coach — in Flow" },
   { href: "/learn", name: "Conversation Practice", note: "dormant" },
   { href: "/interview", name: "Interview", note: "personal audio pool — INTV-003" },
+  { href: "/teacher", name: "Clara — Teacher", note: "direct door — behavior testing" },
 ];
 
 function AllExercisesCard() {
