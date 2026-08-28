@@ -104,10 +104,7 @@ export default function TeacherTopicScreen({
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-14">
         <div className="rise-in">
           <p className="font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">{TEACHER_NAME} · Grammar Explained</p>
-          <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">What don&apos;t you understand?</h1>
-          <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
-            {TEACHER_NAME} explains in English, one thing at a time. Pick a structure you&apos;ve been slipping on lately, or ask about anything else.
-          </p>
+          <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">Choose a topic for your class</h1>
         </div>
 
         {/* Daily allowance note — replaces coin length picker */}
@@ -125,7 +122,7 @@ export default function TeacherTopicScreen({
 
         {primary && (
           <div className="rise-in mt-9" style={{ animationDelay: "80ms" }}>
-            <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Your biggest slip lately</p>
+            <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Topics to focus on — from this week&apos;s practice</p>
             <div className="mt-3">
               <FocusCard focus={primary} selected={selectedCard?.patternId === primary.patternId} onSelect={() => setSelectedCard((prev) => (prev?.patternId === primary.patternId ? null : primary))} size="large" />
             </div>
@@ -181,12 +178,9 @@ export default function TeacherTopicScreen({
             <span className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-line bg-paper-warm px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-ink-muted sm:w-auto">Daily limit reached</span>
           ) : (
             <button type="button" onClick={() => onStart(effectiveTopic, selectedCard?.patternId)} disabled={!effectiveTopic} className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto" style={inkShadow}>
-              Start with {TEACHER_NAME}
+              Start
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4"><path d="M5 12h14M13 6l6 6-6 6" /></svg>
             </button>
-          )}
-          {!isFreeLocked && !exhausted && (
-            <button type="button" onClick={() => onStart("")} className="font-body text-[13px] font-bold text-ink-soft hover:text-ink">I just want to talk →</button>
           )}
         </div>
       </main>

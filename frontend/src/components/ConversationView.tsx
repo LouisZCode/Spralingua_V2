@@ -84,6 +84,7 @@ export default function ConversationView({
   practiceMode,
   typedInput,
   agentOpens,
+  skipBriefing,
   onExerciseRequest,
   onBotReply,
   onSessionEnded,
@@ -118,6 +119,14 @@ export default function ConversationView({
   // orb must not read "ready") until that opening line finishes playing.
   // Absent/false (every existing caller but Clara) is byte-identical.
   agentOpens?: boolean;
+  // Clara's entry flow skips the briefing/"scene preview" screen entirely —
+  // the topic screen (TeacherTopicScreen) IS her briefing now. When true,
+  // this view mounts straight into the live phase and auto-fires the same
+  // start/connect handler the briefing's "I am ready" button calls (see the
+  // mount effect right after startCall's definition). Absent/false (every
+  // existing caller but Clara) is byte-identical: phase still starts
+  // "briefing" and nothing auto-connects.
+  skipBriefing?: boolean;
   // AGENT-00X: Clara's interactive-exercise loop, teacher lessons only.
   // Fires once per `[[ÜBUNG: <id>]]`-terminated reply, but not until that
   // reply's bubble has actually revealed (see flushPendingBot) — the card
@@ -153,7 +162,12 @@ export default function ConversationView({
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
   const { token, user } = useAuth();
-  const [phase, setPhase] = useState<"briefing" | "live">("briefing");
+  // skipBriefing (Clara): start straight in "live" — see startCall's mount
+  // effect below, which fires the connect handler this initial value would
+  // otherwise wait for a briefing-screen click to trigger.
+  const [phase, setPhase] = useState<"briefing" | "live">(
+    skipBriefing ? "live" : "briefing"
+  );
   const [meta, setMeta] = useState<LessonMeta | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState<string>("Loading...");
@@ -195,6 +209,9 @@ export default function ConversationView({
   // real traffic arrived (heartbeat OR an actual turn), so the liveness
   // watchdog below can tell a merely-quiet conversation from a dead socket.
   const lastActivityRef = useRef<number>(Date.now());
+  // skipBriefing (Clara): guards the mount effect below so it fires
+  // startCall exactly once, not on every re-render.
+  const autoStartedRef = useRef(false);
 
   // Fetch briefing copy when the view mounts. Aborted on unmount so a fast
   // unmount can't setState on an unmounted component.
@@ -541,6 +558,17 @@ export default function ConversationView({
       setStatus(`Connection failed: ${e}`);
     }
   };
+
+  // skipBriefing (Clara): fire the exact same connect handler the briefing's
+  // "I am ready" button calls, once, right after mount — phase already
+  // starts "live" (see the useState above) so there's no briefing screen to
+  // wait for a click on.
+  useEffect(() => {
+    if (!skipBriefing || autoStartedRef.current) return;
+    autoStartedRef.current = true;
+    void startCall();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [skipBriefing]);
 
   const confirmFinish = () => {
     setShowFinishConfirm(false);

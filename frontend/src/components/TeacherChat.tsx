@@ -310,6 +310,10 @@ export default function TeacherChat() {
       // AGENT-001: Clara's `kickoff` key means she speaks first — lock Record
       // until her opening line finishes, see ConversationView's agentOpens.
       agentOpens
+      // Clara skips the briefing/"scene preview" screen — the topic screen
+      // (TeacherTopicScreen) already served that purpose. Straight into the
+      // live phase, auto-connecting on mount.
+      skipBriefing
       onFinish={() => router.push("/practice")}
       // Backing out of the briefing card returns to the picker, not /practice
       // (mirrors TandemChat's onBack -> setTopic(null)).
