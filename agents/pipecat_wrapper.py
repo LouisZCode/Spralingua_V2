@@ -205,7 +205,27 @@ class ClientWrapper:
         # OBS-010: set once the first llm span has stamped the rendered
         # system prompt (see astream's finally block).
         self._system_prompt_stamped = False
-        self.agent = agent_assembly(user_id)
+        # AGENT-00X: loaded ahead of agent_assembly (below) so the lesson's
+        # `type` is known before the agent is built — teacher sessions pass a
+        # lower reasoning_effort (see the comment on that call) that no other
+        # lesson type receives.
+        lesson = load_prompts(lesson_id)
+        # AGENT-00X: gates the exercise-marker hold-back below. Read from the
+        # loaded lesson's own `type`, not `lesson_id == "teacher"` — there is
+        # only one teacher lesson today, but the marker contract belongs to
+        # the `type: teacher` middleware branch, not to one specific id.
+        self._is_teacher_lesson = lesson.get("type") == "teacher"
+        self.agent = agent_assembly(
+            user_id,
+            # gpt-oss-120b's hidden reasoning tokens run ~700-1100 per reply
+            # at the provider default ("medium") even for a ~60-word answer
+            # (measured via Langfuse) — pure latency with nothing to show for
+            # it in a short explanation. Teacher-only: tandem and conversation
+            # keep the default, since their prompts are sim-calibrated at that
+            # setting (see sim/PROMPT_LOG.md) and this is exactly the kind of
+            # change that could shift measured behavior.
+            reasoning_effort="low" if self._is_teacher_lesson else None,
+        )
         self.context = Context(
             lesson_id=lesson_id,
             agent_voice=voice,
@@ -228,12 +248,6 @@ class ClientWrapper:
         # turn context → falls back to service-level parent → separate trace).
         self._end_pending: bool = False
 
-        lesson = load_prompts(lesson_id)
-        # AGENT-00X: gates the exercise-marker hold-back below. Read from the
-        # loaded lesson's own `type`, not `lesson_id == "teacher"` — there is
-        # only one teacher lesson today, but the marker contract belongs to
-        # the `type: teacher` middleware branch, not to one specific id.
-        self._is_teacher_lesson = lesson.get("type") == "teacher"
         # TAND-012: per-session exchange cap (5/10/15), whitelisted in main.py
         # and re-gated to tandem-only in pipeline/factory.py. This wrapper
         # re-loads the YAML itself (the factory's `lesson_snapshot` mutation for

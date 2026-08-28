@@ -225,10 +225,31 @@ export default function TeacherChat() {
         );
       }
       const verdict: ExerciseVerdict = await res.json();
-      const verb = verdict.correct ? "Correct" : "Wrong";
-      let report =
-        `${EXERCISE_RESULT_PREFIX} ${verb} — exercise on ${data.patternId}: ` +
-        `they answered "${answer}", expected "${verdict.expected}".`;
+      // Never hand Clara an "expected" value that contradicts a CORRECT
+      // verdict — a judge accepting a valid variant (e.g. "eine" for a "die"
+      // reference) previously still surfaced `expected "die"`, which read to
+      // the LLM as "they were wrong" and caused it to hallucinate a
+      // correction. Three shapes: exact match to the reference, a correct
+      // but different variant, and a genuine miss — only the last one names
+      // an "expected" answer as a correction.
+      const matchesReference =
+        answer.trim().toLowerCase() === verdict.expected.trim().toLowerCase();
+      let report: string;
+      if (verdict.correct && matchesReference) {
+        report =
+          `${EXERCISE_RESULT_PREFIX} Correct — exercise on ${data.patternId}: ` +
+          `the sentence was "${data.prompt}", they answered "${answer}".`;
+      } else if (verdict.correct) {
+        report =
+          `${EXERCISE_RESULT_PREFIX} Correct — exercise on ${data.patternId}: ` +
+          `the sentence was "${data.prompt}", they answered "${answer}" — also a correct fit ` +
+          `(the reference answer was "${verdict.expected}").`;
+      } else {
+        report =
+          `${EXERCISE_RESULT_PREFIX} Wrong — exercise on ${data.patternId}: ` +
+          `the sentence was "${data.prompt}", they answered "${answer}"; ` +
+          `the correct answer is "${verdict.expected}".`;
+      }
       if (verdict.note) report += ` ${verdict.note}`;
       void sendReport(report);
 
