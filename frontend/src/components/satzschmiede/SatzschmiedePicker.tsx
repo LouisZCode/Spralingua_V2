@@ -2,14 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { useCoinBalance, useCoinsBypassed } from "@/components/shared/Coins";
-
-// PAY-002: SATZ_ATTEMPT = 5 coins per vocab exercise
-const SATZ_ATTEMPT_COST = 5;
+import { SATZ_ATTEMPT_COST } from "@/lib/coins";
 
 const SATZ_PRESETS = [
-  { value: 10, label: "10", costLabel: "≈ 50 coins" },
-  { value: 20, label: "20", costLabel: "≈ 100 coins" },
-  { value: 30, label: "30", costLabel: "≈ 150 coins" },
+  { value: 10, label: "10" },
+  { value: 20, label: "20" },
+  { value: 30, label: "30" },
 ] as const;
 
 const SATZ_STORAGE_KEY = "satzschmiede-rounds-v1";
@@ -107,7 +105,7 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        {SATZ_PRESETS.map(({ value, label, costLabel }) => {
+        {SATZ_PRESETS.map(({ value, label }) => {
           const selected = customText === "" && presetChoice === value;
           return (
             <button
@@ -121,7 +119,7 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
             >
               <span className="font-display text-[28px] font-black">{label}</span>
               <span className="mt-1 block font-body text-[11px] font-bold uppercase tracking-[0.14em] opacity-70">
-                {costLabel}
+                ≈ {value * SATZ_ATTEMPT_COST} coins
               </span>
             </button>
           );

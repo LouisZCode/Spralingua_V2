@@ -7,6 +7,7 @@ import {
   UnauthorizedError,
   type PackSummary,
 } from "./api";
+import { loadError } from "../shared/copy";
 
 // The pack shop: browse curated word packs (level packs + situation packs)
 // and add them to your pool. Adding is idempotent server-side, so overlapping
@@ -88,7 +89,7 @@ export default function PackGallery({
   if (error) {
     return (
       <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-        Couldn&apos;t load the packs — is the backend running?
+        {loadError("your packs")}
       </p>
     );
   }

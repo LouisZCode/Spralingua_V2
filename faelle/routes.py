@@ -30,6 +30,7 @@ from database.repository import (
 from drills import apply_level
 from faelle.content import TARGET_PATTERNS, load_items
 from faelle.judge import judge_case
+from drills.copy import JUDGE_UNAVAILABLE
 from grammar import expand_contractions
 from security import drill_try_admit
 
@@ -302,7 +303,7 @@ async def submit_attempt(
                 logger.exception("Fälle judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
-                    detail="The judge is unavailable right now — try again in a moment.",
+                    detail=JUDGE_UNAVAILABLE,
                 )
             correct, note, means_instead = diag.correct, diag.note, diag.means_instead
 

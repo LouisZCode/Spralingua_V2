@@ -13,6 +13,7 @@ import {
   type RoundItem,
 } from "./bauteil/api";
 import { UnauthorizedError } from "./satzschmiede/api";
+import { loadError } from "./shared/copy";
 
 // Bauteil-Sätze — GRAM-002 Exercise A: raw uninflected parts in, the
 // correctly declined phrase out, typed. This component is the auth-guarded
@@ -133,7 +134,7 @@ export default function Bauteil() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a round — is the backend running?
+            {loadError("a round")}
           </p>
         ) : round === null ? null : (
           <BauteilTrainer

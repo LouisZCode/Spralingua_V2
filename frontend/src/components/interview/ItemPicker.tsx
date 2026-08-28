@@ -1,6 +1,7 @@
 "use client";
 
 import type { InterviewItemSummary } from "./api";
+import { loadError } from "../shared/copy";
 
 const inkShadow = {
   ["--shadow-color"]: "var(--color-line)",
@@ -36,7 +37,7 @@ export default function ItemPicker({
 
       {error ? (
         <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-          Couldn&apos;t load your interviews — is the backend running?
+          {loadError("your interviews")}
         </p>
       ) : items === null ? (
         <p className="text-center font-body text-[12px] font-semibold uppercase tracking-[0.26em] text-ink-muted">

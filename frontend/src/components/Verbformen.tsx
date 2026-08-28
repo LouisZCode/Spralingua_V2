@@ -15,6 +15,7 @@ import {
   type AttemptResult,
 } from "./verbformen/api";
 import { explainAttempt, flagVerdict } from "./satzschmiede/api";
+import { loadError } from "./shared/copy";
 import type { DeckCard } from "./satzschmiede/deck";
 
 const redShadow = {
@@ -217,7 +218,7 @@ export default function Verbformen() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load your verbs — is the backend running?
+            {loadError("your verbs")}
           </p>
         ) : verbDeck === null ? null : empty ? (
           /* No verb pairs yet — every verb added in Satzschmiede brings its

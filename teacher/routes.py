@@ -25,6 +25,7 @@ from agents.observability import (
 from auth.deps import get_current_user_id
 from security import drill_try_admit
 from teacher.registry import get_adapter, pick_random_item
+from drills.copy import JUDGE_UNAVAILABLE
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
 
@@ -185,7 +186,7 @@ async def submit_exercise_attempt(
             mark_span_error(span, "judge unavailable")
             raise HTTPException(
                 status_code=502,
-                detail="The judge is unavailable right now — try again in a moment.",
+                detail=JUDGE_UNAVAILABLE,
             )
         span.set_attribute("langfuse.observation.metadata.correct", str(correct))
         span.set_attribute(

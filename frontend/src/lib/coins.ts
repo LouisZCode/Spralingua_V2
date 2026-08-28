@@ -3,6 +3,11 @@
 
 import { HTTP_BASE } from "./api";
 
+// UI-014: price mirrors for the round-length pickers' cost labels — must
+// stay in step with coins/prices.py::SATZ_ATTEMPT / ::LETTER.
+export const SATZ_ATTEMPT_COST = 5;
+export const LETTER_COST = 15;
+
 // PAY-002: GET /coins/balance response shape (verified backend contract).
 export type CoinBalance = {
   tier: "free" | "basic" | "premium";

@@ -22,8 +22,8 @@ const inkShadow = {
 } as React.CSSProperties;
 
 // The drill rules, shown once up front — same convention as the other typed
-// trainers. The deep "why" lives in the collapsible explainer above the
-// trainer (Zeitfaerbung.tsx); these four lines are the mechanics only.
+// trainers. There is no separate deep-dive explainer; these four lines are
+// the only rules copy this exercise has.
 const RULES: { title: string; body: string }[] = [
   {
     title: "Fill the gap with war, wurde, or blieb",

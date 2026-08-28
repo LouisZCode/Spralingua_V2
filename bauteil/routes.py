@@ -28,6 +28,7 @@ from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from bauteil.content import TARGET_PATTERNS, load_items
 from bauteil.judge import judge_attempt
+from drills.copy import JUDGE_UNAVAILABLE
 from database.connection import get_db
 from database.orm import UserDrillItem
 from database.repository import (
@@ -251,7 +252,7 @@ async def submit_attempt(
                 logger.exception("Bauteil judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
-                    detail="The judge is unavailable right now — try again in a moment.",
+                    detail=JUDGE_UNAVAILABLE,
                 )
             correct, case_ok, carrier_ok, note = (
                 diag.correct,

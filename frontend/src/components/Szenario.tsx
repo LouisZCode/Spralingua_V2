@@ -12,7 +12,8 @@ import {
   type Scenario,
   type StructureResult,
 } from "./szenario/api";
-import { expectedTier, readSeen, writeSeen } from "./szenario/seen";
+import { expectedTier, foldSeen, readSeen, writeSeen } from "./szenario/seen";
+import { loadError } from "./shared/copy";
 import {
   addWord,
   fetchGloss,
@@ -81,10 +82,13 @@ export default function Szenario() {
         if (typeof s.questionIndex === "number") {
           const servedTier = s.tier ?? expected;
           const priorSeen = servedTier === expected ? seen : readSeen(servedTier);
-          const served = `${s.scenarioId}:${s.questionIndex}`;
           writeSeen(
             servedTier,
-            s.cycleReset ? [served] : [...priorSeen, served]
+            foldSeen(priorSeen, {
+              scenarioId: s.scenarioId,
+              questionIndex: s.questionIndex,
+              cycleReset: s.cycleReset,
+            })
           );
         }
       })
@@ -236,7 +240,7 @@ export default function Szenario() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a scenario — is the backend running?
+            {loadError("a scenario")}
           </p>
         ) : scenario === null ? null : (
           <SzenarioTrainer

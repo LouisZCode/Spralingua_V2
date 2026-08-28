@@ -37,6 +37,7 @@ from database.repository import (
 from briefkasten.content import POINT_COUNT, load_seeds, seeds_for_level, word_target
 from briefkasten.germanizer import germanize_letter
 from briefkasten.judge import feedback_pass, hint_pass
+from drills.copy import JUDGE_UNAVAILABLE
 from briefkasten.writer import VOCAB_LIMIT, write_letter
 from security import drill_try_admit
 
@@ -334,7 +335,7 @@ async def submit_attempt(
             )
             raise HTTPException(
                 status_code=502,
-                detail="The judge is unavailable right now — try again in a moment.",
+                detail=JUDGE_UNAVAILABLE,
             )
 
         # Runs only after feedback_pass has already succeeded, sequentially

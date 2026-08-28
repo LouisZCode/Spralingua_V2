@@ -17,6 +17,7 @@ import {
 import { addWord, fetchGloss, type GlossInfo } from "./satzschmiede/api";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "./shared/Coins";
+import { loadError } from "./shared/copy";
 
 // VARY-001: seed ids already served this pool cycle, kept in localStorage so
 // variety persists across page visits. Guarded exactly like Szenario.tsx:
@@ -346,7 +347,7 @@ export default function Briefkasten() {
           />
         ) : error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a letter — is the backend running?
+            {loadError("a letter")}
           </p>
         ) : letter === null ? null : (
           <BriefTrainer

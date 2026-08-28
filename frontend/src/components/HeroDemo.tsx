@@ -7,6 +7,7 @@ import {
   ProtobufFrameSerializer,
 } from "@pipecat-ai/websocket-transport";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
+import { loadError } from "./shared/copy";
 
 // Front-page voice demo — the Spralingua "welcome" concierge (a `respond`
 // lesson, no evaluator). Connects to the hardened public demo socket
@@ -231,7 +232,7 @@ export default function HeroDemo() {
       const wsUrl = `${BASE_WS}/ws/demo/${demoUserId}`;
       await client.connect({ wsUrl });
     } catch {
-      setNote("Couldn't connect — is the backend running?");
+      setNote(loadError("the demo"));
       cleanupAudio();
       clientRef.current = null;
       setMode("idle");
@@ -258,7 +259,7 @@ export default function HeroDemo() {
       });
       if (!r.ok) setNote(`Couldn't send your message (${r.status}).`);
     } catch {
-      setNote("Couldn't send your message — is the backend running?");
+      setNote(loadError("your message"));
     }
   }, [draft, mode]);
 

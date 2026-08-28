@@ -36,6 +36,7 @@ from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
 from szenario.content import load_scenarios
 from szenario.judge import judge_structure
+from drills.copy import JUDGE_UNAVAILABLE
 
 router = APIRouter(prefix="/szenario", tags=["szenario"])
 
@@ -417,7 +418,7 @@ async def submit_attempt(
             logger.exception("Szenario judge call failed (scenario {})", scenarioId)
             raise HTTPException(
                 status_code=502,
-                detail="The judge is unavailable right now — try again in a moment.",
+                detail=JUDGE_UNAVAILABLE,
             )
         t_llm = time.perf_counter()
         logger.info(

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import VerbindungenTrainer from "./verbindungen/VerbindungenTrainer";
+import { loadError } from "./shared/copy";
 import {
   fetchRound,
   submitAttempt,
@@ -176,7 +177,7 @@ export default function Verbindungen() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a round — is the backend running?
+            {loadError("a round")}
           </p>
         ) : round === null ? null : (
           <VerbindungenTrainer

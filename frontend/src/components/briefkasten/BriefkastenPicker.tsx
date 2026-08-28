@@ -2,15 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useCoinBalance, useCoinsBypassed } from "@/components/shared/Coins";
+import { LETTER_COST } from "@/lib/coins";
 import Link from "next/link";
 
-// PAY-002: LETTER = 15 coins per letter (full cycle with 2 attempts)
-const LETTER_COST = 15;
-
 const LETTER_PRESETS = [
-  { value: 1, label: "1", costLabel: "≈ 15 coins" },
-  { value: 2, label: "2", costLabel: "≈ 30 coins" },
-  { value: 3, label: "3", costLabel: "≈ 45 coins" },
+  { value: 1, label: "1" },
+  { value: 2, label: "2" },
+  { value: 3, label: "3" },
 ] as const;
 
 const BRIEFKASTEN_STORAGE_KEY = "briefkasten-rounds-v1";
@@ -103,7 +101,7 @@ export default function BriefkastenPicker({ onStart }: BriefkastenPickerProps) {
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        {LETTER_PRESETS.map(({ value, label, costLabel }) => {
+        {LETTER_PRESETS.map(({ value, label }) => {
           const selected = customText === "" && presetChoice === value;
           return (
             <button
@@ -117,7 +115,7 @@ export default function BriefkastenPicker({ onStart }: BriefkastenPickerProps) {
             >
               <span className="font-display text-[28px] font-black">{label}</span>
               <span className="mt-1 block font-body text-[11px] font-bold uppercase tracking-[0.14em] opacity-70">
-                {costLabel}
+                ≈ {value * LETTER_COST} coins
               </span>
             </button>
           );

@@ -6,6 +6,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import SprechenTrainer from "./sprechen/SprechenTrainer";
+import { loadError } from "./shared/copy";
 import {
   fetchNudge,
   fetchRound,
@@ -238,22 +239,11 @@ export default function Sprechen() {
           <p className="mt-1.5 font-body text-[11px] font-semibold uppercase tracking-[0.32em] text-ink-muted">
             constrained speaking
           </p>
-          {/* The model behind every task here: the verb frame is law (the
-              only thing sprechen/judge.py grades); everything inside the
-              frame is flexible and deliberately ungraded — keep this copy
-              aligned with the judge's "judge ONLY the target structure"
-              rule. */}
-          <p className="mx-auto mt-3 max-w-[460px] font-body text-[13px] leading-relaxed text-ink-soft">
-            <span className="font-black text-ink">Only the verb is law:</span>{" "}
-            position two, its partner at the very end — in a weil-clause,
-            everything to the end. The rest is flexible: known things early,
-            the news last.
-          </p>
         </div>
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a round — is the backend running?
+            {loadError("a round")}
           </p>
         ) : round === null ? null : (
           <SprechenTrainer

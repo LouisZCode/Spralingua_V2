@@ -30,6 +30,7 @@ from database.repository import (
 from drills import apply_level
 from satzbau.content import TARGET_PATTERNS, load_items
 from satzbau.judge import judge_clause
+from drills.copy import JUDGE_UNAVAILABLE
 from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
@@ -324,7 +325,7 @@ async def submit_attempt(
                 logger.exception("Satzbau judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
-                    detail="The judge is unavailable right now — try again in a moment.",
+                    detail=JUDGE_UNAVAILABLE,
                 )
             correct, note, variant = diag.correct, diag.note, diag.variant
 

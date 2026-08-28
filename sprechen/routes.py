@@ -37,6 +37,7 @@ from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
 from sprechen.content import TARGET_PATTERNS, load_tasks
 from sprechen.judge import judge_spoken
+from drills.copy import JUDGE_UNAVAILABLE
 from sprechen.nudge import suggest_vocab
 from vocab_nudge import filter_picks, load_deck
 
@@ -230,7 +231,7 @@ async def submit_attempt(
             logger.exception("Sprechen judge call failed (task {})", task_id)
             raise HTTPException(
                 status_code=502,
-                detail="The judge is unavailable right now — try again in a moment.",
+                detail=JUDGE_UNAVAILABLE,
             )
         logger.info(
             "Sprechen attempt timing: stt={:.2f}s llm={:.2f}s (task {})",

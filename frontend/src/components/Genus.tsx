@@ -20,6 +20,7 @@ import {
   type PhraseVerdict,
 } from "./genus/api";
 import { UnauthorizedError } from "./satzschmiede/api";
+import { loadError } from "./shared/copy";
 
 // Artikel-Anker — noun gender trained as a decision: drag der/die/das onto
 // the word (the ending keeps the color — the anchor), then produce the
@@ -199,7 +200,7 @@ export default function Genus() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a round — is the backend running?
+            {loadError("a round")}
           </p>
         ) : round === null ? null : (
           <GenusTrainer

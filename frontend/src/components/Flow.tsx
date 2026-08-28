@@ -6,6 +6,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import { playSound } from "./shared/sound";
+import { loadError } from "./shared/copy";
+import { SATZ_ATTEMPT_COST } from "@/lib/coins";
 import SoundToggle from "./shared/SoundToggle";
 import ThemeToggle from "./shared/ThemeToggle";
 
@@ -59,13 +61,11 @@ import {
   fetchRound as fetchGenusRound,
   fetchMeta as fetchGenusMeta,
   submitArticle as submitGenusArticle,
-  submitPhrase as submitGenusPhrase,
   giveUpArticle as giveUpGenusArticle,
   type Article as GenusArticle,
   type ArticleVerdict as GenusArticleVerdict,
   type EndingSheet,
   type GenusItem,
-  type PhraseVerdict as GenusPhraseVerdict,
 } from "./genus/api";
 
 import SprechenTrainer from "./sprechen/SprechenTrainer";
@@ -84,7 +84,7 @@ import {
   type SzenarioRoundItem,
   type StructureResult,
 } from "./szenario/api";
-import { expectedTier, readSeen, writeSeen, type Tier } from "./szenario/seen";
+import { expectedTier, foldSeen, readSeen, writeSeen, type Tier } from "./szenario/seen";
 
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import {
@@ -466,8 +466,7 @@ function foldSzenarioSeen(
 ) {
   let running = tier === expected ? priorForExpected : readSeen(tier);
   for (const item of items) {
-    const token = `${item.scenarioId}:${item.questionIndex}`;
-    running = item.cycleReset ? [token] : [...running, token];
+    running = foldSeen(running, item);
   }
   writeSeen(tier, running);
 }
@@ -575,12 +574,11 @@ type StoredRoundChoice = RoundPreset | number;
 
 const ROUND_STORAGE_KEY = "flow-rounds-v1";
 
-const ROUND_PRESETS: { key: RoundPreset; label: string; costLabel: string }[] =
-  [
-    { key: "10", label: "10", costLabel: "≈ 50 coins" },
-    { key: "20", label: "20", costLabel: "≈ 100 coins" },
-    { key: "30", label: "30", costLabel: "≈ 150 coins" },
-  ];
+const ROUND_PRESETS: { key: RoundPreset; label: string; value: number }[] = [
+  { key: "10", label: "10", value: 10 },
+  { key: "20", label: "20", value: 20 },
+  { key: "30", label: "30", value: 30 },
+];
 
 function clampRounds(n: number): number {
   return Math.min(50, Math.max(1, Math.trunc(n)));
@@ -1181,21 +1179,6 @@ export default function Flow() {
     [token, signOut, sid],
   );
 
-  // Never called in flow (the genus item ends at the drag beat) — passed for
-  // the trainer's required-prop parity with the standalone page.
-  const handleGenusPhrase = useCallback(
-    async (itemId: string, answer: string): Promise<GenusPhraseVerdict> => {
-      if (!token) throw new UnauthorizedError("/genus/attempts");
-      try {
-        return await submitGenusPhrase(token, itemId, answer, sid());
-      } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
-        throw e;
-      }
-    },
-    [token, signOut, sid],
-  );
-
   const handleSatzAttempt = useCallback(
     async (
       cardId: string,
@@ -1502,7 +1485,7 @@ export default function Flow() {
 
             {phase === "loading" ? null : phase === "error" ? (
               <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-                Couldn&apos;t load — is the backend running?
+                {loadError("this round")}
               </p>
             ) : finished ? (
               <SummaryCard totals={totals} perExercise={perExercise} />
@@ -1626,7 +1609,6 @@ export default function Flow() {
                         key={deal.key}
                         round={[deal.item]}
                         onArticle={handleGenusArticle}
-                        onPhrase={handleGenusPhrase}
                         onNewRound={noopNewRound}
                         flow
                         endings={genusEndings}
@@ -1809,7 +1791,7 @@ function RoundPicker({
       </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
-        {ROUND_PRESETS.map(({ key, label, costLabel }) => {
+        {ROUND_PRESETS.map(({ key, label, value }) => {
           const selected = !customActive && presetChoice === key;
           return (
             <button
@@ -1828,7 +1810,7 @@ function RoundPicker({
                 {label}
               </span>
               <span className="mt-1 block font-body text-[11px] font-bold uppercase tracking-[0.14em] opacity-70">
-                {costLabel}
+                ≈ {value * SATZ_ATTEMPT_COST} coins
               </span>
             </button>
           );

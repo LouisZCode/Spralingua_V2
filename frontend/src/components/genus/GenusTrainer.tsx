@@ -105,7 +105,9 @@ export default function GenusTrainer({
   // Grade one dropped article / one typed phrase (POST /genus/attempts via
   // the parent, which owns the token and the OBS-007 practice-session id).
   onArticle: (itemId: string, article: Article) => Promise<ArticleVerdict>;
-  onPhrase: (itemId: string, answer: string) => Promise<PhraseVerdict>;
+  // UI-014: optional — the typed-phrase beat never runs in flow mode (see
+  // the `flow` prop below), so Flow's mount has nothing real to pass here.
+  onPhrase?: (itemId: string, answer: string) => Promise<PhraseVerdict>;
   // The vocab nudge (POST /genus/nudge): which of the learner's own deck
   // words would fit a sentence about this noun. Resolves to [] on any
   // failure — the pill simply doesn't appear. Optional so Flow (drag beat
@@ -116,7 +118,7 @@ export default function GenusTrainer({
   // FLOW-001: in flow mode the parent deals exactly one item per mount and
   // this trainer runs the DRAG BEAT ONLY — the gender choice is the rep;
   // the typed production stays a standalone-page exercise. `onPhrase` is
-  // never called in flow but stays required for prop parity.
+  // never called in flow, and is optional so a flow mount can omit it.
   flow?: boolean;
   onFlowDone?: (correct: boolean) => void;
   // FLOW-002: the deliberate "give up" escape — Flow-only (default false),
@@ -342,7 +344,7 @@ export default function GenusTrainer({
   async function checkPhrase(e: React.FormEvent) {
     e.preventDefault();
     const answer = value.trim();
-    if (!answer || busy || verdict) return;
+    if (!answer || busy || verdict || !onPhrase) return;
     setBusy(true);
     setFailed(null);
     try {

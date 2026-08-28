@@ -67,3 +67,16 @@ export function writeSeen(tier: Tier, list: string[]): void {
     // Storage blocked/unavailable — variety just resets next visit.
   }
 }
+
+// SZEN-007/FLOW-006: the shared "merge one served item into a seen list"
+// rule — the token is "scenarioId:questionIndex"; a cycleReset item REPLACES
+// the running list with just its own token, otherwise the token is appended.
+// Shared by a single draw (Szenario.tsx's loadScenario) and by folding a
+// whole GET /szenario/round batch sequentially (Flow.tsx).
+export function foldSeen(
+  running: string[],
+  item: { scenarioId: string; questionIndex: number; cycleReset?: boolean }
+): string[] {
+  const token = `${item.scenarioId}:${item.questionIndex}`;
+  return item.cycleReset ? [token] : [...running, token];
+}

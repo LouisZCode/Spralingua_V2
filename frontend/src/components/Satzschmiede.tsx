@@ -26,6 +26,7 @@ import type { DeckCard } from "./satzschmiede/deck";
 import { fetchMeta } from "./genus/api";
 import { postModeComplete } from "./development/api";
 import SoundToggle from "./shared/SoundToggle";
+import { loadError } from "./shared/copy";
 import ThemeToggle from "./shared/ThemeToggle";
 
 const redShadow = {
@@ -417,7 +418,7 @@ export default function Satzschmiede() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load your deck — is the backend running?
+            {loadError("your deck")}
           </p>
         ) : deck === null ? null : emptyPool ? (
           /* First-run state: no cards yet — everything funnels into the popup. */

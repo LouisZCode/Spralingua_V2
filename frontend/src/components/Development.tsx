@@ -17,6 +17,7 @@ import {
   type SeriesPoint,
 } from "./development/api";
 import { diffTokens, MarkedText } from "./shared/feedback";
+import { loadError } from "./shared/copy";
 
 // Development — the learner's own progress dashboard: positives first (what's
 // already conquered + this week's effort), then what still needs work — the
@@ -134,7 +135,7 @@ export default function Development() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load your stats — is the backend running?
+            {loadError("your stats")}
           </p>
         ) : stats === null ? (
           <p className="text-center font-body text-[12px] font-semibold uppercase tracking-[0.26em] text-ink-muted">

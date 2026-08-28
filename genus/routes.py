@@ -49,6 +49,7 @@ from genus.content import (
     _match_surface,
 )
 from genus.judge import GenderVerdict, judge_gender
+from drills.copy import JUDGE_UNAVAILABLE
 from genus.nudge import suggest_vocab
 from security import drill_try_admit
 from vocab_nudge import filter_picks, load_deck
@@ -653,10 +654,7 @@ async def submit_attempt(
                     logger.exception("Genus judge call failed (item {})", item["id"])
                     raise HTTPException(
                         status_code=502,
-                        detail=(
-                            "The judge is unavailable right now — "
-                            "try again in a moment."
-                        ),
+                        detail=JUDGE_UNAVAILABLE,
                     )
                 payload = _judge_payload(item, answer, verdict)
 

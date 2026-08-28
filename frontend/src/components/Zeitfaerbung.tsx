@@ -13,6 +13,7 @@ import {
   type ZeitVerdict,
 } from "./zeitfaerbung/api";
 import { UnauthorizedError } from "./satzschmiede/api";
+import { loadError } from "./shared/copy";
 
 // Zeitfaerbung — war / wurde / blieb: German splits "was" into a state, a
 // becoming, and a staying (plus wurde's second job as the passive auxiliary).
@@ -127,7 +128,7 @@ export default function Zeitfaerbung() {
 
         {error ? (
           <p className="text-center font-body text-[14px] font-semibold text-flag-red-deep">
-            Couldn&apos;t load a round — is the backend running?
+            {loadError("a round")}
           </p>
         ) : round === null ? null : (
           <ZeitfaerbungTrainer

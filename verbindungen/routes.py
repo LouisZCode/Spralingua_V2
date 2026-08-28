@@ -34,6 +34,7 @@ from grammar import expand_contractions
 from security import drill_try_admit
 from verbindungen.content import TARGET_PATTERNS, load_items
 from verbindungen.judge import judge_chunk
+from drills.copy import JUDGE_UNAVAILABLE
 
 from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
@@ -354,7 +355,7 @@ async def submit_attempt(
                 logger.exception("Verbindungen judge call failed (item {})", item["id"])
                 raise HTTPException(
                     status_code=502,
-                    detail="The judge is unavailable right now — try again in a moment.",
+                    detail=JUDGE_UNAVAILABLE,
                 )
             correct, note = diag.correct, diag.note
 
