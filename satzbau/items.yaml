@@ -5,13 +5,19 @@
 # Fields per item (all required, though `given` and `accepts` may be
 # legitimately empty — see below):
 #   id         — stable slug
-#   pattern_id — grammar/taxonomy.yaml id (one of the five this drill
+#   pattern_id — grammar/taxonomy.yaml id (one of the ten this drill
 #                targets: relativsatz | indirekte-frage | zu-infinitiv |
-#                um-zu-damit | fragen-wortstellung)
+#                um-zu-damit | fragen-wortstellung | v2-wortstellung |
+#                trennbare-verben | modalverb-infinitiv-ende |
+#                perfekt-satzklammer | nebensatz-verbende — the last five
+#                added by CLARA-14 Phase B, see the section below)
 #   level      — a1 | a2 | b1
 #   given      — the fixed lead-in shown above the chips, unmovable. May be
 #                "" for fragen-wortstellung items, where the whole sentence
-#                is chips (a direct question has no lead-in to hang off).
+#                is chips (a direct question has no lead-in to hang off) —
+#                and likewise for every v2-wortstellung / trennbare-verben /
+#                modalverb-infinitiv-ende / perfekt-satzklammer item below,
+#                which are all main clauses with nothing to hang off either.
 #   task       — one English line stating the MEANING to build. This is
 #                what turns the puzzle into a real production task instead
 #                of a jigsaw — the learner is building a SPECIFIC sentence.
@@ -31,9 +37,15 @@
 #                applies), never the answer.
 #   rule       — one line teaching the why, shown with the verdict — the
 #                drill's whole teaching payload.
+#   must_start_with — OPTIONAL. When present, the chip (case-insensitive)
+#                the built order MUST begin with. Set on the five
+#                v2-wortstellung items below, whose task line names the
+#                fronted word. content.py validates it against the item's
+#                own chips; satzbau/grading.py::grade enforces it
+#                deterministically, before any judge call.
 #
-# THE FIVE PATTERNS ARE ONE PROBLEM: build the clause, then put the verb
-# where German puts it — clause-final for a relative clause / indirect
+# THE ORIGINAL FIVE PATTERNS ARE ONE PROBLEM: build the clause, then put the
+# verb where German puts it — clause-final for a relative clause / indirect
 # question / purpose clause, second position (verb-first for yes/no) for a
 # direct question. relativsatz varies the pronoun across every gender,
 # number and case (der/die/das/den/dem/deren/dessen/denen) so "der" never
@@ -47,6 +59,38 @@
 # to decide which connector fits, not pattern-match on "purpose = um zu".
 # fragen-wortstellung splits evenly between yes/no (verb-first) and
 # W-questions (verb second, right after the question word).
+#
+# THE FIVE CLARA-14 PHASE B PATTERNS (pool-expansion authoring — Clara's
+# per-pattern exercise pool needed 10+ options, and these were short) are
+# the same "put the verb where German puts it" problem applied to MAIN
+# clauses instead of subordinate ones: v2-wortstellung is verb-second after
+# a fronted word (Heute/Dann/Danach/Trotzdem/Morgen); trennbare-verben sends
+# a separable prefix to the very end; modalverb-infinitiv-ende sends the
+# plain infinitive to the very end after a conjugated modal; perfekt-
+# satzklammer sends the Partizip II to the very end after haben (never sein
+# here — that's perfekt-aux-sein's own pattern, authored separately, and
+# reusing a sein-Perfekt sentence would blur which decision is being
+# tested); nebensatz-verbende sends the conjugated verb to the very end of
+# a weil/dass/obwohl clause — mechanically identical to indirekte-frage
+# above, just a different family of connectors.
+#
+# ACCEPTS-COMPLETENESS FOR THE MAIN-CLAUSE PATTERNS: unlike the subordinate-
+# clause items above, a MAIN clause with a fronted or frontable time adverb
+# (heute/morgen/gestern/samstags/abends/um sieben/um acht) genuinely has TWO
+# equally natural, unmarked German orders — adverb-first-subject-third is
+# not a rare variant, it's the everyday alternative to subject-first. Every
+# item below that carries such an adverb lists the fronted reordering in
+# accepts explicitly, so it lands on the deterministic fast path instead of
+# a judge call. Where a task line itself NAMES the word that must open the
+# sentence ("Start with 'Heute'"), that pins the fronting and the un-pinned
+# subject-first reordering is deliberately left OUT of accepts — it's
+# independently grammatical German but doesn't fulfill THAT task (verified
+# against the live judge during authoring: it correctly grades the un-
+# pinned reordering as incorrect with a "must start with X" note). Items
+# whose only movable element is a direct object (not a time/place adverb)
+# stay single-order — foregrounding an object in an out-of-context flat
+# statement is a marked, contrastive reading in German, not a second
+# neutral rendering of the same task, so it is not listed as an accept.
 
 items:
   # ── relativsatz — pronoun varies across gender/number/case ─────────────
@@ -630,3 +674,334 @@ items:
     accepts: []
     hint: "Wer is both question word and subject here — still just one verb slot, right after it."
     rule: "Wer ist das? — verb straight after wer, even though wer is also the subject."
+
+  # ── v2-wortstellung — CLARA-14 Phase B: a fronted word takes slot one, so
+  # the verb stays second and the subject moves to third. given is "" (like
+  # fragen-wortstellung) — the whole main clause is chips, no lead-in to
+  # hang off. Every task line NAMES the word that must open the sentence
+  # ("Start with X" / "Continue with X"), which is what keeps each item to
+  # ONE valid order despite German's flexible Mittelfeld: an un-fronted,
+  # subject-first reordering of the same chips (e.g. "Ich gehe heute ins
+  # Kino") is independently grammatical German, but it does not fulfill
+  # THIS task, so it is never listed in accepts.
+  - id: v2-heute-kino
+    pattern_id: v2-wortstellung
+    level: a1
+    given: ""
+    must_start_with: "heute"
+    task: "Build the sentence, starting with 'Heute': today I'm going to the cinema."
+    chips: ["heute", "gehe", "ich", "ins", "Kino"]
+    answer: ["heute", "gehe", "ich", "ins", "Kino"]
+    accepts: []
+    hint: "Heute has to open the sentence — what happens to ich and gehe next?"
+    rule: "The fronted word takes slot one, so the verb comes right after it and ich moves to third: Heute gehe ich ins Kino."
+
+  - id: v2-dann-hause
+    pattern_id: v2-wortstellung
+    level: a1
+    given: ""
+    must_start_with: "dann"
+    task: "Continue with 'Dann': then I'm working from home."
+    chips: ["dann", "arbeite", "ich", "zu", "Hause"]
+    answer: ["dann", "arbeite", "ich", "zu", "Hause"]
+    accepts: []
+    hint: "Dann is already in slot one — where does the verb go next?"
+    rule: "Dann arbeite ich zu Hause — the verb stays in position two, right after the fronted word, not after the subject."
+
+  - id: v2-danach-freunde
+    pattern_id: v2-wortstellung
+    level: a1
+    given: ""
+    must_start_with: "danach"
+    task: "Continue with 'Danach': after that I'm meeting my friends."
+    chips: ["danach", "treffe", "ich", "meine", "Freunde"]
+    answer: ["danach", "treffe", "ich", "meine", "Freunde"]
+    accepts: []
+    hint: "Danach is fronted — the verb has to follow it immediately."
+    rule: "Danach treffe ich meine Freunde — subject and verb swap places whenever something else takes position one."
+
+  - id: v2-trotzdem-schwimmen
+    pattern_id: v2-wortstellung
+    level: a1
+    given: ""
+    must_start_with: "trotzdem"
+    task: "Start with 'Trotzdem': nevertheless I'm going swimming."
+    chips: ["trotzdem", "gehe", "ich", "schwimmen"]
+    answer: ["trotzdem", "gehe", "ich", "schwimmen"]
+    accepts: []
+    hint: "Trotzdem occupies slot one — ich can't sit there too."
+    rule: "Trotzdem gehe ich schwimmen — the verb sits second no matter which word opens the sentence."
+
+  - id: v2-morgen-nicht
+    pattern_id: v2-wortstellung
+    level: a1
+    given: ""
+    must_start_with: "morgen"
+    task: "Start with 'Morgen': tomorrow I'm not working."
+    chips: ["morgen", "arbeite", "ich", "nicht"]
+    answer: ["morgen", "arbeite", "ich", "nicht"]
+    accepts: []
+    hint: "Morgen leads the sentence — the verb must come directly after it."
+    rule: "Morgen arbeite ich nicht — verb-second holds even in a negated main clause."
+
+  # ── trennbare-verben — CLARA-14 Phase B: prefix splits off and closes the
+  # main clause. given is "" — the whole clause is chips. Four items open
+  # with a frontable time adverb (um sieben / samstags / abends / um acht);
+  # German lets that adverb front to slot one just as naturally as it lets
+  # the subject lead — both orders are common, unmarked daily-routine
+  # German, so BOTH are listed: the accepts entry is the same chips with
+  # the adverb first and the subject bumped to third. The other two items
+  # carry only a direct object (no separate adverbial), which German
+  # speakers do not front in a neutral, out-of-context statement — fronting
+  # an object there is a marked, contrastive reading, not a second natural
+  # rendering of the same flat task, so those two stay single-order.
+  - id: tv-aufstehen-sieben
+    pattern_id: trennbare-verben
+    level: a1
+    given: ""
+    task: "Say: I get up at seven (separable verb: aufstehen)."
+    chips: ["ich", "stehe", "um", "sieben", "auf"]
+    answer: ["ich", "stehe", "um", "sieben", "auf"]
+    # "Um sieben stehe ich auf" is equally natural German — the time adverb
+    # fronts and the subject drops to third; the prefix still closes it.
+    accepts:
+      - ["um", "sieben", "stehe", "ich", "auf"]
+    hint: "aufstehen splits — the prefix auf waits at the very end, wherever the sentence starts."
+    rule: "aufstehen splits: stehe … auf — Ich stehe um sieben auf (or Um sieben stehe ich auf)."
+
+  - id: tv-einkaufen-samstags
+    pattern_id: trennbare-verben
+    level: a1
+    given: ""
+    task: "Say: I go shopping on Saturdays (separable verb: einkaufen)."
+    chips: ["ich", "kaufe", "samstags", "ein"]
+    answer: ["ich", "kaufe", "samstags", "ein"]
+    accepts:
+      - ["samstags", "kaufe", "ich", "ein"]
+    hint: "einkaufen splits too — the prefix ein waits until the very end, wherever the sentence starts."
+    rule: "einkaufen splits: kaufe … ein — Ich kaufe samstags ein (or Samstags kaufe ich ein)."
+
+  - id: tv-anrufen-mutter
+    pattern_id: trennbare-verben
+    level: a1
+    given: ""
+    task: "Say: I call my mother (separable verb: anrufen)."
+    chips: ["ich", "rufe", "meine", "Mutter", "an"]
+    answer: ["ich", "rufe", "meine", "Mutter", "an"]
+    accepts: []
+    hint: "anrufen splits — the object sits between the verb and the prefix, which closes the sentence."
+    rule: "anrufen splits: rufe … an — Ich rufe meine Mutter an."
+
+  - id: tv-fernsehen-abends
+    pattern_id: trennbare-verben
+    level: a1
+    given: ""
+    task: "Say: I watch TV in the evenings (separable verb: fernsehen)."
+    chips: ["ich", "sehe", "abends", "fern"]
+    answer: ["ich", "sehe", "abends", "fern"]
+    accepts:
+      - ["abends", "sehe", "ich", "fern"]
+    hint: "fernsehen splits — fern stays at the very end, no matter what leads the sentence."
+    rule: "fernsehen splits: sehe … fern — Ich sehe abends fern (or Abends sehe ich fern)."
+
+  - id: tv-anfangen-acht
+    pattern_id: trennbare-verben
+    level: a1
+    given: ""
+    task: "Say: the course starts at eight (separable verb: anfangen)."
+    chips: ["der", "Kurs", "fängt", "um", "acht", "an"]
+    answer: ["der", "Kurs", "fängt", "um", "acht", "an"]
+    accepts:
+      - ["um", "acht", "fängt", "der", "Kurs", "an"]
+    hint: "anfangen splits — the stem is irregular (fängt), and an waits at the very end."
+    rule: "anfangen splits: fängt … an — Der Kurs fängt um acht an (or Um acht fängt der Kurs an)."
+
+  - id: tv-aufraeumen-zimmer
+    pattern_id: trennbare-verben
+    level: a1
+    given: ""
+    task: "Say: I tidy up my room (separable verb: aufräumen)."
+    chips: ["ich", "räume", "mein", "Zimmer", "auf"]
+    answer: ["ich", "räume", "mein", "Zimmer", "auf"]
+    accepts: []
+    hint: "aufräumen splits — the object sits inside, auf closes the sentence."
+    rule: "aufräumen splits: räume … auf — Ich räume mein Zimmer auf."
+
+  # ── modalverb-infinitiv-ende — CLARA-14 Phase B: the modal stays in slot
+  # two, the plain infinitive closes the sentence. given is "". Two items
+  # carry a frontable time adverb (heute / morgen) and list the fronted
+  # variant in accepts for the same reason as trennbare-verben above; the
+  # rest carry only an object or a manner adverb, which stays single-order.
+  - id: mi-moechte-kino
+    pattern_id: modalverb-infinitiv-ende
+    level: a1
+    given: ""
+    task: "Say: I would like to go to the cinema (möchten)."
+    chips: ["ich", "möchte", "ins", "Kino", "gehen"]
+    answer: ["ich", "möchte", "ins", "Kino", "gehen"]
+    accepts: []
+    hint: "möchte is the modal — the real action verb waits at the very end."
+    rule: "Modal möchte stays in position two; the infinitive gehen closes the sentence: Ich möchte ins Kino gehen."
+
+  - id: mi-kann-schwimmen
+    pattern_id: modalverb-infinitiv-ende
+    level: a1
+    given: ""
+    task: "Say: I can swim well (können)."
+    chips: ["ich", "kann", "gut", "schwimmen"]
+    answer: ["ich", "kann", "gut", "schwimmen"]
+    accepts: []
+    hint: "kann is the modal — schwimmen, the real verb, has to wait at the end."
+    rule: "Modal kann stays in position two; the infinitive schwimmen closes the sentence: Ich kann gut schwimmen."
+
+  - id: mi-muss-heute-arbeiten
+    pattern_id: modalverb-infinitiv-ende
+    level: a1
+    given: ""
+    task: "Say: I have to work today (müssen)."
+    chips: ["ich", "muss", "heute", "arbeiten"]
+    answer: ["ich", "muss", "heute", "arbeiten"]
+    accepts:
+      - ["heute", "muss", "ich", "arbeiten"]
+    hint: "muss is the modal — arbeiten, the real verb, waits at the very end, wherever the sentence starts."
+    rule: "Modal muss stays in position two; the infinitive arbeiten closes the sentence: Ich muss heute arbeiten (or Heute muss ich arbeiten)."
+
+  - id: mi-will-brief-schreiben
+    pattern_id: modalverb-infinitiv-ende
+    level: a1
+    given: ""
+    task: "Say: I want to write a letter (wollen)."
+    chips: ["ich", "will", "einen", "Brief", "schreiben"]
+    answer: ["ich", "will", "einen", "Brief", "schreiben"]
+    accepts: []
+    hint: "will is the modal — schreiben, the real verb, has to wait at the end."
+    rule: "Modal will stays in position two; the infinitive schreiben closes the sentence: Ich will einen Brief schreiben."
+
+  - id: mi-koennen-morgen-kommen
+    pattern_id: modalverb-infinitiv-ende
+    level: a1
+    given: ""
+    task: "Say: we can come tomorrow (können)."
+    chips: ["wir", "können", "morgen", "kommen"]
+    answer: ["wir", "können", "morgen", "kommen"]
+    accepts:
+      - ["morgen", "können", "wir", "kommen"]
+    hint: "können is the modal — kommen, the real verb, waits at the end, wherever the sentence starts."
+    rule: "Modal können stays in position two; the infinitive kommen closes the sentence: Wir können morgen kommen (or Morgen können wir kommen)."
+
+  - id: mi-musst-fenster-schliessen
+    pattern_id: modalverb-infinitiv-ende
+    level: a1
+    given: ""
+    task: "Say: you have to close the window (müssen)."
+    chips: ["du", "musst", "das", "Fenster", "schließen"]
+    answer: ["du", "musst", "das", "Fenster", "schließen"]
+    accepts: []
+    hint: "musst is the modal — schließen, the real verb, waits at the very end."
+    rule: "Modal musst stays in position two; the infinitive schließen closes the sentence: Du musst das Fenster schließen."
+
+  # ── perfekt-satzklammer — CLARA-14 Phase B: haben stays in slot two, the
+  # Partizip II closes the bracket. given is "". Three items carry gestern
+  # (a frontable time adverb) and list the fronted variant in accepts, same
+  # reasoning as above; the other two carry only a direct object and stay
+  # single-order. All five use haben, never sein — sein-Perfekt sentences
+  # are perfekt-aux-sein's own pattern (a different taxonomy id, authored
+  # separately), and reusing one here would blur which structural decision
+  # the item is actually testing.
+  - id: ps-buch-gekauft
+    pattern_id: perfekt-satzklammer
+    level: a2
+    given: ""
+    task: "Say: I bought a book yesterday (Perfekt)."
+    chips: ["ich", "habe", "gestern", "ein", "Buch", "gekauft"]
+    answer: ["ich", "habe", "gestern", "ein", "Buch", "gekauft"]
+    accepts:
+      - ["gestern", "habe", "ich", "ein", "Buch", "gekauft"]
+    hint: "habe stays in position two — gekauft, the Partizip II, closes the sentence, wherever it starts."
+    rule: "haben stays second, gekauft closes the bracket: Ich habe gestern ein Buch gekauft (or Gestern habe ich ein Buch gekauft)."
+
+  - id: ps-film-gesehen
+    pattern_id: perfekt-satzklammer
+    level: a2
+    given: ""
+    task: "Say: we watched a film yesterday (Perfekt)."
+    chips: ["wir", "haben", "gestern", "einen", "Film", "gesehen"]
+    answer: ["wir", "haben", "gestern", "einen", "Film", "gesehen"]
+    accepts:
+      - ["gestern", "haben", "wir", "einen", "Film", "gesehen"]
+    hint: "haben stays in position two — gesehen, the Partizip II, closes the sentence, wherever it starts."
+    rule: "haben stays second, gesehen closes the bracket: Wir haben gestern einen Film gesehen (or Gestern haben wir einen Film gesehen)."
+
+  - id: ps-email-geschrieben
+    pattern_id: perfekt-satzklammer
+    level: a2
+    given: ""
+    task: "Say: I wrote an email (Perfekt)."
+    chips: ["ich", "habe", "eine", "E-Mail", "geschrieben"]
+    answer: ["ich", "habe", "eine", "E-Mail", "geschrieben"]
+    accepts: []
+    hint: "habe stays in position two — geschrieben, the Partizip II, closes the sentence (it's an E-Mail, not a Brief)."
+    rule: "haben stays second, geschrieben closes the bracket: Ich habe eine E-Mail geschrieben."
+
+  - id: ps-kueche-aufgeraeumt
+    pattern_id: perfekt-satzklammer
+    level: a2
+    given: ""
+    task: "Say: I tidied the kitchen (Perfekt)."
+    chips: ["ich", "habe", "die", "Küche", "aufgeräumt"]
+    answer: ["ich", "habe", "die", "Küche", "aufgeräumt"]
+    accepts: []
+    hint: "habe stays in position two — aufgeräumt, the Partizip II, closes the sentence, even though it's a separable verb underneath."
+    rule: "haben stays second, aufgeräumt closes the bracket: Ich habe die Küche aufgeräumt."
+
+  - id: ps-pizza-gegessen
+    pattern_id: perfekt-satzklammer
+    level: a2
+    given: ""
+    task: "Say: they ate pizza yesterday (Perfekt)."
+    chips: ["sie", "haben", "gestern", "Pizza", "gegessen"]
+    answer: ["sie", "haben", "gestern", "Pizza", "gegessen"]
+    accepts:
+      - ["gestern", "haben", "sie", "Pizza", "gegessen"]
+    hint: "haben stays in position two — gegessen, the Partizip II, closes the sentence, wherever it starts."
+    rule: "haben stays second, gegessen closes the bracket: Sie haben gestern Pizza gegessen (or Gestern haben sie Pizza gegessen)."
+
+  # ── nebensatz-verbende — CLARA-14 Phase B: weil/dass/obwohl send the
+  # conjugated verb to the very end of their own clause. Same shape as the
+  # existing indirekte-frage items above (given = fixed main-clause lead-in,
+  # chips = the subordinate clause) — the connector is already fixed in
+  # given/first chip, the subject pronoun leads the clause exactly like
+  # every relativsatz/indirekte-frage item above, so each item keeps a
+  # single valid order.
+  - id: ns-weil-keine-zeit
+    pattern_id: nebensatz-verbende
+    level: a2
+    given: "Ich bleibe zu Hause,"
+    task: "Build the reason clause: because I don't have time."
+    chips: ["weil", "ich", "keine", "Zeit", "habe"]
+    answer: ["weil", "ich", "keine", "Zeit", "habe"]
+    accepts: []
+    hint: "This is a subordinate clause — where does the conjugated verb go?"
+    rule: "weil sends the verb to the end: weil ich keine Zeit habe."
+
+  - id: ns-dass-du-recht-hast
+    pattern_id: nebensatz-verbende
+    level: a2
+    given: "Ich glaube,"
+    task: "Build the dass-clause: that you are right."
+    chips: ["dass", "du", "recht", "hast"]
+    answer: ["dass", "du", "recht", "hast"]
+    accepts: []
+    hint: "dass introduces a subordinate clause too — the verb waits until the end."
+    rule: "dass sends the verb to the end: dass du recht hast."
+
+  - id: ns-obwohl-mued
+    pattern_id: nebensatz-verbende
+    level: a2
+    given: "Ich gehe joggen,"
+    task: "Build the obwohl-clause: although I am tired."
+    chips: ["obwohl", "ich", "müde", "bin"]
+    answer: ["obwohl", "ich", "müde", "bin"]
+    accepts: []
+    hint: "obwohl also pushes the verb to the very end of its clause."
+    rule: "obwohl sends the verb to the end: obwohl ich müde bin."

@@ -95,6 +95,8 @@ Two real German rules you must not get backwards:
 
 Only mark `correct: false` when the VERB (or `zu`, or the connector, or the relative pronoun's case/gender) is genuinely wrong — never for a Mittelfeld rearrangement alone.
 
+One exception to that Mittelfeld freedom: if the task names the exact word the sentence must open with ("Start with …" / "Continue with …"), an order that fronts something else instead — even the bare subject — is wrong, regardless of how grammatical the resulting V2 clause otherwise is.
+
 # STEP 2 — grade
 - `correct`: true when the built order is valid, grammatical German performing the required structure (verb in the position the pattern demands; zu attached correctly, including INSIDE a separable verb). German Mittelfeld order is flexible — an order that differs from the canonical answer above is very often STILL correct German that simply reads slightly differently. Judge the learner's actual sentence on its own grammatical merits, not by string-matching the canonical answer.
 - `note`: REQUIRED whenever correct is false. ONE line, AT MOST 14 words, naming exactly which structural rule broke ("the conjugated verb has to be last in a relative clause" / "zu belongs inside anzurufen, not in front of it" / "ob replaces the question word in a yes/no question"). The correct answer is shown separately — never restate it. Null only when correct.

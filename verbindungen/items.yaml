@@ -830,3 +830,320 @@ items:
     chunk: "irregular comparatives: gut → besser, viel → mehr, gern → lieber, hoch → höher"
     hint: "This one drops a letter before adding -er — which form?"
 
+  # ══════════════════════════════════════════════════════════════════════
+  # CLARA-14 Phase B (2026-08-29) — A2/B1 verb-form batch, four patterns
+  # with no exercise anywhere else in the app (als-vs-wenn and
+  # konjunktiv2-hypothese already have a couple of sprechen tasks; these
+  # widen the pool). Same hygiene-batch convention as the block above:
+  # `chunk` carries the RULE to memorize, `hint` is the English rendering
+  # of the full sentence.
+  # ══════════════════════════════════════════════════════════════════════
+
+  # ── als-vs-wenn — one-time past (als) vs. repeated past / condition ─────
+  # ── (wenn); every "wenn" item carries an explicit repetition marker so ──
+  # ── it never collides with "als" covering one long-but-singular period ──
+  - id: avw-klein-spanien
+    pattern_id: als-vs-wenn
+    frame: "___ ich klein war, habe ich in Spanien gewohnt."
+    answer: "Als"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "When I was little, I lived in Spain."
+
+  - id: avw-frau-treffen
+    pattern_id: als-vs-wenn
+    frame: "___ ich meine Frau zum ersten Mal traf, war ich neunzehn."
+    answer: "Als"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "When I met my wife for the first time, I was nineteen."
+
+  - id: avw-oma-besuch
+    pattern_id: als-vs-wenn
+    frame: "Immer ___ ich früher meine Oma besuchte, hat sie mir Kuchen gebacken."
+    answer: "wenn"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "Whenever I used to visit my grandma, she baked me a cake."
+
+  - id: avw-regen-frueher
+    pattern_id: als-vs-wenn
+    frame: "Jedes Mal, ___ es früher geregnet hat, sind wir zu Hause geblieben."
+    answer: "wenn"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "Whenever it rained back then, we stayed home."
+
+  - id: avw-unfall-zwoelf
+    pattern_id: als-vs-wenn
+    frame: "___ ich zwölf war, hatte ich einen schweren Unfall."
+    answer: "Als"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "When I was twelve, I had a serious accident."
+
+  - id: avw-eltern-heirat
+    pattern_id: als-vs-wenn
+    frame: "___ meine Eltern geheiratet haben, war meine Mutter erst zwanzig."
+    answer: "Als"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "When my parents got married, my mother was only twenty."
+
+  - id: avw-regnet-zuhause
+    pattern_id: als-vs-wenn
+    frame: "___ es regnet, bleibe ich lieber zu Hause."
+    answer: "Wenn"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "If it rains, I prefer to stay home."
+
+  - id: avw-zeit-telefonieren
+    pattern_id: als-vs-wenn
+    frame: "___ du morgen Zeit hast, können wir telefonieren."
+    answer: "Wenn"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "If you have time tomorrow, we can talk on the phone."
+
+  - id: avw-treffen-reden
+    pattern_id: als-vs-wenn
+    frame: "Jedes Mal, ___ wir uns trafen, haben wir stundenlang geredet."
+    answer: "wenn"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "Whenever we met, we'd talk for hours."
+
+  - id: avw-berlin-ankunft
+    pattern_id: als-vs-wenn
+    frame: "___ wir in Berlin ankamen, hat es stark geschneit."
+    answer: "Als"
+    chunk: "a one-time (even if long) past situation → als · a repeated past event or a condition → wenn"
+    hint: "When we arrived in Berlin, it was snowing heavily."
+
+  # ── perfekt-aux-sein — gap is the AUXILIARY (bin/bist/ist/sind/seid) ────
+  # ── ONLY; the Partizip II is always given, never gapped here — that's ───
+  # ── partizip2-form's territory, and every verb below is a genuine ───────
+  # ── movement/change-of-state verb, never a fixed sein-vs-haben pair ─────
+  - id: pas-fahren-ich
+    pattern_id: perfekt-aux-sein
+    frame: "Ich ___ letzte Woche nach Berlin gefahren."
+    answer: "bin"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "I drove to Berlin last week."
+
+  - id: pas-gehen-du
+    pattern_id: perfekt-aux-sein
+    frame: "___ du gestern ins Kino gegangen?"
+    answer: "Bist"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "Did you go to the movies yesterday?"
+
+  - id: pas-aufstehen-er
+    pattern_id: perfekt-aux-sein
+    frame: "Er ___ heute sehr früh aufgestanden."
+    answer: "ist"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "He got up very early today."
+
+  - id: pas-bleiben-wir
+    pattern_id: perfekt-aux-sein
+    frame: "Wir ___ das ganze Wochenende zu Hause geblieben."
+    answer: "sind"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "We stayed home the whole weekend."
+
+  - id: pas-kommen-freunde
+    pattern_id: perfekt-aux-sein
+    frame: "Meine Freunde ___ pünktlich zur Party gekommen."
+    answer: "sind"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "My friends arrived at the party on time."
+
+  - id: pas-fliegen-ich
+    pattern_id: perfekt-aux-sein
+    frame: "Ich ___ zum ersten Mal nach Amerika geflogen."
+    answer: "bin"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "I flew to America for the first time."
+
+  - id: pas-laufen-wir
+    pattern_id: perfekt-aux-sein
+    frame: "Wir ___ gestern zehn Kilometer gelaufen."
+    answer: "sind"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "We ran ten kilometers yesterday."
+
+  - id: pas-aufwachen-ich
+    pattern_id: perfekt-aux-sein
+    frame: "Ich ___ heute Morgen um sechs Uhr aufgewacht."
+    answer: "bin"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "I woke up at six this morning."
+
+  - id: pas-umziehen-schwester
+    pattern_id: perfekt-aux-sein
+    frame: "Meine Schwester ___ letztes Jahr nach München umgezogen."
+    answer: "ist"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "My sister moved to Munich last year."
+
+  - id: pas-werden-arzt
+    pattern_id: perfekt-aux-sein
+    frame: "Er ___ vor zwei Jahren Arzt geworden."
+    answer: "ist"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "He became a doctor two years ago."
+
+  - id: pas-ankommen-ihr
+    pattern_id: perfekt-aux-sein
+    frame: "___ ihr rechtzeitig am Flughafen angekommen?"
+    answer: "Seid"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "Did you all arrive at the airport on time?"
+
+  - id: pas-sterben-opa
+    pattern_id: perfekt-aux-sein
+    frame: "Mein Opa ___ letztes Jahr gestorben."
+    answer: "ist"
+    chunk: "movement or change of state (fahren, gehen, aufstehen, bleiben, kommen, sterben, werden …) → Perfekt with sein, not haben"
+    hint: "My grandpa died last year."
+
+  # ── partizip2-form — gap is the PARTICIPLE only; auxiliary is always ────
+  # ── the given "habe/hat/haben" so the aux choice is never in question ───
+  # ── here — that's perfekt-aux-sein's territory. Every verb is a strong ──
+  # ── verb whose Partizip II changes the stem (never a plain -t ending) ───
+  - id: p2f-trinken
+    pattern_id: partizip2-form
+    frame: "Ich habe Kaffee ___."
+    answer: "getrunken"
+    chunk: "strong verb: trinken → getrunken — Partizip II changes the stem, never just -t (not 'getrinkt')"
+    hint: "I drank coffee."
+
+  - id: p2f-lesen
+    pattern_id: partizip2-form
+    frame: "Ich habe das ganze Buch ___."
+    answer: "gelesen"
+    chunk: "strong verb: lesen → gelesen — Partizip II changes the stem, not a plain -t ending"
+    hint: "I read the whole book."
+
+  - id: p2f-sehen
+    pattern_id: partizip2-form
+    frame: "Wir haben gestern einen Film ___."
+    answer: "gesehen"
+    chunk: "strong verb: sehen → gesehen — Partizip II changes the stem, not a plain -t ending"
+    hint: "We watched a movie yesterday."
+
+  - id: p2f-essen
+    pattern_id: partizip2-form
+    frame: "Er hat die ganze Pizza ___."
+    answer: "gegessen"
+    chunk: "strong verb: essen → gegessen — Partizip II changes the stem, not a plain -t ending"
+    hint: "He ate the whole pizza."
+
+  - id: p2f-nehmen
+    pattern_id: partizip2-form
+    frame: "Sie hat den Bus ___."
+    answer: "genommen"
+    chunk: "strong verb: nehmen → genommen — Partizip II changes the stem, not a plain -t ending"
+    hint: "She took the bus."
+
+  - id: p2f-schreiben
+    pattern_id: partizip2-form
+    frame: "Ich habe eine lange E-Mail ___."
+    answer: "geschrieben"
+    chunk: "strong verb: schreiben → geschrieben — Partizip II changes the stem, not a plain -t ending"
+    hint: "I wrote a long email."
+
+  - id: p2f-sprechen
+    pattern_id: partizip2-form
+    frame: "Wir haben zwei Stunden ___."
+    answer: "gesprochen"
+    chunk: "strong verb: sprechen → gesprochen — Partizip II changes the stem, not a plain -t ending"
+    hint: "We talked for two hours."
+
+  - id: p2f-helfen
+    pattern_id: partizip2-form
+    frame: "Er hat mir bei den Hausaufgaben ___."
+    answer: "geholfen"
+    chunk: "strong verb: helfen → geholfen — Partizip II changes the stem, not a plain -t ending"
+    hint: "He helped me with my homework."
+
+  - id: p2f-finden
+    pattern_id: partizip2-form
+    frame: "Ich habe meinen Schlüssel endlich ___."
+    answer: "gefunden"
+    chunk: "strong verb: finden → gefunden — Partizip II changes the stem, not a plain -t ending"
+    hint: "I finally found my key."
+
+  - id: p2f-singen
+    pattern_id: partizip2-form
+    frame: "Die Kinder haben ein Lied ___."
+    answer: "gesungen"
+    chunk: "strong verb: singen → gesungen — Partizip II changes the stem, not a plain -t ending"
+    hint: "The kids sang a song."
+
+  - id: p2f-gewinnen
+    pattern_id: partizip2-form
+    frame: "Unsere Mannschaft hat das Spiel ___."
+    answer: "gewonnen"
+    chunk: "strong verb: gewinnen → gewonnen — Partizip II changes the stem, not a plain -t ending"
+    hint: "Our team won the game."
+
+  - id: p2f-tragen
+    pattern_id: partizip2-form
+    frame: "Sie hat gestern eine rote Jacke ___."
+    answer: "getragen"
+    chunk: "strong verb: tragen → getragen — Partizip II changes the stem, not a plain -t ending"
+    hint: "She wore a red jacket yesterday."
+
+  # ── konjunktiv2-hypothese — gap is the K2 marker (wäre/hätte/würde); ────
+  # ── the rest of the hypothetical is always given so the ONE decision ────
+  # ── under test is which of the three markers this clause needs ──────────
+  - id: k2h-reich-haus
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich reich ___, würde ich ein großes Haus kaufen."
+    answer: "wäre"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I were rich, I would buy a big house."
+
+  - id: k2h-chef-anders
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich Chef ___, würde ich vieles anders machen."
+    answer: "wäre"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I were the boss, I would do many things differently."
+
+  - id: k2h-du-ich
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich du ___, würde ich sofort einen Termin beim Arzt machen."
+    answer: "wäre"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I were you, I'd make a doctor's appointment right away."
+
+  - id: k2h-zeit-reisen
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich mehr Zeit ___, würde ich öfter reisen."
+    answer: "hätte"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I had more time, I would travel more often."
+
+  - id: k2h-superkraft-unsichtbar
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich eine Superkraft ___, wäre ich unsichtbar."
+    answer: "hätte"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I had a superpower, I would be invisible."
+
+  - id: k2h-fluegel-fliegen
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich Flügel ___, würde ich jeden Tag fliegen."
+    answer: "hätte"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I had wings, I would fly every day."
+
+  - id: k2h-million-kuendigen
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich eine Million Euro hätte, ___ ich sofort meinen Job kündigen."
+    answer: "würde"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I had a million euros, I would quit my job immediately."
+
+  - id: k2h-beruehmt-leben
+    pattern_id: konjunktiv2-hypothese
+    frame: "Wenn ich berühmt wäre, ___ ich ganz anders leben."
+    answer: "würde"
+    chunk: "unreal/hypothetical situations take wäre/hätte/würde + infinitive, never the present tense"
+    hint: "If I were famous, I would live completely differently."
+

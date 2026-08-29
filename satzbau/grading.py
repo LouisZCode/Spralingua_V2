@@ -67,6 +67,25 @@ async def grade(item: dict, order: list[str], *, give_up: bool = False) -> tuple
         correct, note = True, None
         # A deterministic green never calls the LLM judge.
         judge_skipped = True
+    elif (
+        item.get("must_start_with")
+        and order
+        and _normalize_tokens([order[0]])[0] != item["must_start_with"].strip().lower()
+    ):
+        # FIX A (CLARA-14 Phase B verification, BLOCKER): the five
+        # v2-wortstellung tasks NAME the word that must open the sentence.
+        # An otherwise-grammatical order that fronts something else (most
+        # often the bare subject) is still wrong for THIS task, and the
+        # judge was measured accepting it — so this is enforced
+        # deterministically, before any judge call, same as the multiset
+        # match above. Give-up and the deterministic-green path above are
+        # untouched.
+        opener = item["must_start_with"]
+        correct, note = (
+            False,
+            f"The task asks you to start with '{opener[:1].upper()}{opener[1:]}'.",
+        )
+        judge_skipped = True
     else:
         diag = await judge_clause(item, order)
         correct, note, variant = diag.correct, diag.note, diag.variant

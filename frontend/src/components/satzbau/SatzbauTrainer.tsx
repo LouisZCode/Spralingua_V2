@@ -14,6 +14,16 @@ import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 // contract as the sibling drills. `retry` marks the copy.
 type QueueItem = ClauseItem & { retry?: boolean };
 
+// FIX B (CLARA-14 Phase B verification): items authored with `given: ""`
+// now store every chip in MID-SENTENCE casing (satzbau/items.yaml), so a
+// chip that lands in position 0 of the built or corrected sentence needs
+// capitalizing at DISPLAY time only — this never touches the chip data
+// itself or what's sent to onAttempt. A `given`-prefixed lead-in already
+// starts capitalized, so this is a no-op there.
+function capFirst(s: string): string {
+  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+}
+
 type Phase = "intro" | "drill" | "done";
 
 const redShadow = {
@@ -333,12 +343,14 @@ export default function SatzbauTrainer({
 
   const builtText = gaveUp
     ? "(gave up)"
-    : [item.given, ...placedIdx.map((i) => item.chips[i])]
-        .filter(Boolean)
-        .join(" ");
-  const correctedText = [item.given, ...(verdict?.expected ?? [])]
-    .filter(Boolean)
-    .join(" ");
+    : capFirst(
+        [item.given, ...placedIdx.map((i) => item.chips[i])]
+          .filter(Boolean)
+          .join(" ")
+      );
+  const correctedText = capFirst(
+    [item.given, ...(verdict?.expected ?? [])].filter(Boolean).join(" ")
+  );
 
   return (
     <div>
@@ -398,7 +410,11 @@ export default function SatzbauTrainer({
                   onClick={() => removeChip(pos)}
                   className="btn-3d rounded-[14px] border-[3px] border-red-line bg-flag-red-fill px-3.5 py-1.5 font-display text-[16px] font-black text-on-fill"
                 >
-                  {item.chips[chipI]}
+                  {/* FIX B: sentence-initial chip only — a lead-in already
+                      covers position 0 when `given` is set. */}
+                  {pos === 0 && !item.given
+                    ? capFirst(item.chips[chipI])
+                    : item.chips[chipI]}
                 </button>
               ))}
             </div>

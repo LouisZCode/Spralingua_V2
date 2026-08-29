@@ -15,9 +15,13 @@ _ITEMS_PATH = Path(__file__).parent / "items.yaml"
 
 # The taxonomy patterns this exercise targets (todo GRAM-002, Exercise D).
 # The first three are the original lexicon chunks (reflexivity, fixed
-# prepositions, da-/wo-compounds); the remaining five are an A1/A2 hygiene
-# batch — patterns with no exercise anywhere else in the app. The loader
-# below cross-checks every id against grammar/taxonomy.yaml.
+# prepositions, da-/wo-compounds); the next five are an A1/A2 hygiene
+# batch — patterns with no exercise anywhere else in the app. The last four
+# (CLARA-14 Phase B) are an A2/B1 verb-form batch: partizip2-form gaps the
+# Partizip II stem, perfekt-aux-sein gaps the Perfekt auxiliary, als-vs-wenn
+# gaps the past-tense conjunction, konjunktiv2-hypothese gaps the Konjunktiv
+# II marker (wäre/hätte/würde). The loader below cross-checks every id
+# against grammar/taxonomy.yaml.
 TARGET_PATTERNS = (
     "reflexivpronomen",
     "verben-mit-praepositionen",
@@ -27,6 +31,10 @@ TARGET_PATTERNS = (
     "nicht-vs-kein",
     "am-um-im-zeit",
     "komparativ-form",
+    "partizip2-form",
+    "perfekt-aux-sein",
+    "als-vs-wenn",
+    "konjunktiv2-hypothese",
 )
 
 _REQUIRED = ("id", "pattern_id", "frame", "answer", "chunk", "hint")

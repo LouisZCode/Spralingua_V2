@@ -89,6 +89,33 @@ _NEW_PATTERN_GUIDANCE = {
         "or the correct irregular (besser/mehr/lieber/höher) — and that "
         "'mehr + adjective' is never how German builds a comparative."
     ),
+    # CLARA-14 pool expansion (2026-08-29): the four patterns below gained
+    # items in items.yaml the same day — a pattern in TARGET_PATTERNS with no
+    # entry here 502s every judged (non-deterministic) attempt.
+    "perfekt-aux-sein": (
+        "This item tests the Perfekt auxiliary. `note` must name that this "
+        "verb of movement or change of state builds its Perfekt with sein, "
+        "and the correctly conjugated form for the subject (bin/bist/ist/"
+        "sind/seid) — a haben form is the classic miss."
+    ),
+    "partizip2-form": (
+        "This item tests the Partizip II of a strong verb. `note` must name "
+        "the correct participle and that its stem changes (trinken → "
+        "getrunken, nehmen → genommen) — a regular -t participle built from "
+        "the infinitive stem is never right for these verbs."
+    ),
+    "als-vs-wenn": (
+        "This item tests als vs. wenn. `note` must name which one fits and "
+        "why: als for a one-time past situation or period, wenn for "
+        "repeated past events (immer/jedes Mal) and for present or future "
+        "conditions."
+    ),
+    "konjunktiv2-hypothese": (
+        "This item tests the Konjunktiv II in an unreal condition. `note` "
+        "must name the needed form (wäre/hätte/würde, correctly conjugated "
+        "for the subject) and that a hypothesis never takes the plain "
+        "present indicative."
+    ),
 }
 
 

@@ -14,17 +14,32 @@ from grammar import load_taxonomy
 
 _ITEMS_PATH = Path(__file__).parent / "items.yaml"
 
-# The five taxonomy patterns this exercise targets, and NO others — all five
+# The five taxonomy patterns this exercise originally targeted — all five
 # boil down to the same underlying problem: build the clause, then put the
 # verb where German puts it (clause-final for a relative clause / indirect
 # question / purpose clause, second position — verb-first for yes/no — for
 # a direct question).
+#
+# CLARA-14 Phase B added five more (pool-expansion authoring, so Clara's
+# per-pattern exercise pool clears 10+ options): v2-wortstellung,
+# trennbare-verben, modalverb-infinitiv-ende, perfekt-satzklammer,
+# nebensatz-verbende. These are main-clause/subordinate-clause word-order
+# problems too — verb-second in a main clause, prefix-to-the-end for a
+# separable verb, infinitive-to-the-end after a modal, Partizip II closing
+# the sentence bracket, conjugated verb to the very end of a weil/dass/
+# wenn/obwohl clause — so they fit the same chip-ordering mechanic and the
+# same catalog without a new drill.
 TARGET_PATTERNS = (
     "relativsatz",
     "indirekte-frage",
     "zu-infinitiv",
     "um-zu-damit",
     "fragen-wortstellung",
+    "v2-wortstellung",
+    "trennbare-verben",
+    "modalverb-infinitiv-ende",
+    "perfekt-satzklammer",
+    "nebensatz-verbende",
 )
 
 # ``given`` and ``accepts`` are allowed to be legitimately EMPTY (an empty
@@ -81,6 +96,17 @@ def load_items() -> dict[str, dict]:
                 raise ValueError(f"{where}: accepts[{j}] is not a reordering of 'answer'")
             if alt == item["answer"]:
                 raise ValueError(f"{where}: accepts[{j}] duplicates the canonical 'answer'")
+        # FIX A (CLARA-14 Phase B verification): OPTIONAL field. When
+        # present, names the chip a task pins as the required sentence
+        # opener (the five v2-wortstellung items) — must match one of the
+        # item's own chips, case-insensitively, so grading.py has something
+        # real to enforce.
+        if "must_start_with" in item:
+            must_start_with = item["must_start_with"]
+            if not isinstance(must_start_with, str) or not must_start_with:
+                raise ValueError(f"{where}: 'must_start_with' must be a non-empty string")
+            if not any(must_start_with.lower() == c.lower() for c in item["chips"]):
+                raise ValueError(f"{where}: 'must_start_with' must match one of the item's chips")
         if item["id"] in catalog:
             raise ValueError(f"{where}: duplicate item id")
         catalog[item["id"]] = item
