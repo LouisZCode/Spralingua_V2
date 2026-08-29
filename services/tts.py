@@ -32,7 +32,8 @@ VOICE_MAP = {
     # System/preset voices (not in the account's cloned-voice list)
     "happy_harry": "german_bavarian_male_v2",
     "sophie": "german_bavarian_female",
-    "calm_woman": "Calm_Woman",
+    "calm_woman": "Calm_Woman",  # Clara's voice until 2026-08-29 — kept so it's never lost
+    "german_sweet_lady": "German_SweetLady",  # Clara since 2026-08-29 (trialing EN+DE quality)
     "German-Male": "German_PlayfulMan",
     # Cloned voices (exist in the MiniMax account)
     "luis_clone": "moss_audio_744c4375-eb2b-11f0-b8d7-fa843b4be43a",     # best Luis clone (old luis_voice_clone deleted)
