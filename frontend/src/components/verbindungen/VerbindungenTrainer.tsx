@@ -55,6 +55,7 @@ export default function VerbindungenTrainer({
   onFlowDone,
   allowGiveUp,
   onGiveUp,
+  hideContinue,
 }: {
   round: ChunkItem[];
   // Judge one typed gap-fill (POST /verbindungen/attempts via the parent,
@@ -77,6 +78,11 @@ export default function VerbindungenTrainer({
   // so standalone practice stays pixel-identical.
   allowGiveUp?: boolean;
   onGiveUp?: (itemId: string) => Promise<ChunkVerdict>;
+  // CLARA-14: Clara's room only — after a graded verdict, suppress the
+  // advance button/Enter keybinding and never call onFlowDone; the parent
+  // (TeacherChat) dismisses the card externally. Absent/false (Flow, every
+  // other caller) is byte-identical.
+  hideContinue?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>(flow ? "drill" : "intro");
   const [queue, setQueue] = useState<QueueItem[]>(round);
@@ -137,7 +143,7 @@ export default function VerbindungenTrainer({
 
   // Enter advances from the feedback state (the input is unmounted then).
   useEffect(() => {
-    if (verdict === null) return;
+    if (verdict === null || hideContinue) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Enter") {
         e.preventDefault();
@@ -146,7 +152,7 @@ export default function VerbindungenTrainer({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [verdict, advance]);
+  }, [verdict, advance, hideContinue]);
 
   async function check(e: React.FormEvent) {
     e.preventDefault();
@@ -429,19 +435,24 @@ export default function VerbindungenTrainer({
                 {verdict.chunk}
               </p>
             </div>
-            <div className="mt-5 flex items-center justify-center gap-4">
-              <button
-                type="button"
-                onClick={advance}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
-                style={inkShadow}
-              >
-                {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
-              </button>
-              <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
-                or press Enter
-              </span>
-            </div>
+            {/* CLARA-14: Clara's room hides this — the card dismisses when
+                her spoken reaction lands (or a 15s backstop), not on a
+                learner click. See hideContinue's doc comment above. */}
+            {!hideContinue && (
+              <div className="mt-5 flex items-center justify-center gap-4">
+                <button
+                  type="button"
+                  onClick={advance}
+                  className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  style={inkShadow}
+                >
+                  {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
+                </button>
+                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                  or press Enter
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>

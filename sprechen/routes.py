@@ -35,8 +35,8 @@ from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
+from sprechen import grading
 from sprechen.content import TARGET_PATTERNS, load_tasks
-from sprechen.judge import judge_spoken
 from drills.copy import JUDGE_UNAVAILABLE
 from sprechen.nudge import suggest_vocab
 from vocab_nudge import filter_picks, load_deck
@@ -225,7 +225,11 @@ async def submit_attempt(
         attempt_span.set_attribute("langfuse.observation.input", transcript)
 
         try:
-            verdict = await judge_spoken(task, transcript)
+            # CLARA-14: verdict assembly moved to sprechen/grading.py::grade
+            # so this route and teacher/routes.py's audio path share one
+            # implementation. `judge_skipped` is unused here (this route
+            # never stamped that span attribute) — see grading.py's docstring.
+            verdict, _judge_skipped = await grading.grade(task, transcript, give_up=False)
         except Exception as exc:
             attempt_span.record_exception(exc)
             logger.exception("Sprechen judge call failed (task {})", task_id)
@@ -240,17 +244,17 @@ async def submit_attempt(
             task_id,
         )
 
-        passed = verdict.constraint_met and not verdict.slips
+        passed = verdict["passed"]
         attempt_span.set_attribute(
             "langfuse.observation.output",
-            f"passed={passed} constraintMet={verdict.constraint_met} "
-            f"hits={verdict.hits} slips={len(verdict.slips)}",
+            f"passed={passed} constraintMet={verdict['constraintMet']} "
+            f"hits={verdict['hits']} slips={len(verdict['slips'])}",
         )
         # Structured verdict attributes so Langfuse can filter without
         # string-parsing the free-text trace.output above.
-        attempt_span.set_attribute("verdict.constraint_met", bool(verdict.constraint_met))
-        attempt_span.set_attribute("verdict.hits", verdict.hits)
-        attempt_span.set_attribute("verdict.slips_count", len(verdict.slips))
+        attempt_span.set_attribute("verdict.constraint_met", bool(verdict["constraintMet"]))
+        attempt_span.set_attribute("verdict.hits", verdict["hits"])
+        attempt_span.set_attribute("verdict.slips_count", len(verdict["slips"]))
         attempt_span.set_attribute("verdict.pattern_id", task["pattern_id"])
 
         # Feed the ledger (design rule 4) — non-fatal. One write per attempt:
@@ -264,15 +268,15 @@ async def submit_attempt(
                     session_id=session_id,
                     source="sprechen",
                 )
-            elif verdict.slips:
-                first = verdict.slips[0]
+            elif verdict["slips"]:
+                first = verdict["slips"][0]
                 await record_grammar_error(
                     db,
                     user_id=user_id,
                     pattern_id=task["pattern_id"],
-                    sentence=first.quote,
-                    corrected=first.corrected,
-                    note=first.note,
+                    sentence=first["quote"],
+                    corrected=first["corrected"],
+                    note=first["note"],
                     source="sprechen",
                     session_id=session_id,
                 )
@@ -300,20 +304,7 @@ async def submit_attempt(
         except Exception:
             logger.exception("Drill-attempt log write failed (task {})", task_id)
 
-        return {
-            "transcript": transcript,
-            "passed": passed,
-            "constraintMet": verdict.constraint_met,
-            "constraintNote": verdict.constraint_note,
-            "hits": verdict.hits,
-            # Display-only, symmetric to slips (SPRECH-001) — defensive
-            # getattr/or-empty so a judge response missing the field can't 500.
-            "hitQuotes": getattr(verdict, "hit_quotes", None) or [],
-            "slips": [
-                {"quote": s.quote, "corrected": s.corrected, "note": s.note}
-                for s in verdict.slips
-            ],
-        }
+        return verdict
 
 
 class GiveUpIn(BaseModel):
@@ -339,6 +330,12 @@ async def give_up_attempt(
     task = load_tasks().get(body.task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")
+
+    # CLARA-14: verdict assembly moved to sprechen/grading.py::grade so this
+    # route and teacher/routes.py's give-up path share one implementation.
+    # No await boundary this route depends on — give_up=True never touches
+    # the judge — so this can run before the span opens below.
+    verdict, _judge_skipped = await grading.grade(task, "", give_up=True)
 
     with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("sprechen-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
@@ -386,16 +383,7 @@ async def give_up_attempt(
         except Exception:
             logger.exception("Drill-attempt log write failed (task {})", task["id"])
 
-        return {
-            "transcript": "",
-            "passed": False,
-            "constraintMet": False,
-            "constraintNote": "You gave up — no recording was judged.",
-            "hits": 0,
-            "hitQuotes": [],
-            "slips": [],
-            "gaveUp": True,
-        }
+        return verdict
 
 
 class NudgeIn(BaseModel):

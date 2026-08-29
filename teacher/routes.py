@@ -1,6 +1,6 @@
 """HTTP routes for Clara's interactive-exercise loop (AGENT-00X backend
-half, rebuilt for CLARA-13 — "Clara mounts the real drill trainers"), plus
-the cold-start topic-screen endpoint:
+half, rebuilt for CLARA-13 — "Clara mounts the real drill trainers"; CLARA-14
+adds the speaking drill), plus the cold-start topic-screen endpoint:
 
 - ``GET /teacher/starters`` — three curated starter topics for a learner
   whose ``user_errors`` ledger is still empty (see ``teacher/starters.py``).
@@ -10,16 +10,22 @@ the cold-start topic-screen endpoint:
   trainer component Flow does, dealt Flow-style with a round of one.
 - ``POST /teacher/exercise/attempts`` — grade one typed/typed-order answer
   using that drill's own deterministic check + judge, returning that drill's
-  NATIVE verdict shape (see teacher/registry.py).
+  NATIVE verdict shape (see teacher/registry.py). For the sprechen (speech)
+  adapter this route only accepts a give-up — a real attempt has audio to
+  transcribe first, which is what the next route is for.
+- ``POST /teacher/exercise/attempts-audio`` — CLARA-14, sprechen-only:
+  multipart audio in, sprechen's NATIVE verdict shape out (transcribe then
+  grade, same pipeline ``POST /sprechen/attempts`` uses).
 
-All three sit behind the same session-JWT dependency every drill router
-uses; the POST also shares the drills' per-user rate limiter (the judge calls
-it may fire are exactly as expensive as a normal drill attempt).
+All four sit behind the same session-JWT dependency every drill router uses;
+the two attempts routes also share the drills' per-user rate limiter (the
+transcription/judge calls they may fire are exactly as expensive as a normal
+drill attempt).
 """
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -30,7 +36,10 @@ from agents.observability import (
     tracer,
 )
 from auth.deps import get_current_user_id
+from satz.examiner import transcribe_attempt
 from security import drill_try_admit
+from sprechen import grading as sprechen_grading
+from sprechen.routes import _MAX_AUDIO_BYTES  # SAME cap POST /sprechen/attempts enforces — not re-derived
 from teacher.registry import get_adapter, pick_random_item
 from teacher.starters import starters_for_level
 from drills.copy import JUDGE_UNAVAILABLE
@@ -174,6 +183,32 @@ async def submit_exercise_attempt(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
 
+    if adapter.speech:
+        # CLARA-14: sprechen's real attempt is audio, not typed/ordered text
+        # — this JSON route can only ever grade a give-up for it (nothing to
+        # transcribe). A non-give-up JSON attempt is a frontend bug (or a
+        # stale client), not a learner error, so it's rejected 422 rather
+        # than silently misgraded as an empty typed answer.
+        if not body.give_up:
+            raise HTTPException(
+                status_code=422,
+                detail="Speaking exercises need audio — use POST /teacher/exercise/attempts-audio.",
+            )
+        session_id = get_trace_session(user_id)
+        with propagate_trace_context(user_id=user_id, session_id=session_id), \
+                tracer.start_as_current_span("teacher-exercise-attempt") as span:
+            span.set_attribute("user.id", user_id)
+            if session_id:
+                span.set_attribute("langfuse.session.id", session_id)
+            span.set_attribute("drill", body.drill)
+            span.set_attribute("item_id", item["id"])
+            span.set_attribute("langfuse.observation.metadata.pattern", item["pattern_id"])
+            span.set_attribute("gave_up", True)
+            verdict, _judge_skipped = await adapter.grade(item, "", give_up=True)
+            span.set_attribute("langfuse.observation.metadata.correct", str(verdict["passed"]))
+            span.set_attribute("langfuse.observation.output", "passed=False (gave up)")
+            return verdict
+
     # satzbau grades an `order: list[str]`; the other four grade a typed
     # `answer: str` — the request carries whichever field applies (D3),
     # validated 422 when it's missing and this isn't a give-up.
@@ -233,5 +268,116 @@ async def submit_exercise_attempt(
             "langfuse.observation.output",
             f"correct={correct} expected={verdict.get('expected')}"
             + (f" note={note}" if note else ""),
+        )
+        return verdict
+
+
+@router.post("/exercise/attempts-audio")
+async def submit_exercise_attempt_audio(
+    itemId: str = Form(...),
+    audio: UploadFile = File(...),
+    user_id: str = Depends(get_current_user_id),
+):
+    """Grade one SPOKEN attempt for a sprechen item dealt via
+    ``GET /teacher/exercise`` (CLARA-14). sprechen's audio -> transcript ->
+    judge pipeline doesn't fit ``AttemptIn``'s typed/ordered-text shape
+    (``answer``/``order``), so it gets its own multipart sibling route — the
+    same relationship ``POST /sprechen/give-up`` has to ``POST
+    /sprechen/attempts``, just flipped (there the JSON route is the odd one
+    out; here the multipart route is). Returns sprechen's NATIVE verdict
+    shape — byte-compatible with what ``POST /sprechen/attempts`` returns for
+    the same item+audio (``sprechen/grading.py::grade``, shared by both).
+
+    ============================================================================
+    ABSOLUTE INVARIANT — THIS ROUTE WRITES NOTHING, EVER.
+    No `record_grammar_error`, no `credit_pattern_success`, no
+    `record_drill_attempt`, no daily-mode credit, no DB session at all. This is
+    the approved design decision for v1 ("stay silent") — Clara's room is
+    deliberately exempt from every evaluator (see ARCHITECTURE.md's teacher
+    branch), and a practice item handed out INSIDE that room must not become a
+    side-channel into the same learning-state tables the exemption exists to
+    keep her out of. If a future version wants these writes, that's a new,
+    deliberate decision — not a bug fix to this comment.
+    ============================================================================
+    """
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
+    adapter = get_adapter("sprechen")
+    item = adapter.load_items().get(itemId) if adapter is not None else None
+    if item is None:
+        raise HTTPException(status_code=404, detail="Unknown item.")
+
+    # Same audio validation/limits as POST /sprechen/attempts (sprechen/
+    # routes.py) — the cap itself is imported, not re-derived, above.
+    data = await audio.read()
+    if not data:
+        raise HTTPException(status_code=422, detail="We didn't get any audio — try again.")
+    if len(data) > _MAX_AUDIO_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail="That recording is too long — a few sentences is enough.",
+        )
+
+    # Same tracing shape as submit_exercise_attempt: a root span carrying the
+    # transcript as root-observation input and the verdict as output, wrapped
+    # in propagate_trace_context so the STT + judge generations transcribe_
+    # attempt/grade fire nest under it WITH user/session. `langfuse.session.id`
+    # joins Clara's live conversation Session server-side, same lookup as the
+    # JSON route (there is no client-supplied session_id here, unlike
+    # /sprechen/attempts's own form field). Tracing only — the WRITES-NOTHING
+    # invariant above is untouched.
+    session_id = get_trace_session(user_id)
+    with propagate_trace_context(user_id=user_id, session_id=session_id), \
+            tracer.start_as_current_span("teacher-exercise-attempt") as span:
+        span.set_attribute("user.id", user_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
+        span.set_attribute("drill", "sprechen")
+        span.set_attribute("item_id", item["id"])
+        span.set_attribute("langfuse.observation.metadata.pattern", item["pattern_id"])
+        span.set_attribute("langfuse.observation.metadata.drill", "sprechen")
+
+        try:
+            # STT cost stamping (agents/audio_costs.py) happens INSIDE
+            # transcribe_attempt on its own "stt" span — same as
+            # POST /sprechen/attempts, nothing extra to do here.
+            transcript = await transcribe_attempt(
+                data, audio.content_type, keyterms=item.get("keyterms")
+            )
+        except Exception as exc:
+            span.record_exception(exc)
+            logger.exception("Teacher sprechen transcription failed (item {})", itemId)
+            # Mirrors POST /sprechen/attempts's own STT failure mapping
+            # exactly (sprechen/routes.py) — NOT the judge's JUDGE_UNAVAILABLE
+            # detail, which is a different failure with a different message.
+            raise HTTPException(
+                status_code=502,
+                detail="Couldn't process the audio — try again in a moment.",
+            )
+        if not transcript:
+            raise HTTPException(
+                status_code=422,
+                detail="We couldn't hear anything — try again a bit closer to the mic.",
+            )
+        span.set_attribute("langfuse.observation.input", transcript)
+
+        try:
+            verdict, _judge_skipped = await sprechen_grading.grade(item, transcript, give_up=False)
+        except Exception:
+            logger.exception("Teacher sprechen judge call failed (item {})", itemId)
+            mark_span_error(span, "judge unavailable")
+            raise HTTPException(
+                status_code=502,
+                detail=JUDGE_UNAVAILABLE,
+            )
+
+        span.set_attribute("langfuse.observation.metadata.correct", str(verdict["passed"]))
+        span.set_attribute(
+            "langfuse.observation.output",
+            f"passed={verdict['passed']} constraintMet={verdict['constraintMet']} "
+            f"hits={verdict['hits']} slips={len(verdict['slips'])}",
         )
         return verdict

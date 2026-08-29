@@ -18,6 +18,8 @@ import BauteilTrainer from "./bauteil/BauteilTrainer";
 import type { RoundItem as BauteilItem, BauteilVerdict } from "./bauteil/api";
 import ZeitfaerbungTrainer from "./zeitfaerbung/ZeitfaerbungTrainer";
 import type { ZeitItem, ZeitVerdict } from "./zeitfaerbung/api";
+import SprechenTrainer from "./sprechen/SprechenTrainer";
+import type { SpokenTask, SprechenVerdict } from "./sprechen/api";
 
 // AGENT-001: the /teacher orchestrator — the explanation-agent counterpart to
 // TandemChat. Note 5 added a picker screen (TeacherTopicScreen) ahead of the
@@ -36,6 +38,13 @@ import type { ZeitItem, ZeitVerdict } from "./zeitfaerbung/api";
 // enforced there) — the choice of trainer, the Skip row, and every attempt/
 // give-up closure below all live here. See teacher/routes.py (backend) for
 // the two HTTP endpoints.
+//
+// CLARA-14 Phase A: sprechen joins the roster (round 2's drill — audio, its
+// own multipart endpoint), and every mounted trainer now gets `hideContinue`
+// — no post-verdict advance click. A graded card stays up showing its
+// feedback and dismisses itself either when Clara's next reply reveals
+// (onBotReply, wired below) or a 15s backstop, whichever comes first. See
+// each closure's own comments below for the specifics.
 
 // Sentinel-OUT: kept byte-identical to agents/pipecat_wrapper.py's
 // EXERCISE_RESULT_PREFIX. The backend keys off this exact literal to route a
@@ -54,6 +63,13 @@ const REPORT_MAX_CHARS = 450;
 // ConversationView.tsx — it already fires at the "she finished talking"
 // bubble-reveal moment, so this is purely the extra pause on top of that).
 const EXERCISE_REVEAL_DELAY_MS = 2000;
+
+// CLARA-14: once a graded verdict has been reported to Clara, the card is
+// meant to dismiss when her spoken reaction to it reveals (see onBotReply
+// below) — but if that reply never arrives (a dropped /say, a session that
+// ends some other way before she replies), this backstop clears it anyway
+// so a learner is never left staring at a stale feedback card.
+const EXERCISE_DISMISS_BACKSTOP_MS = 15000;
 
 function truncateReport(text: string): string {
   return text.length > REPORT_MAX_CHARS
@@ -82,7 +98,8 @@ type Exercise =
       itemId: string;
       patternId: string;
       item: ZeitItem;
-    };
+    }
+  | { drill: "sprechen"; itemId: string; patternId: string; item: SpokenTask };
 
 // D5: the three report shapes, byte-identical to the pre-CLARA-13 template —
 // only the per-drill sentence/answer/expected/note extraction (below) is new.
@@ -117,6 +134,48 @@ function buildReport(params: {
   return report;
 }
 
+// CLARA-14: sprechen's own report template family — no single reference
+// answer to quote (D5's alsoCorrectFit doesn't apply to speech), so this
+// doesn't reuse buildReport. Pinned per clara_sprechen_spec.md's mapping.
+function buildSprechenReport(params: {
+  patternId: string;
+  prompt: string;
+  transcript: string;
+  passed: boolean;
+  constraintNote: string | null;
+  slips: { note: string }[];
+}): string {
+  const { patternId, prompt, transcript, passed, constraintNote, slips } =
+    params;
+  let report: string;
+  if (passed) {
+    report =
+      `${EXERCISE_RESULT_PREFIX} Correct — speaking exercise on ${patternId}: ` +
+      `the task was "${prompt}", they said "${transcript}".`;
+    if (constraintNote) report += ` ${constraintNote}`;
+  } else {
+    report =
+      `${EXERCISE_RESULT_PREFIX} Wrong — speaking exercise on ${patternId}: ` +
+      `the task was "${prompt}", they said "${transcript}"` +
+      (constraintNote ? `; ${constraintNote}` : ".");
+  }
+  const slipNotes = slips.slice(0, 2).map((s) => s.note);
+  if (slipNotes.length > 0) report += ` Slips: ${slipNotes.join("; ")}.`;
+  return report;
+}
+
+function buildSprechenGiveUpReport(
+  patternId: string,
+  prompt: string,
+  constraintNote: string | null
+): string {
+  let report =
+    `${EXERCISE_RESULT_PREFIX} Wrong — speaking exercise on ${patternId}: ` +
+    `the task was "${prompt}", they gave up.`;
+  if (constraintNote) report += ` ${constraintNote}`;
+  return report;
+}
+
 // D3: the pinned POST /teacher/exercise/attempts payload/response contract —
 // a thin fetch, not a per-drill api.ts (that endpoint doesn't exist there:
 // Clara's room writes nothing and must not touch the drills' own
@@ -147,6 +206,32 @@ async function postAttempt<V>(
     );
   }
   return res.json() as Promise<V>;
+}
+
+// CLARA-14: sprechen's real attempt is audio, not JSON — its own multipart
+// endpoint (POST /teacher/exercise/attempts-audio). No Content-Type header:
+// the browser sets the multipart boundary itself. Give-up still has no
+// audio, so it goes through postAttempt above like every other drill.
+async function postAttemptAudio(
+  token: string,
+  itemId: string,
+  audio: Blob
+): Promise<SprechenVerdict> {
+  const form = new FormData();
+  form.append("itemId", itemId);
+  form.append("audio", audio, "attempt");
+  const res = await fetch(`${HTTP_BASE}/teacher/exercise/attempts-audio`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: form,
+  });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new Error(
+      typeof detail === "string" ? detail : "Couldn't check that — try again."
+    );
+  }
+  return res.json() as Promise<SprechenVerdict>;
 }
 
 export default function TeacherChat() {
@@ -199,6 +284,19 @@ export default function TeacherChat() {
     }
   }, []);
 
+  // CLARA-14: the dismissal backstop — armed the instant a graded verdict's
+  // report goes out (see sendGradedReport below), cleared the instant
+  // something else clears the exercise first (Clara's own reply via
+  // onBotReply, a fresh exercise_request, or the session ending).
+  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearDismissTimer = useCallback(() => {
+    if (dismissTimerRef.current) {
+      clearTimeout(dismissTimerRef.current);
+      dismissTimerRef.current = null;
+    }
+  }, []);
+
   const sendReport = useCallback(
     async (rawText: string) => {
       if (!token || !user) return;
@@ -220,12 +318,52 @@ export default function TeacherChat() {
     [token, user]
   );
 
+  // CLARA-14: the dismissal rework — a graded verdict's report is sent
+  // exactly as before (sendReport, unconditionally, same timing), but now
+  // also arms the 15s backstop timer (see EXERCISE_DISMISS_BACKSTOP_MS)
+  // that stands in for onFlowDone as this card's eventual dismissal.
+  // zeitfaerbung's "unrecognized" reply never reaches this — see D4's guard
+  // in submitZeitfaerbung below, which returns before this would be called.
+  const armDismissBackstop = useCallback(() => {
+    clearDismissTimer();
+    dismissTimerRef.current = setTimeout(() => {
+      dismissTimerRef.current = null;
+      setExercise(null);
+    }, EXERCISE_DISMISS_BACKSTOP_MS);
+  }, [clearDismissTimer]);
+
+  const sendGradedReport = useCallback(
+    (rawText: string) => {
+      void sendReport(rawText);
+      armDismissBackstop();
+    },
+    [sendReport, armDismissBackstop]
+  );
+
+  // CLARA-14: the other half of the dismissal — ConversationView's onBotReply
+  // fires the instant ANY bot reply reveals (marker or not, see that
+  // component's own doc comment). Once a graded verdict is up
+  // (exerciseAnswered), Clara's next reply IS her reaction to the report we
+  // just sent — that's the natural dismissal moment. Before a verdict lands
+  // (exerciseAnswered still false — the reveal-pause window, or the learner
+  // still working the item), a bot reply is unrelated to this exercise and
+  // must not touch it.
+  const handleBotReply = useCallback(() => {
+    if (exerciseAnswered) {
+      clearDismissTimer();
+      setExercise(null);
+    }
+  }, [exerciseAnswered, clearDismissTimer]);
+
   const handleExerciseRequest = useCallback(
     (patternId: string) => {
       // A fresh request always replaces whatever's open, and cancels any
-      // reveal still pending from a previous one.
+      // reveal still pending from a previous one — and, CLARA-14, any
+      // dismissal backstop still armed from the PREVIOUS exercise's graded
+      // verdict (that card is gone now regardless of the timer).
       const seq = ++requestSeqRef.current;
       clearRevealTimer();
+      clearDismissTimer();
       setExercise(null);
       setExerciseAnswered(false);
       if (!token) return;
@@ -273,7 +411,7 @@ export default function TeacherChat() {
           // has anything to reveal.
         });
     },
-    [token, sendReport, clearRevealTimer]
+    [token, sendReport, clearRevealTimer, clearDismissTimer]
   );
 
   const handleSkip = useCallback(() => {
@@ -285,12 +423,12 @@ export default function TeacherChat() {
     setExercise(null);
   }, [exercise, sendReport]);
 
-  // FLOW-001-style dismissal: the trainer calls this once the learner
-  // advances PAST a shown verdict (Enter / the continue action) — see each
-  // trainer's own `advance()`. The old bespoke card's auto-dismiss timers
-  // (arm on verdict, fire after a fixed window, or on Clara's next reply) are
-  // gone with it — dismissal is now purely this explicit, learner-driven
-  // action, exactly like Flow's onFlowDone.
+  // CLARA-14: every mount below now passes `hideContinue`, which makes each
+  // trainer's `advance()`/`next()` unreachable (no button, keybinding
+  // ignored — see each trainer's own gate), so this never actually fires
+  // from any of the six mounts today. Kept wired anyway as a harmless
+  // fallback: a trainer mounted without `hideContinue` would still dismiss
+  // correctly through its normal onFlowDone path, same as Flow's.
   const handleExerciseDone = useCallback(() => {
     setExercise(null);
   }, []);
@@ -305,17 +443,19 @@ export default function TeacherChat() {
   const handleSessionEnded = useCallback(() => {
     requestSeqRef.current++;
     clearRevealTimer();
+    clearDismissTimer(); // CLARA-14: no dangling dismiss backstop post-session
     setExercise(null);
     setExerciseAnswered(false);
-  }, [clearRevealTimer]);
+  }, [clearRevealTimer, clearDismissTimer]);
 
-  // Belt-and-suspenders: clear the reveal timer if this component itself
-  // unmounts mid-window (e.g. a fast route change) — no orphaned timer.
+  // Belt-and-suspenders: clear both timers if this component itself
+  // unmounts mid-window (e.g. a fast route change) — no orphaned timers.
   useEffect(() => {
     return () => {
       clearRevealTimer();
+      clearDismissTimer();
     };
-  }, [clearRevealTimer]);
+  }, [clearRevealTimer, clearDismissTimer]);
 
   // ─── D5 per-drill report mapping + POST closures ─────────────────────
   // Each of the five mirrors the SAME shape: POST the attempt to the
@@ -347,7 +487,7 @@ export default function TeacherChat() {
       }
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
-      void sendReport(
+      sendGradedReport(
         buildReport({
           patternId: ex.patternId,
           sentence: ex.item.frame,
@@ -360,7 +500,7 @@ export default function TeacherChat() {
       );
       return verdict;
     },
-    [token, sendReport]
+    [token, sendGradedReport]
   );
 
   const submitSatzbau = useCallback(
@@ -390,7 +530,7 @@ export default function TeacherChat() {
       // a TRUE verdict, `note` only a FALSE one — never both.
       const note = verdict.correct ? verdict.variant : verdict.note;
       const alsoCorrectFit = verdict.correct && verdict.variant != null;
-      void sendReport(
+      sendGradedReport(
         buildReport({
           patternId: ex.patternId,
           sentence,
@@ -403,7 +543,7 @@ export default function TeacherChat() {
       );
       return verdict;
     },
-    [token, sendReport]
+    [token, sendGradedReport]
   );
 
   const submitVerbindungen = useCallback(
@@ -423,7 +563,7 @@ export default function TeacherChat() {
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
-      void sendReport(
+      sendGradedReport(
         buildReport({
           patternId: ex.patternId,
           sentence: ex.item.frame,
@@ -436,7 +576,7 @@ export default function TeacherChat() {
       );
       return verdict;
     },
-    [token, sendReport]
+    [token, sendGradedReport]
   );
 
   const submitBauteil = useCallback(
@@ -456,7 +596,7 @@ export default function TeacherChat() {
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
-      void sendReport(
+      sendGradedReport(
         buildReport({
           patternId: ex.patternId,
           sentence: ex.item.frame,
@@ -469,7 +609,7 @@ export default function TeacherChat() {
       );
       return verdict;
     },
-    [token, sendReport]
+    [token, sendGradedReport]
   );
 
   const submitZeitfaerbung = useCallback(
@@ -496,7 +636,7 @@ export default function TeacherChat() {
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
-      void sendReport(
+      sendGradedReport(
         buildReport({
           patternId: ex.patternId,
           sentence: ex.item.frame,
@@ -509,7 +649,50 @@ export default function TeacherChat() {
       );
       return verdict;
     },
-    [token, sendReport]
+    [token, sendGradedReport]
+  );
+
+  // CLARA-14: sprechen's own submit — real attempt goes through the
+  // multipart audio endpoint, give-up through the same JSON endpoint every
+  // other drill's give-up uses (D3 in the backend spec: drill="sprechen" +
+  // give_up=true is the one JSON shape sprechen's attempts route accepts).
+  // Report mapping is sprechen's own template family (buildSprechenReport /
+  // buildSprechenGiveUpReport above) — no alsoCorrectFit, no single
+  // reference answer to quote.
+  const submitSprechen = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "sprechen" }>,
+      audio: Blob | null,
+      giveUp: boolean
+    ): Promise<SprechenVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = giveUp
+        ? await postAttempt<SprechenVerdict>(token, {
+            drill: "sprechen",
+            itemId: ex.itemId,
+            give_up: true,
+          })
+        : await postAttemptAudio(token, ex.itemId, audio ?? new Blob());
+      setExerciseAnswered(true);
+      sendGradedReport(
+        giveUp
+          ? buildSprechenGiveUpReport(
+              ex.patternId,
+              ex.item.prompt,
+              verdict.constraintNote
+            )
+          : buildSprechenReport({
+              patternId: ex.patternId,
+              prompt: ex.item.prompt,
+              transcript: verdict.transcript,
+              passed: verdict.passed,
+              constraintNote: verdict.constraintNote,
+              slips: verdict.slips,
+            })
+      );
+      return verdict;
+    },
+    [token, sendGradedReport]
   );
   // ───────────────────────────────────────────────────────────────────
 
@@ -548,6 +731,7 @@ export default function TeacherChat() {
           onAttempt={(_itemId, answer) => submitFaelle(exercise, answer, false)}
           onGiveUp={() => submitFaelle(exercise, null, true)}
           onFlowDone={handleExerciseDone}
+          hideContinue
         />
       )}
       {exercise.drill === "satzbau" && (
@@ -560,6 +744,7 @@ export default function TeacherChat() {
           onAttempt={(_itemId, order) => submitSatzbau(exercise, order, false)}
           onGiveUp={() => submitSatzbau(exercise, null, true)}
           onFlowDone={handleExerciseDone}
+          hideContinue
         />
       )}
       {exercise.drill === "verbindungen" && (
@@ -574,6 +759,7 @@ export default function TeacherChat() {
           }
           onGiveUp={() => submitVerbindungen(exercise, null, true)}
           onFlowDone={handleExerciseDone}
+          hideContinue
         />
       )}
       {exercise.drill === "bauteil" && (
@@ -586,6 +772,7 @@ export default function TeacherChat() {
           onAttempt={(_itemId, answer) => submitBauteil(exercise, answer, false)}
           onGiveUp={() => submitBauteil(exercise, null, true)}
           onFlowDone={handleExerciseDone}
+          hideContinue
         />
       )}
       {exercise.drill === "zeitfaerbung" && (
@@ -600,6 +787,20 @@ export default function TeacherChat() {
           }
           onGiveUp={() => submitZeitfaerbung(exercise, null, true)}
           onFlowDone={handleExerciseDone}
+          hideContinue
+        />
+      )}
+      {exercise.drill === "sprechen" && (
+        <SprechenTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_taskId, audio) => submitSprechen(exercise, audio, false)}
+          onGiveUp={() => submitSprechen(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+          hideContinue
         />
       )}
     </div>
@@ -633,6 +834,7 @@ export default function TeacherChat() {
       // (mirrors TandemChat's onBack -> setTopic(null)).
       onBack={() => setTopic(null)}
       onExerciseRequest={handleExerciseRequest}
+      onBotReply={handleBotReply}
       onSessionEnded={handleSessionEnded}
       // CLARA-13: ConversationView renders whatever this is, inline after
       // the last bubble, once it goes non-null — see that file for

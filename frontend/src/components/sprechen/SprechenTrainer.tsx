@@ -41,6 +41,7 @@ export default function SprechenTrainer({
   allowGiveUp,
   onGiveUp,
   sessionId,
+  hideContinue,
 }: {
   round: SpokenTask[];
   // Judge one recorded clip (POST /sprechen/attempts via the parent, which
@@ -72,6 +73,12 @@ export default function SprechenTrainer({
   // OBS-007 practice-sitting id, owned by the parent (Sprechen.tsx or
   // Flow.tsx) — threaded through to GermanWay's rephrase call.
   sessionId?: string;
+  // CLARA-14: Clara's room only — after a graded verdict, suppress the
+  // advance button/Space-Enter keybinding and never call onFlowDone; the
+  // parent (TeacherChat) dismisses the card externally. Does NOT touch
+  // "↻ Try again" (a mid-item retry, not an advance). Absent/false (Flow,
+  // every other caller) is byte-identical.
+  hideContinue?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>("drill");
   const [index, setIndex] = useState(0);
@@ -151,7 +158,7 @@ export default function SprechenTrainer({
   // needed is not calling into it during that window.
   useSpeakHotkey(() => {
     if (verdict !== null) {
-      next();
+      if (!hideContinue) next();
       return;
     }
     if (checking) return;
@@ -458,16 +465,21 @@ export default function SprechenTrainer({
             <p className="font-body text-[14px] font-semibold text-flag-red-deep">
               {verdict.constraintNote}
             </p>
-            <div className="mt-6 flex items-center justify-center">
-              <button
-                type="button"
-                onClick={next}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
-                style={inkShadow}
-              >
-                {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
-              </button>
-            </div>
+            {/* CLARA-14: Clara's room hides this — the card dismisses when
+                her spoken reaction lands (or a 15s backstop), not on a
+                learner click. See hideContinue's doc comment above. */}
+            {!hideContinue && (
+              <div className="mt-6 flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={next}
+                  className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  style={inkShadow}
+                >
+                  {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="mt-6">
@@ -601,6 +613,8 @@ export default function SprechenTrainer({
             )}
 
             <div className="mt-6 flex items-center justify-center gap-4">
+              {/* Mid-item retry — stays under hideContinue too (CLARA-14
+                  only suppresses the ADVANCE affordance, never this). */}
               <button
                 type="button"
                 onClick={startRecording}
@@ -608,14 +622,16 @@ export default function SprechenTrainer({
               >
                 ↻ Try again
               </button>
-              <button
-                type="button"
-                onClick={next}
-                className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
-                style={inkShadow}
-              >
-                {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
-              </button>
+              {!hideContinue && (
+                <button
+                  type="button"
+                  onClick={next}
+                  className="btn-3d inline-flex items-center rounded-[18px] border-[3px] border-line bg-card px-6 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+                  style={inkShadow}
+                >
+                  {flow ? "Next" : index + 1 >= round.length ? "Finish" : "Next"}
+                </button>
+              )}
             </div>
           </div>
         )}

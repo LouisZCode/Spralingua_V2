@@ -1,23 +1,31 @@
 """Pattern -> exercise registry for Clara's interactive-exercise loop
 (AGENT-00X, "the teacher can hand out a real item"; rebuilt for CLARA-13,
-"Clara mounts the real drill trainers").
+"Clara mounts the real drill trainers"; extended for CLARA-14 with a sixth,
+audio adapter — sprechen).
 
 Clara's room has never had a written drill; this is the bridge. It maps
-``grammar/taxonomy.yaml`` pattern ids onto items drawn from FIVE existing
-typed-answer drill catalogs — faelle, satzbau, zeitfaerbung, verbindungen,
-bauteil — and now serves each drill's item and grades each attempt in that
-drill's own NATIVE shape, so the frontend mounts the exact same trainer
-component Flow does, dealt Flow-style with a round of one. Nothing here
-flattens a card or collapses a verdict anymore (that generic-card design was
-CLARA-13's predecessor, AGENT-00X) — this module is pure plumbing: item
-lookup/pattern-matching (``pick_random_item``) plus two per-drill functions
-per adapter, ``serve`` and ``grade``, both IMPORTED from that drill's own
-``<drill>/grading.py`` (grading) and ``<drill>/routes.py`` (serve-time
-transforms, e.g. satzbau's chip shuffle) — nothing here reimplements a check,
-a serve-time transform, or duplicates an ``items.yaml``. No drill module is
-edited to make this work.
+``grammar/taxonomy.yaml`` pattern ids onto items drawn from SIX existing
+drill catalogs — faelle, satzbau, zeitfaerbung, verbindungen, bauteil (typed
+text) and sprechen (spoken; CLARA-14) — and now serves each drill's item and
+grades each attempt in that drill's own NATIVE shape, so the frontend mounts
+the exact same trainer component Flow does, dealt Flow-style with a round of
+one. Nothing here flattens a card or collapses a verdict anymore (that
+generic-card design was CLARA-13's predecessor, AGENT-00X) — this module is
+pure plumbing: item lookup/pattern-matching (``pick_random_item``) plus two
+per-drill functions per adapter, ``serve`` and ``grade``, both IMPORTED from
+that drill's own ``<drill>/grading.py`` (grading) and ``<drill>/routes.py``
+(serve-time transforms, e.g. satzbau's chip shuffle) — nothing here
+reimplements a check, a serve-time transform, or duplicates an ``items.yaml``.
+No drill module is edited to make this work.
 
-Coverage is v1-complete: all five target drills turned out to be reusable
+sprechen's ``grade`` doesn't fit the typed/ordered-text call shape the other
+five share (a real attempt needs audio transcribed first, which is I/O with
+its own route — see ``teacher/routes.py::submit_exercise_attempt_audio``) —
+the ``DrillAdapter.speech`` flag below marks it so ``teacher/routes.py``'s
+JSON attempts route can branch instead of forcing an audio drill through the
+text-answer path.
+
+Coverage is v1-complete: all six target drills turned out to be reusable
 as-is (generic catalog only — CONT-002 personal/forged items are skipped;
 those live per-user in ``user_drill_items`` and add nothing a random generic
 item doesn't already give this room). If a future drill can't be reused
@@ -53,6 +61,12 @@ from zeitfaerbung import grading as _zeitfaerbung_grading
 from zeitfaerbung.content import (
     DOPPELDEUTIG_GROUPS as _ZF_DOPPEL_GROUPS,
     load_items as _load_zeitfaerbung_items,
+)
+
+from sprechen import grading as _sprechen_grading
+from sprechen.content import (
+    TARGET_PATTERNS as _SPRECHEN_PATTERNS,
+    load_tasks as _load_sprechen_tasks,
 )
 
 
@@ -104,6 +118,24 @@ def _serve_zeitfaerbung(item: dict) -> dict:
     return entry
 
 
+def _serve_sprechen(item: dict) -> dict:
+    # Mirrors sprechen/routes.py:154-159 (GET /round's per-item entry) — the
+    # judge rubric (`forces`) stays server-side, same as a Flow-dealt round.
+    return {"id": item["id"], "title": item["title"], "prompt": item["prompt"]}
+
+
+def _sprechen_validate_noop(item: dict, _transcript: str) -> str | None:
+    """Never actually called (CLARA-14): ``teacher/routes.py``'s speech
+    branch only ever reaches ``adapter.grade`` for a give-up (no audio to
+    validate), which every other adapter also skips its own ``validate`` for.
+    A real sprechen attempt goes through the dedicated multipart route
+    (``submit_exercise_attempt_audio``), which validates the AUDIO directly —
+    there is no typed/ordered ``answer``/``order`` here for a pure function
+    like this to check. Present only so ``DrillAdapter``'s dataclass contract
+    is satisfied."""
+    return None
+
+
 @dataclass(frozen=True)
 class DrillAdapter:
     name: str
@@ -122,6 +154,11 @@ class DrillAdapter:
     # `answer: str` — teacher/routes.py uses this to pick which AttemptIn
     # field to hand to validate()/grade().
     uses_order: bool = field(default=False)
+    # True for sprechen only (CLARA-14): its real attempt payload is AUDIO,
+    # not typed/ordered text — teacher/routes.py's JSON attempts route
+    # branches on this to reject a non-give-up JSON attempt (pointing at the
+    # dedicated multipart route) instead of running it through the text path.
+    speech: bool = field(default=False)
 
 
 _ADAPTERS: dict[str, DrillAdapter] = {
@@ -170,6 +207,19 @@ _ADAPTERS: dict[str, DrillAdapter] = {
         serve=_serve_zeitfaerbung,
         validate=_zeitfaerbung_grading.validate,
         grade=_zeitfaerbung_grading.grade,
+    ),
+    # CLARA-14: the seven word-order/conjunction patterns Sprechen alone
+    # covers (v2-wortstellung, trennbare-verben, modalverb-infinitiv-ende,
+    # nebensatz-verbende, perfekt-satzklammer, als-vs-wenn,
+    # konjunktiv2-hypothese) — previously 404ing from Clara's room.
+    "sprechen": DrillAdapter(
+        name="sprechen",
+        load_items=_load_sprechen_tasks,
+        patterns=lambda: frozenset(_SPRECHEN_PATTERNS),
+        serve=_serve_sprechen,
+        validate=_sprechen_validate_noop,
+        grade=_sprechen_grading.grade,
+        speech=True,
     ),
 }
 
