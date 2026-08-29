@@ -502,6 +502,19 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
             if all_seeded:
                 header = lesson.get("starter_focus_header") or header
             parts.append(header + _format_teacher_focus(ctx.grammar_focus))
+        # CLARA-16: the full exercise catalog — every pool-covered pattern
+        # id NOT already printed above in the focus section — appended
+        # last, so the top-3 focus ids stay Clara's first choice and this
+        # list is the fallback net. `.get` tolerance matches every sibling
+        # layer above: a lesson_snapshot frozen before this key existed
+        # simply renders without it, same as the fallback_wunsch/forge keys.
+        if ctx.exercise_catalog:
+            catalog_header = lesson.get("catalog_header")
+            if catalog_header:
+                lines = "\n".join(
+                    f"- {e['label']} (id: {e['pattern_id']})" for e in ctx.exercise_catalog
+                )
+                parts.append(catalog_header + lines)
         assembled = "\n---\n\n".join(parts)
     elif lesson_type == "respond":
         assembled = lesson["persona_prompt"]

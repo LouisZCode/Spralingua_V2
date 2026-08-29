@@ -81,6 +81,11 @@ from database.repository import (
 # same as every other prompt-layer dependency above.
 from teacher.starters import starters_for_level
 
+# CLARA-16: the exercise registry's own coverage map (drill -> covered
+# taxonomy pattern ids), used below to build Context.exercise_catalog for
+# teacher sessions. Same top-level-import layering as teacher.starters above.
+from teacher.registry import coverage as teacher_coverage
+
 # Live pipeline tasks keyed by user_id. Used by /say/{user_id} in main.py
 # to inject typed turns into an active session. Per-client isolation rule
 # from CLAUDE.md still holds — this is just a lookup, not shared state.
@@ -472,6 +477,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # the cold-start starters_for_level(...) call so there is only one
         # DB read either way.
         student_level: str | None = None
+        # CLARA-16: teacher-only full exercise catalog (Context.exercise_catalog)
+        # — built below, once grammar_focus has settled (cold-start starters and
+        # any `?pattern=` injection included), so the exclusion set is complete.
+        # Empty for every other lesson type.
+        exercise_catalog: list = []
         snapshot_type = lesson_snapshot.get("type")
         if snapshot_type in ("tandem", "teacher"):
             try:
@@ -574,6 +584,38 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"{snapshot_type.capitalize()} layer fetch failed (non-fatal): {type(e).__name__}: {e}"
                 )
 
+        # CLARA-16: the full exercise catalog (teacher lessons only) — union
+        # of every taxonomy pattern id `teacher/registry.py`'s adapters
+        # actually cover, minus the ids already printed above in
+        # `grammar_focus` (real ledger patterns, cold-start starters, and any
+        # `?pattern=` injection are all resolved by this point, so this runs
+        # AFTER that block, not inside it). Ordered by `load_taxonomy()`'s own
+        # dict order (A1 -> B1, preserved from the YAML). This is what lets
+        # Clara deal a pool-covered topic that falls outside her top-3 focus
+        # list instead of live-forging a topic the pool already has a real
+        # exercise for — see agents/conversational_prompt.py's teacher branch
+        # (catalog_header) and agents/prompts/teacher.yaml's re-scoped
+        # fallbacks. Non-fatal, same contract as the ledger reads just above:
+        # a failure here only means Clara's prompt renders without the extra
+        # list, never a failed connect.
+        if snapshot_type == "teacher":
+            try:
+                taxonomy = load_taxonomy()
+                focus_ids = {p["pattern_id"] for p in grammar_focus}
+                covered_ids: set[str] = set()
+                for pattern_ids in teacher_coverage().values():
+                    covered_ids.update(pattern_ids)
+                exercise_catalog = [
+                    {"pattern_id": pid, "label": taxonomy[pid]["label"]}
+                    for pid in taxonomy  # dict preserves YAML order (A1 -> B1)
+                    if pid in covered_ids and pid not in focus_ids
+                ]
+            except Exception as e:  # noqa: BLE001 — non-fatal, like the ledger reads above
+                logger.warning(
+                    f"Exercise catalog build failed (non-fatal): {type(e).__name__}: {e}"
+                )
+                exercise_catalog = []
+
         # Per-session audio location (OBS-010). Derived before the DB insert
         # so audio_path is available for the row; kept here (not above the
         # gate) because mkdir is the only side-effect and the gate has no
@@ -610,7 +652,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
         # both passed — the wrapper's own DB/transcript fields need the
         # former, its hand-rolled `llm` span needs the latter.
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level, forge_enabled=forge_enabled)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, exercise_catalog=exercise_catalog, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level, forge_enabled=forge_enabled)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.

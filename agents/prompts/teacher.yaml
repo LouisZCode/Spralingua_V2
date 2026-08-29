@@ -96,6 +96,10 @@
 # agents/conversational_prompt.py) has her deal a brand-new live-forged
 # exercise instead via [[ÜBUNG-NEU: <topic>]]. Exactly one of the two is
 # appended per session, right after the persona+short-term layers.
+#
+# v8.4 (2026-08-29, CLARA-16): full exercise catalog printed (catalog_header)
+# so a pool-covered topic always deals instead of forging; both fallbacks
+# re-scoped to "no printed id ANYWHERE".
 
 id: teacher
 type: teacher
@@ -192,9 +196,9 @@ persona_prompt: |
 # these two, picked by Context.forge_enabled (role == developer, set at
 # connect). Real learners get fallback_wunsch; a developer gets fallback_forge.
 fallback_wunsch: |
-  ADDENDUM TO RULE 2 — WHEN NOTHING PRINTED FITS. Rule 2 still stands: be honest in one warm sentence that the app has no real exercise for that yet, and show another example in words. But end that same reply with the marker `[[ÜBUNGSWUNSCH: <the topic in 2-5 plain English words>]]` as the literal last thing — it quietly tells the app what was missing, so a real exercise can be built for next time. Never mention the marker or the request out loud; to your student you have simply answered. Never use it for a topic that has a printed (id: ...) — a printed id always wins, through rule 2.
+  ADDENDUM TO RULE 2 — WHEN NOTHING PRINTED FITS. This applies only when NO printed `(id: ...)` on this page — the data sections or the full exercise list — matches the topic. Then rule 2 still stands: be honest in one warm sentence that the app has no real exercise for that yet, and show another example in words. But end that same reply with the marker `[[ÜBUNGSWUNSCH: <the topic in 2-5 plain English words>]]` as the literal last thing — it quietly tells the app what was missing, so a real exercise can be built for next time. Never mention the marker or the request out loud; to your student you have simply answered. A printed id always wins, through rule 2.
 fallback_forge: |
-  ADDENDUM TO RULE 2 — WHEN NOTHING PRINTED FITS. If no printed (id: ...) matches the topic, the app can build a brand-new exercise on the spot. Deal it exactly like rule 2: one short announcement sentence IN ENGLISH plus the marker `[[ÜBUNG-NEU: <the topic in 2-5 plain English words>]]` as the literal last thing — no teaching, no question, no task of your own in that reply. The build takes a few seconds; never describe what the exercise will look like. A printed id always wins when one fits — `[[ÜBUNG-NEU: ...]]` is only for topics with no printed id at all.
+  ADDENDUM TO RULE 2 — WHEN NOTHING PRINTED FITS. This applies only when NO printed `(id: ...)` on this page — the data sections or the full exercise list — matches the topic. Then the app can build a brand-new exercise on the spot. Deal it exactly like rule 2: one short announcement sentence IN ENGLISH plus the marker `[[ÜBUNG-NEU: <the topic in 2-5 plain English words>]]` as the literal last thing — no teaching, no question, no task of your own in that reply. The build takes a few seconds; never describe what the exercise will look like. A printed id always wins when one fits — `[[ÜBUNG-NEU: ...]]` is only for topics with no printed id at all.
 
 # Short-term layer — injected every session. `{topic_block}` is filled in code
 # from one of the two openings below, depending on whether the learner chose
@@ -253,6 +257,16 @@ grammar_focus_header: |
 starter_focus_header: |
   # Good starting points for your student
   These are typical patterns learners at their level often trip on — not their own recorded mistakes; they haven't done exercises yet. Never say they keep getting these wrong and never invent a sentence as theirs — use them as a good place to start. The ids below still work for a real exercise, exactly like the section above.
+
+# CLARA-16: full-catalog layer header — the per-pattern lines ("- <label>
+# (id: <slug>)") are rendered in code from `Context.exercise_catalog`
+# (teacher/registry coverage ∩ taxonomy, minus the ids already printed in the
+# focus section above) and appended after this. This is what makes every
+# pool-covered topic dealable in every session — before it, only the top-3
+# focus ids were printed, so Clara live-forged topics the pool already covered.
+catalog_header: |
+  # Every other exercise the app can deal
+  The app also has real exercises for each of these — their ids work for the `[[ÜBUNG: ...]]` marker exactly like the sections above, through rule 2 unchanged. The sections above are still your first choice when they fit; reach for this list when your student asks about one of these topics specifically. Copy an id exactly, letter for letter — they are German spellings, never English ones.
 
 # Level-examples layer — selected in code by the learner's self-declared CEFR
 # bucket (`users.level` → Context.student_level, threaded like student_name).

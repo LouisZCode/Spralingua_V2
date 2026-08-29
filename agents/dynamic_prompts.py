@@ -97,3 +97,15 @@ class Context:
     # `exercise_forge` RTVI message. False for every other lesson type and
     # for every non-developer teacher session.
     forge_enabled: bool = False
+    # CLARA-16: teacher-only. The full catalog of exercises the app can deal
+    # for this student — every taxonomy pattern id `teacher/registry.py`'s
+    # adapters actually cover, MINUS the ids already printed in
+    # `grammar_focus` above — built once at connect by `pipeline/factory.py`
+    # from `teacher.registry.coverage()` ∩ `grammar.load_taxonomy()`,
+    # ordered by the taxonomy's own A1→B1 order. Read by the teacher
+    # middleware branch (`conversational_prompt.py`) to render the
+    # `catalog_header` layer, which is what lets Clara deal a pool-covered
+    # topic that falls outside her top-3 focus list instead of live-forging
+    # a topic the pool already has a real exercise for. Each entry is
+    # `{pattern_id, label}`. Empty for every other lesson type.
+    exercise_catalog: list = field(default_factory=list)

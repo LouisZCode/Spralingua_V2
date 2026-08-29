@@ -1,15 +1,32 @@
-"""Live single-gap exercise forge for Clara's dev-only ``[[ÜBUNG-NEU: ...]]``
-marker (CLARA-15 P3).
+"""Live production-exercise forge for Clara's dev-only ``[[ÜBUNG-NEU: ...]]``
+marker (CLARA-15 P3, rewritten for CLARA-16 — "the produce format").
 
 Two structured-output LLM calls per topic — draft, then a blind-rederive
-verify pass — build ONE fresh German gap-fill item on the spot, the same
+verify pass — build ONE fresh German PRODUCTION task on the spot, the same
 draft-then-verify shape ``drills/forge.py`` uses for personal Bauteil/
 Verbindungen items, but synchronous on the request path (a developer is
 waiting on the reply) and scoped to a free-text topic string rather than a
-vocab card. The graded shape is Verbindungen's NATIVE verdict —
-``{correct, expected, chunk, note}`` — because ``teacher/routes.py`` serves a
-forged item through the same ``VerbindungenTrainer`` component real
-Verbindungen items use (see ``teacher/registry.py::_serve_verbindungen``).
+vocab card.
+
+v1 (single-gap fill-the-blank, ``ForgeDraft``/``ForgeVerify``/
+``ForgeMissVerdict`` — deleted this round) was pedagogically shallow: the
+owner's own words testing it were "I just had to write the word HATT — no
+learning." v2 replaces the format entirely. The forge now builds a
+production task — an English instruction like "Make a wish about your
+weekend using 'hätte'" — and the learner answers with ONE complete German
+sentence of their own, typed OR spoken (audio → Deepgram STT → the same
+judge as the typed path). Constraint-judged free production has NO
+accept-list at all: the judge grades the learner's own sentence against the
+task and the target structure directly, which also removes v1's worst
+failure mode — a wrong, pre-approved accepts list failing a learner who was
+right.
+
+This module is still dev-only (``teacher/routes.py`` 403s any non-developer
+before ever calling in here) and still writes nothing — see the ABSOLUTE
+INVARIANT blocks on every route in ``teacher/routes.py``. Clara's room is
+deliberately exempt from every evaluator, and a practice item handed out
+inside that room must never become a side-channel into the learning-state
+tables the exemption exists to keep her out of.
 
 The in-memory store below is a DELIBERATE, DOCUMENTED exception to the
 "no module-level singletons" rule in CLAUDE.md: this is process-local,
@@ -83,135 +100,197 @@ def get_item(item_id: str) -> Optional[dict]:
 
 
 # --------------------------------------------------------------------------
-# Draft + verify schemas. Cerebras strict json_schema limits apply (see
-# CLAUDE.md): root object, additionalProperties:false (langchain's
+# Draft + verify + judge schemas. Cerebras strict json_schema limits apply
+# (see CLAUDE.md): root object, additionalProperties:false (langchain's
 # to_strict_json_schema adds this automatically for a plain pydantic model,
 # same as every sibling judge schema in this repo — no manual model_config
-# needed), no pattern/format/minItems/maxItems/minLength/maxLength. The
-# "exactly one ___" / "at most 6 accepts" rules are therefore enforced in
-# PYTHON below (_sane / list slicing), never in the schema itself.
+# needed), no pattern/format/minItems/maxItems/minLength/maxLength. Any
+# "at most N words" phrasing below is prompt guidance, not a schema
+# constraint — Cerebras strict mode forbids enforcing it in the schema
+# itself.
 # --------------------------------------------------------------------------
 
 
-class ForgeDraft(BaseModel):
-    """One drafted single-gap German item for a free-text topic."""
+class ProduceDraft(BaseModel):
+    """One drafted German production task for a free-text topic — an
+    English instruction the student answers with ONE original German
+    sentence of their own, never a gap to fill and never a sentence to
+    translate."""
 
-    sentence: str = Field(
+    task_en: str = Field(
         description=(
-            "German sentence with exactly one ___ gap testing the topic. "
-            "A1-B1 vocabulary unless the topic itself needs higher. "
-            "Contemporary, natural German a real teacher would say"
+            "One-sentence ENGLISH instruction telling the student what to "
+            "produce — a concrete, everyday scenario that REQUIRES the "
+            "topic's structure (not merely allows it), e.g. for hätte-"
+            "wishes: 'Make a wish about your weekend using \"hätte\".' "
+            "Must be answerable with exactly ONE German sentence"
         )
     )
-    answer: str = Field(description="The words that correctly fill the gap")
-    accepts: list[str] = Field(
-        description="Every filler that is ALSO correct for this gap, including answer itself, at most 6 entries"
+    target_de: str = Field(
+        description="The exact German word(s)/structure the sentence must contain — short, this is what the frontend shows bold"
     )
-    hint_en: str = Field(
-        description="Natural full-sentence English rendering of the filled sentence"
+    example_de: str = Field(
+        description=(
+            "ONE natural German sentence that fully satisfies the task — a "
+            "model answer a real student could give. A2-B1 vocabulary "
+            "unless the topic itself genuinely needs higher"
+        )
     )
     rule_note: str = Field(
-        description="One short English sentence naming the grammar rule the gap tests"
+        description="One short English sentence naming the grammar rule the task practices"
     )
     title: str = Field(description="Two to four words naming the exercise topic")
 
 
-class ForgeVerify(BaseModel):
-    """Blind second-pass check on a drafted item: derive the gap yourself
-    before trusting the draft's claimed answer."""
+class ProduceVerify(BaseModel):
+    """Blind second-pass check on a drafted production task: answer the
+    task yourself, from scratch, before trusting anything the draft
+    claimed."""
 
-    derived_answer: str = Field(
-        description="The word(s) you independently work out belong in the gap, from the sentence's own grammar alone — before weighing the draft's claim"
+    own_answer: str = Field(
+        description="Your OWN one-sentence German answer to the task, written BEFORE weighing the draft's example_de"
     )
     ok: bool = Field(
-        description="True iff the sentence has exactly one unambiguous gap and the draft's answer plus accepts all correctly fill it, matching your own derivation"
-    )
-    accepts: list[str] = Field(
-        description="Corrected list of every filler that is genuinely correct for the gap, at most 6, always including derived_answer when ok is true"
+        description=(
+            "True iff ALL of: the task is clear and doable in exactly one "
+            "German sentence; the target genuinely belongs in ANY correct "
+            "answer to it (truly unavoidable, not just one option among "
+            "several); and the draft's example_de fully satisfies the task "
+            "and is correct, natural German"
+        )
     )
     reason: str = Field(description="One short line: why ok is false, or 'ok' when true")
 
 
-class ForgeMissVerdict(BaseModel):
-    """Verdict on a MISSED forged gap-fill answer — the deterministic accepts
-    match already failed; grade whether the typed filler should have been
-    accepted anyway. Isolates the gap alone, same convention as
-    ``faelle/judge.py``."""
+class ProduceVerdict(BaseModel):
+    """Verdict on a learner's own sentence answering a live-forged
+    production task — constraint-judged free production, with NO
+    accept-list: the judge grades the sentence directly against the task
+    and the target structure, never against a fixed list of pre-approved
+    fillers."""
 
     correct: bool = Field(
-        description="True when the typed filler is ALSO a grammatically and semantically correct filler for the gap, even though it wasn't in the pre-approved list"
+        description="True iff the sentence answers the task AND uses the target structure correctly"
     )
     note: Optional[str] = Field(
         default=None,
-        description="REQUIRED when correct is false — at most 14 words naming what's wrong. Null when correct",
+        description=(
+            "REQUIRED when correct is false — at most 14 words naming the "
+            "miss. When correct is true, may carry one tiny by-the-way tip "
+            "unrelated to the target, or stay null"
+        ),
+    )
+    corrected: Optional[str] = Field(
+        default=None,
+        description=(
+            "The learner's OWN sentence, minimally repaired to satisfy the "
+            "task with the target — only when correct is false. Never a "
+            "different sentence, never the reference answer verbatim. Null "
+            "when correct"
+        ),
     )
 
 
-DRAFT_PROMPT = """# Role
-You draft ONE single-gap German exercise item for a topic a student asked their teacher about, live, on the spot.
+PRODUCE_DRAFT_PROMPT = """# Role
+You draft ONE production task for a German student who asked their teacher about a topic, live, on the spot. A production task is an English instruction telling the student to write or say ONE German sentence of their own — never a fill-the-blank, never a sentence to translate.
 
 # Topic
 {topic}
 
 # What to build
-- `sentence` — ONE natural, contemporary German sentence with EXACTLY ONE `___` gap that tests the topic above. A1-B1 vocabulary throughout, unless the topic itself genuinely needs a higher level (e.g. a B2 tense) — never harder than the topic requires.
-- `answer` — the words that correctly fill the gap.
-- `accepts` — every filler that is ALSO correct here (synonyms, equally valid case/form choices), including `answer` itself; at most 6.
-- `hint_en` — a natural, full-sentence English rendering of the filled sentence (comprehension only, not a translation drill).
-- `rule_note` — ONE short English sentence naming the rule the gap tests.
+- `task_en` — ONE English instruction describing an everyday, concrete scenario the student could plausibly be in, phrased so that producing it in German REQUIRES the topic's structure — not merely allows it. Example: for a Konjunktiv II wish, "Make a wish about your weekend using 'hätte'." The scenario must be answerable with exactly ONE complete German sentence.
+- `target_de` — the exact German word(s) or structure the sentence must contain — short, this is what the frontend shows bold as the student's hint.
+- `example_de` — ONE natural German sentence that fully satisfies the task — a model answer a real student could give. A2-B1 vocabulary throughout, unless the topic itself genuinely needs higher.
+- `rule_note` — ONE short English sentence naming the rule the task practices.
 - `title` — two to four words naming the exercise.
 
 # Hard rules
-- Exactly one `___` in `sentence` — never zero, never more than one.
-- The sentence must be unambiguous GIVEN THE FRAME — a fluent speaker reading it must land on `answer` (or an `accepts` sibling), not on any other filler.
-- Natural, everyday German a real teacher would actually use — never a stilted textbook fragment.
+- `task_en` is IN ENGLISH — never write the instruction itself in German.
+- The task must be answerable with exactly ONE German sentence — not a paragraph, not a list, not several sentences.
+- The target must be UNAVOIDABLE: a student who genuinely completes the scenario cannot dodge the structure and still succeed. If a task CAN be answered without the target, tighten the scenario until the structure is the only natural way to say it.
+- Never a fill-the-blank (no ___ anywhere in `task_en`) and never a translate-this-sentence task — the student invents their own sentence from the scenario; they never convert one that's handed to them.
+- Everyday, concrete, and natural — a real teacher's assignment, not a stilted textbook drill sentence.
 """
 
-VERIFY_PROMPT = """# Role
-You are a strict second pass on a live-forged German gap-fill exercise, before it ever reaches a student. Work out the gap YOURSELF first — do not simply trust the draft.
+PRODUCE_VERIFY_PROMPT = """# Role
+You are a strict second pass on a live-forged German production task, before it ever reaches a student. Answer the task YOURSELF first — do not simply trust the draft.
 
 # The item
-- sentence with gap: "{sentence}"
+- task (English instruction): "{task_en}"
+- target structure the answer must contain: "{target_de}"
 - rule being tested: {rule_note}
-- draft's claimed answer: "{answer}"
-- draft's claimed accepts: {accepts}
+- draft's own model answer: "{example_de}"
 
 # What to do
-1. Read ONLY the sentence and the rule. Work out, from the sentence's own grammar, what word(s) belong in the gap — write that in `derived_answer` before weighing anything the draft claimed.
-2. Compare: does the draft's `answer` match what you derived (or an equally correct sibling)? Is every entry in `accepts` ALSO genuinely correct for this gap? Is the sentence unambiguous, with exactly one gap?
-3. Set `ok` to true only if all of that holds. Otherwise false, with `reason` naming the problem in one short line (else "ok").
-4. `accepts` in your OWN answer is the corrected list — add anything genuinely correct the draft missed, remove anything not actually correct; always include `derived_answer` when `ok` is true.
+1. Read ONLY the task. Write your own one-sentence German answer to it in `own_answer` — before weighing anything the draft claimed.
+2. Check three things, in order:
+   - Is the task clear and doable with ONE German sentence — not vague, not requiring more?
+   - Does the target genuinely belong in ANY correct answer to this task — is it truly unavoidable, not just one option among several?
+   - Does the draft's `example_de` fully satisfy the task, and is it correct, natural German?
+3. Set `ok` to true only if all three hold. Otherwise false, with `reason` naming the problem in one short line (else "ok").
 """
 
-MISS_PROMPT = """# Role
-You grade ONE missed answer to a live-forged German gap-fill exercise. The learner's answer did not match any pre-approved filler — decide honestly whether it should have been accepted anyway. Grade ONLY the gap; everything else in the sentence was given to the learner and is not in question.
+# CLARA-16: the spoken-attempt tolerance rules, injected as `{modality_block}`
+# in PRODUCE_JUDGE_PROMPT when grading a transcribed answer — same "the
+# learner never chose the spelling" convention every ASR-fed judge in this
+# repo follows (see CLAUDE.md, faelle/judge.py's style, satz/examiner.py's
+# PROMPT). For a typed answer, `_modality_block` substitutes a one-line
+# opposite instead: spelling counts, punctuation doesn't.
+SPOKEN_TOLERANCE_BLOCK = """# How this sentence arrived
+The sentence arrived via speech recognition — the learner never chose the spelling. Ignore punctuation, capitalization and spelling entirely; resolve homophones in the learner's favor (das/dass, seid/seit, wieder/wider). A trimmed word ending is the recognizer's doing, not the learner's. Grade word choice and structure only."""
 
-# The item
-- sentence: "{sentence}"
-- one correct answer (a reference, not the only one): "{expected}"
-- the rule being tested: {rule_note}
+_TYPED_TOLERANCE_LINE = (
+    "# How this sentence arrived\nThe sentence was typed; spelling counts, but punctuation does not."
+)
 
-# What the learner typed
-"{typed}"
 
-# Worked examples
-- expected "einen Kuchen" · rule "accusative direct object" · typed "einen Kuchen." (trailing period) → **correct: true**. Punctuation is not grammar.
-- expected "gestern" · rule "time adverb, simple past narration" · typed "heute" → **correct: false**. Different word, wrong meaning — "heute" (today) does not fit where the sentence needs a past-time adverb. note: "heute means today, not yesterday — wrong tense fit".
-- expected "der Fahrer" · rule "nominative subject" · typed "den Fahrer" → **correct: false**. Right noun, wrong case for the subject slot. note: "that's accusative — the subject here needs nominative der".
-- expected "mit ihm" · rule "dative pronoun after mit" · typed "mit ihn" → **correct: false**. CONTROL: accusative pronoun after a dative preposition. note: "ihn is accusative — mit takes dative, so ihm".
+def _modality_block(spoken: bool) -> str:
+    """Selects the `{modality_block}` slot text for PRODUCE_JUDGE_PROMPT —
+    the full spoken-tolerance rules (SPOKEN_TOLERANCE_BLOCK) for a
+    transcribed answer, or the one-line typed equivalent otherwise."""
+    return SPOKEN_TOLERANCE_BLOCK if spoken else _TYPED_TOLERANCE_LINE
 
-# Grade
-- `correct` — true only if the typed filler is grammatically correct AND fits the sentence's meaning as well as the reference answer.
-- `note` — REQUIRED when correct=false, at most 14 words, naming exactly what's wrong. Never restate the correct answer (it's shown separately). Null when correct.
+
+PRODUCE_JUDGE_PROMPT = """# Role
+You grade ONE learner sentence against a live-forged German production task. There is no accept-list here — the learner invented their own sentence, so you judge it directly against the task, never against the reference answer word-for-word.
+
+# The task
+- instruction: "{task_en}"
+- target structure that must appear, used correctly: "{target_de}"
+- the rule being practiced: {rule_note}
+- one good answer (a reference, NOT the only one): "{example}"
+
+{modality_block}
+
+# What the learner wrote
+"{sentence}"
+
+# STEP 1 — isolate what you grade
+Grade ONLY two things:
+1. Does the sentence answer the TASK — is it a plausible, complete response to the scenario?
+2. Is the TARGET structure present in the sentence and used CORRECTLY?
+An unrelated slip anywhere ELSE in the sentence — a different word choice, a minor typo, an equally valid way of phrasing the rest — must NEVER flip `correct` to false. Note it as a small tip if you like, nothing more.
+
+# STEP 2 — worked examples
+- task "Make a wish about your weekend using 'hätte'" · target "hätte" · reference "Ich hätte gern mehr Zeit für meine Familie gehabt." · learner "Ich hätte gerne mal wieder richtig ausgeschlafen." → **correct: true**. A completely different sentence from the reference, still a genuine wish, `hätte` used correctly — that's the whole point of free production.
+- same task/target · learner "Ich würde gerne mal wieder richtig ausschlafen, wen ich mehr zeit hätte." → **correct: true**, note: "small typo: 'wen' should be 'wenn' — otherwise spot on". A stray typo outside the target is not a grammar failure.
+- same task/target · learner "Ich habe letztes Wochenende viel geschlafen." → **correct: false**. CONTROL — `hätte` never appears at all, the target structure is simply missing. note: "no 'hätte' — that's the whole point of a wish", corrected: "Ich hätte letztes Wochenende gerne viel geschlafen."
+- task "Explain what you would do if you won the lottery, using a Konjunktiv II sentence with 'würde'" · target "würde" · learner "Wenn ich im Lotto gewinne, kaufe ich ein Haus." → **correct: false**. DODGE — the learner answered with a real-condition sentence instead of the hypothetical the task asked for; `würde` (or an equivalent Konjunktiv II form) never appears. note: "that's a real condition, not the hypothetical 'würde' asks for", corrected: "Wenn ich im Lotto gewinnen würde, würde ich ein Haus kaufen."
+- task "Tell a friend they should see a doctor, using 'solltest'" · target "solltest" · learner "Du solltest zum Arzt gehen." → **correct: true**. Answers the task, target present and correctly formed.
+
+# STEP 3 — grade
+- `correct` — true iff BOTH step-1 conditions pass.
+- `note` — REQUIRED when correct=false, AT MOST 14 words naming the miss (missing target, target misused, or doesn't answer the task). When correct=true, may carry one tiny by-the-way tip (a typo, a stylistic aside) or stay null — never invent a problem just to fill it.
+- `corrected` — ONLY when correct=false: the learner's OWN sentence, minimally repaired to satisfy the task with the target — never a different sentence, never the reference answer verbatim.
 """
 
 
-async def _draft(topic: str, *, reason: Optional[str] = None) -> ForgeDraft:
+async def _draft(topic: str, *, reason: Optional[str] = None) -> ProduceDraft:
     # JUDGE-001 (2026-08-15): drafts CONTENT, not a verdict — temperature=None
     # keeps provider-default sampling, same convention as drills/forge.py's
     # draft calls and satz/enricher.py.
-    llm = structured_judge_llm(ForgeDraft, temperature=None)
-    prompt = DRAFT_PROMPT.replace("{topic}", topic)
+    llm = structured_judge_llm(ProduceDraft, temperature=None)
+    prompt = PRODUCE_DRAFT_PROMPT.replace("{topic}", topic)
     if reason:
         prompt += (
             f"\n\n# Your last attempt was rejected\n{reason}\n"
@@ -223,14 +302,14 @@ async def _draft(topic: str, *, reason: Optional[str] = None) -> ForgeDraft:
     return result
 
 
-async def _verify(draft: ForgeDraft) -> ForgeVerify:
+async def _verify(draft: ProduceDraft) -> ProduceVerify:
     # temperature=0 default (structured_judge_llm) — this IS a verdict.
-    llm = structured_judge_llm(ForgeVerify)
+    llm = structured_judge_llm(ProduceVerify)
     prompt = (
-        VERIFY_PROMPT.replace("{sentence}", draft.sentence)
+        PRODUCE_VERIFY_PROMPT.replace("{task_en}", draft.task_en)
+        .replace("{target_de}", draft.target_de)
         .replace("{rule_note}", draft.rule_note)
-        .replace("{answer}", draft.answer)
-        .replace("{accepts}", ", ".join(draft.accepts))
+        .replace("{example_de}", draft.example_de)
     )
     with generation_span("teacher-forge-verify", model=FORGE_MODEL, input_text=prompt) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
@@ -238,32 +317,52 @@ async def _verify(draft: ForgeDraft) -> ForgeVerify:
     return result
 
 
-def _sane(draft: ForgeDraft) -> Optional[str]:
+def _sane_produce(draft: ProduceDraft) -> Optional[str]:
     """Cheap structural gate BEFORE ever calling the verify LLM — a reason
-    string when something's off (fed back into the redraft), else None."""
-    if draft.sentence.count("___") != 1:
-        return "the sentence must contain exactly one ___ gap"
-    if not draft.answer.strip():
-        return "answer must not be empty"
-    if not any(a.strip() for a in draft.accepts):
-        return "accepts must include at least the answer"
+    string when something's off (fed back into the redraft), else None.
+
+    Field-emptiness plus a lenient token-containment check: at least one
+    whitespace-token of `target_de` must appear (case-insensitively) inside
+    `example_de`. Exact-string containment would false-negative on
+    inflection (`target_de` "hätte" vs. an example that only ever inflects
+    it further, or a multi-word target where only part shows up unchanged)
+    — checking tokens individually and passing on ANY hit is the same
+    lenient-containment tradeoff v1's `_sane` made for its gap/accepts
+    check, ported to the produce shape.
+    """
+    fields = {
+        "task_en": draft.task_en,
+        "target_de": draft.target_de,
+        "example_de": draft.example_de,
+        "rule_note": draft.rule_note,
+        "title": draft.title,
+    }
+    for name, value in fields.items():
+        if not value.strip():
+            return f"{name} must not be empty"
+
+    target_tokens = [t for t in draft.target_de.strip().lower().split() if t]
+    example_lower = draft.example_de.strip().lower()
+    if target_tokens and not any(tok in example_lower for tok in target_tokens):
+        return "example_de must contain the target structure"
     return None
 
 
 async def forge_item(topic: str) -> dict:
-    """Draft -> verify a single-gap German item for ``topic``. One redraft on
-    a rejected first pass (sanity gate OR verify), then raises.
+    """Draft -> verify ONE production task for ``topic``. One redraft on a
+    rejected first pass (sanity gate OR verify), then raises.
 
-    Returns an internal dict — id/topic/title/frame/hint/answer/accepts/
-    rule_note — that ``teacher/routes.py`` both stores whole (via
-    :func:`store_item`, for grading) and projects down to the served
-    round-item shape (``{id, frame, hint}``, mirroring
-    ``teacher/registry.py::_serve_verbindungen`` field-for-field).
+    Returns an internal dict — id/topic/title/task/target/example/rule_note
+    — that ``teacher/routes.py`` both stores whole (via :func:`store_item`,
+    for grading) and projects down to the served pre-attempt shape
+    (``{id, task, target, hint}``) — ``example`` (the model answer) is
+    withheld until after the attempt; serving it up front would hand the
+    learner the answer.
     """
     reason: Optional[str] = None
     for attempt in (1, 2):
         draft = await _draft(topic, reason=reason)
-        gate_reason = _sane(draft)
+        gate_reason = _sane_produce(draft)
         if gate_reason is not None:
             logger.warning(f"[FORGE] draft #{attempt} for {topic!r} failed sanity gate: {gate_reason}")
             reason = gate_reason
@@ -271,24 +370,13 @@ async def forge_item(topic: str) -> dict:
 
         verify = await _verify(draft)
         if verify.ok:
-            accepts = list(
-                dict.fromkeys(
-                    [*(a.strip() for a in (verify.accepts or []) if a and a.strip()),
-                     verify.derived_answer.strip(),
-                     draft.answer.strip()]
-                )
-            )
-            if draft.answer.strip() not in accepts:
-                accepts.insert(0, draft.answer.strip())
-            accepts = accepts[:6]
             return {
                 "id": f"forge-{uuid4().hex}",
                 "topic": topic,
                 "title": draft.title,
-                "frame": draft.sentence,
-                "hint": draft.hint_en,
-                "answer": draft.answer,
-                "accepts": accepts,
+                "task": draft.task_en,
+                "target": draft.target_de,
+                "example": draft.example_de,
                 "rule_note": draft.rule_note,
             }
 
@@ -298,89 +386,68 @@ async def forge_item(topic: str) -> dict:
     raise RuntimeError(f"forge_item: exhausted retries for topic={topic!r} last_reason={reason!r}")
 
 
-# --------------------------------------------------------------------------
-# Grading — mirrors verbindungen/grading.py's shape and normalization
-# (case/whitespace-insensitive match against a pre-approved list, judge only
-# on a miss), returning verbindungen's NATIVE verdict:
-# {correct, expected, chunk, note}. `chunk` carries the gap answer (a
-# forged item has no fixed-chunk concept the way real Verbindungen items
-# do, but VerbindungenTrainer reads this field, so it must be present) and
-# `expected` is the canonical answer — same value, per spec.
-# --------------------------------------------------------------------------
-
-
-def _normalize(s: str) -> str:
-    return " ".join(s.split()).strip()
-
-
-async def grade_forged(item: dict, answer: str, *, give_up: bool = False) -> tuple[dict, bool]:
-    """Returns ``(verdict, judge_skipped)``. ``judge_skipped`` is True only
-    when give-up or the deterministic accepts-match short-circuited the
-    judge call — same contract as every sibling drill's ``grade``."""
-    if give_up:
-        return (
-            {
-                "correct": False,
-                "expected": item["answer"],
-                "chunk": item["answer"],
-                "note": item["rule_note"],
-            },
-            True,
-        )
-
-    typed = _normalize(answer)
-    accepts_norm = {_normalize(a).lower() for a in item["accepts"]}
-    if typed.lower() in accepts_norm:
-        return (
-            {
-                "correct": True,
-                "expected": item["answer"],
-                "chunk": item["answer"],
-                "note": None,
-            },
-            True,
-        )
-
-    # Miss — ONE generic judge call (schema-factory, temp 0 default), a
-    # worked-example prompt over the item's own rule_note. Judge failure
-    # fails SOFT to the deterministic-miss verdict — never 502 an attempt
-    # deterministic logic can already answer.
-    try:
-        verdict = await _judge_miss(item, typed)
-        return (
-            {
-                "correct": verdict.correct,
-                "expected": item["answer"],
-                "chunk": item["answer"],
-                "note": verdict.note,
-            },
-            False,
-        )
-    except Exception:
-        logger.exception(f"[FORGE] judge call failed for item {item['id']}")
-        return (
-            {
-                "correct": False,
-                "expected": item["answer"],
-                "chunk": item["answer"],
-                "note": item["rule_note"],
-            },
-            False,
-        )
-
-
-async def _judge_miss(item: dict, typed: str) -> ForgeMissVerdict:
+async def _judge_produced(item: dict, sentence: str, *, spoken: bool) -> ProduceVerdict:
     # temperature=0 default (structured_judge_llm) — this IS a verdict.
-    llm = structured_judge_llm(ForgeMissVerdict)
+    llm = structured_judge_llm(ProduceVerdict)
     prompt = (
-        MISS_PROMPT.replace("{sentence}", item["frame"])
-        .replace("{expected}", item["answer"])
+        PRODUCE_JUDGE_PROMPT.replace("{task_en}", item["task"])
+        .replace("{target_de}", item["target"])
         .replace("{rule_note}", item["rule_note"])
-        .replace("{typed}", typed)
+        .replace("{example}", item["example"])
+        .replace("{modality_block}", _modality_block(spoken))
+        .replace("{sentence}", sentence)
     )
     with generation_span("teacher-forge-judge", model=FORGE_MODEL, input_text=prompt) as span:
         result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
         record_generation_output(span, result.model_dump_json(), usage, response_metadata)
     if result.correct:
-        result.note = None
+        result.corrected = None
     return result
+
+
+async def grade_produced(
+    item: dict, answer: str, *, spoken: bool = False, give_up: bool = False
+) -> tuple[dict, bool]:
+    """Grade one learner sentence against a forged production ``item``.
+    Returns ``(verdict, judge_skipped)`` — the same two-element shape every
+    sibling drill's ``grade`` returns.
+
+    Unlike v1's gap-fill (a deterministic accepts-match short-circuited the
+    judge on a hit), constraint-judged free production has NO accept-list to
+    match against — a real attempt is ALWAYS judged, the same "no
+    deterministic path" contract ``sprechen/grading.py::grade`` already
+    uses. ``judge_skipped`` is True only for a give-up, the one case that
+    never calls the judge at all.
+
+    A judge-call exception PROPAGATES rather than failing soft — unlike v1's
+    ``grade_forged`` (which had a deterministic miss-verdict to fall back
+    on), there is no fallback verdict for free production: the caller
+    (``teacher/routes.py``) maps the exception to a 502 JUDGE_UNAVAILABLE.
+
+    An empty/whitespace ``answer`` is not handled here — the ROUTE 422s that
+    before this is ever called (both the typed and the audio-transcript
+    paths validate non-empty input before reaching this function).
+    """
+    if give_up:
+        return (
+            {
+                "correct": False,
+                "note": item["rule_note"],
+                "corrected": None,
+                "example": item["example"],
+                "gaveUp": True,
+            },
+            True,
+        )
+
+    sentence = " ".join(answer.split())
+    verdict = await _judge_produced(item, sentence, spoken=spoken)
+    return (
+        {
+            "correct": verdict.correct,
+            "note": verdict.note,
+            "corrected": verdict.corrected,
+            "example": item["example"],
+        },
+        False,
+    )

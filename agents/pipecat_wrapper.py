@@ -7,6 +7,7 @@ Each client connection gets its own ClientWrapper instance, holding:
 """
 
 import asyncio
+import difflib
 import re
 import time
 
@@ -117,6 +118,32 @@ _EXERCISE_MARKER_PREFIXES = {
 # (spaces, umlauts) and are validated separately (length only) where they're
 # consumed, in `ClientWrapper.astream`'s finally block.
 _EXERCISE_MARKER_ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
+
+
+def _snap_pattern_id(pattern_id: str, known_ids: set[str]) -> str:
+    """CLARA-16: snap a near-miss deal-marker id onto the printed set.
+
+    The catalog probe caught Clara anglicizing a printed id one character off
+    (`passive-werden` for the printed `passiv-werden`) — the marker was valid
+    as a slug, so it sailed through to `GET /teacher/exercise`, 404ed there,
+    and the learner would have seen an announced exercise never arrive. The
+    wrapper knows every id actually printed on her page (`Context.
+    grammar_focus` + `Context.exercise_catalog`), so a close-but-wrong id is
+    corrected deterministically here, BEFORE the RTVI push. Only near misses
+    snap (difflib cutoff 0.8 — one-letter slips and anglicized spellings); a
+    genuinely hallucinated id passes through unchanged so the deal route's
+    404 + ERROR trace keeps its agent-quality-signal meaning. With no known
+    ids at all (both layers empty/unloaded), nothing snaps.
+    """
+    if not known_ids or pattern_id in known_ids:
+        return pattern_id
+    close = difflib.get_close_matches(pattern_id, known_ids, n=1, cutoff=0.8)
+    if close:
+        logger.info(
+            f"[EXERCISE] Snapped near-miss marker id {pattern_id!r} -> {close[0]!r}"
+        )
+        return close[0]
+    return pattern_id
 
 # Sentinel-IN: the frontend hardcodes this exact literal on a synthetic
 # "here's how that exercise went" turn it sends through the existing POST
@@ -231,6 +258,7 @@ class ClientWrapper:
 
     def __init__(self, user_id, session_id, voice="happy_harry", lesson_id="lesson_zero",
                  topic="", grammar_focus=None, session_notes=None, vocab_words=None,
+                 exercise_catalog=None,
                  max_exchanges_override: int | None = None, trace_session_id: str | None = None,
                  student_name: str | None = None, student_level: str | None = None,
                  forge_enabled: bool = False):
@@ -297,6 +325,10 @@ class ClientWrapper:
             # CLARA-15 P3: mirrors self.forge_enabled above — read by the
             # teacher branch of conversational_prompt.py's prompt assembly.
             forge_enabled=forge_enabled,
+            # CLARA-16: teacher-only full exercise catalog (see
+            # Context.exercise_catalog) — fetched by the factory at connect
+            # and read by the teacher branch of conversational_prompt.py.
+            exercise_catalog=exercise_catalog or [],
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client
@@ -637,7 +669,19 @@ class ClientWrapper:
                     payload = marker_filter.marker_id
                     kind = marker_filter.marker_kind
                     if kind == "deal":
-                        pattern_id = payload
+                        # CLARA-16: correct a near-miss id against everything
+                        # actually printed on Clara's page (focus + catalog)
+                        # before it reaches the client — see _snap_pattern_id.
+                        known_ids = {
+                            p["pattern_id"]
+                            for layer in (
+                                self.context.grammar_focus,
+                                self.context.exercise_catalog,
+                            )
+                            for p in layer
+                            if isinstance(p, dict) and p.get("pattern_id")
+                        }
+                        pattern_id = _snap_pattern_id(payload, known_ids)
                         if _EXERCISE_MARKER_ID_RE.match(pattern_id):
                             logger.info(f"[EXERCISE] Dealt pattern {pattern_id!r} to the client")
                             if self.rtvi_processor is not None and hasattr(

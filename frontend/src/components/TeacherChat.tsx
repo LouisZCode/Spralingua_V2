@@ -20,6 +20,8 @@ import ZeitfaerbungTrainer from "./zeitfaerbung/ZeitfaerbungTrainer";
 import type { ZeitItem, ZeitVerdict } from "./zeitfaerbung/api";
 import SprechenTrainer from "./sprechen/SprechenTrainer";
 import type { SpokenTask, SprechenVerdict } from "./sprechen/api";
+import ProduceCard from "./teacher/ProduceCard";
+import type { ProduceItem, ProduceVerdict } from "./teacher/ProduceCard";
 
 // AGENT-001: the /teacher orchestrator — the explanation-agent counterpart to
 // TandemChat. Note 5 added a picker screen (TeacherTopicScreen) ahead of the
@@ -100,12 +102,13 @@ type Exercise =
       item: ZeitItem;
     }
   | { drill: "sprechen"; itemId: string; patternId: string; item: SpokenTask }
-  // CLARA-15: the live forge card — POST /teacher/exercise/forge's response.
-  // Native VERBINDUNGEN item/verdict shapes, same as the `verbindungen` case
-  // above (mounted in the SAME trainer below), but keyed by `topic` — the
-  // developer's free-text ask — instead of a taxonomy `patternId`, since a
-  // forged item has none.
-  | { drill: "forge"; itemId: string; topic: string; item: ChunkItem };
+  // CLARA-16: the live forge card — POST /teacher/exercise/forge's response.
+  // No longer a native VERBINDUNGEN gap-fill item (that was CLARA-15); the
+  // forge now returns a production task, graded typed OR spoken, mounted by
+  // the bespoke ProduceCard below. Keyed by `topic` — the developer's
+  // free-text ask — instead of a taxonomy `patternId`, since a forged item
+  // has none.
+  | { drill: "produce"; itemId: string; topic: string; item: ProduceItem };
 
 // D5: the three report shapes, byte-identical to the pre-CLARA-13 template —
 // only the per-drill sentence/answer/expected/note extraction (below) is new.
@@ -182,6 +185,59 @@ function buildSprechenGiveUpReport(
   return report;
 }
 
+// CLARA-16: produce's own report template family — labeled by TOPIC, not
+// patternId (a forged item has none, same reasoning as CLARA-15's forge
+// report before it). No alsoCorrectFit (there's no single reference
+// answer — `example` is a model, not THE answer), and "their sentence" is
+// either what they typed or, for a spoken attempt, the transcript STT
+// heard — the caller passes whichever applies.
+function buildProduceReport(params: {
+  topic: string;
+  task: string;
+  answer: string;
+  correct: boolean;
+  note: string | null;
+  corrected: string | null;
+  example: string;
+}): string {
+  const { topic, task, answer, correct, note, corrected, example } = params;
+  if (correct) {
+    const tip = note ? ` — tip given: ${note}` : "";
+    return (
+      `${EXERCISE_RESULT_PREFIX} Correct — produce exercise on ${topic}: ` +
+      `the task was "${task}", they answered "${answer}"${tip}.`
+    );
+  }
+  return (
+    `${EXERCISE_RESULT_PREFIX} Wrong — produce exercise on ${topic}: ` +
+    `the task was "${task}", they answered "${answer}" — ${note ?? ""}; ` +
+    `a good version: "${corrected ?? example}".`
+  );
+}
+
+function buildProduceGiveUpReport(
+  topic: string,
+  task: string,
+  example: string
+): string {
+  return (
+    `${EXERCISE_RESULT_PREFIX} Gave up — produce exercise on ${topic}: ` +
+    `the task was "${task}"; a good answer: "${example}".`
+  );
+}
+
+// CLARA-16: attaches the HTTP status to whatever it throws — every existing
+// closure below only ever reads `.message` (unchanged), but ProduceCard's
+// own catch (network error vs. a 404 expired item) needs the status too, and
+// this is the one place both postAttempt/postAttemptAudio funnel through.
+type HttpAttemptError = Error & { status?: number };
+
+function httpAttemptError(status: number, message: string): HttpAttemptError {
+  const err = new Error(message) as HttpAttemptError;
+  err.status = status;
+  return err;
+}
+
 // D3: the pinned POST /teacher/exercise/attempts payload/response contract —
 // a thin fetch, not a per-drill api.ts (that endpoint doesn't exist there:
 // Clara's room writes nothing and must not touch the drills' own
@@ -207,7 +263,8 @@ async function postAttempt<V>(
   });
   if (!res.ok) {
     const detail = (await res.json().catch(() => null))?.detail;
-    throw new Error(
+    throw httpAttemptError(
+      res.status,
       typeof detail === "string" ? detail : "Couldn't check that — try again."
     );
   }
@@ -218,14 +275,21 @@ async function postAttempt<V>(
 // endpoint (POST /teacher/exercise/attempts-audio). No Content-Type header:
 // the browser sets the multipart boundary itself. Give-up still has no
 // audio, so it goes through postAttempt above like every other drill.
-async function postAttemptAudio(
+// CLARA-16: extended with a `drill` field, ALWAYS appended now that a second
+// drill (produce) uses this same endpoint — the backend defaults a missing
+// one to "sprechen", but both call sites below send it explicitly rather
+// than lean on that default. Generic over the verdict shape so produce's
+// {…, transcript} return type doesn't have to masquerade as SprechenVerdict.
+async function postAttemptAudio<V>(
   token: string,
   itemId: string,
-  audio: Blob
-): Promise<SprechenVerdict> {
+  audio: Blob,
+  drill: string
+): Promise<V> {
   const form = new FormData();
   form.append("itemId", itemId);
   form.append("audio", audio, "attempt");
+  form.append("drill", drill);
   const res = await fetch(`${HTTP_BASE}/teacher/exercise/attempts-audio`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
@@ -233,11 +297,12 @@ async function postAttemptAudio(
   });
   if (!res.ok) {
     const detail = (await res.json().catch(() => null))?.detail;
-    throw new Error(
+    throw httpAttemptError(
+      res.status,
       typeof detail === "string" ? detail : "Couldn't check that — try again."
     );
   }
-  return res.json() as Promise<SprechenVerdict>;
+  return res.json() as Promise<V>;
 }
 
 export default function TeacherChat() {
@@ -428,15 +493,15 @@ export default function TeacherChat() {
     [token, sendReport, clearRevealTimer, clearDismissTimer]
   );
 
-  // CLARA-15: the live forge — POST /teacher/exercise/forge, then mount the
-  // SAME VerbindungenTrainer the native `verbindungen` case mounts below
-  // (the forged item is a native chunk-gap item). Expect multi-second
-  // latency (two LLM calls server-side): the fetch, not the ~2s reveal
-  // pause, is normally the long pole, so the "Building your exercise…"
-  // loading state (see exerciseSlot below) covers that wait. A 403 (a stray
-  // message reaching a non-dev — server bug), 502, or any network failure
-  // fails safe — Clara already spoke, so v1 has no error card: the slot just
-  // clears silently and the failure goes to the console.
+  // CLARA-16: the live forge — POST /teacher/exercise/forge, then mount
+  // ProduceCard (below), which owns the typed/spoken UI for the returned
+  // production task. Expect multi-second latency (two LLM calls
+  // server-side): the fetch, not the ~2s reveal pause, is normally the long
+  // pole, so the "Building your exercise…" loading state (see exerciseSlot
+  // below) covers that wait. A 403 (a stray message reaching a non-dev —
+  // server bug), 502, or any network failure fails safe — Clara already
+  // spoke, so v1 has no error card: the slot just clears silently and the
+  // failure goes to the console.
   const handleExerciseForge = useCallback(
     (topic: string) => {
       // A fresh forge always replaces whatever's open (drill or another
@@ -452,7 +517,7 @@ export default function TeacherChat() {
         return;
       }
 
-      let fetched: Extract<Exercise, { drill: "forge" }> | null = null;
+      let fetched: Extract<Exercise, { drill: "produce" }> | null = null;
       let pauseDone = false;
       const reveal = () => {
         if (requestSeqRef.current !== seq || !fetched || !pauseDone) return;
@@ -484,7 +549,7 @@ export default function TeacherChat() {
           }
           const data = (await res.json()) as Extract<
             Exercise,
-            { drill: "forge" }
+            { drill: "produce" }
           >;
           fetched = data;
           reveal();
@@ -505,7 +570,7 @@ export default function TeacherChat() {
     if (!exercise && !forging) return;
     requestSeqRef.current++; // supersede any fetch that might still land
     const label = exercise
-      ? exercise.drill === "forge"
+      ? exercise.drill === "produce"
         ? exercise.topic
         : exercise.patternId
       : forging!;
@@ -767,7 +832,12 @@ export default function TeacherChat() {
             itemId: ex.itemId,
             give_up: true,
           })
-        : await postAttemptAudio(token, ex.itemId, audio ?? new Blob());
+        : await postAttemptAudio<SprechenVerdict>(
+            token,
+            ex.itemId,
+            audio ?? new Blob(),
+            "sprechen"
+          );
       setExerciseAnswered(true);
       sendGradedReport(
         giveUp
@@ -790,37 +860,86 @@ export default function TeacherChat() {
     [token, sendGradedReport]
   );
 
-  // CLARA-15: the forge card's own submit — same native ChunkVerdict shape
-  // and attempt wiring as submitVerbindungen above (POST /teacher/exercise/
-  // attempts with drill: "forge"), but the report is labeled by topic, not
-  // patternId (D5's rule for this drill — see clara15_frontend_spec.md).
-  const submitForge = useCallback(
+  // CLARA-16: the forge/produce card's own submit trio — typed (JSON,
+  // mirrors every other drill's postAttempt shape), spoken (multipart,
+  // carries its own transcript back so the report can quote what was
+  // actually said), give-up (JSON, no text of the learner's own to quote).
+  // Three separate closures rather than one `(answer, giveUp)` pair like the
+  // other drills above — ProduceCard's own prop contract keeps typed/
+  // spoken/give-up as three distinct callbacks (see that file), so this
+  // mirrors it 1:1 instead of collapsing them. Report is labeled by TOPIC,
+  // not patternId — same reasoning as CLARA-15's forge report before it, a
+  // forged item has no taxonomy pattern id.
+  const submitProduceAnswer = useCallback(
     async (
-      ex: Extract<Exercise, { drill: "forge" }>,
-      answer: string | null,
-      giveUp: boolean
-    ): Promise<ChunkVerdict> => {
+      ex: Extract<Exercise, { drill: "produce" }>,
+      answer: string
+    ): Promise<ProduceVerdict> => {
       if (!token) throw new Error("Not signed in.");
-      const verdict = await postAttempt<ChunkVerdict>(token, {
-        drill: "forge",
+      const verdict = await postAttempt<ProduceVerdict>(token, {
+        drill: "produce",
         itemId: ex.itemId,
-        give_up: giveUp,
-        answer: giveUp ? undefined : answer ?? "",
+        answer,
       });
       setExerciseAnswered(true);
-      const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
-      const alsoCorrectFit =
-        verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
       sendGradedReport(
-        buildReport({
-          patternId: ex.topic,
-          sentence: ex.item.frame,
-          answer: displayAnswer,
-          expected: verdict.expected,
+        buildProduceReport({
+          topic: ex.topic,
+          task: ex.item.task,
+          answer,
           correct: verdict.correct,
-          alsoCorrectFit,
           note: verdict.note,
+          corrected: verdict.corrected,
+          example: verdict.example,
         })
+      );
+      return verdict;
+    },
+    [token, sendGradedReport]
+  );
+
+  const submitProduceAudio = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "produce" }>,
+      audio: Blob
+    ): Promise<ProduceVerdict & { transcript: string }> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttemptAudio<ProduceVerdict & { transcript: string }>(
+        token,
+        ex.itemId,
+        audio,
+        "produce"
+      );
+      setExerciseAnswered(true);
+      sendGradedReport(
+        buildProduceReport({
+          topic: ex.topic,
+          task: ex.item.task,
+          answer: verdict.transcript,
+          correct: verdict.correct,
+          note: verdict.note,
+          corrected: verdict.corrected,
+          example: verdict.example,
+        })
+      );
+      return verdict;
+    },
+    [token, sendGradedReport]
+  );
+
+  const submitProduceGiveUp = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "produce" }>
+    ): Promise<ProduceVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<ProduceVerdict>(token, {
+        drill: "produce",
+        itemId: ex.itemId,
+        give_up: true,
+      });
+      setExerciseAnswered(true);
+      sendGradedReport(
+        buildProduceGiveUpReport(ex.topic, ex.item.task, verdict.example)
       );
       return verdict;
     },
@@ -935,20 +1054,20 @@ export default function TeacherChat() {
           hideContinue
         />
       )}
-      {/* CLARA-15: the forge card mounts the SAME VerbindungenTrainer the
-          native `verbindungen` case above does — a forged item is a native
-          chunk-gap item, identical round-of-one/flow/hideContinue wiring. */}
-      {exercise.drill === "forge" && (
-        <VerbindungenTrainer
+      {/* CLARA-16: the forge card mounts ProduceCard — a bespoke single-item
+          UI (typed textarea OR mic), not a round-of-one of an existing
+          trainer, so it doesn't take the flow/allowGiveUp/hideContinue
+          contract the mounts above do; TeacherChat still owns dismissal via
+          exerciseAnswered/onBotReply/the backstop timer exactly the same
+          way (see submitProduce* above, which call setExerciseAnswered). */}
+      {exercise.drill === "produce" && (
+        <ProduceCard
           key={exerciseKey}
-          round={[exercise.item]}
-          flow
-          onNewRound={noopNewRound}
-          allowGiveUp
-          onAttempt={(_itemId, answer) => submitForge(exercise, answer, false)}
-          onGiveUp={() => submitForge(exercise, null, true)}
-          onFlowDone={handleExerciseDone}
-          hideContinue
+          item={exercise.item}
+          topic={exercise.topic}
+          onAttempt={(answer) => submitProduceAnswer(exercise, answer)}
+          onAttemptAudio={(audio) => submitProduceAudio(exercise, audio)}
+          onGiveUp={() => submitProduceGiveUp(exercise)}
         />
       )}
     </div>
