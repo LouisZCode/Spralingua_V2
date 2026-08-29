@@ -82,3 +82,7 @@ class Context:
     # first token. None when unset; the teacher middleware branch renders it
     # into the "Today" section only when set. Unused by every other type.
     student_name: str | None = None
+    # LEVEL round: teacher-only for now — the learner's self-declared CEFR
+    # bucket from `users.level` ("A1"|"A2"|"B1"|"B2+"); None when never
+    # chosen — renders nothing.
+    student_level: str | None = None

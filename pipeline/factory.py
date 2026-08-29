@@ -455,6 +455,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         session_notes: list = []
         vocab_words: list = []
         student_name: str | None = None
+        # LEVEL round: teacher-only self-declared CEFR bucket, threaded like
+        # student_name — loaded once below, unconditionally, and reused by
+        # the cold-start starters_for_level(...) call so there is only one
+        # DB read either way.
+        student_level: str | None = None
         snapshot_type = lesson_snapshot.get("type")
         if snapshot_type in ("tandem", "teacher"):
             try:
@@ -484,6 +489,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                             stripped_name = raw_name.strip()
                             student_name = stripped_name.split()[0] if stripped_name else None
 
+                        # LEVEL round: loaded here, unconditionally, so it's
+                        # available for the prompt's level_examples layer
+                        # (Context.student_level) even when the ledger isn't
+                        # empty. The cold-start starters_for_level(...) call
+                        # below reuses this same value — no second DB read.
+                        student_level = await load_user_level(db, user_id=db_user_id)
+
                         # Cold-start slice: an empty ledger means an empty
                         # focus section, which leaves Clara with no legal
                         # `[[ÜBUNG: <id>]]` id at all. Fall back to three
@@ -493,7 +505,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # `seeded: True` lets the prompt layer (below) tell
                         # "typical for your level" apart from real slips.
                         if not grammar_focus:
-                            level = await load_user_level(db, user_id=db_user_id)
                             grammar_focus = [
                                 {
                                     "pattern_id": s["pattern_id"],
@@ -502,7 +513,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                     "examples": [],
                                     "seeded": True,
                                 }
-                                for s in starters_for_level(level)
+                                for s in starters_for_level(student_level)
                             ]
                         # `?pattern=`: the topic screen's picked focus/starter
                         # card, guaranteed onto the page. Without this the
@@ -543,6 +554,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
                     f"notes={len(session_notes)} vocab_words={len(vocab_words)} "
                     f"name={'set' if student_name else 'none'} "
+                    f"level={student_level or 'unset'} "
                     f"topic={topic!r} pattern={pattern!r} user={db_user_id}"
                 )
             except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
@@ -586,7 +598,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
         # both passed — the wrapper's own DB/transcript fields need the
         # former, its hand-rolled `llm` span needs the latter.
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override, student_name=student_name)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.

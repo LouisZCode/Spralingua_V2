@@ -188,7 +188,7 @@ class ClientWrapper:
     def __init__(self, user_id, session_id, voice="happy_harry", lesson_id="lesson_zero",
                  topic="", grammar_focus=None, session_notes=None, vocab_words=None,
                  max_exchanges_override: int | None = None, trace_session_id: str | None = None,
-                 student_name: str | None = None):
+                 student_name: str | None = None, student_level: str | None = None):
         self.user_id = user_id
         self.session_id = session_id
         # Langfuse-only, surface-prefixed form of `session_id` (e.g.
@@ -240,6 +240,8 @@ class ClientWrapper:
             vocab_words=vocab_words or [],
             # AGENT-001 v8: teacher-only greet-by-name (see Context.student_name).
             student_name=student_name,
+            # LEVEL round: teacher-only self-declared CEFR bucket (see Context.student_level).
+            student_level=student_level,
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client

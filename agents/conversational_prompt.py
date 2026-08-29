@@ -477,6 +477,9 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         if ctx.student_name:
             short += f"\nYour student's first name is {ctx.student_name}."
         parts = [base, short]
+        level_block = (lesson.get("level_examples") or {}).get(ctx.student_level or "")
+        if level_block:
+            parts.append(level_block.strip())
         if ctx.grammar_focus:
             # Cold-start slice: pipeline/factory.py fills an empty ledger
             # with curated starter patterns, each carrying `seeded: True`.
