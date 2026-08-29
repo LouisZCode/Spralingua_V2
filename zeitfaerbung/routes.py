@@ -29,12 +29,8 @@ from database.repository import (
     record_grammar_error,
 )
 from drills import apply_level
-from zeitfaerbung.content import (
-    ALL_FORMS,
-    DOPPELDEUTIG_GROUPS,
-    FORM_TO_FAMILY,
-    load_items,
-)
+from zeitfaerbung import grading
+from zeitfaerbung.content import DOPPELDEUTIG_GROUPS, load_items
 
 from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
@@ -101,27 +97,6 @@ async def get_round(
     return {"items": result}
 
 
-# Learners naturally retype the whole sentence (the sibling drills support
-# that), so the cap matches verbindungen's — the grader below pulls the one
-# verb form out of a full retyped frame.
-_MAX_ANSWER_CHARS = 120
-
-_EDGE_PUNCT = " .,!?;:…\"'"
-
-
-def _normalize(s: str) -> str:
-    return " ".join(s.split()).strip(_EDGE_PUNCT).lower()
-
-
-def _recognized_tokens(answer: str) -> list[str]:
-    """Every token of the typed answer that is itself a war/wurde/blieb
-    form — order preserved, duplicates kept (so "wurde wurde" correctly
-    counts as two, triggering the "one verb form only" branch)."""
-    normalized = _normalize(answer)
-    tokens = (t.strip(_EDGE_PUNCT) for t in normalized.split())
-    return [t for t in tokens if t in ALL_FORMS]
-
-
 class AttemptIn(BaseModel):
     item_id: str
     answer: str
@@ -156,17 +131,13 @@ async def submit_attempt(
         if _e.status_code == 402:
             raise
         raise HTTPException(status_code=503, detail="billing temporarily unavailable")
-    answer = " ".join(body.answer.split())
+    answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
     if not body.give_up:
-        if not answer:
-            raise HTTPException(status_code=422, detail="Type your answer first.")
-        if len(answer) > _MAX_ANSWER_CHARS:
-            raise HTTPException(
-                status_code=422,
-                detail="Keep it to one verb form — that looks like a paragraph.",
-            )
+        reason = grading.validate(item, answer)
+        if reason:
+            raise HTTPException(status_code=422, detail=reason)
 
     with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("zeitfaerbung-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
@@ -175,94 +146,24 @@ async def submit_attempt(
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
         attempt_span.set_attribute("langfuse.observation.input", answer)
 
-        accepted = item["answers"]
-        is_doppel = item["group"] in DOPPELDEUTIG_GROUPS
-        reading = None
-        alt = None
-
         if body.give_up:
             # FLOW-002 escape hatch: no recognizer runs — grade this exactly
             # like the "wrong verb entirely" branch below (same kind, same
             # note shape), so the frontend's existing wrong-verdict card
-            # renders with no new branch. typed_for_ledger stays the literal
-            # gap marker — a real attempt always substitutes a word here, so
-            # an unfilled "___" in the ledger's sentence is itself the
-            # give-up sentinel (DATA-004 review can tell the two apart).
+            # renders with no new branch. typed_for_ledger (grading.grade's
+            # second return value) stays the literal gap marker — a real
+            # attempt always substitutes a word here, so an unfilled "___"
+            # in the ledger's sentence is itself the give-up sentinel
+            # (DATA-004 review can tell the two apart).
             attempt_span.set_attribute("gave_up", True)
-            correct, kind, expected = False, "verb", accepted[0]
-            typed_for_ledger = "___"
-            if is_doppel:
-                sein_form = next(a for a in accepted if FORM_TO_FAMILY[a] == "sein")
-                werden_form = next(a for a in accepted if FORM_TO_FAMILY[a] == "werden")
-                note = (
-                    f"Both forms work here: {sein_form} — "
-                    f"{item['readings'][sein_form]}; {werden_form} — "
-                    f"{item['readings'][werden_form]}."
-                )
-            else:
-                note = item["why"]
-        else:
-            recognized = _recognized_tokens(answer)
-            if len(recognized) > 1:
-                # The learner retyped the sentence, and the FRAME itself may
-                # contain war/wurde/blieb forms ("…, und die Straßen waren
-                # leer."). Frame words are context, not the answer: discard
-                # family forms up to their frame multiplicity and grade what
-                # remains — but only when that leaves exactly one candidate
-                # (a bare "war" typed alone never enters this branch).
-                remaining = list(recognized)
-                for frame_form in _recognized_tokens(item["frame"].replace("___", " ")):
-                    if frame_form in remaining:
-                        remaining.remove(frame_form)
-                if len(remaining) == 1:
-                    recognized = remaining
 
-            if len(recognized) == 0:
-                correct, kind, expected = False, "unrecognized", None
-                note = "Answer with a form of war, wurde, or blieb."
-                typed_for_ledger = answer
-            elif len(recognized) > 1:
-                correct, kind, expected = False, "unrecognized", None
-                note = "One verb form only, please."
-                typed_for_ledger = answer
-            else:
-                token = recognized[0]
-                typed_for_ledger = token
-                if token in accepted:
-                    correct, kind, expected = True, "match", token
-                    if is_doppel:
-                        other = next(a for a in accepted if a != token)
-                        reading = item["readings"][token]
-                        alt = {"form": other, "reading": item["readings"][other]}
-                        note = None
-                    else:
-                        note = item["why"]
-                else:
-                    token_family = FORM_TO_FAMILY.get(token)
-                    family_match = next(
-                        (a for a in accepted if FORM_TO_FAMILY.get(a) == token_family),
-                        None,
-                    )
-                    if family_match is not None:
-                        correct, kind, expected = False, "form", family_match
-                        note = (
-                            f"Right verb ({token_family}) — wrong form for this "
-                            f"subject: {family_match}."
-                        )
-                    else:
-                        correct, kind, expected = False, "verb", accepted[0]
-                        if is_doppel:
-                            sein_form = next(a for a in accepted if FORM_TO_FAMILY[a] == "sein")
-                            werden_form = next(
-                                a for a in accepted if FORM_TO_FAMILY[a] == "werden"
-                            )
-                            note = (
-                                f"Two forms even work here: {sein_form} — "
-                                f"{item['readings'][sein_form]}; {werden_form} — "
-                                f"{item['readings'][werden_form]}. But {token} doesn't fit."
-                            )
-                        else:
-                            note = item["why"]
+        verdict, typed_for_ledger = await grading.grade(item, answer, give_up=body.give_up)
+        correct, kind, expected, note = (
+            verdict["correct"],
+            verdict["kind"],
+            verdict["expected"],
+            verdict["note"],
+        )
 
         attempt_span.set_attribute(
             "langfuse.observation.output",
@@ -288,7 +189,7 @@ async def submit_attempt(
                     source="zeitfaerbung",
                 )
             else:
-                expected_for_ledger = expected if expected is not None else accepted[0]
+                expected_for_ledger = expected if expected is not None else item["answers"][0]
                 await record_grammar_error(
                     db,
                     user_id=user_id,
@@ -324,14 +225,4 @@ async def submit_attempt(
         except Exception:
             logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
-        return {
-            "correct": correct,
-            "kind": kind,
-            "expected": expected,
-            # "unrecognized" keeps the item live for a retry — shipping the
-            # accepted forms there would answer it in devtools.
-            "accepted": accepted if kind != "unrecognized" else [],
-            "note": note,
-            "reading": reading,
-            "alt": alt,
-        }
+        return verdict

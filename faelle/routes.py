@@ -10,7 +10,6 @@ this is generic-catalog only (v1) — no CONT-002 personal-forge path.
 """
 
 import random
-import re
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,10 +27,9 @@ from database.repository import (
     record_grammar_error,
 )
 from drills import apply_level
+from faelle import grading
 from faelle.content import TARGET_PATTERNS, load_items
-from faelle.judge import judge_case
 from drills.copy import JUDGE_UNAVAILABLE
-from grammar import expand_contractions
 from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
@@ -197,38 +195,6 @@ async def get_round(
     return {"items": result}
 
 
-_MAX_ANSWER_CHARS = 120
-
-# Same deterministic-match contract as verbindungen/routes.py (kept local —
-# each exercise module is self-contained like satz/ and bauteil/ are).
-_EDGE_PUNCT = " .,!?;:…\"'"
-
-
-def _normalize(s: str) -> str:
-    # BUG-011: contractions expand to their two-word form, so "beim" and
-    # "bei dem" compare equal. Expansion keeps dative and accusative apart
-    # (im -> in dem vs. ins -> in das), so the wechselpraepositionen pairs
-    # warned about below are still safe — a genuine case swap stays red.
-    return expand_contractions(" ".join(s.split()).strip(_EDGE_PUNCT).lower())
-
-
-def _matches(typed: str, expected: str, frame: str) -> bool:
-    """Exact match, or the answer embedded in the typed-out sentence — but
-    ONLY frame words may surround it. Plain containment would defeat the
-    wechselpraepositionen pairs: "Tisch" is common to both "auf den Tisch"
-    and "auf dem Tisch", so a lax match could green the wrong case outright
-    — a genuine case swap must reach the judge, never green deterministically."""
-    t, e = _normalize(typed), _normalize(expected)
-    if t == e:
-        return True
-    m = re.search(rf"(?<!\w){re.escape(e)}(?!\w)", t)
-    if m is None:
-        return False
-    frame_words = set(_normalize(frame.replace("___", " ")).split())
-    leftover = (t[: m.start()] + " " + t[m.end():]).split()
-    return all(w in frame_words for w in leftover)
-
-
 class AttemptIn(BaseModel):
     item_id: str
     answer: str
@@ -262,17 +228,13 @@ async def submit_attempt(
         if _e.status_code == 402:
             raise
         raise HTTPException(status_code=503, detail="billing temporarily unavailable")
-    answer = " ".join(body.answer.split())
+    answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
     if not body.give_up:
-        if not answer:
-            raise HTTPException(status_code=422, detail="Type your answer first.")
-        if len(answer) > _MAX_ANSWER_CHARS:
-            raise HTTPException(
-                status_code=422,
-                detail="Keep it to the missing words — that looks like a paragraph.",
-            )
+        reason = grading.validate(item, answer)
+        if reason:
+            raise HTTPException(status_code=422, detail=reason)
 
     with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("faelle-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
@@ -281,31 +243,27 @@ async def submit_attempt(
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
         attempt_span.set_attribute("langfuse.observation.input", answer)
 
-        means_instead: str | None = None
         if body.give_up:
             # FLOW-002 escape hatch: skip the judge entirely, grade as a
             # miss, and reveal the rule through the exact same response
             # shape a judged miss returns — no new frontend branch.
             attempt_span.set_attribute("gave_up", True)
-            correct, note = False, "Gave up — here's the rule to learn."
-        elif _matches(answer, item["answer"], item["frame"]):
-            correct, note = True, None
+        try:
+            verdict, judge_skipped = await grading.grade(item, answer, give_up=body.give_up)
+        except Exception as exc:
+            attempt_span.record_exception(exc)
+            logger.exception("Fälle judge call failed (item {})", item["id"])
+            raise HTTPException(
+                status_code=502,
+                detail=JUDGE_UNAVAILABLE,
+            )
+        if judge_skipped:
             # A deterministic green never calls the LLM judge — flag that
             # explicitly so Langfuse can tell "judged correct" apart from
             # "matched without a judge call" (same contract as bauteil/
             # verbindungen).
             attempt_span.set_attribute("judge_skipped", True)
-        else:
-            try:
-                diag = await judge_case(item, answer)
-            except Exception as exc:
-                attempt_span.record_exception(exc)
-                logger.exception("Fälle judge call failed (item {})", item["id"])
-                raise HTTPException(
-                    status_code=502,
-                    detail=JUDGE_UNAVAILABLE,
-                )
-            correct, note, means_instead = diag.correct, diag.note, diag.means_instead
+        correct, note = verdict["correct"], verdict["note"]
 
         attempt_span.set_attribute(
             "langfuse.observation.output",
@@ -366,10 +324,4 @@ async def submit_attempt(
         except Exception:
             logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
-        return {
-            "correct": correct,
-            "expected": item["answer"],
-            "rule": item["rule"],
-            "note": note,
-            "meansInstead": means_instead,
-        }
+        return verdict

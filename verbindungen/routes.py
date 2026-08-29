@@ -9,7 +9,6 @@ tracing under the frontend-minted practice-session id.
 
 import asyncio
 import random
-import re
 from collections import Counter
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,10 +29,9 @@ from database.repository import (
 )
 from drills import apply_level
 from drills.forge import backfill_missing
-from grammar import expand_contractions
 from security import drill_try_admit
+from verbindungen import grading
 from verbindungen.content import TARGET_PATTERNS, load_items
-from verbindungen.judge import judge_chunk
 from drills.copy import JUDGE_UNAVAILABLE
 
 from coins.gate import admit_coins_or_402
@@ -244,37 +242,6 @@ async def get_round(
     return {"items": result}
 
 
-_MAX_ANSWER_CHARS = 120
-
-# Same deterministic-match contract as bauteil/routes.py (kept local — each
-# exercise module is self-contained like satz/ and bauteil/ are).
-_EDGE_PUNCT = " .,!?;:…\"'"
-
-
-def _normalize(s: str) -> str:
-    # BUG-011: contractions expand to their two-word form, so "beim" and
-    # "bei dem" compare equal. The case distinction survives (im -> in dem
-    # vs. ins -> in das), so this cannot green a wrong case.
-    return expand_contractions(" ".join(s.split()).strip(_EDGE_PUNCT).lower())
-
-
-def _matches(typed: str, expected: str, frame: str) -> bool:
-    """Exact match, or the answer embedded in the typed-out sentence — but
-    ONLY frame words may surround it. Plain containment would defeat the
-    decoys: "mich auf" contains the decoy answer "auf", yet the extra
-    pronoun is exactly the error the mix exists to catch — it must reach
-    the judge, never green deterministically."""
-    t, e = _normalize(typed), _normalize(expected)
-    if t == e:
-        return True
-    m = re.search(rf"(?<!\w){re.escape(e)}(?!\w)", t)
-    if m is None:
-        return False
-    frame_words = set(_normalize(frame.replace("___", " ")).split())
-    leftover = (t[: m.start()] + " " + t[m.end():]).split()
-    return all(w in frame_words for w in leftover)
-
-
 class AttemptIn(BaseModel):
     item_id: str
     answer: str
@@ -316,17 +283,13 @@ async def submit_attempt(
         if _e.status_code == 402:
             raise
         raise HTTPException(status_code=503, detail="billing temporarily unavailable")
-    answer = " ".join(body.answer.split())
+    answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
     if not body.give_up:
-        if not answer:
-            raise HTTPException(status_code=422, detail="Type your answer first.")
-        if len(answer) > _MAX_ANSWER_CHARS:
-            raise HTTPException(
-                status_code=422,
-                detail="Keep it to the missing words — that looks like a paragraph.",
-            )
+        reason = grading.validate(item, answer)
+        if reason:
+            raise HTTPException(status_code=422, detail=reason)
 
     with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("verbindungen-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
@@ -340,24 +303,21 @@ async def submit_attempt(
             # miss, and reveal the canonical chunk through the exact same
             # response shape a judged miss returns — no new frontend branch.
             attempt_span.set_attribute("gave_up", True)
-            correct, note = False, "Gave up — here's the chunk to learn."
-        elif _matches(answer, item["answer"], item["frame"]):
-            correct, note = True, None
+        try:
+            verdict, judge_skipped = await grading.grade(item, answer, give_up=body.give_up)
+        except Exception as exc:
+            attempt_span.record_exception(exc)
+            logger.exception("Verbindungen judge call failed (item {})", item["id"])
+            raise HTTPException(
+                status_code=502,
+                detail=JUDGE_UNAVAILABLE,
+            )
+        if judge_skipped:
             # TASK 2: a deterministic green never calls the LLM judge — flag
             # that explicitly so Langfuse can tell "judged correct" apart
             # from "matched without a judge call" (same contract as bauteil).
             attempt_span.set_attribute("judge_skipped", True)
-        else:
-            try:
-                diag = await judge_chunk(item, answer)
-            except Exception as exc:
-                attempt_span.record_exception(exc)
-                logger.exception("Verbindungen judge call failed (item {})", item["id"])
-                raise HTTPException(
-                    status_code=502,
-                    detail=JUDGE_UNAVAILABLE,
-                )
-            correct, note = diag.correct, diag.note
+        correct, note = verdict["correct"], verdict["note"]
 
         attempt_span.set_attribute(
             "langfuse.observation.output",
@@ -420,9 +380,4 @@ async def submit_attempt(
         except Exception:
             logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
-        return {
-            "correct": correct,
-            "expected": item["answer"],
-            "chunk": item["chunk"],
-            "note": note,
-        }
+        return verdict

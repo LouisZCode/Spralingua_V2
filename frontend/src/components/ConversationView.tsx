@@ -19,10 +19,6 @@ import { useRecorder } from "./shared/recorder";
 import { TANDEM_LESSONS, partnerByLesson } from "./shared/tandem";
 import { TEACHER_LESSON } from "./shared/teacher";
 import type { GlossInfo } from "./satzschmiede/api";
-import ExerciseCard, {
-  type ExerciseData,
-  type ExerciseVerdict,
-} from "./teacher/ExerciseCard";
 
 // Briefing field values are either a single prose string OR a list of
 // short items (renders as bullets). Authors pick per field per lesson.
@@ -88,10 +84,7 @@ export default function ConversationView({
   onExerciseRequest,
   onBotReply,
   onSessionEnded,
-  exercise,
-  exerciseKey,
-  onExerciseSubmit,
-  onExerciseSkip,
+  exerciseSlot,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -146,18 +139,17 @@ export default function ConversationView({
   // without sending anything (see TeacherChat.tsx). Optional/absent for
   // VoiceChat and TandemChat.
   onSessionEnded?: () => void;
-  // AGENT-00X: the exercise card itself. TeacherChat owns fetching the item
-  // and decides WHEN it's ready to reveal (the bot-reply reveal moment above
-  // plus a fixed pause — see that file's EXERCISE_REVEAL_DELAY_MS); this
-  // component only renders it, inline in the chat flow after the last
-  // bubble, once `exercise` goes non-null. That same non-null check is the
-  // ONLY gate for every single-focus behavior below (hiding Record/Type,
-  // ignoring the "/" shortcut) — VoiceChat and TandemChat never pass these
-  // four props, so none of it is reachable there.
-  exercise?: ExerciseData | null;
-  exerciseKey?: number;
-  onExerciseSubmit?: (answer: string) => Promise<ExerciseVerdict>;
-  onExerciseSkip?: () => void;
+  // CLARA-13: the exercise slot itself — an opaque node the caller builds
+  // (TeacherChat mounts one of the five real drill trainers, wrapped in its
+  // own Skip row). This component doesn't know or care what's inside; it
+  // only decides WHEN to reveal it (the bot-reply reveal moment above plus a
+  // fixed pause — see that file's EXERCISE_REVEAL_DELAY_MS) and renders it
+  // inline in the chat flow after the last bubble, once `exerciseSlot` goes
+  // non-null. That same non-null check is the ONLY gate for every
+  // single-focus behavior below (hiding Record/Type, ignoring the "/"
+  // shortcut) — VoiceChat and TandemChat never pass this prop, so none of it
+  // is reachable there.
+  exerciseSlot?: React.ReactNode;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -177,11 +169,11 @@ export default function ConversationView({
   const [endedBy, setEndedBy] = useState<"user" | "agent">("agent");
   const [speakerState, setSpeakerState] = useState<SpeakerState>("idle");
   const [typeOpen, setTypeOpen] = useState(false);
-  // AGENT-00X: single focus while Clara's exercise card is up — this is the
+  // CLARA-13: single focus while Clara's exercise slot is up — this is the
   // one flag every focus-mode branch below checks, and it's derived purely
-  // from the `exercise` prop's presence (never a lesson-type guess), so it's
-  // always false for VoiceChat/TandemChat.
-  const exerciseActive = !!exercise;
+  // from the `exerciseSlot` prop's presence (never a lesson-type guess), so
+  // it's always false for VoiceChat/TandemChat.
+  const exerciseActive = exerciseSlot != null;
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const transcriptRef = useRef<HTMLElement | null>(null);
@@ -732,10 +724,7 @@ export default function ConversationView({
             onStartRecording={recorder.start}
             onStopRecording={recorder.stop}
             onCancelRecording={recorder.cancel}
-            exercise={exercise}
-            exerciseKey={exerciseKey}
-            onExerciseSubmit={onExerciseSubmit}
-            onExerciseSkip={onExerciseSkip}
+            exerciseSlot={exerciseSlot}
           />
         )}
 
@@ -1004,10 +993,7 @@ function LivePhase({
   onStopRecording,
   onCancelRecording,
   onOpenType,
-  exercise,
-  exerciseKey,
-  onExerciseSubmit,
-  onExerciseSkip,
+  exerciseSlot,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -1042,13 +1028,10 @@ function LivePhase({
   // AGENT-001: opens the type-a-turn overlay from a visible button, not just
   // the dev-only "/" shortcut.
   onOpenType?: () => void;
-  // AGENT-00X: the exercise card + its two actions, forwarded verbatim from
-  // ConversationView — see that component's props for the contract. Absent
-  // for VoiceChat/TandemChat.
-  exercise?: ExerciseData | null;
-  exerciseKey?: number;
-  onExerciseSubmit?: (answer: string) => Promise<ExerciseVerdict>;
-  onExerciseSkip?: () => void;
+  // CLARA-13: the exercise slot, forwarded verbatim from ConversationView —
+  // see that component's props for the contract. Absent for
+  // VoiceChat/TandemChat.
+  exerciseSlot?: React.ReactNode;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   // No barge-in by design: while Lena is composing or speaking, recording a
@@ -1057,11 +1040,11 @@ function LivePhase({
   const botBusy =
     speakerState === "agent_thinking" || speakerState === "agent_speaking";
   const recordDisabled = !recording && (botBusy || !!sending);
-  // AGENT-00X: single focus — while the card is up, Record and Type are
+  // CLARA-13: single focus — while the slot is up, Record and Type are
   // hidden outright (not just disabled), and the shortcut that opens Type is
   // ignored (see ConversationView's keydown effect). Gated purely on
-  // `exercise` being present, same as every other focus-mode check.
-  const exerciseActive = !!(exercise && onExerciseSubmit && onExerciseSkip);
+  // `exerciseSlot` being present, same as every other focus-mode check.
+  const exerciseActive = exerciseSlot != null;
   return (
     <>
       {/* Header */}
@@ -1275,20 +1258,16 @@ function LivePhase({
         ))}
       </section>
 
-      {/* AGENT-00X: Clara's interactive-exercise card — inline in the chat
+      {/* CLARA-13: Clara's interactive-exercise slot — inline in the chat
           flow, after the last bubble, never a modal overlay. TeacherChat
-          decides WHEN `exercise` goes non-null (bot-reply reveal + a fixed
-          pause); this just renders it in place and is the only reason
-          Record/Type were hidden above. Remounts (fresh internal state) on
-          every `exerciseKey` bump. */}
+          decides WHEN `exerciseSlot` goes non-null (bot-reply reveal + a
+          fixed pause) and owns whatever's rendered inside it (a real drill
+          trainer plus its own Skip row, remounted per exercise via its own
+          `key`); this just renders it in place and is the only reason
+          Record/Type were hidden above. */}
       {exerciseActive && (
         <div className="exercise-reveal mt-4 flex justify-center">
-          <ExerciseCard
-            key={exerciseKey}
-            data={exercise!}
-            onSubmit={onExerciseSubmit!}
-            onSkip={onExerciseSkip!}
-          />
+          {exerciseSlot}
         </div>
       )}
     </>

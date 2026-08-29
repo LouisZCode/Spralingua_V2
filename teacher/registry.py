@@ -1,14 +1,21 @@
 """Pattern -> exercise registry for Clara's interactive-exercise loop
-(AGENT-00X, "the teacher can hand out a real item").
+(AGENT-00X, "the teacher can hand out a real item"; rebuilt for CLARA-13,
+"Clara mounts the real drill trainers").
 
 Clara's room has never had a written drill; this is the bridge. It maps
 ``grammar/taxonomy.yaml`` pattern ids onto items drawn from FIVE existing
 typed-answer drill catalogs — faelle, satzbau, zeitfaerbung, verbindungen,
-bauteil — and normalizes each into ONE generic card shape the frontend can
-render without knowing which drill it came from. Grading reuses each drill's
-own deterministic matcher (and judge LLM, where that drill has one) by
-IMPORTING its module-level functions — nothing here reimplements a check or
-duplicates an ``items.yaml``. No drill module is edited to make this work.
+bauteil — and now serves each drill's item and grades each attempt in that
+drill's own NATIVE shape, so the frontend mounts the exact same trainer
+component Flow does, dealt Flow-style with a round of one. Nothing here
+flattens a card or collapses a verdict anymore (that generic-card design was
+CLARA-13's predecessor, AGENT-00X) — this module is pure plumbing: item
+lookup/pattern-matching (``pick_random_item``) plus two per-drill functions
+per adapter, ``serve`` and ``grade``, both IMPORTED from that drill's own
+``<drill>/grading.py`` (grading) and ``<drill>/routes.py`` (serve-time
+transforms, e.g. satzbau's chip shuffle) — nothing here reimplements a check,
+a serve-time transform, or duplicates an ``items.yaml``. No drill module is
+edited to make this work.
 
 Coverage is v1-complete: all five target drills turned out to be reusable
 as-is (generic catalog only — CONT-002 personal/forged items are skipped;
@@ -23,169 +30,78 @@ YAML parse happens (and is cached) the first time any route touches it.
 """
 
 import random
-from dataclasses import dataclass
-from typing import Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable
 
+from bauteil import grading as _bauteil_grading
 from bauteil.content import TARGET_PATTERNS as _BAUTEIL_PATTERNS, load_items as _load_bauteil_items
-from bauteil.judge import judge_attempt as _judge_bauteil
-from bauteil.routes import _matches as _bauteil_matches
 
+from faelle import grading as _faelle_grading
 from faelle.content import TARGET_PATTERNS as _FAELLE_PATTERNS, load_items as _load_faelle_items
-from faelle.judge import judge_case as _judge_faelle
-from faelle.routes import _matches as _faelle_matches
 
+from satzbau import grading as _satzbau_grading
 from satzbau.content import TARGET_PATTERNS as _SATZBAU_PATTERNS, load_items as _load_satzbau_items
-from satzbau.judge import judge_clause as _judge_satzbau
-from satzbau.routes import _matches as _satzbau_matches, _shuffle_chips as _satzbau_shuffle_chips
+from satzbau.routes import _shuffle_chips as _satzbau_shuffle_chips
 
+from verbindungen import grading as _verbindungen_grading
 from verbindungen.content import (
     TARGET_PATTERNS as _VERBINDUNGEN_PATTERNS,
     load_items as _load_verbindungen_items,
 )
-from verbindungen.judge import judge_chunk as _judge_verbindungen
-from verbindungen.routes import _matches as _verbindungen_matches
 
+from zeitfaerbung import grading as _zeitfaerbung_grading
 from zeitfaerbung.content import (
     DOPPELDEUTIG_GROUPS as _ZF_DOPPEL_GROUPS,
-    FORM_TO_FAMILY as _ZF_FORM_TO_FAMILY,
     load_items as _load_zeitfaerbung_items,
 )
-from zeitfaerbung.routes import _recognized_tokens as _zf_recognized_tokens
-
-# Normalized verdict every ``grade`` callable returns: (correct, expected, note).
-Verdict = tuple[bool, str, "str | None"]
 
 
 # --------------------------------------------------------------------------
-# Card builders — "what would that drill's own UI show as the task?" in one
-# short instruction line + the exercise text itself. Answers/rules never
-# appear here (same server-side-secrecy contract every drill's /round obeys).
+# Serve — "what does that drill's own GET /round emit for one item?", byte-
+# for-byte, so a Clara-dealt item is indistinguishable from a Flow-dealt one.
+# Mirrors the list-comprehension entry each drill's own round route builds —
+# the file:line noted per function is what this must never drift from.
 # --------------------------------------------------------------------------
 
-def _faelle_card(item: dict) -> dict:
+def _serve_faelle(item: dict) -> dict:
+    # Mirrors faelle/routes.py:196 (GET /round's per-item entry).
+    return {"id": item["id"], "frame": item["frame"], "hint": item["hint"]}
+
+
+def _serve_satzbau(item: dict) -> dict:
+    # Mirrors satzbau/routes.py:214-223 (GET /round's per-item entry) —
+    # chips are re-shuffled per serve via the drill's OWN _shuffle_chips,
+    # imported above rather than reimplemented, so a re-roll here always
+    # matches what /satzbau/round would have shuffled.
     return {
-        "instruction": "Fill in the missing word(s) to complete the German sentence.",
-        "prompt": item["frame"],
-        "expected_shape": "a word or short phrase",
+        "id": item["id"],
+        "given": item["given"],
+        "task": item["task"],
+        "chips": _satzbau_shuffle_chips(item["chips"], item["answer"]),
+        "hint": item["hint"],
     }
 
 
-def _satzbau_card(item: dict) -> dict:
-    shuffled = _satzbau_shuffle_chips(item["chips"], item["answer"])
-    lines = [item["task"]]
-    if item["given"]:
-        lines.append(f'Start: "{item["given"]}"')
-    lines.append(f"Arrange these words to finish it: {', '.join(shuffled)}")
-    return {
-        "instruction": "Put the words in the correct order to build the sentence.",
-        "prompt": "\n".join(lines),
-        "expected_shape": "the words in order, separated by spaces",
-    }
+def _serve_verbindungen(item: dict) -> dict:
+    # Mirrors verbindungen/routes.py:235 (GET /round's per-item entry).
+    return {"id": item["id"], "frame": item["frame"], "hint": item["hint"]}
 
 
-def _verbindungen_card(item: dict) -> dict:
-    return {
-        "instruction": "Complete the fixed phrase — type the missing word(s).",
-        "prompt": item["frame"],
-        "expected_shape": "a word or short phrase",
-    }
+def _serve_bauteil(item: dict) -> dict:
+    # Mirrors bauteil/routes.py:117-123 (GET /round's per-item entry).
+    return {"id": item["id"], "parts": item["parts"], "frame": item["frame"], "hint": item["hint"]}
 
 
-def _bauteil_card(item: dict) -> dict:
-    return {
-        "instruction": "Build the correctly inflected phrase from these parts, then type it into the gap.",
-        "prompt": f'Parts: {" · ".join(item["parts"])}\nSentence: {item["frame"]}',
-        "expected_shape": "a short phrase",
-    }
-
-
-def _zeitfaerbung_card(item: dict) -> dict:
-    return {
-        "instruction": "Fill the gap with the correct form of war, wurde, or blieb.",
-        "prompt": item["frame"],
-        "expected_shape": "one verb form",
-    }
-
-
-# --------------------------------------------------------------------------
-# Grading — deterministic check first (zero LLM cost), judge only on a miss,
-# exactly the same checks/judges each drill's own POST /attempts uses. Every
-# function collapses that drill's richer verdict down to (correct, expected,
-# note) per the normalized card contract.
-# --------------------------------------------------------------------------
-
-async def _grade_faelle(item: dict, answer: str) -> Verdict:
-    if _faelle_matches(answer, item["answer"], item["frame"]):
-        return True, item["answer"], None
-    diag = await _judge_faelle(item, answer)
-    note = diag.note
-    if diag.means_instead:
-        note = f"{note} ({diag.means_instead})" if note else diag.means_instead
-    return diag.correct, item["answer"], note
-
-
-async def _grade_satzbau(item: dict, answer: str) -> Verdict:
-    order = answer.split()
-    expected = " ".join(item["answer"])
-    if _satzbau_matches(order, item):
-        return True, expected, None
-    diag = await _judge_satzbau(item, order)
-    # `variant` only ever accompanies a TRUE verdict, `note` only a FALSE
-    # one (see satzbau/judge.py) — never both, so this can't clobber either.
-    note = diag.note if not diag.correct else diag.variant
-    return diag.correct, expected, note
-
-
-async def _grade_verbindungen(item: dict, answer: str) -> Verdict:
-    if _verbindungen_matches(answer, item["answer"], item["frame"]):
-        return True, item["answer"], None
-    diag = await _judge_verbindungen(item, answer)
-    return diag.correct, item["answer"], diag.note
-
-
-async def _grade_bauteil(item: dict, answer: str) -> Verdict:
-    if _bauteil_matches(answer, item["answer"], item["frame"]):
-        return True, item["answer"], None
-    diag = await _judge_bauteil(item, answer)
-    return diag.correct, item["answer"], diag.note
-
-
-async def _grade_zeitfaerbung(item: dict, answer: str) -> Verdict:
-    # No judge LLM for this drill (see zeitfaerbung/routes.py) — the closed
-    # war/wurde/blieb form set is deterministic end to end, same as the
-    # drill's own /attempts. Reuses that module's own token recognizer so
-    # this can never drift from what the real drill accepts.
-    accepted = item["answers"]
-    is_doppel = item["group"] in _ZF_DOPPEL_GROUPS
-
-    recognized = _zf_recognized_tokens(answer)
-    if len(recognized) > 1:
-        remaining = list(recognized)
-        for frame_form in _zf_recognized_tokens(item["frame"].replace("___", " ")):
-            if frame_form in remaining:
-                remaining.remove(frame_form)
-        if len(remaining) == 1:
-            recognized = remaining
-
-    if len(recognized) == 0:
-        return False, accepted[0], "Answer with a form of war, wurde, or blieb."
-    if len(recognized) > 1:
-        return False, accepted[0], "One verb form only, please."
-
-    token = recognized[0]
-    if token in accepted:
-        if is_doppel:
-            other = next(a for a in accepted if a != token)
-            note = f"{item['readings'][token]} (the other valid form, {other}, would mean: {item['readings'][other]})"
-        else:
-            note = item.get("why")
-        return True, token, note
-
-    token_family = _ZF_FORM_TO_FAMILY.get(token)
-    family_match = next((a for a in accepted if _ZF_FORM_TO_FAMILY.get(a) == token_family), None)
-    if family_match is not None:
-        return False, family_match, f"Right verb, wrong form for this subject: {family_match}."
-    return False, accepted[0], item.get("why")
+def _serve_zeitfaerbung(item: dict) -> dict:
+    # Mirrors zeitfaerbung/routes.py:95-100 (GET /round's per-item entry) —
+    # ``hint`` is omitted ENTIRELY for doppeldeutig items (an English hint
+    # would force one reading and spoil the ambiguity that's the point of
+    # that group). Reuses the drill's own DOPPELDEUTIG_GROUPS constant
+    # (imported above) — never redefined here.
+    entry = {"id": item["id"], "frame": item["frame"]}
+    if item["group"] not in _ZF_DOPPEL_GROUPS:
+        entry["hint"] = item["hint"]
+    return entry
 
 
 @dataclass(frozen=True)
@@ -193,8 +109,19 @@ class DrillAdapter:
     name: str
     load_items: Callable[[], dict[str, dict]]
     patterns: Callable[[], frozenset[str]]
-    build_card: Callable[[dict], dict]
-    grade: Callable[[dict, str], Awaitable[Verdict]]
+    serve: Callable[[dict], dict]
+    # validate(item, answer_or_order) -> str | None — the 422 reason, or None.
+    validate: Callable[[dict, Any], "str | None"]
+    # grade(item, answer_or_order, *, give_up=False) -> (verdict: dict, extra)
+    # — ``verdict`` is that drill's NATIVE verdict shape; ``extra`` is a
+    # per-drill implementation detail (judge_skipped for the four judge-
+    # backed drills, the ledger sentinel for zeitfaerbung) callers of THIS
+    # module never need to interpret, only optionally discard.
+    grade: Callable[..., Awaitable[tuple[dict, Any]]]
+    # True for satzbau only: its attempt payload is `order: list[str]`, not
+    # `answer: str` — teacher/routes.py uses this to pick which AttemptIn
+    # field to hand to validate()/grade().
+    uses_order: bool = field(default=False)
 
 
 _ADAPTERS: dict[str, DrillAdapter] = {
@@ -202,29 +129,34 @@ _ADAPTERS: dict[str, DrillAdapter] = {
         name="faelle",
         load_items=_load_faelle_items,
         patterns=lambda: frozenset(_FAELLE_PATTERNS),
-        build_card=_faelle_card,
-        grade=_grade_faelle,
+        serve=_serve_faelle,
+        validate=_faelle_grading.validate,
+        grade=_faelle_grading.grade,
     ),
     "satzbau": DrillAdapter(
         name="satzbau",
         load_items=_load_satzbau_items,
         patterns=lambda: frozenset(_SATZBAU_PATTERNS),
-        build_card=_satzbau_card,
-        grade=_grade_satzbau,
+        serve=_serve_satzbau,
+        validate=_satzbau_grading.validate,
+        grade=_satzbau_grading.grade,
+        uses_order=True,
     ),
     "verbindungen": DrillAdapter(
         name="verbindungen",
         load_items=_load_verbindungen_items,
         patterns=lambda: frozenset(_VERBINDUNGEN_PATTERNS),
-        build_card=_verbindungen_card,
-        grade=_grade_verbindungen,
+        serve=_serve_verbindungen,
+        validate=_verbindungen_grading.validate,
+        grade=_verbindungen_grading.grade,
     ),
     "bauteil": DrillAdapter(
         name="bauteil",
         load_items=_load_bauteil_items,
         patterns=lambda: frozenset(_BAUTEIL_PATTERNS),
-        build_card=_bauteil_card,
-        grade=_grade_bauteil,
+        serve=_serve_bauteil,
+        validate=_bauteil_grading.validate,
+        grade=_bauteil_grading.grade,
     ),
     # No TARGET_PATTERNS constant exists on zeitfaerbung/content.py (its
     # pattern_id is derived per-group, not declared as a flat tuple — see
@@ -235,8 +167,9 @@ _ADAPTERS: dict[str, DrillAdapter] = {
         name="zeitfaerbung",
         load_items=_load_zeitfaerbung_items,
         patterns=lambda: frozenset(i["pattern_id"] for i in _load_zeitfaerbung_items().values()),
-        build_card=_zeitfaerbung_card,
-        grade=_grade_zeitfaerbung,
+        serve=_serve_zeitfaerbung,
+        validate=_zeitfaerbung_grading.validate,
+        grade=_zeitfaerbung_grading.grade,
     ),
 }
 

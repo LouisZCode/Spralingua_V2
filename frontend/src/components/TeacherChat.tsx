@@ -4,10 +4,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import ConversationView from "./ConversationView";
 import TeacherTopicScreen from "./TeacherTopicScreen";
-import type { ExerciseData, ExerciseVerdict } from "./teacher/ExerciseCard";
 import { useAuth } from "./auth/AuthContext";
 import { TEACHER_LESSON, TEACHER_VOICE } from "./shared/teacher";
 import { HTTP_BASE } from "@/lib/api";
+
+import FaelleTrainer from "./faelle/FaelleTrainer";
+import type { CaseItem, CaseVerdict } from "./faelle/api";
+import SatzbauTrainer from "./satzbau/SatzbauTrainer";
+import type { ClauseItem, ClauseVerdict } from "./satzbau/api";
+import VerbindungenTrainer from "./verbindungen/VerbindungenTrainer";
+import type { ChunkItem, ChunkVerdict } from "./verbindungen/api";
+import BauteilTrainer from "./bauteil/BauteilTrainer";
+import type { RoundItem as BauteilItem, BauteilVerdict } from "./bauteil/api";
+import ZeitfaerbungTrainer from "./zeitfaerbung/ZeitfaerbungTrainer";
+import type { ZeitItem, ZeitVerdict } from "./zeitfaerbung/api";
 
 // AGENT-001: the /teacher orchestrator — the explanation-agent counterpart to
 // TandemChat. Note 5 added a picker screen (TeacherTopicScreen) ahead of the
@@ -17,14 +27,15 @@ import { HTTP_BASE } from "@/lib/api";
 // typing is the precise channel for German examples, since the teacher
 // session runs English STT.
 //
-// AGENT-00X: this file also owns Clara's interactive-exercise loop —
-// GET the item, hold it until it's time to reveal, POST the attempt, and
+// CLARA-13: this file also owns Clara's interactive-exercise loop — GET the
+// item, hold it until it's time to reveal, mount the SAME drill trainer Flow
+// mounts (round of one), POST the attempt to the teacher-only endpoint, and
 // report the outcome back through the pipeline via the existing
-// POST /say/{user_id}. ConversationView renders the actual card (inline in
-// the chat flow, single-focus enforced there) via the exercise/exerciseKey/
-// onExerciseSubmit/onExerciseSkip props below; onExerciseRequest/onBotReply/
-// onSessionEnded are the three hooks that drive this file's own state. See
-// teacher/routes.py (backend) for the two HTTP endpoints.
+// POST /say/{user_id}. ConversationView only renders whatever opaque
+// `exerciseSlot` this file hands it (inline in the chat flow, single-focus
+// enforced there) — the choice of trainer, the Skip row, and every attempt/
+// give-up closure below all live here. See teacher/routes.py (backend) for
+// the two HTTP endpoints.
 
 // Sentinel-OUT: kept byte-identical to agents/pipecat_wrapper.py's
 // EXERCISE_RESULT_PREFIX. The backend keys off this exact literal to route a
@@ -38,10 +49,6 @@ const EXERCISE_RESULT_PREFIX = "⟦ÜBUNGSERGEBNIS⟧";
 // that gets rejected.
 const REPORT_MAX_CHARS = 450;
 
-// Auto-dismiss a graded verdict after this long even if Clara's reply to the
-// report never arrives (judge timeout, a skipped follow-up, etc).
-const VERDICT_AUTOCLOSE_MS = 8000;
-
 // The card must appear ~2s after Clara finishes SPEAKING her announcement,
 // not the instant the marker arrives (see onExerciseRequest's own comment in
 // ConversationView.tsx — it already fires at the "she finished talking"
@@ -54,13 +61,93 @@ function truncateReport(text: string): string {
     : text;
 }
 
-type RawExercise = {
-  drill: string;
-  itemId: string;
+// CLARA-13: the GET /teacher/exercise response — a discriminated union on
+// `drill`, `item` typed by each drill's own native round-item shape (the
+// exact per-item dict that drill's own /round endpoint emits — see
+// clara_trainers_contracts.md's PER-DRILL CONTRACTS). itemId/patternId ride
+// alongside `item` rather than inside it — the native item shapes don't
+// carry a pattern id of their own.
+type Exercise =
+  | { drill: "faelle"; itemId: string; patternId: string; item: CaseItem }
+  | { drill: "satzbau"; itemId: string; patternId: string; item: ClauseItem }
+  | {
+      drill: "verbindungen";
+      itemId: string;
+      patternId: string;
+      item: ChunkItem;
+    }
+  | { drill: "bauteil"; itemId: string; patternId: string; item: BauteilItem }
+  | {
+      drill: "zeitfaerbung";
+      itemId: string;
+      patternId: string;
+      item: ZeitItem;
+    };
+
+// D5: the three report shapes, byte-identical to the pre-CLARA-13 template —
+// only the per-drill sentence/answer/expected/note extraction (below) is new.
+function buildReport(params: {
   patternId: string;
-  instruction: string;
-  prompt: string;
-};
+  sentence: string;
+  answer: string;
+  expected: string;
+  correct: boolean;
+  alsoCorrectFit: boolean;
+  note: string | null;
+}): string {
+  const { patternId, sentence, answer, expected, correct, alsoCorrectFit, note } =
+    params;
+  let report: string;
+  if (correct && !alsoCorrectFit) {
+    report =
+      `${EXERCISE_RESULT_PREFIX} Correct — exercise on ${patternId}: ` +
+      `the sentence was "${sentence}", they answered "${answer}".`;
+  } else if (correct) {
+    report =
+      `${EXERCISE_RESULT_PREFIX} Correct — exercise on ${patternId}: ` +
+      `the sentence was "${sentence}", they answered "${answer}" — also a correct fit ` +
+      `(the reference answer was "${expected}").`;
+  } else {
+    report =
+      `${EXERCISE_RESULT_PREFIX} Wrong — exercise on ${patternId}: ` +
+      `the sentence was "${sentence}", they answered "${answer}"; ` +
+      `the correct answer is "${expected}".`;
+  }
+  if (note) report += ` ${note}`;
+  return report;
+}
+
+// D3: the pinned POST /teacher/exercise/attempts payload/response contract —
+// a thin fetch, not a per-drill api.ts (that endpoint doesn't exist there:
+// Clara's room writes nothing and must not touch the drills' own
+// coin-gated /attempts routes). Throws on a non-2xx exactly like every other
+// practice client's `request` helper.
+async function postAttempt<V>(
+  token: string,
+  body: {
+    drill: string;
+    itemId: string;
+    give_up?: boolean;
+    answer?: string;
+    order?: string[];
+  }
+): Promise<V> {
+  const res = await fetch(`${HTTP_BASE}/teacher/exercise/attempts`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new Error(
+      typeof detail === "string" ? detail : "Couldn't check that — try again."
+    );
+  }
+  return res.json() as Promise<V>;
+}
 
 export default function TeacherChat() {
   const { token, user, ready } = useAuth();
@@ -85,31 +172,25 @@ export default function TeacherChat() {
     }
   }, [ready, token, router]);
 
-  // ─── AGENT-00X: the exercise loop ────────────────────────────────────
-  const [exercise, setExercise] = useState<ExerciseData | null>(null);
-  // Bumps on every accepted exercise_request so ExerciseCard remounts with
-  // fresh internal state (answering, not a stale verdict) even if a marker
-  // ever repeated the same pattern id back to back.
+  // ─── CLARA-13: the exercise loop ─────────────────────────────────────
+  const [exercise, setExercise] = useState<Exercise | null>(null);
+  // Bumps on every accepted exercise_request so the mounted trainer remounts
+  // with fresh internal state (answering, not a stale verdict) even if a
+  // marker ever repeated the same pattern id back to back.
   const [exerciseKey, setExerciseKey] = useState(0);
-  // Guards a fetch/POST in flight from a request that's since been
-  // superseded (a NEW exercise_request, or the session ending) — only the
-  // most recent request's resolution is allowed to touch state.
+  // Gates the wrapper row's Skip affordance — true once a graded verdict has
+  // landed for the current item, mirroring the old card's "Skip is gone once
+  // graded — the card is answered at that point, there's nothing left to
+  // skip" rule. Reset on every new exercise; NOT set on a zeitfaerbung
+  // "unrecognized" reply (D4 — that's not a graded attempt).
+  const [exerciseAnswered, setExerciseAnswered] = useState(false);
+  // Guards a fetch in flight from a request that's since been superseded (a
+  // NEW exercise_request, or the session ending) — only the most recent
+  // request's resolution is allowed to touch state.
   const requestSeqRef = useRef(0);
-  const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The ~2s post-speech pause before a fetched item is allowed to reveal —
   // see EXERCISE_REVEAL_DELAY_MS above and handleExerciseRequest below.
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // True only once a verdict is showing for the CURRENT card — gates
-  // onBotReply's auto-dismiss so an unanswered card (the learner is
-  // ignoring it and still chatting) doesn't vanish out from under them.
-  const verdictShownRef = useRef(false);
-
-  const clearDismissTimer = useCallback(() => {
-    if (dismissTimerRef.current) {
-      clearTimeout(dismissTimerRef.current);
-      dismissTimerRef.current = null;
-    }
-  }, []);
 
   const clearRevealTimer = useCallback(() => {
     if (revealTimerRef.current) {
@@ -141,26 +222,26 @@ export default function TeacherChat() {
 
   const handleExerciseRequest = useCallback(
     (patternId: string) => {
-      // A fresh request always replaces whatever card is open, and cancels
-      // any reveal still pending from a previous one.
+      // A fresh request always replaces whatever's open, and cancels any
+      // reveal still pending from a previous one.
       const seq = ++requestSeqRef.current;
-      clearDismissTimer();
       clearRevealTimer();
-      verdictShownRef.current = false;
       setExercise(null);
+      setExerciseAnswered(false);
       if (!token) return;
 
       // TIMING: this call fires the instant Clara's bubble for THIS reply
       // reveals (ConversationView's flushPendingBot) — i.e. the moment she
-      // finishes speaking. The card itself must not appear until
+      // finishes speaking. The slot itself must not appear until
       // EXERCISE_REVEAL_DELAY_MS after that, so it waits on BOTH the fetch
       // AND this pause, whichever finishes last — fetching starts right away
       // so the data is normally already in hand once the pause elapses.
-      let fetched: ExerciseData | null = null;
+      let fetched: Exercise | null = null;
       let pauseDone = false;
       const reveal = () => {
         if (requestSeqRef.current !== seq || !fetched || !pauseDone) return;
         setExercise(fetched);
+        setExerciseAnswered(false);
         setExerciseKey((k) => k + 1);
       };
       revealTimerRef.current = setTimeout(() => {
@@ -182,14 +263,8 @@ export default function TeacherChat() {
             return;
           }
           if (!res.ok) return; // nothing actionable to show or report
-          const data: RawExercise = await res.json();
-          fetched = {
-            drill: data.drill,
-            itemId: data.itemId,
-            patternId: data.patternId,
-            instruction: data.instruction,
-            prompt: data.prompt,
-          };
+          const data = (await res.json()) as Exercise;
+          fetched = data;
           reveal();
         })
         .catch(() => {
@@ -198,74 +273,7 @@ export default function TeacherChat() {
           // has anything to reveal.
         });
     },
-    [token, sendReport, clearDismissTimer, clearRevealTimer]
-  );
-
-  const handleAnswer = useCallback(
-    async (data: ExerciseData, answer: string): Promise<ExerciseVerdict> => {
-      if (!token) throw new Error("Not signed in.");
-      const res = await fetch(`${HTTP_BASE}/teacher/exercise/attempts`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          drill: data.drill,
-          itemId: data.itemId,
-          answer,
-        }),
-      });
-      if (!res.ok) {
-        const detail = (await res.json().catch(() => null))?.detail;
-        throw new Error(
-          typeof detail === "string"
-            ? detail
-            : "Couldn't check that — try again."
-        );
-      }
-      const verdict: ExerciseVerdict = await res.json();
-      // Never hand Clara an "expected" value that contradicts a CORRECT
-      // verdict — a judge accepting a valid variant (e.g. "eine" for a "die"
-      // reference) previously still surfaced `expected "die"`, which read to
-      // the LLM as "they were wrong" and caused it to hallucinate a
-      // correction. Three shapes: exact match to the reference, a correct
-      // but different variant, and a genuine miss — only the last one names
-      // an "expected" answer as a correction.
-      const matchesReference =
-        answer.trim().toLowerCase() === verdict.expected.trim().toLowerCase();
-      let report: string;
-      if (verdict.correct && matchesReference) {
-        report =
-          `${EXERCISE_RESULT_PREFIX} Correct — exercise on ${data.patternId}: ` +
-          `the sentence was "${data.prompt}", they answered "${answer}".`;
-      } else if (verdict.correct) {
-        report =
-          `${EXERCISE_RESULT_PREFIX} Correct — exercise on ${data.patternId}: ` +
-          `the sentence was "${data.prompt}", they answered "${answer}" — also a correct fit ` +
-          `(the reference answer was "${verdict.expected}").`;
-      } else {
-        report =
-          `${EXERCISE_RESULT_PREFIX} Wrong — exercise on ${data.patternId}: ` +
-          `the sentence was "${data.prompt}", they answered "${answer}"; ` +
-          `the correct answer is "${verdict.expected}".`;
-      }
-      if (verdict.note) report += ` ${verdict.note}`;
-      void sendReport(report);
-
-      // Verdict is now visible — arm the dismissal window (see
-      // onBotReply/onSessionEnded below for the other two triggers).
-      verdictShownRef.current = true;
-      clearDismissTimer();
-      dismissTimerRef.current = setTimeout(() => {
-        dismissTimerRef.current = null;
-        verdictShownRef.current = false;
-        setExercise(null);
-      }, VERDICT_AUTOCLOSE_MS);
-
-      return verdict;
-    },
-    [token, sendReport, clearDismissTimer]
+    [token, sendReport, clearRevealTimer]
   );
 
   const handleSkip = useCallback(() => {
@@ -274,43 +282,328 @@ export default function TeacherChat() {
     void sendReport(
       `${EXERCISE_RESULT_PREFIX} They skipped the exercise on ${exercise.patternId}.`
     );
-    clearDismissTimer();
-    verdictShownRef.current = false;
     setExercise(null);
-  }, [exercise, sendReport, clearDismissTimer]);
+  }, [exercise, sendReport]);
 
-  // A reply landed (any turn, not necessarily one carrying a new exercise).
-  // Only acts while a VERDICT is showing — an unanswered card stays open
-  // across Clara's other chat replies, since the card is explicitly meant
-  // to not block the conversation.
-  const handleBotReply = useCallback(() => {
-    if (!verdictShownRef.current) return;
-    requestSeqRef.current++;
-    clearDismissTimer();
-    verdictShownRef.current = false;
+  // FLOW-001-style dismissal: the trainer calls this once the learner
+  // advances PAST a shown verdict (Enter / the continue action) — see each
+  // trainer's own `advance()`. The old bespoke card's auto-dismiss timers
+  // (arm on verdict, fire after a fixed window, or on Clara's next reply) are
+  // gone with it — dismissal is now purely this explicit, learner-driven
+  // action, exactly like Flow's onFlowDone.
+  const handleExerciseDone = useCallback(() => {
     setExercise(null);
-  }, [clearDismissTimer]);
+  }, []);
+
+  // Round of one, never mutated, never re-dealt — flow-mode trainers never
+  // call this, same noop Flow.tsx wires.
+  const noopNewRound = useCallback(() => {}, []);
 
   // Session winding down (WS closed / Finish confirmed) — drop any open
-  // card silently, whatever state it's in, and cancel a reveal still
+  // slot silently, whatever state it's in, and cancel a reveal still
   // pending in its ~2s window so it can never pop up after the fact.
   const handleSessionEnded = useCallback(() => {
     requestSeqRef.current++;
-    clearDismissTimer();
     clearRevealTimer();
-    verdictShownRef.current = false;
     setExercise(null);
-  }, [clearDismissTimer, clearRevealTimer]);
+    setExerciseAnswered(false);
+  }, [clearRevealTimer]);
 
-  // Belt-and-suspenders: clear both timers if this component itself
-  // unmounts mid-window (e.g. a fast route change) — no orphaned timers.
+  // Belt-and-suspenders: clear the reveal timer if this component itself
+  // unmounts mid-window (e.g. a fast route change) — no orphaned timer.
   useEffect(() => {
     return () => {
-      clearDismissTimer();
       clearRevealTimer();
     };
-  }, [clearDismissTimer, clearRevealTimer]);
+  }, [clearRevealTimer]);
+
+  // ─── D5 per-drill report mapping + POST closures ─────────────────────
+  // Each of the five mirrors the SAME shape: POST the attempt to the
+  // teacher-only endpoint, mark the item answered (so the Skip row above
+  // disappears), build the ⟦ÜBUNGSERGEBNIS⟧ report from that drill's native
+  // verdict fields, send it, and hand the native verdict back to the
+  // trainer — same timing as before (Clara reacts while the card still
+  // shows its own feedback).
+
+  const submitFaelle = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "faelle" }>,
+      answer: string | null,
+      giveUp: boolean
+    ): Promise<CaseVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<CaseVerdict>(token, {
+        drill: "faelle",
+        itemId: ex.itemId,
+        give_up: giveUp,
+        answer: giveUp ? undefined : answer ?? "",
+      });
+      setExerciseAnswered(true);
+      const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      // Old adapter's rule: meansInstead rides along on the SAME note line.
+      let note = verdict.note;
+      if (verdict.meansInstead) {
+        note = note ? `${note} (${verdict.meansInstead})` : verdict.meansInstead;
+      }
+      const alsoCorrectFit =
+        verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
+      void sendReport(
+        buildReport({
+          patternId: ex.patternId,
+          sentence: ex.item.frame,
+          answer: displayAnswer,
+          expected: verdict.expected,
+          correct: verdict.correct,
+          alsoCorrectFit,
+          note,
+        })
+      );
+      return verdict;
+    },
+    [token, sendReport]
+  );
+
+  const submitSatzbau = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "satzbau" }>,
+      order: string[] | null,
+      giveUp: boolean
+    ): Promise<ClauseVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<ClauseVerdict>(token, {
+        drill: "satzbau",
+        itemId: ex.itemId,
+        give_up: giveUp,
+        order: giveUp ? undefined : order ?? [],
+      });
+      setExerciseAnswered(true);
+      // The target sentence — given lead-in + the canonical order — doubles
+      // as both S and E for satzbau (there's no separate gap-fill "sentence"
+      // text to quote).
+      const sentence = [ex.item.given, ...verdict.expected]
+        .filter(Boolean)
+        .join(" ");
+      const displayAnswer = giveUp
+        ? "(gave up)"
+        : [ex.item.given, ...(order ?? [])].filter(Boolean).join(" ");
+      // Mirrors the old adapter's collapse: `variant` only ever accompanies
+      // a TRUE verdict, `note` only a FALSE one — never both.
+      const note = verdict.correct ? verdict.variant : verdict.note;
+      const alsoCorrectFit = verdict.correct && verdict.variant != null;
+      void sendReport(
+        buildReport({
+          patternId: ex.patternId,
+          sentence,
+          answer: displayAnswer,
+          expected: sentence,
+          correct: verdict.correct,
+          alsoCorrectFit,
+          note,
+        })
+      );
+      return verdict;
+    },
+    [token, sendReport]
+  );
+
+  const submitVerbindungen = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "verbindungen" }>,
+      answer: string | null,
+      giveUp: boolean
+    ): Promise<ChunkVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<ChunkVerdict>(token, {
+        drill: "verbindungen",
+        itemId: ex.itemId,
+        give_up: giveUp,
+        answer: giveUp ? undefined : answer ?? "",
+      });
+      setExerciseAnswered(true);
+      const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      const alsoCorrectFit =
+        verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
+      void sendReport(
+        buildReport({
+          patternId: ex.patternId,
+          sentence: ex.item.frame,
+          answer: displayAnswer,
+          expected: verdict.expected,
+          correct: verdict.correct,
+          alsoCorrectFit,
+          note: verdict.note,
+        })
+      );
+      return verdict;
+    },
+    [token, sendReport]
+  );
+
+  const submitBauteil = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "bauteil" }>,
+      answer: string | null,
+      giveUp: boolean
+    ): Promise<BauteilVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<BauteilVerdict>(token, {
+        drill: "bauteil",
+        itemId: ex.itemId,
+        give_up: giveUp,
+        answer: giveUp ? undefined : answer ?? "",
+      });
+      setExerciseAnswered(true);
+      const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      const alsoCorrectFit =
+        verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
+      void sendReport(
+        buildReport({
+          patternId: ex.patternId,
+          sentence: ex.item.frame,
+          answer: displayAnswer,
+          expected: verdict.expected,
+          correct: verdict.correct,
+          alsoCorrectFit,
+          note: verdict.note,
+        })
+      );
+      return verdict;
+    },
+    [token, sendReport]
+  );
+
+  const submitZeitfaerbung = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "zeitfaerbung" }>,
+      answer: string | null,
+      giveUp: boolean
+    ): Promise<ZeitVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<ZeitVerdict>(token, {
+        drill: "zeitfaerbung",
+        itemId: ex.itemId,
+        give_up: giveUp,
+        answer: giveUp ? undefined : answer ?? "",
+      });
+      // D4: "unrecognized" isn't a scored attempt anywhere in this product —
+      // the trainer keeps the item live for another try (no advance), and
+      // Clara must hear nothing about it. Give-up never resolves this kind
+      // (zeitfaerbung/routes.py), so this only ever short-circuits a genuine
+      // typo/gibberish text attempt; Skip stays available since nothing was
+      // graded.
+      if (verdict.kind === "unrecognized") return verdict;
+      setExerciseAnswered(true);
+      const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      const alsoCorrectFit =
+        verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
+      void sendReport(
+        buildReport({
+          patternId: ex.patternId,
+          sentence: ex.item.frame,
+          answer: displayAnswer,
+          expected: verdict.expected,
+          correct: verdict.correct,
+          alsoCorrectFit,
+          note: verdict.note,
+        })
+      );
+      return verdict;
+    },
+    [token, sendReport]
+  );
   // ───────────────────────────────────────────────────────────────────
+
+  // CLARA-13: the wrapper row (D6's Skip affordance) plus whichever real
+  // drill trainer this pattern dealt, mounted exactly as Flow.tsx mounts it
+  // (round of one, `flow`, `allowGiveUp`, a noop onNewRound) minus
+  // onGloss/onAdd/onNudge/sessionId — see clara_trainers_contracts.md's
+  // "Flow's mount reference". Handed to ConversationView as one opaque node;
+  // it renders it, we own everything inside it.
+  const exerciseSlot: React.ReactNode = exercise ? (
+    <div className="flex w-full max-w-[440px] flex-col gap-2">
+      <div className="flex items-center justify-between gap-3 rounded-[16px] border-[3px] border-line bg-paper-warm px-4 py-2">
+        <span className="font-body text-[10px] font-black uppercase tracking-[0.28em] text-ink-muted">
+          Quick practice
+        </span>
+        {/* Unobtrusive — never a rival to the trainer's own Check button,
+            and gone once graded (D6/old card's rule: there's nothing left
+            to skip). */}
+        {!exerciseAnswered && (
+          <button
+            type="button"
+            onClick={handleSkip}
+            className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline disabled:pointer-events-none disabled:opacity-40"
+          >
+            Skip
+          </button>
+        )}
+      </div>
+      {exercise.drill === "faelle" && (
+        <FaelleTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_itemId, answer) => submitFaelle(exercise, answer, false)}
+          onGiveUp={() => submitFaelle(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+        />
+      )}
+      {exercise.drill === "satzbau" && (
+        <SatzbauTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_itemId, order) => submitSatzbau(exercise, order, false)}
+          onGiveUp={() => submitSatzbau(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+        />
+      )}
+      {exercise.drill === "verbindungen" && (
+        <VerbindungenTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_itemId, answer) =>
+            submitVerbindungen(exercise, answer, false)
+          }
+          onGiveUp={() => submitVerbindungen(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+        />
+      )}
+      {exercise.drill === "bauteil" && (
+        <BauteilTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_itemId, answer) => submitBauteil(exercise, answer, false)}
+          onGiveUp={() => submitBauteil(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+        />
+      )}
+      {exercise.drill === "zeitfaerbung" && (
+        <ZeitfaerbungTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_itemId, answer) =>
+            submitZeitfaerbung(exercise, answer, false)
+          }
+          onGiveUp={() => submitZeitfaerbung(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+        />
+      )}
+    </div>
+  ) : null;
 
   if (!ready || !token) {
     return null;
@@ -340,19 +633,12 @@ export default function TeacherChat() {
       // (mirrors TandemChat's onBack -> setTopic(null)).
       onBack={() => setTopic(null)}
       onExerciseRequest={handleExerciseRequest}
-      onBotReply={handleBotReply}
       onSessionEnded={handleSessionEnded}
-      // AGENT-00X: ConversationView renders the card itself, inline after
-      // the last bubble, once `exercise` goes non-null — see that file for
+      // CLARA-13: ConversationView renders whatever this is, inline after
+      // the last bubble, once it goes non-null — see that file for
       // placement/animation/single-focus. This file only decides WHEN that
-      // happens (handleExerciseRequest above) and what its two actions do.
-      exercise={exercise}
-      exerciseKey={exerciseKey}
-      onExerciseSubmit={(answer) => {
-        if (!exercise) return Promise.reject(new Error("No active exercise."));
-        return handleAnswer(exercise, answer);
-      }}
-      onExerciseSkip={handleSkip}
+      // happens (handleExerciseRequest above) and what's inside it.
+      exerciseSlot={exerciseSlot}
     />
   );
 }

@@ -1,18 +1,23 @@
 """HTTP routes for Clara's interactive-exercise loop (AGENT-00X backend
-half), plus the cold-start topic-screen endpoint:
+half, rebuilt for CLARA-13 — "Clara mounts the real drill trainers"), plus
+the cold-start topic-screen endpoint:
 
 - ``GET /teacher/starters`` — three curated starter topics for a learner
   whose ``user_errors`` ledger is still empty (see ``teacher/starters.py``).
 - ``GET /teacher/exercise?pattern=<taxonomy id>`` — one random item for that
-  pattern, normalized into a generic card the frontend can render without
-  knowing which of the five underlying drills it came from.
+  pattern, served in that drill's NATIVE round-item shape (exactly what
+  ``GET /<drill>/round`` would emit for it) so the frontend mounts the same
+  trainer component Flow does, dealt Flow-style with a round of one.
 - ``POST /teacher/exercise/attempts`` — grade one typed/typed-order answer
-  using that drill's own deterministic check + judge (see teacher/registry.py).
+  using that drill's own deterministic check + judge, returning that drill's
+  NATIVE verdict shape (see teacher/registry.py).
 
 All three sit behind the same session-JWT dependency every drill router
 uses; the POST also shares the drills' per-user rate limiter (the judge calls
 it may fire are exactly as expensive as a normal drill attempt).
 """
+
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
@@ -86,18 +91,18 @@ async def teacher_balance(user_id: str = Depends(get_current_user_id)):
         used = int(cnt or 0)
         return {"tier": tier, "limit": limit, "used": used, "remaining": max(0, limit - used), "nextResetAt": nxt.isoformat()}
 
-_MAX_ANSWER_CHARS = 200  # generous: a satzbau order retypes several words
-
-
 @router.get("/exercise")
 async def get_exercise(
     pattern: str,
     user_id: str = Depends(get_current_user_id),
 ):
-    """One random item for ``pattern``, normalized to one generic card shape.
-    404 when no covered drill targets this pattern — Clara's own prompt is
-    told to only ever name an id from her rendered focus list, but a stale
-    or hallucinated id must still fail closed here, not 500."""
+    """One random item for ``pattern``, served in that drill's NATIVE
+    round-item shape (CLARA-13) — the frontend mounts the same trainer
+    component Flow does, so the item must be indistinguishable from a
+    Flow-dealt one. 404 when no covered drill targets this pattern —
+    Clara's own prompt is told to only ever name an id from her rendered
+    focus list, but a stale or hallucinated id must still fail closed here,
+    not 500."""
     # Joins Clara's live conversation Session in Langfuse (server-side lookup;
     # the frontend carries no session id). One trace per dealt exercise =
     # Clara's deal rate is countable per session/user. A 404 is stamped as an
@@ -116,7 +121,7 @@ async def get_exercise(
             raise HTTPException(status_code=404, detail="no exercise for this pattern")
         drill_name, item = picked
         adapter = get_adapter(drill_name)
-        card = adapter.build_card(item)
+        native_item = adapter.serve(item)
         span.set_attribute("drill", drill_name)
         span.set_attribute("item_id", item["id"])
         span.set_attribute("langfuse.observation.output", f"{drill_name}:{item['id']}")
@@ -124,16 +129,16 @@ async def get_exercise(
             "drill": drill_name,
             "itemId": item["id"],
             "patternId": item["pattern_id"],
-            "instruction": card["instruction"],
-            "prompt": card["prompt"],
-            "expected_shape": card.get("expected_shape"),
+            "item": native_item,
         }
 
 
 class AttemptIn(BaseModel):
     drill: str
     itemId: str
-    answer: str = Field(max_length=2000)
+    give_up: bool = False
+    answer: str | None = Field(default=None, max_length=2000)  # text drills
+    order: list[str] | None = None  # satzbau
 
 
 @router.post("/exercise/attempts")
@@ -141,7 +146,9 @@ async def submit_exercise_attempt(
     body: AttemptIn,
     user_id: str = Depends(get_current_user_id),
 ):
-    """Grade one attempt with that drill's own deterministic check + judge.
+    """Grade one attempt with that drill's own deterministic check + judge,
+    returning that drill's NATIVE verdict shape (CLARA-13) — byte-compatible
+    with what ``POST /<drill>/attempts`` returns for the same item+answer.
 
     ============================================================================
     ABSOLUTE INVARIANT — THIS ROUTE WRITES NOTHING, EVER.
@@ -167,14 +174,22 @@ async def submit_exercise_attempt(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
 
-    answer = " ".join(body.answer.split())
-    if not answer:
-        raise HTTPException(status_code=422, detail="Type your answer first.")
-    if len(answer) > _MAX_ANSWER_CHARS:
-        raise HTTPException(
-            status_code=422,
-            detail="Keep it to the answer — that looks like a paragraph.",
-        )
+    # satzbau grades an `order: list[str]`; the other four grade a typed
+    # `answer: str` — the request carries whichever field applies (D3),
+    # validated 422 when it's missing and this isn't a give-up.
+    if adapter.uses_order:
+        if not body.give_up and body.order is None:
+            raise HTTPException(status_code=422, detail="Place the chips first.")
+        payload: Any = body.order if body.order is not None else []
+    else:
+        if not body.give_up and body.answer is None:
+            raise HTTPException(status_code=422, detail="Type your answer first.")
+        payload = " ".join((body.answer or "").split())
+
+    if not body.give_up:
+        reason = adapter.validate(item, payload)
+        if reason:
+            raise HTTPException(status_code=422, detail=reason)
 
     # Same tracing shape as every drill's /attempts: a root span carrying the
     # answer as root-observation input and the verdict as output, wrapped in
@@ -191,12 +206,17 @@ async def submit_exercise_attempt(
             span.set_attribute("langfuse.session.id", session_id)
         span.set_attribute("drill", body.drill)
         span.set_attribute("item_id", item["id"])
-        span.set_attribute("langfuse.observation.input", answer)
+        span.set_attribute(
+            "langfuse.observation.input",
+            " ".join(payload) if adapter.uses_order else payload,
+        )
         # Filterable metadata (langfuse.observation.metadata.*) — the fields
         # OBS-009-style evaluation will want to slice by.
         span.set_attribute("langfuse.observation.metadata.pattern", item["pattern_id"])
+        if body.give_up:
+            span.set_attribute("gave_up", True)
         try:
-            correct, expected, note = await adapter.grade(item, answer)
+            verdict, _extra = await adapter.grade(item, payload, give_up=body.give_up)
         except Exception:
             logger.exception(
                 "Teacher exercise judge call failed (drill {} item {})", body.drill, item["id"]
@@ -206,9 +226,12 @@ async def submit_exercise_attempt(
                 status_code=502,
                 detail=JUDGE_UNAVAILABLE,
             )
+        correct = verdict["correct"]
+        note = verdict.get("note")
         span.set_attribute("langfuse.observation.metadata.correct", str(correct))
         span.set_attribute(
             "langfuse.observation.output",
-            f"correct={correct} expected={expected}" + (f" note={note}" if note else ""),
+            f"correct={correct} expected={verdict.get('expected')}"
+            + (f" note={note}" if note else ""),
         )
-        return {"correct": correct, "expected": expected, "note": note}
+        return verdict

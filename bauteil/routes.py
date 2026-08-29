@@ -16,7 +16,6 @@ dependencies as ``satz/routes.py``:
 
 import asyncio
 import random
-import re
 
 from fastapi import APIRouter, Depends, HTTPException
 from loguru import logger
@@ -26,8 +25,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
+from bauteil import grading
 from bauteil.content import TARGET_PATTERNS, load_items
-from bauteil.judge import judge_attempt
 from drills.copy import JUDGE_UNAVAILABLE
 from database.connection import get_db
 from database.orm import UserDrillItem
@@ -39,7 +38,6 @@ from database.repository import (
 )
 from drills import apply_level
 from drills.forge import backfill_missing
-from grammar import expand_contractions
 from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
@@ -133,37 +131,6 @@ async def get_round(
     return {"items": result}
 
 
-# Learners type one phrase; anything longer than a generous full sentence is
-# a paste accident, not an attempt.
-_MAX_ANSWER_CHARS = 120
-
-_EDGE_PUNCT = " .,!?;:…\"'"
-
-
-def _normalize(s: str) -> str:
-    # BUG-011: contractions expand to their two-word form, so "beim" and
-    # "bei dem" compare equal. The case distinction survives (im -> in dem
-    # vs. ins -> in das), so this cannot green a wrong declension.
-    return expand_contractions(" ".join(s.split()).strip(_EDGE_PUNCT).lower())
-
-
-def _matches(typed: str, expected: str, frame: str) -> bool:
-    """Deterministic green: the exact phrase, or the phrase embedded in the
-    typed-out sentence. Containment alone would be a hole — extra NON-frame
-    words around the phrase (an added pronoun, a different preposition) must
-    fall through to the judge — so whatever surrounds the match must consist
-    of frame words only (i.e. the learner typed the sentence, nothing else)."""
-    t, e = _normalize(typed), _normalize(expected)
-    if t == e:
-        return True
-    m = re.search(rf"(?<!\w){re.escape(e)}(?!\w)", t)
-    if m is None:
-        return False
-    frame_words = set(_normalize(frame.replace("___", " ")).split())
-    leftover = (t[: m.start()] + " " + t[m.end():]).split()
-    return all(w in frame_words for w in leftover)
-
-
 class AttemptIn(BaseModel):
     item_id: str
     answer: str
@@ -205,16 +172,13 @@ async def submit_attempt(
         if _e.status_code == 402:
             raise
         raise HTTPException(status_code=503, detail="billing temporarily unavailable")
-    answer = " ".join(body.answer.split())
+    answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
     if not body.give_up:
-        if not answer:
-            raise HTTPException(status_code=422, detail="Type your answer first.")
-        if len(answer) > _MAX_ANSWER_CHARS:
-            raise HTTPException(
-                status_code=422, detail="Keep it to the phrase — that looks like a paragraph."
-            )
+        reason = grading.validate(item, answer)
+        if reason:
+            raise HTTPException(status_code=422, detail=reason)
 
     # OBS-007: one Langfuse trace per judged attempt, grouped into the
     # practice sitting. Deterministic greens trace too (no `llm` child) —
@@ -232,34 +196,26 @@ async def submit_attempt(
             # response shape a judged miss returns — the frontend needs no
             # new branch to show it.
             attempt_span.set_attribute("gave_up", True)
-            correct, case_ok, carrier_ok, note = (
-                False,
-                False,
-                False,
-                "Gave up — here's the phrase to learn.",
+        try:
+            verdict, judge_skipped = await grading.grade(item, answer, give_up=body.give_up)
+        except Exception as exc:
+            attempt_span.record_exception(exc)
+            logger.exception("Bauteil judge call failed (item {})", item["id"])
+            raise HTTPException(
+                status_code=502,
+                detail=JUDGE_UNAVAILABLE,
             )
-        elif _matches(answer, item["answer"], item["frame"]):
-            correct, case_ok, carrier_ok, note = True, True, True, None
+        if judge_skipped:
             # TASK 2: a deterministic green never calls the LLM judge — flag
             # that explicitly so Langfuse can tell "judged correct" apart
             # from "matched without a judge call".
             attempt_span.set_attribute("judge_skipped", True)
-        else:
-            try:
-                diag = await judge_attempt(item, answer)
-            except Exception as exc:
-                attempt_span.record_exception(exc)
-                logger.exception("Bauteil judge call failed (item {})", item["id"])
-                raise HTTPException(
-                    status_code=502,
-                    detail=JUDGE_UNAVAILABLE,
-                )
-            correct, case_ok, carrier_ok, note = (
-                diag.correct,
-                diag.case_ok,
-                diag.carrier_ok,
-                diag.note,
-            )
+        correct, case_ok, carrier_ok, note = (
+            verdict["correct"],
+            verdict["caseOk"],
+            verdict["carrierOk"],
+            verdict["note"],
+        )
 
         attempt_span.set_attribute(
             "langfuse.observation.output",
@@ -328,10 +284,4 @@ async def submit_attempt(
             logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
         # camelCase like every other practice payload.
-        return {
-            "correct": correct,
-            "expected": item["answer"],
-            "caseOk": case_ok,
-            "carrierOk": carrier_ok,
-            "note": note,
-        }
+        return verdict

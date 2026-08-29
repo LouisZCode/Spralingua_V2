@@ -28,8 +28,8 @@ from database.repository import (
     record_grammar_error,
 )
 from drills import apply_level
+from satzbau import grading
 from satzbau.content import TARGET_PATTERNS, load_items
-from satzbau.judge import judge_clause
 from drills.copy import JUDGE_UNAVAILABLE
 from security import drill_try_admit
 
@@ -224,30 +224,6 @@ async def get_round(
     return {"items": result}
 
 
-# Generous but bounded — the longest catalog item is 6 chips; this covers a
-# real round plus headroom without accepting a garbage-sized payload.
-_MAX_ORDER_TOKENS = 20
-_MAX_TOKEN_CHARS = 40
-
-_EDGE_PUNCT = " .,!?;:…\"'"
-
-
-def _normalize_tokens(tokens: list[str]) -> tuple[str, ...]:
-    return tuple(t.strip(_EDGE_PUNCT).lower() for t in tokens)
-
-
-def _matches(order: list[str], item: dict) -> bool:
-    """Exact match against the canonical answer, or against any listed
-    ``accepts`` alternate. Deliberately narrower than the sibling drills'
-    ``_matches`` (no substring/embedding heuristic needed) — the learner's
-    submission is already a clean list of the exact chip tokens, not typed
-    free text to fuzzily line up against a frame."""
-    norm = _normalize_tokens(order)
-    if norm == _normalize_tokens(item["answer"]):
-        return True
-    return any(norm == _normalize_tokens(alt) for alt in item["accepts"])
-
-
 class AttemptIn(BaseModel):
     item_id: str
     order: list[str]
@@ -286,15 +262,9 @@ async def submit_attempt(
     # give_up skips validation entirely — there's nothing built, the
     # learner is conceding the item.
     if not body.give_up:
-        if not order:
-            raise HTTPException(status_code=422, detail="Place the chips first.")
-        if len(order) > _MAX_ORDER_TOKENS or any(len(t) > _MAX_TOKEN_CHARS for t in order):
-            raise HTTPException(status_code=422, detail="That doesn't look like a chip set.")
-        if sorted(_normalize_tokens(order)) != sorted(_normalize_tokens(item["chips"])):
-            raise HTTPException(
-                status_code=422,
-                detail="Those aren't the chips you were given for this item.",
-            )
+        reason = grading.validate(item, order)
+        if reason:
+            raise HTTPException(status_code=422, detail=reason)
 
     with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satzbau-attempt") as attempt_span:
         attempt_span.set_attribute("user.id", user_id)
@@ -303,31 +273,27 @@ async def submit_attempt(
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
         attempt_span.set_attribute("langfuse.observation.input", " ".join(order))
 
-        variant: str | None = None
         if body.give_up:
             # FLOW-002 escape hatch: skip the judge entirely, grade as a
             # miss, and reveal the answer through the exact same response
             # shape a judged miss returns — no new frontend branch.
             attempt_span.set_attribute("gave_up", True)
-            correct, note = False, "Gave up — here's the order to learn."
-        elif _matches(order, item):
-            correct, note = True, None
+        try:
+            verdict, judge_skipped = await grading.grade(item, order, give_up=body.give_up)
+        except Exception as exc:
+            attempt_span.record_exception(exc)
+            logger.exception("Satzbau judge call failed (item {})", item["id"])
+            raise HTTPException(
+                status_code=502,
+                detail=JUDGE_UNAVAILABLE,
+            )
+        if judge_skipped:
             # A deterministic green never calls the LLM judge — flag that
             # explicitly so Langfuse can tell "judged correct" apart from
             # "matched without a judge call" (same contract as the sibling
             # drills).
             attempt_span.set_attribute("judge_skipped", True)
-        else:
-            try:
-                diag = await judge_clause(item, order)
-            except Exception as exc:
-                attempt_span.record_exception(exc)
-                logger.exception("Satzbau judge call failed (item {})", item["id"])
-                raise HTTPException(
-                    status_code=502,
-                    detail=JUDGE_UNAVAILABLE,
-                )
-            correct, note, variant = diag.correct, diag.note, diag.variant
+        correct, note = verdict["correct"], verdict["note"]
 
         attempt_span.set_attribute(
             "langfuse.observation.output",
@@ -390,10 +356,4 @@ async def submit_attempt(
         except Exception:
             logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
-        return {
-            "correct": correct,
-            "expected": item["answer"],
-            "rule": item["rule"],
-            "note": note,
-            "variant": variant,
-        }
+        return verdict
