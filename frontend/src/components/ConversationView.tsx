@@ -82,6 +82,7 @@ export default function ConversationView({
   agentOpens,
   skipBriefing,
   onExerciseRequest,
+  onExerciseForge,
   onBotReply,
   onSessionEnded,
   exerciseSlot,
@@ -127,6 +128,15 @@ export default function ConversationView({
   // VoiceChat and TandemChat, which never pass it — zero behavior change
   // there.
   onExerciseRequest?: (patternId: string) => void;
+  // CLARA-15: the live-forge counterpart to onExerciseRequest above — fires
+  // for a `[[ÜBUNG-NEU: <topic>]]` marker (RTVI type "exercise_forge") at
+  // the SAME reveal point and under the SAME hold semantics (see
+  // pendingExerciseForgeTopicRef below): held until this turn's reply
+  // actually reveals, and only one of onExerciseRequest/onExerciseForge can
+  // be pending at a time — a newer message of either kind replaces it.
+  // Server-gated to developers; optional/absent for VoiceChat and
+  // TandemChat, which never pass it.
+  onExerciseForge?: (topic: string) => void;
   // AGENT-00X: fires every time ANY bot reply lands visually, marker or not
   // — same reveal point as onExerciseRequest, just unconditional. The
   // teacher room uses this to auto-dismiss a graded exercise card once
@@ -190,6 +200,11 @@ export default function ConversationView({
   // see agents/pipecat_wrapper.py). Consumed — and cleared — by
   // flushPendingBot once this turn's reply actually reveals.
   const pendingExercisePatternRef = useRef<string | null>(null);
+  // CLARA-15: same hold contract, for the forge marker's topic. Only one of
+  // this ref and pendingExercisePatternRef is ever set at a time — whichever
+  // server message arrives most recently clears the other (see
+  // onServerMessage below).
+  const pendingExerciseForgeTopicRef = useRef<string | null>(null);
   const botStartedTimeRef = useRef<number | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const REVEAL_SAFETY_MS = 300;
@@ -321,6 +336,11 @@ export default function ConversationView({
       const patternId = pendingExercisePatternRef.current;
       pendingExercisePatternRef.current = null;
       onExerciseRequest?.(patternId);
+    }
+    if (pendingExerciseForgeTopicRef.current) {
+      const topic = pendingExerciseForgeTopicRef.current;
+      pendingExerciseForgeTopicRef.current = null;
+      onExerciseForge?.(topic);
     }
   };
 
@@ -520,7 +540,23 @@ export default function ConversationView({
               // reveals, so the card can never pop up mid-sentence.
               const patternId = (data as { pattern_id?: unknown }).pattern_id;
               if (typeof patternId === "string" && patternId) {
+                // CLARA-15: a fresh request always wins over a still-held forge.
+                pendingExerciseForgeTopicRef.current = null;
                 pendingExercisePatternRef.current = patternId;
+              }
+            } else if (
+              data &&
+              typeof data === "object" &&
+              (data as { type?: unknown }).type === "exercise_forge"
+            ) {
+              // CLARA-15: Clara ended her reply with a `[[ÜBUNG-NEU: <topic>]]`
+              // marker — the live-forge counterpart to exercise_request
+              // above, same hold-until-reveal contract. Server-gated to
+              // developers; a regular user never receives this message.
+              const topic = (data as { topic?: unknown }).topic;
+              if (typeof topic === "string" && topic) {
+                pendingExercisePatternRef.current = null;
+                pendingExerciseForgeTopicRef.current = topic;
               }
             }
           },

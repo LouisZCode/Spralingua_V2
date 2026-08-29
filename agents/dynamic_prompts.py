@@ -86,3 +86,14 @@ class Context:
     # bucket from `users.level` ("A1"|"A2"|"B1"|"B2+"); None when never
     # chosen — renders nothing.
     student_level: str | None = None
+    # CLARA-15 P3: teacher-only. True iff this session's user has
+    # `role == "developer"` (loaded once at connect from the already-fetched
+    # user row in `pipeline/factory.py`'s teacher daily-count gate — no extra
+    # query). Read by `conversational_prompt.py`'s teacher branch to append
+    # `fallback_forge` instead of `fallback_wunsch` when nothing printed fits
+    # a topic, and by `ClientWrapper`/`ExerciseMarkerFilter` (via
+    # `ClientWrapper.forge_enabled`, set from this same value) to decide
+    # whether a confirmed `[[ÜBUNG-NEU: ...]]` marker is allowed to push an
+    # `exercise_forge` RTVI message. False for every other lesson type and
+    # for every non-developer teacher session.
+    forge_enabled: bool = False

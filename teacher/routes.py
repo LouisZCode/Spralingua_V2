@@ -16,11 +16,20 @@ adds the speaking drill), plus the cold-start topic-screen endpoint:
 - ``POST /teacher/exercise/attempts-audio`` — CLARA-14, sprechen-only:
   multipart audio in, sprechen's NATIVE verdict shape out (transcribe then
   grade, same pipeline ``POST /sprechen/attempts`` uses).
+- ``POST /teacher/exercise/forge`` — CLARA-15 P3, developer-only: draft +
+  verify ONE fresh single-gap German item live for a free-text topic
+  (``teacher/forge.py``) when nothing printed fits it, served in
+  Verbindungen's NATIVE round-item shape. 403s any non-developer — real
+  learners never reach this path at all, since Clara's prompt only offers
+  the ``[[ÜBUNG-NEU: ...]]`` marker that leads here when
+  ``Context.forge_enabled`` is True. ``POST /teacher/exercise/attempts``
+  above also grades ``drill: "forge"`` attempts against the same in-memory
+  store.
 
-All four sit behind the same session-JWT dependency every drill router uses;
-the two attempts routes also share the drills' per-user rate limiter (the
-transcription/judge calls they may fire are exactly as expensive as a normal
-drill attempt).
+All five sit behind the same session-JWT dependency every drill router uses;
+the attempts/attempts-audio/forge routes also share the drills' per-user rate
+limiter (the transcription/judge/forge calls they may fire are exactly as
+expensive as a normal drill attempt).
 """
 
 from typing import Any
@@ -40,6 +49,7 @@ from satz.examiner import transcribe_attempt
 from security import drill_try_admit
 from sprechen import grading as sprechen_grading
 from sprechen.routes import _MAX_AUDIO_BYTES  # SAME cap POST /sprechen/attempts enforces — not re-derived
+from teacher.forge import forge_item, get_item as get_forged_item, grade_forged, store_item
 from teacher.registry import get_adapter, pick_random_item
 from teacher.starters import starters_for_level
 from drills.copy import JUDGE_UNAVAILABLE
@@ -142,6 +152,91 @@ async def get_exercise(
         }
 
 
+class ForgeIn(BaseModel):
+    topic: str = Field(max_length=200)  # stripped + re-checked to 1-80 below
+
+
+@router.post("/exercise/forge")
+async def forge_exercise(
+    body: ForgeIn,
+    user_id: str = Depends(get_current_user_id),
+):
+    """CLARA-15 P3, developer-only: draft + verify ONE fresh single-gap
+    German item live for ``body.topic`` (``teacher/forge.py``) and serve it
+    in Verbindungen's NATIVE round-item shape (mirrors ``GET
+    /teacher/exercise``'s own contract) — the frontend mounts the same
+    ``VerbindungenTrainer`` component. Real learners never reach this: Clara's
+    prompt only offers the ``[[ÜBUNG-NEU: ...]]`` marker that leads here when
+    ``Context.forge_enabled`` is True (``role == "developer"``), and this
+    route re-checks that same condition itself as an independent, defense-in-
+    depth gate — a prompt regression must not turn into an open forge for
+    every learner.
+
+    ============================================================================
+    ABSOLUTE INVARIANT — THIS ROUTE WRITES NOTHING, EVER.
+    No `record_grammar_error`, no `credit_pattern_success`, no
+    `record_drill_attempt`, no daily-mode credit, no DB session at all. This is
+    the approved design decision for v1 ("stay silent") — Clara's room is
+    deliberately exempt from every evaluator (see ARCHITECTURE.md's teacher
+    branch), and a practice item handed out INSIDE that room must not become a
+    side-channel into the same learning-state tables the exemption exists to
+    keep her out of. If a future version wants these writes, that's a new,
+    deliberate decision — not a bug fix to this comment. (The one DB read this
+    route performs — the role check below — is read-only, not a write.)
+    ============================================================================
+    """
+    topic = body.topic.strip()
+    if not (1 <= len(topic) <= 80):
+        raise HTTPException(status_code=422, detail="Give a short topic (1-80 characters).")
+
+    from sqlalchemy import select
+    from database.connection import get_sessionmaker
+    from database.orm import User
+
+    async with get_sessionmaker()() as db:
+        user = await db.scalar(select(User).where(User.id == user_id))
+    if user is None or (user.role or "") != "developer":
+        raise HTTPException(status_code=403, detail={"code": "forge_locked"})
+
+    if not drill_try_admit(user_id):
+        raise HTTPException(
+            status_code=429,
+            detail="You're going very fast — take a short break and try again in a few minutes.",
+        )
+
+    # Same session-joining shape as the deal span (GET /teacher/exercise)
+    # above: get_trace_session + propagate_trace_context so this route's
+    # forge/verify judge generations nest under Clara's live conversation
+    # Session. DEFAULT Langfuse environment — never "forge" (that env is
+    # background content-forge volume; this is learner— well, developer-
+    # facing, not batch content generation).
+    session_id = get_trace_session(user_id)
+    with propagate_trace_context(user_id=user_id, session_id=session_id), \
+            tracer.start_as_current_span("teacher-exercise-forge") as span:
+        span.set_attribute("user.id", user_id)
+        if session_id:
+            span.set_attribute("langfuse.session.id", session_id)
+        span.set_attribute("langfuse.observation.input", topic)
+        span.set_attribute("langfuse.observation.metadata.topic", topic)
+        try:
+            item = await forge_item(topic)
+        except Exception:
+            logger.exception(f"Teacher forge failed (topic={topic!r})")
+            mark_span_error(span, "forge unavailable")
+            raise HTTPException(status_code=502, detail={"code": "FORGE_UNAVAILABLE"})
+        store_item(item)
+        span.set_attribute("drill", "forge")
+        span.set_attribute("item_id", item["id"])
+        span.set_attribute("langfuse.observation.output", f"forge:{item['id']}")
+        return {
+            "drill": "forge",
+            "itemId": item["id"],
+            "topic": topic,
+            # Mirrors teacher/registry.py::_serve_verbindungen field-for-field.
+            "item": {"id": item["id"], "frame": item["frame"], "hint": item["hint"]},
+        }
+
+
 class AttemptIn(BaseModel):
     drill: str
     itemId: str
@@ -176,6 +271,56 @@ async def submit_exercise_attempt(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
+
+    if body.drill == "forge":
+        # CLARA-15 P3: a live-forged item is process-local dev-preview state
+        # (teacher/forge.py's in-memory store), not a drill catalog — no
+        # `get_adapter` entry exists for it. No role check here on purpose:
+        # the item only exists at all if a developer forged it via
+        # POST /teacher/exercise/forge, so a stale/missing id already 404s
+        # everyone, developer or not (D7-style uniform stale-item behavior).
+        item = get_forged_item(body.itemId)
+        if item is None:
+            raise HTTPException(
+                status_code=404,
+                detail="That exercise expired — ask Clara for a fresh one.",
+            )
+        if not body.give_up and body.answer is None:
+            raise HTTPException(status_code=422, detail="Type your answer first.")
+        answer_payload = " ".join((body.answer or "").split())
+
+        session_id = get_trace_session(user_id)
+        with propagate_trace_context(user_id=user_id, session_id=session_id), \
+                tracer.start_as_current_span("teacher-exercise-attempt") as span:
+            span.set_attribute("user.id", user_id)
+            if session_id:
+                span.set_attribute("langfuse.session.id", session_id)
+            span.set_attribute("drill", "forge")
+            span.set_attribute("item_id", item["id"])
+            span.set_attribute("langfuse.observation.metadata.topic", item.get("topic", ""))
+            span.set_attribute("langfuse.observation.input", answer_payload)
+            if body.give_up:
+                span.set_attribute("gave_up", True)
+            try:
+                verdict, _judge_skipped = await grade_forged(
+                    item, answer_payload, give_up=body.give_up
+                )
+            except Exception:
+                logger.exception(
+                    "Teacher forge judge call failed (item {})", item["id"]
+                )
+                mark_span_error(span, "judge unavailable")
+                raise HTTPException(status_code=502, detail=JUDGE_UNAVAILABLE)
+            correct = verdict["correct"]
+            note = verdict.get("note")
+            span.set_attribute("langfuse.observation.metadata.correct", str(correct))
+            span.set_attribute(
+                "langfuse.observation.output",
+                f"correct={correct} expected={verdict.get('expected')}"
+                + (f" note={note}" if note else ""),
+            )
+            return verdict
+
     adapter = get_adapter(body.drill)
     if adapter is None:
         raise HTTPException(status_code=404, detail="Unknown item.")

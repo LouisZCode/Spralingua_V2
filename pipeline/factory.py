@@ -342,6 +342,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         if exchanges_override is not None:
             lesson_snapshot["max_exchanges"] = exchanges_override
 
+        # CLARA-15 P3: teacher-lessons-only, defaults False for every other
+        # lesson type AND for the demo socket. Set below, inside the teacher
+        # daily-count gate block, from that SAME already-loaded user row (no
+        # extra query) — a developer gets it regardless of tier (they also
+        # bypass the gate itself).
+        forge_enabled: bool = False
+
         # Clara daily-count gate (replaces the PAY-002 coin bundle for teacher).
         # free→0/day (locked), basic→1/day, premium→3/day, developer→∞.
         # Counted at accept time — the moment Start creates the session — so the
@@ -357,6 +364,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
 
                 async with get_sessionmaker()() as _gate_db2:
                     _u2 = await _gate_db2.scalar(_select2(_User2).where(_User2.id == db_user_id))
+                    # CLARA-15 P3: derived from this SAME already-loaded row
+                    # — teacher lessons only (this whole block is gated on
+                    # that above), no extra query.
+                    if _u2 is not None and (_u2.role or "") == "developer":
+                        forge_enabled = True
                     if _u2 is not None and (_u2.role or "") != "developer":
                         tier2 = _u2.tier or "free"
                         limit2 = {"free": 0, "basic": 1, "premium": 3}.get(tier2, 0)
@@ -598,7 +610,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
         # both passed — the wrapper's own DB/transcript fields need the
         # former, its hand-rolled `llm` span needs the latter.
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level, forge_enabled=forge_enabled)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.

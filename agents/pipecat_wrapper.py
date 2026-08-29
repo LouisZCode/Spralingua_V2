@@ -89,11 +89,33 @@ def _contains_goodbye(text: str) -> bool:
 # frontend. `ExerciseMarkerFilter` below is the ONLY thing standing between
 # the raw token stream and TTS/transcript/pending bot text, so no fragment of
 # the marker — not even a lone "[" — is ever spoken, stored, or shown.
+#
+# CLARA-15 P3: generalized from the single `[[ÜBUNG: <id>]]` deal marker to
+# THREE markers sharing the `[[ÜBUNG` stem, distinguished by what follows it:
+#   [[ÜBUNG: <id>]]          — deal (unchanged: slug id, existing behavior)
+#   [[ÜBUNGSWUNSCH: <text>]] — demand-only signal (free text, no id printed)
+#   [[ÜBUNG-NEU: <text>]]    — dev-only live-forge deal (free text)
+# The three prefixes diverge at the character right after the shared "[[ÜBUNG"
+# stem (':' vs 'S' vs '-'), so none is ever a prefix of another once that
+# point is reached — the streaming matcher below narrows the set of still-
+# possible prefixes as each character arrives, with no ambiguity.
 EXERCISE_MARKER_PREFIX = "[[ÜBUNG:"
+EXERCISE_MARKER_WUNSCH_PREFIX = "[[ÜBUNGSWUNSCH:"
+EXERCISE_MARKER_NEU_PREFIX = "[[ÜBUNG-NEU:"
 EXERCISE_MARKER_CLOSE = "]]"
+# kind -> full opening prefix, in priority-irrelevant order (the streaming
+# matcher below disambiguates purely by character divergence, not by order).
+_EXERCISE_MARKER_PREFIXES = {
+    "deal": EXERCISE_MARKER_PREFIX,
+    "wunsch": EXERCISE_MARKER_WUNSCH_PREFIX,
+    "neu": EXERCISE_MARKER_NEU_PREFIX,
+}
 # Taxonomy ids are lowercase-hyphenated slugs (grammar/taxonomy.yaml); a
 # marker id that doesn't look like one is dropped rather than pushed —
 # never trust free-form model output as a value going straight to the client.
+# Applies ONLY to the `deal` kind — `wunsch`/`neu` carry free-text topics
+# (spaces, umlauts) and are validated separately (length only) where they're
+# consumed, in `ClientWrapper.astream`'s finally block.
 _EXERCISE_MARKER_ID_RE = re.compile(r"^[a-z0-9-]{1,64}$")
 
 # Sentinel-IN: the frontend hardcodes this exact literal on a synthetic
@@ -105,36 +127,50 @@ EXERCISE_RESULT_PREFIX = "⟦ÜBUNGSERGEBNIS⟧"
 
 class ExerciseMarkerFilter:
     """Streaming character-level filter that withholds Clara's trailing
-    ``[[ÜBUNG: <id>]]`` marker from a teacher-lesson token stream, however
-    the tokenizer happens to split it.
+    exercise marker from a teacher-lesson token stream, however the
+    tokenizer happens to split it. Recognizes THREE markers sharing the
+    ``[[ÜBUNG`` stem (see ``_EXERCISE_MARKER_PREFIXES``): the original
+    ``[[ÜBUNG: <id>]]`` deal, plus ``[[ÜBUNGSWUNSCH: <text>]]`` (demand-only)
+    and ``[[ÜBUNG-NEU: <text>]]`` (dev-only live-forge deal) added in
+    CLARA-15 P3.
 
     Feed raw token text to :meth:`feed`; it returns the text (possibly
     empty) that is safe to release right now — append/yield that, never the
     raw token. Call :meth:`finalize` once the stream ends.
 
-    Once the fixed prefix ``"[[ÜBUNG:"`` fully matches, the filter commits:
+    While a run of characters is still a valid PREFIX of one or more of the
+    three full marker openers, it is held back (not released) — the set of
+    still-possible kinds narrows as each character arrives, since the three
+    prefixes diverge at a fixed point right after the shared ``[[ÜBUNG``
+    stem and are never a prefix of one another past that point. Once one
+    opener fully matches, the filter commits to that kind and swallows:
     everything from that point to the end of the stream is withheld
     permanently (this is the "tolerate a marker outside the very end of a
     reply" rule — the contract asks the model to put it only at the true
     end, but if it doesn't, silently dropping the tail is safer than trying
-    to resume mid-reply parsing). ``marker_id`` is set once a closing
-    ``"]]"`` is seen; a marker that starts but never closes before the
-    stream ends leaves ``marker_id`` as ``None`` and nothing is pushed.
+    to resume mid-reply parsing). ``marker_id`` (the payload — free text for
+    ``wunsch``/``neu``, a slug for ``deal``) and ``marker_kind`` are set
+    together once a closing ``"]]"`` is seen; a marker that starts but never
+    closes before the stream ends leaves both ``None`` and nothing is
+    pushed.
 
-    A candidate that turns out NOT to be the marker (an early mismatch, or
+    A candidate that turns out NOT to be any marker (an early mismatch, or
     running out of stream mid-candidate) is released as ordinary text —
     either immediately (mismatch) or via :meth:`finalize` (stream ended
-    while still a valid partial prefix, e.g. a lone stray "[[").
+    while still a valid partial prefix, e.g. a lone stray "[[" or a cut-off
+    "[[ÜBUNGSW").
     """
 
-    _PREFIX = EXERCISE_MARKER_PREFIX
+    _PREFIXES = _EXERCISE_MARKER_PREFIXES
     _CLOSE = EXERCISE_MARKER_CLOSE
 
     def __init__(self) -> None:
         self._held = ""
-        self._swallowing = False  # True once `_PREFIX` has fully matched
+        self._swallowing = False  # True once one prefix has fully matched
         self._marker_closed = False
+        self._kind: str | None = None  # which prefix matched, once swallowing
         self.marker_id: str | None = None
+        self.marker_kind: str | None = None  # "deal" | "wunsch" | "neu"
 
     def feed(self, token: str) -> str:
         """Consume one streamed token; return the text now safe to release."""
@@ -146,35 +182,43 @@ class ExerciseMarkerFilter:
                 return ""  # everything after a confirmed marker is dropped
             self._held += ch
             if self._held.endswith(self._CLOSE):
-                inner = self._held[len(self._PREFIX): -len(self._CLOSE)].strip()
+                prefix = self._PREFIXES[self._kind]
+                inner = self._held[len(prefix): -len(self._CLOSE)].strip()
                 self.marker_id = inner
+                self.marker_kind = self._kind
                 self._marker_closed = True
                 self._held = ""
             return ""
 
         candidate = self._held + ch
-        if self._PREFIX.startswith(candidate):
+        matches = [k for k, p in self._PREFIXES.items() if p.startswith(candidate)]
+        if matches:
             self._held = candidate
-            if candidate == self._PREFIX:
+            # By construction the three prefixes diverge before any of them
+            # is a prefix of another, so at most one can equal `candidate`.
+            exact = next((k for k in matches if self._PREFIXES[k] == candidate), None)
+            if exact is not None:
+                self._kind = exact
                 self._swallowing = True
             return ""
 
-        # Mismatch: `self._held` was never going to become the marker —
+        # Mismatch: `self._held` was never going to become any marker —
         # release it, then check whether `ch` alone starts a fresh candidate
         # (covers e.g. a stray "x[[[ÜBUNG: ..." where the real marker starts
         # one character later).
         flushed, self._held = self._held, ""
-        if self._PREFIX.startswith(ch):
+        if any(p.startswith(ch) for p in self._PREFIXES.values()):
             self._held = ch
             return flushed
         return flushed + ch
 
     def finalize(self) -> str:
         """Call once the token stream ends. Returns text that was held but
-        never resolved into a confirmed marker start — a stray "[[" that ran
-        out of stream instead of diverging mid-way. A confirmed-but-unclosed
-        marker (the model got cut off mid-marker) is dropped, not flushed —
-        see the class docstring."""
+        never resolved into a confirmed marker start — a stray "[[" (or a
+        cut-off partial opener like "[[ÜBUNGSW") that ran out of stream
+        instead of diverging mid-way. A confirmed-but-unclosed marker (the
+        model got cut off mid-marker) is dropped, not flushed — see the
+        class docstring."""
         if self._swallowing:
             self._held = ""
             return ""
@@ -188,8 +232,16 @@ class ClientWrapper:
     def __init__(self, user_id, session_id, voice="happy_harry", lesson_id="lesson_zero",
                  topic="", grammar_focus=None, session_notes=None, vocab_words=None,
                  max_exchanges_override: int | None = None, trace_session_id: str | None = None,
-                 student_name: str | None = None, student_level: str | None = None):
+                 student_name: str | None = None, student_level: str | None = None,
+                 forge_enabled: bool = False):
         self.user_id = user_id
+        # CLARA-15 P3: teacher-only, set by pipeline/factory.py from the
+        # user's role == "developer" (already-loaded row, no extra query).
+        # False for every other lesson type. Read in `astream`'s finally
+        # block to decide whether a confirmed `[[ÜBUNG-NEU: ...]]` marker is
+        # allowed to push an `exercise_forge` RTVI message, and mirrored
+        # onto `self.context.forge_enabled` below for the prompt layer.
+        self.forge_enabled = forge_enabled
         self.session_id = session_id
         # Langfuse-only, surface-prefixed form of `session_id` (e.g.
         # "tandem-<hex>") — see pipeline/factory.py. Falls back to the bare
@@ -242,6 +294,9 @@ class ClientWrapper:
             student_name=student_name,
             # LEVEL round: teacher-only self-declared CEFR bucket (see Context.student_level).
             student_level=student_level,
+            # CLARA-15 P3: mirrors self.forge_enabled above — read by the
+            # teacher branch of conversational_prompt.py's prompt assembly.
+            forge_enabled=forge_enabled,
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client
@@ -333,11 +388,13 @@ class ClientWrapper:
         span on the trace.
 
         AGENT-00X, teacher lessons only: tokens are routed through an
-        ``ExerciseMarkerFilter`` so a trailing ``[[ÜBUNG: <id>]]`` marker
-        never reaches ``full_response`` (and therefore never reaches TTS,
-        the stored transcript, or the pending bot text — all three are built
-        from ``full_response``). The confirmed id, if any, is pushed to the
-        client after the loop — see the `finally` block below.
+        ``ExerciseMarkerFilter`` so a trailing exercise marker — the
+        original ``[[ÜBUNG: <id>]]`` deal, or (CLARA-15 P3)
+        ``[[ÜBUNGSWUNSCH: <text>]]``/``[[ÜBUNG-NEU: <text>]]`` — never
+        reaches ``full_response`` (and therefore never reaches TTS, the
+        stored transcript, or the pending bot text — all three are built
+        from ``full_response``). The confirmed payload, if any, is handled
+        after the loop by kind — see the `finally` block below.
         """
         text = input_dict.get("input", "")
         messages = {"messages": [{"role": "user", "content": text}]}
@@ -560,25 +617,110 @@ class ClientWrapper:
                 if text.strip() and not is_kickoff and not is_exercise_result:
                     self._user_turn_text.append((self._current_vad_seq, text))
 
-                # AGENT-00X: push the confirmed exercise-request to the client
-                # now that the reply is fully assembled and stripped above.
-                # Guarded like `flush_bot_output`'s own client push — a
-                # stubbed/absent rtvi_processor (unit tests, a connect that
-                # never finished wiring the pipeline) must never raise here.
+                # AGENT-00X / CLARA-15 P3: push the confirmed exercise
+                # marker to the client now that the reply is fully assembled
+                # and stripped above. Guarded like `flush_bot_output`'s own
+                # client push — a stubbed/absent rtvi_processor (unit tests,
+                # a connect that never finished wiring the pipeline) must
+                # never raise here. Behavior branches by `marker_kind`:
+                #   deal   -> unchanged from pre-CLARA-15 (byte-identical
+                #             push of {"type": "exercise_request", ...}).
+                #   wunsch -> never pushes anything; only logs the demand.
+                #   neu    -> always logs the demand too, then pushes
+                #             {"type": "exercise_forge", ...} ONLY when this
+                #             session is forge_enabled (role == developer);
+                #             otherwise treated like wunsch (log-only) plus
+                #             one extra warning — defense in depth, since
+                #             the prompt itself shouldn't offer this marker
+                #             to a non-developer session at all.
                 if marker_filter is not None and marker_filter.marker_id is not None:
-                    pattern_id = marker_filter.marker_id
-                    if _EXERCISE_MARKER_ID_RE.match(pattern_id):
-                        logger.info(f"[EXERCISE] Dealt pattern {pattern_id!r} to the client")
-                        if self.rtvi_processor is not None and hasattr(
-                            self.rtvi_processor, "send_server_message"
-                        ):
-                            await self.rtvi_processor.send_server_message(
-                                {"type": "exercise_request", "pattern_id": pattern_id}
+                    payload = marker_filter.marker_id
+                    kind = marker_filter.marker_kind
+                    if kind == "deal":
+                        pattern_id = payload
+                        if _EXERCISE_MARKER_ID_RE.match(pattern_id):
+                            logger.info(f"[EXERCISE] Dealt pattern {pattern_id!r} to the client")
+                            if self.rtvi_processor is not None and hasattr(
+                                self.rtvi_processor, "send_server_message"
+                            ):
+                                await self.rtvi_processor.send_server_message(
+                                    {"type": "exercise_request", "pattern_id": pattern_id}
+                                )
+                        else:
+                            logger.warning(
+                                f"[EXERCISE] Dropping malformed marker id {pattern_id!r}"
                             )
-                    else:
-                        logger.warning(
-                            f"[EXERCISE] Dropping malformed marker id {pattern_id!r}"
-                        )
+                    elif kind in ("wunsch", "neu"):
+                        topic = payload.strip()
+                        if not (1 <= len(topic) <= 80):
+                            logger.warning(
+                                f"[EXERCISE] Dropping malformed {kind} payload {payload!r} "
+                                f"(must be 1-80 chars after stripping)"
+                            )
+                        else:
+                            await self._log_exercise_demand(topic, kind)
+                            if kind == "neu":
+                                if self.forge_enabled:
+                                    logger.info(
+                                        f"[EXERCISE] Forge-dealing topic {topic!r} to the client"
+                                    )
+                                    if self.rtvi_processor is not None and hasattr(
+                                        self.rtvi_processor, "send_server_message"
+                                    ):
+                                        await self.rtvi_processor.send_server_message(
+                                            {"type": "exercise_forge", "topic": topic}
+                                        )
+                                else:
+                                    # Defense in depth: the prompt only ever
+                                    # offers `[[ÜBUNG-NEU: ...]]` when
+                                    # forge_enabled is True, so reaching here
+                                    # means the model produced it anyway —
+                                    # log loudly, but treat exactly like a
+                                    # `wunsch` (demand already logged above,
+                                    # no push).
+                                    logger.warning(
+                                        f"[EXERCISE] Dropping ÜBUNG-NEU push — "
+                                        f"forge_enabled is False for this session "
+                                        f"(topic={topic!r})"
+                                    )
+
+    async def _log_exercise_demand(self, topic: str, kind: str) -> None:
+        """CLARA-15 P3: log a demand signal for a confirmed
+        ``[[ÜBUNGSWUNSCH: ...]]``/``[[ÜBUNG-NEU: ...]]`` marker — a topic
+        Clara had no printed exercise for. This is the measurement the
+        feature exists for; it is otherwise invisible to the learner.
+
+        One Langfuse span named ``teacher-exercise-demand``, attached to
+        this session's LIVE trace the same way the ``llm`` span above joins
+        it (same ``turn_ctx``, same explicit ``user.id``/
+        ``langfuse.session.id`` stamping — mirrors that span's own
+        construction). DEFAULT Langfuse environment — never
+        ``langfuse.environment: "forge"`` (that env is reserved for
+        background content-forge volume; this is learner-facing). Also
+        emits one loguru INFO line with the same fields. Wrapped end-to-end:
+        a logging failure here must never break the stream — the session
+        goes on regardless.
+        """
+        try:
+            turn_ctx = self._turn_context or get_current_turn_context()
+            with tracer.start_as_current_span(
+                "teacher-exercise-demand", context=turn_ctx
+            ) as span:
+                span.set_attribute("user.id", self.user_id)
+                span.set_attribute("langfuse.session.id", self.trace_session_id)
+                span.set_attribute("langfuse.observation.input", topic)
+                span.set_attribute("langfuse.observation.metadata.topic", topic)
+                span.set_attribute("langfuse.observation.metadata.kind", kind)
+                span.set_attribute(
+                    "langfuse.observation.metadata.forge_enabled", self.forge_enabled
+                )
+            logger.info(
+                f"[DEMAND] topic={topic!r} kind={kind!r} forge_enabled={self.forge_enabled}"
+            )
+        except Exception as e:  # noqa: BLE001 — demand logging must never break the stream
+            logger.warning(
+                f"[DEMAND] logging failed (non-fatal): {type(e).__name__}: {e}"
+            )
 
     def render_transcript(self) -> str:
         """Format the captured turns as a single string for the evaluator prompt."""

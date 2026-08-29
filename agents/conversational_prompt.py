@@ -477,6 +477,16 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         if ctx.student_name:
             short += f"\nYour student's first name is {ctx.student_name}."
         parts = [base, short]
+        # CLARA-15 P3: addendum to rule 2 ("when nothing printed fits") —
+        # exactly one of the two keys is appended, picked by
+        # `Context.forge_enabled` (teacher-only, set at connect from the
+        # user's role == "developer" — pipeline/factory.py). A snapshot
+        # predating this feature carries neither key — `.get` degrades to
+        # appending nothing, same tolerance as the level/focus layers below.
+        fallback_key = "fallback_forge" if ctx.forge_enabled else "fallback_wunsch"
+        fallback_block = lesson.get(fallback_key)
+        if fallback_block:
+            parts.append(fallback_block.strip())
         level_block = (lesson.get("level_examples") or {}).get(ctx.student_level or "")
         if level_block:
             parts.append(level_block.strip())

@@ -99,7 +99,13 @@ type Exercise =
       patternId: string;
       item: ZeitItem;
     }
-  | { drill: "sprechen"; itemId: string; patternId: string; item: SpokenTask };
+  | { drill: "sprechen"; itemId: string; patternId: string; item: SpokenTask }
+  // CLARA-15: the live forge card — POST /teacher/exercise/forge's response.
+  // Native VERBINDUNGEN item/verdict shapes, same as the `verbindungen` case
+  // above (mounted in the SAME trainer below), but keyed by `topic` — the
+  // developer's free-text ask — instead of a taxonomy `patternId`, since a
+  // forged item has none.
+  | { drill: "forge"; itemId: string; topic: string; item: ChunkItem };
 
 // D5: the three report shapes, byte-identical to the pre-CLARA-13 template —
 // only the per-drill sentence/answer/expected/note extraction (below) is new.
@@ -269,6 +275,12 @@ export default function TeacherChat() {
   // skip" rule. Reset on every new exercise; NOT set on a zeitfaerbung
   // "unrecognized" reply (D4 — that's not a graded attempt).
   const [exerciseAnswered, setExerciseAnswered] = useState(false);
+  // CLARA-15: non-null while a forge fetch is in flight (holds the topic
+  // being forged, before the item exists) — distinct from `exercise`, which
+  // only ever holds a MOUNTABLE item. Drives the "Building your exercise…"
+  // loading state in the slot (see exerciseSlot below). Null for every
+  // other drill's request, which never has a loading phase of its own.
+  const [forging, setForging] = useState<string | null>(null);
   // Guards a fetch in flight from a request that's since been superseded (a
   // NEW exercise_request, or the session ending) — only the most recent
   // request's resolution is allowed to touch state.
@@ -366,6 +378,8 @@ export default function TeacherChat() {
       clearDismissTimer();
       setExercise(null);
       setExerciseAnswered(false);
+      // CLARA-15: a fresh drill request always wins over a still-forging card.
+      setForging(null);
       if (!token) return;
 
       // TIMING: this call fires the instant Clara's bubble for THIS reply
@@ -414,21 +428,101 @@ export default function TeacherChat() {
     [token, sendReport, clearRevealTimer, clearDismissTimer]
   );
 
+  // CLARA-15: the live forge — POST /teacher/exercise/forge, then mount the
+  // SAME VerbindungenTrainer the native `verbindungen` case mounts below
+  // (the forged item is a native chunk-gap item). Expect multi-second
+  // latency (two LLM calls server-side): the fetch, not the ~2s reveal
+  // pause, is normally the long pole, so the "Building your exercise…"
+  // loading state (see exerciseSlot below) covers that wait. A 403 (a stray
+  // message reaching a non-dev — server bug), 502, or any network failure
+  // fails safe — Clara already spoke, so v1 has no error card: the slot just
+  // clears silently and the failure goes to the console.
+  const handleExerciseForge = useCallback(
+    (topic: string) => {
+      // A fresh forge always replaces whatever's open (drill or another
+      // forge), same as handleExerciseRequest above.
+      const seq = ++requestSeqRef.current;
+      clearRevealTimer();
+      clearDismissTimer();
+      setExercise(null);
+      setExerciseAnswered(false);
+      setForging(topic);
+      if (!token) {
+        setForging(null);
+        return;
+      }
+
+      let fetched: Extract<Exercise, { drill: "forge" }> | null = null;
+      let pauseDone = false;
+      const reveal = () => {
+        if (requestSeqRef.current !== seq || !fetched || !pauseDone) return;
+        setExercise(fetched);
+        setExerciseAnswered(false);
+        setForging(null);
+        setExerciseKey((k) => k + 1);
+      };
+      revealTimerRef.current = setTimeout(() => {
+        revealTimerRef.current = null;
+        pauseDone = true;
+        reveal();
+      }, EXERCISE_REVEAL_DELAY_MS);
+
+      fetch(`${HTTP_BASE}/teacher/exercise/forge`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ topic }),
+      })
+        .then(async (res) => {
+          if (requestSeqRef.current !== seq) return; // superseded
+          if (!res.ok) {
+            console.warn(`Forge exercise failed: ${res.status}`);
+            setForging(null);
+            return;
+          }
+          const data = (await res.json()) as Extract<
+            Exercise,
+            { drill: "forge" }
+          >;
+          fetched = data;
+          reveal();
+        })
+        .catch((e) => {
+          if (requestSeqRef.current !== seq) return; // superseded
+          console.warn("Forge exercise fetch error:", e);
+          setForging(null);
+        });
+    },
+    [token, clearRevealTimer, clearDismissTimer]
+  );
+
   const handleSkip = useCallback(() => {
-    if (!exercise) return;
+    // CLARA-15: the slot can be up either as a live/graded drill (`exercise`)
+    // or as the forge loading state (`forging` — no item yet, just the topic
+    // being forged) — Skip must work from either.
+    if (!exercise && !forging) return;
     requestSeqRef.current++; // supersede any fetch that might still land
+    const label = exercise
+      ? exercise.drill === "forge"
+        ? exercise.topic
+        : exercise.patternId
+      : forging!;
     void sendReport(
-      `${EXERCISE_RESULT_PREFIX} They skipped the exercise on ${exercise.patternId}.`
+      `${EXERCISE_RESULT_PREFIX} They skipped the exercise on ${label}.`
     );
     setExercise(null);
-  }, [exercise, sendReport]);
+    setForging(null);
+  }, [exercise, forging, sendReport]);
 
   // CLARA-14: every mount below now passes `hideContinue`, which makes each
   // trainer's `advance()`/`next()` unreachable (no button, keybinding
   // ignored — see each trainer's own gate), so this never actually fires
-  // from any of the six mounts today. Kept wired anyway as a harmless
-  // fallback: a trainer mounted without `hideContinue` would still dismiss
-  // correctly through its normal onFlowDone path, same as Flow's.
+  // from any of the mounts today (seven, since CLARA-15's forge card). Kept
+  // wired anyway as a harmless fallback: a trainer mounted without
+  // `hideContinue` would still dismiss correctly through its normal
+  // onFlowDone path, same as Flow's.
   const handleExerciseDone = useCallback(() => {
     setExercise(null);
   }, []);
@@ -446,6 +540,7 @@ export default function TeacherChat() {
     clearDismissTimer(); // CLARA-14: no dangling dismiss backstop post-session
     setExercise(null);
     setExerciseAnswered(false);
+    setForging(null); // CLARA-15: including an in-flight forge fetch's slot
   }, [clearRevealTimer, clearDismissTimer]);
 
   // Belt-and-suspenders: clear both timers if this component itself
@@ -694,6 +789,43 @@ export default function TeacherChat() {
     },
     [token, sendGradedReport]
   );
+
+  // CLARA-15: the forge card's own submit — same native ChunkVerdict shape
+  // and attempt wiring as submitVerbindungen above (POST /teacher/exercise/
+  // attempts with drill: "forge"), but the report is labeled by topic, not
+  // patternId (D5's rule for this drill — see clara15_frontend_spec.md).
+  const submitForge = useCallback(
+    async (
+      ex: Extract<Exercise, { drill: "forge" }>,
+      answer: string | null,
+      giveUp: boolean
+    ): Promise<ChunkVerdict> => {
+      if (!token) throw new Error("Not signed in.");
+      const verdict = await postAttempt<ChunkVerdict>(token, {
+        drill: "forge",
+        itemId: ex.itemId,
+        give_up: giveUp,
+        answer: giveUp ? undefined : answer ?? "",
+      });
+      setExerciseAnswered(true);
+      const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      const alsoCorrectFit =
+        verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
+      sendGradedReport(
+        buildReport({
+          patternId: ex.topic,
+          sentence: ex.item.frame,
+          answer: displayAnswer,
+          expected: verdict.expected,
+          correct: verdict.correct,
+          alsoCorrectFit,
+          note: verdict.note,
+        })
+      );
+      return verdict;
+    },
+    [token, sendGradedReport]
+  );
   // ───────────────────────────────────────────────────────────────────
 
   // CLARA-13: the wrapper row (D6's Skip affordance) plus whichever real
@@ -803,6 +935,43 @@ export default function TeacherChat() {
           hideContinue
         />
       )}
+      {/* CLARA-15: the forge card mounts the SAME VerbindungenTrainer the
+          native `verbindungen` case above does — a forged item is a native
+          chunk-gap item, identical round-of-one/flow/hideContinue wiring. */}
+      {exercise.drill === "forge" && (
+        <VerbindungenTrainer
+          key={exerciseKey}
+          round={[exercise.item]}
+          flow
+          onNewRound={noopNewRound}
+          allowGiveUp
+          onAttempt={(_itemId, answer) => submitForge(exercise, answer, false)}
+          onGiveUp={() => submitForge(exercise, null, true)}
+          onFlowDone={handleExerciseDone}
+          hideContinue
+        />
+      )}
+    </div>
+  ) : forging ? (
+    // CLARA-15: the forge fetch is in flight (two LLM calls server-side) —
+    // same slot header/Skip row as the graded state above, plus a muted
+    // loading line in place of the trainer. Existing tokens only.
+    <div className="flex w-full max-w-[440px] flex-col gap-2">
+      <div className="flex items-center justify-between gap-3 rounded-[16px] border-[3px] border-line bg-paper-warm px-4 py-2">
+        <span className="font-body text-[10px] font-black uppercase tracking-[0.28em] text-ink-muted">
+          Quick practice
+        </span>
+        <button
+          type="button"
+          onClick={handleSkip}
+          className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline"
+        >
+          Skip
+        </button>
+      </div>
+      <p className="text-center font-body text-[13px] font-semibold text-ink-muted">
+        Building your exercise…
+      </p>
     </div>
   ) : null;
 
@@ -834,6 +1003,7 @@ export default function TeacherChat() {
       // (mirrors TandemChat's onBack -> setTopic(null)).
       onBack={() => setTopic(null)}
       onExerciseRequest={handleExerciseRequest}
+      onExerciseForge={handleExerciseForge}
       onBotReply={handleBotReply}
       onSessionEnded={handleSessionEnded}
       // CLARA-13: ConversationView renders whatever this is, inline after
