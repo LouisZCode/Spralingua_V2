@@ -178,6 +178,14 @@ export default function ConversationView({
   const [showSummary, setShowSummary] = useState(false);
   const [showFinishConfirm, setShowFinishConfirm] = useState(false);
   const [endedBy, setEndedBy] = useState<"user" | "agent">("agent");
+  // SESS-001: non-null means the live phase renders the blocked panel
+  // instead of LivePhase — either the pre-connect check in startCall found
+  // another live session ("already_live"), or handleFinish's never-started
+  // fallback caught a WS close that happened before session_started ever
+  // arrived ("no_session" — a gate reject or a connect that died early).
+  const [startBlocked, setStartBlocked] = useState<
+    "already_live" | "no_session" | null
+  >(null);
   const [speakerState, setSpeakerState] = useState<SpeakerState>("idle");
   const [typeOpen, setTypeOpen] = useState(false);
   // CLARA-13: single focus while Clara's exercise slot is up — this is the
@@ -195,6 +203,15 @@ export default function ConversationView({
   // before React clears `draft`.
   const sendingRef = useRef(false);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // SESS-001: mirrors `sessionId` but as a ref, set in the SAME
+  // session_started handler below. handleFinish is invoked from callbacks
+  // captured at client-creation time (the PipecatClient `callbacks` object
+  // built once per connect), so a `sessionId` STATE read there would always
+  // see the value from that closure's render — the initial null — never a
+  // later update. Reading this ref instead is how handleFinish can tell a
+  // session that actually started (session_started arrived) from one that
+  // never did (a gate reject or a connect that died before the handshake).
+  const sessionIdRef = useRef<string | null>(null);
   const pendingBotTextRef = useRef<string | null>(null);
   // AGENT-00X: set by onServerMessage when an "exercise_request" RTVI
   // message arrives (always strictly before this turn's bot-output message —
@@ -402,6 +419,21 @@ export default function ConversationView({
       onFinish();
       return;
     }
+    // SESS-001: reason is "agent" here (the branch above already returned
+    // for "user"). That covers a real agent-completed session AND a WS
+    // close that fired onDisconnected before session_started ever arrived
+    // — a gate reject (4001/4002/4003/4004) or a connect that died before
+    // the handshake — since endReasonRef stays null (defaulting to "agent"
+    // above) in both cases. sessionIdRef is the discriminator: it's only
+    // ever written inside the session_started handler, so null here means
+    // the session never actually started, and the celebratory summary
+    // modal would be misleading.
+    if (reason === "agent" && sessionIdRef.current === null) {
+      // `prev ?? ...` — don't clobber a more specific "already_live" panel
+      // (set by startCall's pre-check) if both paths somehow fire.
+      setStartBlocked((prev) => prev ?? "no_session");
+      return;
+    }
     setEndedBy(reason);
     setShowSummary(true);
   };
@@ -464,6 +496,34 @@ export default function ConversationView({
         console.warn("Audio unlock failed:", e);
       });
     }
+    // SESS-001: pre-check before connecting — the backend rejects a second
+    // simultaneous voice connect per account (WS close 4004), but the
+    // transport doesn't surface close codes to us, so walking into that
+    // reject looks identical to any other dead connect. Check first and
+    // show a clear panel instead. Fail OPEN on any failure of this fetch
+    // (non-ok status, network error, bad JSON) — proceed to connect
+    // normally; the server's 4004 gate is the authoritative backstop, this
+    // is only the friendlier first line.
+    try {
+      const activeRes = await fetch(`${HTTP_BASE}/sessions/active`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (activeRes.ok) {
+        const activeData: { active?: boolean } = await activeRes.json();
+        if (activeData.active) {
+          setStartBlocked("already_live");
+          setPhase("live"); // renders the panel region — see the main return
+          // Nothing ever started: the liveness watchdog and any later
+          // handleFinish call must treat this session as already wound
+          // down, the same as a real finished one.
+          finishedRef.current = true;
+          setStatus("Blocked");
+          return;
+        }
+      }
+    } catch {
+      // Fail open — see comment above.
+    }
     setPhase("live");
     // AGENT-001: lessons with `kickoff` open on the agent's turn, not idle — lock
     // Record (and the orb copy) as "agent_thinking" until onBotStartedSpeaking
@@ -496,7 +556,13 @@ export default function ConversationView({
         callbacks: {
           onConnected: () => setStatus("Connected"),
           // WS close codes are a backstop — entry screens pre-check the bundle/limit
-          // so this path is rarely hit. 4001 = not enough coins, 4002 = Clara requires Basic, 4003 = Clara daily limit.
+          // so this path is rarely hit. 4001 = not enough coins, 4002 = Clara requires
+          // Basic, 4003 = Clara daily limit, 4004 = session already live elsewhere
+          // (SESS-001 — startCall's pre-check against GET /sessions/active is the
+          // friendly first line for this one specifically). None of these four ever
+          // reach session_started, so handleFinish's never-started fallback
+          // (sessionIdRef still null) now routes them to the blocked panel instead
+          // of the celebratory summary modal.
           onDisconnected: () => {
             setStatus("Disconnected");
             handleFinish();
@@ -573,6 +639,7 @@ export default function ConversationView({
               const sid = (data as { session_id?: unknown }).session_id;
               if (typeof sid === "string") {
                 setSessionId(sid);
+                sessionIdRef.current = sid; // SESS-001 — see the ref's own comment
               }
             } else if (
               data &&
@@ -816,30 +883,43 @@ export default function ConversationView({
             onBack={onBack ?? onFinish}
           />
         )}
-        {phase === "live" && (
-          <LivePhase
-            title={meta?.title ?? ""}
-            messages={messages}
-            speakerState={speakerState}
-            transcriptRef={transcriptRef}
-            onFinish={() => setShowFinishConfirm(true)}
-            prominentFinish={TANDEM_LESSONS.has(params.lesson) || params.lesson === TEACHER_LESSON}
-            germanWay={TANDEM_LESSONS.has(params.lesson)}
-            onGloss={onGloss}
-            onAdd={onAdd}
-            practiceMode={practiceMode}
-            onOpenType={typedInput ? () => setTypeOpen(true) : undefined}
-            recording={recorder.recording}
-            elapsed={recorder.elapsed}
-            sending={practiceSending}
-            recordError={recorder.error ?? practiceError}
-            onStartRecording={recorder.start}
-            onStopRecording={recorder.stop}
-            onCancelRecording={recorder.cancel}
-            exerciseSlot={exerciseSlot}
-            teacherLayout={teacherLayout}
-          />
-        )}
+        {phase === "live" &&
+          // SESS-001: a blocked start (already-live elsewhere, or a gate
+          // reject that never reached session_started) never gets a real
+          // session — render the explanation panel in place of LivePhase
+          // instead of walking the learner into a dead room. Deliberately
+          // doesn't read `meta` — this must render correctly even for
+          // Clara's skipBriefing auto-connect, where `meta` is often still
+          // loading when the pre-check in startCall resolves.
+          (startBlocked ? (
+            <StartBlockedPanel
+              variant={startBlocked}
+              onBack={onBack ?? onFinish}
+            />
+          ) : (
+            <LivePhase
+              title={meta?.title ?? ""}
+              messages={messages}
+              speakerState={speakerState}
+              transcriptRef={transcriptRef}
+              onFinish={() => setShowFinishConfirm(true)}
+              prominentFinish={TANDEM_LESSONS.has(params.lesson) || params.lesson === TEACHER_LESSON}
+              germanWay={TANDEM_LESSONS.has(params.lesson)}
+              onGloss={onGloss}
+              onAdd={onAdd}
+              practiceMode={practiceMode}
+              onOpenType={typedInput ? () => setTypeOpen(true) : undefined}
+              recording={recorder.recording}
+              elapsed={recorder.elapsed}
+              sending={practiceSending}
+              recordError={recorder.error ?? practiceError}
+              onStartRecording={recorder.start}
+              onStopRecording={recorder.stop}
+              onCancelRecording={recorder.cancel}
+              exerciseSlot={exerciseSlot}
+              teacherLayout={teacherLayout}
+            />
+          ))}
 
         <audio ref={audioRef} autoPlay />
       </div>
@@ -894,6 +974,11 @@ export default function ConversationView({
       )}
 
       {showSummary &&
+        // SESS-001: handleFinish's never-started branch already returns
+        // before setShowSummary, so this can't fire on a blocked start —
+        // belt-and-suspenders against any future path that sets
+        // showSummary without going through handleFinish.
+        !startBlocked &&
         (TANDEM_LESSONS.has(params.lesson) ? (
           <TandemDebriefModal
             lessonTitle={meta?.title ?? ""}
@@ -953,6 +1038,57 @@ export default function ConversationView({
         </div>
       )}
     </main>
+  );
+}
+
+/* ─── Start-blocked panel (SESS-001) ───────────────────────────
+   Renders in place of LivePhase when a session either found another
+   live session before connecting, or never actually started. Same
+   visual family as the finish-confirm dialog above (lift-panel, a
+   rounded-[28px] border-[3px] border-line bg-elevated card), but
+   centered in the normal live-phase column rather than as a fixed
+   overlay, since it stands in for LivePhase's own content. Deliberately
+   takes no `meta` — must render correctly while it's still loading
+   (Clara's skipBriefing auto-connect can hit the pre-check before the
+   parallel /lessons/{lesson} fetch resolves). */
+
+function StartBlockedPanel({
+  variant,
+  onBack,
+}: {
+  variant: "already_live" | "no_session";
+  onBack: () => void;
+}) {
+  const copy =
+    variant === "already_live"
+      ? {
+          heading: "One session at a time",
+          body: "You already have a live session on another device or tab. Finish it there, then start again here.",
+        }
+      : {
+          heading: "The session couldn't start",
+          body: "You may have a session open on another device, or the connection dropped. Go back and try again in a moment.",
+        };
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center">
+      <div className="lift-panel w-full max-w-[420px] rounded-[28px] border-[3px] border-line bg-elevated px-7 py-8 text-center">
+        <h2 className="font-display text-[26px] font-black leading-tight text-ink">
+          {copy.heading}
+        </h2>
+        <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">
+          {copy.body}
+        </p>
+        <button
+          onClick={onBack}
+          className="btn-3d mt-7 w-full rounded-2xl border-[3px] border-line bg-card px-5 py-3 font-display text-[14px] font-bold uppercase tracking-[0.16em] text-ink"
+          style={
+            { ["--shadow-color"]: "var(--color-line)" } as React.CSSProperties
+          }
+        >
+          ← Back
+        </button>
+      </div>
+    </div>
   );
 }
 

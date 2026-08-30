@@ -293,6 +293,30 @@ def lesson_meta(lesson_id: str):
     }
 
 
+@app.get("/sessions/active")
+async def session_active(request: Request):
+    """SESS-001: is a live voice session already running for this account?
+
+    The client-side half of the one-session gate: entry flows call this
+    right before opening the WebSocket and show a clear "finish your
+    other session first" panel instead of connecting into a 4004. Reads
+    the in-process registry only — no DB.
+
+    Registered BEFORE ``/sessions/{session_id}`` below: Starlette matches
+    routes in registration order, and ``{session_id}`` happily captures the
+    literal string "active" — declaring this route second would make it
+    permanently unreachable, silently falling through to ``get_session``
+    with ``session_id="active"`` instead.
+    """
+    sub = _bearer_subject(request)
+    if sub is None:
+        raise HTTPException(status_code=401, detail="missing or invalid token")
+    return {
+        "active": sub in ACTIVE_TASKS,
+        "lesson": ACTIVE_LESSONS.get(sub),
+    }
+
+
 @app.get("/sessions/{session_id}")
 async def get_session(session_id: str, request: Request):
     """Return the activity_session row for the post-session modal to render.

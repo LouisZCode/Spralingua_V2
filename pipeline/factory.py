@@ -354,6 +354,36 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # bypass the gate itself).
         forge_enabled: bool = False
 
+        # SESS-001: one live voice session per account. A second simultaneous
+        # connect used to overwrite this user's ACTIVE_TASKS entry (stealing
+        # /say routing) and, worse, its disconnect popped the entry out from
+        # under the FIRST session — the BUG-004 identity guard in the finally
+        # below protects the other ordering, not that one. Owner's call: reject
+        # the newcomer outright (close 4004; the client pre-checks
+        # GET /sessions/active and shows a clear panel, this is the backstop).
+        # Demo connects are exempt — public visitors must never be able to lock
+        # each other out, and the demo's per-visitor ids make collisions
+        # meaningless anyway. Known accepted gaps, both deliberate:
+        #   - developers are NOT exempt (this is correctness, not billing — the
+        #     owner's own account is the one that hit the bug);
+        #   - the check-to-register window (gate here, ACTIVE_TASKS[user_id]
+        #     assignment further down) is not atomic, so two connects landing
+        #     within the same sub-second setup window can still both pass — that
+        #     degenerate race just falls back to the pre-SESS-001 behavior, and
+        #     a placeholder registration was rejected because a leaked entry
+        #     would lock the account out until restart;
+        #   - a session that dies UNGRACEFULLY server-side (edge half-open) holds
+        #     the lock until the transport notices — bounded in practice, and a
+        #     graceful close (End button, agent goodbye, tab close) frees it
+        #     instantly.
+        if db_user_id != "demo" and user_id in ACTIVE_TASKS:
+            logger.info(
+                f"session gate: already live for user {user_id} (4004) — "
+                f"rejecting second connect"
+            )
+            await websocket.close(code=4004, reason="Session already live elsewhere")
+            return
+
         # Clara daily-count gate (replaces the PAY-002 coin bundle for teacher).
         # free→0/day (locked), basic→1/day, premium→3/day, developer→∞.
         # Counted at accept time — the moment Start creates the session — so the
@@ -969,7 +999,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 kickoff_task.cancel()  # AGENT-001 — per-client, never outlives this connection
             # Identity-guarded: if the same user opened a second tab, its
             # connect overwrote our entry — popping blindly here would break
-            # /say for that still-live session (BUG-004).
+            # /say for that still-live session (BUG-004). SESS-001 now rejects
+            # the overwrite up front for authenticated users (the 4004 gate
+            # above); this guard stays as defense-in-depth for the demo
+            # exemption and the accepted check-to-register race.
             if ACTIVE_TASKS.get(user_id) is task:
                 ACTIVE_TASKS.pop(user_id, None)
                 ACTIVE_LESSONS.pop(user_id, None)  # kept in lockstep — same guard, same branch
