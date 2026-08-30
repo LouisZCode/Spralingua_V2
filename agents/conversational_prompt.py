@@ -384,8 +384,9 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
       the three DB-backed layers stashed on Context at connect, each omitted
       when empty.
     - `teacher` (teacher — Clara): persona + short_term (today + the picked
-      topic) + the learner's open ledger patterns, rendered without the
-      tandem's covert elicit hints.
+      topic) + the curated explanation bank entry for the picked pattern, if
+      any (CLARA-20) + the learner's open ledger patterns, rendered without
+      the tandem's covert elicit hints.
     - `respond` (e.g. a1_l1): returns `persona_prompt` verbatim — diegetic
       roleplay, no profile/level/date injection.
 
@@ -477,6 +478,35 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         if ctx.student_name:
             short += f"\nYour student's first name is {ctx.student_name}."
         parts = [base, short]
+        # CLARA-20: the curated explanation bank. When the learner's picked
+        # pattern (Context.picked_pattern) has an entry in the bank, Clara's
+        # kickoff must teach with ITS vetted German sentences, never her own
+        # inventions (see teacher.yaml's kickoff branch). Appended
+        # immediately after the short-term layer, ahead of the raw ledger
+        # data below, so the prepared opening always outranks it. `.get`
+        # tolerance throughout: no pattern picked, a pattern absent from the
+        # bank, or an old cached lesson_snapshot missing the template key
+        # all render nothing extra — today's improvised-kickoff behavior.
+        #
+        # Fix round (2026-08-30, sim-proven): the entry's `native_note` is
+        # deliberately NOT rendered into this prompt — gpt-oss-120b drops
+        # instructions about a FUTURE turn. It's delivered instead by turn
+        # injection on the session's first ⟦ÜBUNGSERGEBNIS⟧ turn — see
+        # `ClientWrapper._augment_first_result` in agents/pipecat_wrapper.py.
+        from grammar.loader import load_explanations
+
+        explanation_entry = (
+            load_explanations().get(ctx.picked_pattern) if ctx.picked_pattern else None
+        )
+        explanation_tpl = lesson.get("explanation_template")
+        if explanation_entry and explanation_tpl:
+            explanation = explanation_tpl.format(
+                pair_a=explanation_entry["pair"][0],
+                pair_b=explanation_entry["pair"][1],
+                point=explanation_entry["point"],
+                test=explanation_entry["test"],
+            )
+            parts.append(explanation.strip())
         # CLARA-15 P3: addendum to rule 2 ("when nothing printed fits") —
         # exactly one of the two keys is appended, picked by
         # `Context.forge_enabled` (teacher-only, set at connect from the

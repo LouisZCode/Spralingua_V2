@@ -11,9 +11,13 @@ from pathlib import Path
 import yaml
 
 _TAXONOMY_PATH = Path(__file__).parent / "taxonomy.yaml"
+_EXPLANATIONS_PATH = Path(__file__).parent / "explanations.yaml"
 
 _REQUIRED_FIELDS = ("id", "label", "level", "description", "wrong", "right", "elicit")
 _LEVELS = {"A1", "A2", "B1", "B2"}
+
+# CLARA-20: the curated explanation bank's five required fields per entry.
+_EXPLANATION_FIELDS = ("pair", "point", "test", "native_note", "source")
 
 
 @lru_cache(maxsize=1)
@@ -41,6 +45,38 @@ def load_taxonomy() -> dict[str, dict]:
             raise ValueError(f"{where}: duplicate pattern id {p['id']!r}")
         catalog[p["id"]] = p
     return catalog
+
+
+@lru_cache(maxsize=1)
+def load_explanations() -> dict[str, dict]:
+    """Parse and validate the curated explanation bank (CLARA-20).
+
+    Consumed by the teacher branch of ``agents/conversational_prompt.py``:
+    when the learner's picked pattern (``Context.picked_pattern``) has an
+    entry here, Clara's kickoff opens with its prepared ``pair`` + ``point``
+    instead of inventing her own German. Same fail-loud philosophy as
+    ``load_taxonomy`` — a malformed bank must not survive silently, since a
+    bad entry would put fabricated or mismatched German in Clara's mouth.
+
+    Every key must be a known ``load_taxonomy()`` pattern id, and every entry
+    must carry all five shipped fields.
+    """
+    with open(_EXPLANATIONS_PATH, "r", encoding="utf-8") as f:
+        data = yaml.safe_load(f)
+    if not data:
+        raise ValueError(f"{_EXPLANATIONS_PATH}: no entries")
+
+    taxonomy = load_taxonomy()
+    bank: dict[str, dict] = {}
+    for pattern_id, entry in data.items():
+        where = f"{_EXPLANATIONS_PATH} ({pattern_id})"
+        if pattern_id not in taxonomy:
+            raise ValueError(f"{where}: not a known taxonomy pattern id")
+        for field in _EXPLANATION_FIELDS:
+            if field not in entry:
+                raise ValueError(f"{where}: missing '{field}'")
+        bank[pattern_id] = entry
+    return bank
 
 
 def taxonomy_brief() -> str:

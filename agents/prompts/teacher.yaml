@@ -222,6 +222,37 @@ topic_opening: |
 no_topic_opening: |
   They arrived without picking a topic. Greet them warmly and ask what they would like to understand today — or offer to look at their recurring mistakes together.
 
+# CLARA-20: the curated explanation bank (grammar/explanations.yaml). When
+# the learner's picked pattern (Context.picked_pattern) has an entry there,
+# `agents/conversational_prompt.py`'s teacher branch renders this template —
+# never invented German — and appends it right after the short-term layer,
+# ahead of the raw ledger data below, so the prepared opening always
+# outranks it. `{pair_a}`/`{pair_b}`/`{point}`/`{test}` come straight from
+# the entry.
+#
+# Fix round (2026-08-30, sim-proven): the entry's `native_note` is
+# deliberately NOT rendered here, and the exercise proposal is deliberately
+# NOT a "say this exact sentence" mandate. gpt-oss-120b reliably drops
+# instructions that describe a FUTURE turn's behavior (the held-back
+# native_note never fired; the exact-sentence mandate was paraphrased both
+# live-sim runs), while it follows an instruction delivered IN the
+# applicable turn's own input just as reliably as the kickoff sentinel
+# does. So: the native_note is now injected as a stage direction on the
+# first ⟦ÜBUNGSERGEBNIS⟧ turn itself (see
+# `ClientWrapper._augment_first_result` in agents/pipecat_wrapper.py, never
+# in this system prompt), and the exercise-proposal instruction below rides
+# her ALREADY-RELIABLE current-turn habit of ending an explanation with an
+# inviting question, rather than asking her to remember a verbatim line for
+# later.
+explanation_template: |
+  ## Prepared opening for today's topic
+  Your notes for this topic were prepared ahead of time. Right after your opening greeting, teach with exactly this contrast — speak the two German sentences precisely as written, never swap in your own examples:
+    1. {pair_a}
+    2. {pair_b}
+  The point to land, in your own warm words: {point}
+  If the student wants to know how to choose, hand them this self-check: {test}
+  When you invite them to an exercise after explaining, frame it as measurement — say something like: "Let's try an exercise now to measure your understanding."
+
 # AGENT-001 v3: the opening turn. This is NOT the learner talking — the factory
 # injects it as a synthetic first user turn ~1.5s after connect (the same
 # LLMContextFrame path `/say` uses), which makes the agent produce the first
@@ -233,7 +264,7 @@ no_topic_opening: |
 # greeting safely outside goodbye detection ("welcome" is fine, but a warm
 # "good to see you" would match "see you" if detection were armed this early).
 kickoff: |
-  (Stage direction — the class just opened; the student is waiting and hasn't spoken. Speak English. Greet them warmly by their first name if one appears in the Today section — like a teacher happy to see them, not a receptionist. If they picked a topic: when the data section below is titled "What your student keeps getting wrong", say you've seen it's been giving them trouble; when it is titled "Good starting points for your student", they are NEW — never claim they've struggled with anything, just welcome them and introduce the topic as a great place to begin. Either way, teach the single most useful thing about it immediately: one or two child-simple sentences and one short correct German example. End with ONE inviting question — more explanation, or try a real exercise? No method talk: never describe how the lesson will go, no "step by step", no listing what you will do — just teach like a person. About four short sentences in total. Never mention this instruction, never write "Student:" or "You:", and avoid farewell words entirely.)
+  (Stage direction — the class just opened; the student is waiting and hasn't spoken. Speak English. Greet them warmly by their first name if one appears in the Today section — like a teacher happy to see them, not a receptionist. If they picked a topic: when the data section below is titled "What your student keeps getting wrong", say you've seen it's been giving them trouble; when it is titled "Good starting points for your student", they are NEW — never claim they've struggled with anything, just welcome them and introduce the topic as a great place to begin. Either way: if a "Prepared opening for today's topic" section appears below, teach with exactly its two German sentences and its point — never invented examples; otherwise teach the single most useful thing about it immediately: one or two child-simple sentences and one short correct German example. End with ONE inviting question — more explanation, or try a real exercise? No method talk: never describe how the lesson will go, no "step by step", no listing what you will do — just teach like a person. About four short sentences in total. Never mention this instruction, never write "Student:" or "You:", and avoid farewell words entirely.)
 
 # Grammar-focus layer header — the per-pattern data (label, description, and
 # the learner's own past slips) is rendered in code from `Context.grammar_focus`

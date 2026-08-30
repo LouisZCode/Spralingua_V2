@@ -45,6 +45,8 @@ class _BotOutputMessageWithDuration(RTVIBotOutputMessage):
 
     data: _BotOutputDataWithDuration
 
+from grammar.loader import load_explanations
+
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 from .fake_profiles import load_profile
@@ -261,7 +263,7 @@ class ClientWrapper:
                  exercise_catalog=None,
                  max_exchanges_override: int | None = None, trace_session_id: str | None = None,
                  student_name: str | None = None, student_level: str | None = None,
-                 forge_enabled: bool = False):
+                 forge_enabled: bool = False, picked_pattern: str | None = None):
         self.user_id = user_id
         # CLARA-15 P3: teacher-only, set by pipeline/factory.py from the
         # user's role == "developer" (already-loaded row, no extra query).
@@ -296,6 +298,18 @@ class ClientWrapper:
         # only one teacher lesson today, but the marker contract belongs to
         # the `type: teacher` middleware branch, not to one specific id.
         self._is_teacher_lesson = lesson.get("type") == "teacher"
+        # CLARA-20: teacher-only, mirrors self.context.picked_pattern below
+        # (same reason self.forge_enabled is mirrored next to
+        # self.context.forge_enabled) — kept directly on the wrapper for
+        # `_augment_first_result`'s bank lookup, which runs in `astream`
+        # and has no reason to go through Context for it.
+        self.picked_pattern = picked_pattern
+        # CLARA-20: True once the session's first ⟦ÜBUNGSERGEBNIS⟧ turn has
+        # been seen — gates the one-time native_note stage-direction
+        # injection in `_augment_first_result`. Set on that turn regardless
+        # of whether a note actually exists ("first result" is about turn
+        # order, not content), so a later result turn is never re-augmented.
+        self._first_result_seen: bool = False
         self.agent = agent_assembly(
             user_id,
             # gpt-oss-120b's hidden reasoning tokens run ~700-1100 per reply
@@ -329,6 +343,10 @@ class ClientWrapper:
             # Context.exercise_catalog) — fetched by the factory at connect
             # and read by the teacher branch of conversational_prompt.py.
             exercise_catalog=exercise_catalog or [],
+            # CLARA-20: teacher-only picked-topic pattern id (see
+            # Context.picked_pattern) — already validated against
+            # `load_taxonomy()` by the factory, threaded through unchanged.
+            picked_pattern=picked_pattern,
         )
         self._pipeline_task = None  # Set by factory after pipeline creation
         self.rtvi_processor = None  # Set by factory; used to push bot output to the client
@@ -399,6 +417,44 @@ class ClientWrapper:
         self._user_turn_text: list[tuple[int, str]] = []
         self._dropped_audio_count: int = 0
 
+    def _augment_first_result(self, text: str) -> str:
+        """CLARA-20 fix round: inject the held-back ``native_note`` as a
+        stage direction on the session's FIRST ⟦ÜBUNGSERGEBNIS⟧ turn — the
+        text sent to the LLM only. The stored transcript and the BUG-002
+        audio↔text pairing (both built from ``astream``'s original,
+        unaugmented ``text``) never see this — same reasoning as why the
+        kickoff sentinel is kept out of both.
+
+        Why turn injection, not prompt memory: gpt-oss-120b reliably drops
+        instructions describing a FUTURE turn's behavior — the prompt-only
+        version of this (a "hold this note until the first result" line
+        sitting in the system prompt all session) never fired in either
+        live sim (2026-08-30). An instruction delivered IN the applicable
+        turn's own input is followed just as reliably as the kickoff
+        sentinel's stage direction is — same channel, different trigger.
+
+        Sets ``_first_result_seen`` the moment a result turn is seen,
+        whether or not a note exists for the picked pattern — "first
+        result" is about turn order, not content, so a later result turn is
+        never re-augmented even when this one had nothing to add. No-op
+        outside teacher lessons, on any turn that isn't a result turn, or
+        once the first result turn has already passed.
+        """
+        if not self._is_teacher_lesson or not text.startswith(EXERCISE_RESULT_PREFIX):
+            return text
+        if self._first_result_seen:
+            return text
+        self._first_result_seen = True
+        entry = load_explanations().get(self.picked_pattern) if self.picked_pattern else None
+        native_note = entry.get("native_note") if entry else None
+        if not native_note:
+            return text
+        return text + (
+            "\n\n(Stage direction — after reacting to this result, add one "
+            "casual by-the-way about real German, one sentence, then move "
+            f"on: {native_note})"
+        )
+
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
 
@@ -427,9 +483,16 @@ class ClientWrapper:
         stored transcript, or the pending bot text — all three are built
         from ``full_response``). The confirmed payload, if any, is handled
         after the loop by kind — see the `finally` block below.
+
+        CLARA-20 fix round: ``text`` (the original input) drives the
+        transcript/VAD-pairing bookkeeping below; ``llm_text`` — ``text``
+        plus ``_augment_first_result``'s stage direction, when it applies —
+        is what actually reaches the model. See that method's docstring for
+        why.
         """
         text = input_dict.get("input", "")
-        messages = {"messages": [{"role": "user", "content": text}]}
+        llm_text = self._augment_first_result(text)
+        messages = {"messages": [{"role": "user", "content": llm_text}]}
 
         self._exchange_count += 1
 
@@ -467,8 +530,13 @@ class ClientWrapper:
             # silently for either reason.
             llm_span.set_attribute("user.id", self.user_id)
             llm_span.set_attribute("langfuse.session.id", self.trace_session_id)
-            # Observation-level input — shown on the LLM observation row in Langfuse.
-            llm_span.set_attribute("langfuse.observation.input", text)
+            # Observation-level input — shown on the LLM observation row in
+            # Langfuse. CLARA-20 fix round: this is `llm_text`, the text
+            # actually sent to the model (original `text` plus any
+            # `_augment_first_result` stage direction) — deliberately, so a
+            # trace shows what the model really saw, which is exactly the
+            # kind of thing this fix round needed to debug.
+            llm_span.set_attribute("langfuse.observation.input", llm_text)
             # v4 (observations-first): the trace's Input column reads from the
             # ROOT observation — the observer's live turn span — not from the
             # deprecated `langfuse.trace.input` on a child. If no turn span is
@@ -476,7 +544,7 @@ class ClientWrapper:
             # observation.input above already covers it.
             turn_span = get_current_turn_span()
             if turn_span is not None and turn_span.is_recording():
-                turn_span.set_attribute("langfuse.observation.input", text)
+                turn_span.set_attribute("langfuse.observation.input", llm_text)
             llm_span.set_attribute("voice", self.context.agent_voice)
             llm_span.set_attribute("lesson_id", self.context.lesson_id)
             llm_span.set_attribute("exchange", self._exchange_count)

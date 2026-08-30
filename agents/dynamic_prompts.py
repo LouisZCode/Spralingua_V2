@@ -109,3 +109,14 @@ class Context:
     # a topic the pool already has a real exercise for. Each entry is
     # `{pattern_id, label}`. Empty for every other lesson type.
     exercise_catalog: list = field(default_factory=list)
+    # CLARA-20: teacher-only. The taxonomy pattern id the learner picked on
+    # Clara's topic screen — the same `?pattern=` WS param `pipeline/factory.py`
+    # already validates against `load_taxonomy()` for the grammar-focus layer
+    # above, threaded through unchanged. Read by the teacher branch of
+    # `agents/conversational_prompt.py` to look it up in
+    # `grammar.loader.load_explanations()`: a hit means Clara's kickoff opens
+    # with the bank's prepared pair + point instead of inventing her own
+    # German. None when no pattern was picked, or when factory.py's
+    # validation rejected it — today's improvised-kickoff behavior is then
+    # unchanged. Unused by every other lesson type.
+    picked_pattern: str | None = None

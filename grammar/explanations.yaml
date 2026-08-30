@@ -1,0 +1,323 @@
+# Clara explanation bank (CLARA-20) — curated per-pattern explanations Clara
+# delivers verbatim, one entry per grammar/taxonomy.yaml pattern id, same
+# order. Wired in by agents/conversational_prompt.py's teacher branch via
+# Context.picked_pattern: when the learner's chosen topic matches an entry
+# here, Clara's kickoff opens with THESE exact German sentences, never her
+# own inventions.
+#
+# Fields per entry (all required):
+#   pair        — two CORRECT German sentences forming an audible minimal
+#                 contrast; VETTED German — edit only deliberately, never
+#                 let an LLM regenerate them
+#   point       — one spoken English sentence: what the pair shows, by
+#                 effect, not by grammatical form
+#   test        — one operational self-check the learner can run on any
+#                 sentence
+#   native_note — what Germans actually do (register/frequency); held back
+#                 and dealt as a casual by-the-way right after the learner's
+#                 FIRST exercise result of the session, never in the
+#                 kickoff; null when the sources support no such claim
+#   source      — the german.stackexchange question the entry draws on
+#                 (CC BY-SA); null when the entry was instead drafted from
+#                 grammar/taxonomy.yaml's own wrong/right contrast pair
+#
+# Distilled from top-voted german.stackexchange answers — see `source` per
+# entry; entries with a null source were drafted from the taxonomy's own
+# contrast pair instead. Review-edited 2026-08-30.
+
+v2-wortstellung:
+  pair:
+  - Ich gehe heute ins Kino.
+  - Heute gehe ich ins Kino.
+  point: Putting heute first just moves the spotlight onto today, but gehe still has to stay in second place, right after whatever leads.
+  test: Does something besides the subject start the sentence? Then the verb comes right after it, and the subject follows the verb.
+  native_note: null
+  source: null
+
+subjekt-verb-endung:
+  pair:
+  - Ich wohne in Berlin.
+  - Mein Bruder wohnt in Berlin.
+  point: The -e on wohne signals ich is doing it, the -t on wohnt signals someone else is, the ending itself carries who's living there.
+  test: 'Who''s doing the action? Match the ending to that person: ich takes -e, du takes -st, er or sie or es takes -t, wir or sie takes -en.'
+  native_note: null
+  source: null
+
+sein-vs-haben:
+  pair:
+  - Ich habe Hunger.
+  - Ich bin müde.
+  point: Hunger sits with haben because it's something you carry, müde sits with sein because it's something you are.
+  test: Is it a feeling you carry, like Hunger or Angst? Use haben. Is it a state you're in, like müde or krank? Use sein.
+  native_note: null
+  source: null
+
+akkusativ-artikel:
+  pair:
+  - Der Mann ist hier.
+  - Ich sehe den Mann.
+  point: Same man, but in the second sentence the seeing lands on him, so der becomes den.
+  test: Is he the one the action lands on? Then der turns into den.
+  native_note: null
+  source: null
+
+nicht-vs-kein:
+  pair:
+  - Ich habe keine Zeit.
+  - Ich arbeite heute nicht.
+  point: Keine attaches to Zeit because it's a thing you have, nicht attaches to arbeite because it's the doing itself.
+  test: Are you saying no to a noun, a thing? Use kein. Are you saying no to the action or the description? Use nicht.
+  native_note: German speakers basically never say nicht eine, they fuse it straight into keine instead.
+  source: https://german.stackexchange.com/questions/1103
+
+modalverb-infinitiv-ende:
+  pair:
+  - Ich gehe ins Kino.
+  - Ich will ins Kino gehen.
+  point: Alone, gehe sits right up front — but the moment will takes charge, the action gehen has to wait at the very end.
+  test: Is there a modal verb like will, kann, or muss? Then push the main action verb to the very end, in its plain form.
+  native_note: null
+  source: null
+
+trennbare-verben:
+  pair:
+  - Ich muss um sieben aufstehen.
+  - Ich stehe um sieben auf.
+  point: With muss in charge, aufstehen stays in one piece at the end — on its own it splits, stehe up front and auf at the very end.
+  test: Does the verb have a prefix that can peel off, like aufstehen or anrufen? Keep the base verb second and send the prefix to the end.
+  native_note: Native speakers almost never move that prefix to the front by itself, that word order sounds like poetry or just bad style.
+  source: https://german.stackexchange.com/questions/23985/putting-part-of-separable-verb-at-beginning-of-sentence
+
+pronomen-akk-dat:
+  pair:
+  - Kannst du mich morgen anrufen?
+  - Kannst du mir morgen helfen?
+  point: Anrufen reaches straight at the person, so it takes mich, but helfen sends its help toward the person, so it takes mir.
+  test: Which verb is it? Anrufen, sehen, or fragen take mich or dich. Helfen, danken, or gefallen take mir or dir.
+  native_note: null
+  source: https://german.stackexchange.com/questions/59351
+
+possessiv-endung:
+  pair:
+  - Mein Vater arbeitet hier.
+  - Meine Mutter arbeitet hier.
+  point: 'Vater is a der-word so mein stays plain, but Mutter is a die-word so mein needs an e: meine.'
+  test: 'Is the noun a der-word or das-word? Keep mein plain. Is it a die-word or plural? Add an e: meine.'
+  native_note: null
+  source: https://german.stackexchange.com/questions/6105
+
+fragen-wortstellung:
+  pair:
+  - Wo wohnst du?
+  - Wohnst du in Berlin?
+  point: With wo asking the question, wohnst comes right after it, but with no question word at all, wohnst jumps to the very front on its own.
+  test: Does the question start with a word like wo, was, or wer? Put the verb right after it. No question word? Put the verb first.
+  native_note: null
+  source: null
+
+am-um-im-zeit:
+  pair:
+  - Der Kurs ist am Montag.
+  - Der Kurs beginnt um acht Uhr.
+  point: Montag names a whole day, so it takes am, but acht Uhr names one exact point on the clock, so it takes um.
+  test: Naming a day, a part of the day, or a month? Use am or im. Naming an exact clock time? Use um.
+  native_note: German speakers keep um strictly for exact clock times, they would never say am acht Uhr the way English says at eight.
+  source: https://german.stackexchange.com/questions/7172
+
+perfekt-aux-sein:
+  pair:
+  - Ich habe den Bus gefahren.
+  - Ich bin nach Hause gefahren.
+  point: In the first sentence you are driving something else, but in the second you yourself arrive somewhere, and that is what flips habe to bin.
+  test: Does the subject itself end up somewhere or change? Then use bin or ist, not habe or hat.
+  native_note: null
+  source: https://german.stackexchange.com/questions/70908
+
+partizip2-form:
+  pair:
+  - Ich habe Tee gekocht.
+  - Ich habe Tee getrunken.
+  point: One verb keeps its plain sound and just adds an ending, but the other changes its inner vowel and ends differently, and each verb decides for itself which way it goes.
+  test: Try the plain -t ending first. If that sounds odd, like getrinkt, the verb likely needs a vowel change and -en instead.
+  native_note: Even native speakers guess a plain -t ending when a verb is new to them — in one study most finished the made-up verb bepfeifen as bepfeift — so the vowel-changing verbs are simply learned one by one.
+  source: https://german.stackexchange.com/questions/1683
+
+perfekt-satzklammer:
+  pair:
+  - Ich habe ein Buch gekauft.
+  - Ich habe gestern ein spannendes Buch gekauft.
+  point: No matter how much you add in the middle, the finished-action word always waits until the very end.
+  test: Adding more details? They all go in the middle — the finished-action word still comes last, no matter how long the sentence grows.
+  native_note: null
+  source: https://german.stackexchange.com/questions/9042
+
+nebensatz-verbende:
+  pair:
+  - Ich habe keine Zeit.
+  - Ich bleibe zu Hause, weil ich keine Zeit habe.
+  point: It is the same words, but weil pushes the verb all the way to the end of its own clause.
+  test: Does the clause start with weil, dass, wenn, or obwohl? Then send the conjugated verb to the very end of that clause.
+  native_note: null
+  source: https://german.stackexchange.com/questions/30615
+
+wechselpraepositionen:
+  pair:
+  - Ich bin in dem Supermarkt.
+  - Ich gehe in den Supermarkt.
+  point: The first sentence says you are simply there, the second says you are heading toward it, and that shift is what turns dem into den.
+  test: Are you already there, or moving toward it? Moving toward it is what turns dem into den.
+  native_note: Moving around inside a place still counts as being there — er läuft in dem Park keeps dem — the switch to den only comes when you head into somewhere new.
+  source: https://german.stackexchange.com/questions/1919/two-way-prepositions-used-with-non-movement-verbs
+
+dativ-praepositionen:
+  pair:
+  - Ich fahre mit meinem Bruder.
+  - Ich wohne bei meinem Bruder.
+  point: Mit and bei look nothing alike, but they both turn mein into meinem in front of Bruder, every single time.
+  test: Is mit, nach, bei, von, zu, aus, or seit right before the noun? Then der becomes dem and mein becomes meinem.
+  native_note: null
+  source: https://german.stackexchange.com/questions/81815
+
+akkusativ-praepositionen:
+  pair:
+  - Das Geschenk ist für meinen Vater.
+  - Ich gehe ohne meinen Vater ins Kino.
+  point: Für and ohne look nothing alike, but they both turn mein into meinen in front of Vater, every single time.
+  test: Is für, ohne, gegen, durch, or um right before the noun? Then der becomes den and mein becomes meinen.
+  native_note: null
+  source: https://german.stackexchange.com/questions/62496
+
+dativ-verben:
+  pair:
+  - Ich sehe meine Mutter.
+  - Ich helfe meiner Mutter.
+  point: Most verbs would leave Mutter as meine, but helfen is one of a handful that turns it into meiner instead.
+  test: Is the verb helfen, danken, gefallen, gehören, or antworten? Then meine becomes meiner, unlike with most other verbs.
+  native_note: There is no trick to spot these — one collected list has over ninety such verbs — Germans simply know each one, so learn them as you meet them.
+  source: https://german.stackexchange.com/questions/33815/a-list-of-verbs-that-take-only-dative-objects
+
+komparativ-form:
+  pair:
+  - Der Sommer ist schön.
+  - Der Sommer ist schöner als der Winter.
+  point: Just adding -er onto the word does the comparing for you, so you do not need a separate word for more in front of it.
+  test: Are you comparing two things with more? Add -er to the end of the German word instead of putting a separate word for more in front.
+  native_note: null
+  source: https://german.stackexchange.com/questions/1136
+
+reflexivpronomen:
+  pair:
+  - Ich freue mich auf das Wochenende.
+  - Du freust dich auf das Wochenende.
+  point: The verb alone is not finished until it gets a small word that matches back to the subject, ich needs mich and du needs dich.
+  test: Is it a verb like freuen, treffen, or erinnern? Add the small word that matches the subject, you cannot leave it out.
+  native_note: null
+  source: https://german.stackexchange.com/questions/61276/why-do-i-see-a-reflexive-pronoun-at-the-end-of-the-sentence
+
+praeteritum-sein-haben-modal:
+  pair:
+  - Ich habe gestern gearbeitet.
+  - Ich war gestern müde.
+  point: Most verbs stretch into two words to talk about something that already happened, but sein just switches straight to its own short word instead, war.
+  test: Is the verb sein, haben, or a modal like wollen or können? Then just say war, hatte, or wollte instead of spelling it out with habe or bin.
+  native_note: The one-word past is the storytelling form you meet in books — in everyday conversation Germans use the two-word form for most verbs, and keep war, hatte and wollte as the natural exceptions.
+  source: https://german.stackexchange.com/questions/246
+
+zu-infinitiv:
+  pair:
+  - Ich kann das Fenster schließen.
+  - Ich habe vergessen, das Fenster zu schließen.
+  point: Kann sits right next to schließen with nothing between them, but vergessen is talking about the action from outside, so zu joins the two together.
+  test: Is the first verb a modal like kann, muss or will? Then no zu. Any other verb in front needs zu before the action.
+  native_note: null
+  source: https://german.stackexchange.com/questions/18554/gerund-vs-infinitive
+
+adjektivendungen:
+  pair:
+  - Das ist das große Haus.
+  - Das ist ein großes Haus.
+  point: Das already matches Haus on its own, so groß only needs a light -e to tag along; ein doesn't do that matching, so groß has to carry it with -es.
+  test: Does der, die or das already show what the noun is? Then the adjective takes a light ending. Does ein hide it? Then the adjective shows it instead.
+  native_note: null
+  source: https://german.stackexchange.com/questions/25357
+
+konjunktiv2-hypothese:
+  pair:
+  - Wenn ich reich bin, kaufe ich ein Haus.
+  - Wenn ich reich wäre, würde ich ein Haus kaufen.
+  point: Bin means you think getting rich could really happen; wäre and würde mark it as a made-up situation you don't expect to come true.
+  test: Do you believe this could really happen? If not, use wäre or hätte, and würde with a plain verb like kaufen.
+  native_note: In everyday spoken German, würde plus a plain verb is used far more than old one-word forms like ginge, which can sound bookish or stiff.
+  source: https://german.stackexchange.com/questions/5288
+
+relativsatz:
+  pair:
+  - Der Kollege sitzt neben mir.
+  - Der Kollege, der neben mir sitzt, ist nett.
+  point: On its own, sitzt comes right after Kollege; once der opens a side comment about him, sitzt has to wait until that comment closes.
+  test: Does der, die or das open a side comment about the noun? Then push the verb to the very end.
+  native_note: null
+  source: https://german.stackexchange.com/questions/7753/ich-der-ich-seit-20-jahren-meinem-volke-or-seinem-volke-diene-questions-a
+
+indirekte-frage:
+  pair:
+  - Wo ist der Bahnhof?
+  - Ich weiß nicht, wo der Bahnhof ist.
+  point: Asked straight out, ist jumps right after wo; folded into ich weiß nicht, that same ist has to wait until the very end.
+  test: Tucked inside ich weiß nicht? Move the verb to the end, and add ob if there's no question word.
+  native_note: null
+  source: null
+
+als-vs-wenn:
+  pair:
+  - Als ich ein Kind war, habe ich in Spanien gewohnt.
+  - Wenn ich Geburtstag hatte, hat meine Familie gefeiert.
+  point: Being a child only happened once, so als marks that one stretch of time; having a birthday came back every year, so wenn marks each repeat.
+  test: Did this happen only once in the past? Use als. Did it happen again and again? Use wenn.
+  native_note: null
+  source: null
+
+verben-mit-praepositionen:
+  pair:
+  - Ich warte auf den Bus.
+  - Ich denke an den Bus.
+  point: Warten always reaches for auf, and denken always reaches for an — each verb is glued to its own connecting word, and you can't swap them.
+  test: Which one small word always follows this verb? Learn it as part of the verb, not translated from English.
+  native_note: null
+  source: null
+
+passiv-werden:
+  pair:
+  - Die Tür wird geschlossen.
+  - Die Tür ist geschlossen.
+  point: Wird geschlossen catches the door in the act of closing; ist geschlossen just reports that it's already shut.
+  test: Is the action still happening or already finished? If still happening, use wird. If finished, use ist.
+  native_note: null
+  source: https://german.stackexchange.com/questions/31233
+
+n-deklination:
+  pair:
+  - Der Kollege ist nett.
+  - Ich habe einen Kollegen gefragt.
+  point: When Kollege is the one doing the action, he stays plain; the moment he's not doing it anymore — here, he's the one getting asked — he picks up an -n.
+  test: Is this a masculine noun for a person, like Kollege or Herr? If it's not doing the action, add -n.
+  native_note: null
+  source: https://german.stackexchange.com/questions/70293/how-to-tell-the-accusative-and-dative-singular-declensions-of-a-masculine-noun-g
+
+um-zu-damit:
+  pair:
+  - Ich lerne Deutsch, um in Deutschland zu arbeiten.
+  - Ich lerne Deutsch, damit meine Familie in Deutschland leben kann.
+  point: When the same person does both things — learning and working — um zu links them directly; when someone else benefits, like the family, damit opens a new part with its own verb.
+  test: Is it the same person doing both actions? Use um zu. If someone else benefits, use damit instead.
+  native_note: null
+  source: null
+
+da-wo-komposita:
+  pair:
+  - Ich freue mich auf die Party.
+  - Ich freue mich darauf.
+  point: With die Party actually named, auf points straight at it; once it's only understood from what came before, darauf carries that meaning on its own.
+  test: Is the thing named right there? Use the plain connecting word. If not, fuse da onto that word.
+  native_note: null
+  source: https://german.stackexchange.com/questions/12231

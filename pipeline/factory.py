@@ -512,6 +512,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # any `?pattern=` injection included), so the exclusion set is complete.
         # Empty for every other lesson type.
         exercise_catalog: list = []
+        # CLARA-20: teacher-only, mirrors `pattern` once it's passed the same
+        # `pattern in load_taxonomy()` validation as the grammar-focus
+        # injection below (Context.picked_pattern) — None for every other
+        # lesson type, or when no valid pattern was picked.
+        picked_pattern: str | None = None
         snapshot_type = lesson_snapshot.get("type")
         if snapshot_type in ("tandem", "teacher"):
             try:
@@ -578,6 +583,11 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # re-gated to teacher here, and an unknown/absent id
                         # is ignored silently rather than rejected.
                         if pattern and pattern in load_taxonomy():
+                            # CLARA-20: same validated id, threaded onto
+                            # Context.picked_pattern so the teacher branch of
+                            # conversational_prompt.py can look it up in the
+                            # curated explanation bank.
+                            picked_pattern = pattern
                             existing = next(
                                 (p for p in grammar_focus if p["pattern_id"] == pattern),
                                 None,
@@ -682,7 +692,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # `session_id` (bare) and `trace_session_id` (Langfuse-prefixed) are
         # both passed — the wrapper's own DB/transcript fields need the
         # former, its hand-rolled `llm` span needs the latter.
-        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, exercise_catalog=exercise_catalog, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level, forge_enabled=forge_enabled)
+        wrapper = ClientWrapper(user_id=user_id, session_id=session_id, trace_session_id=trace_session_id, voice=voice, lesson_id=lesson_id, topic=topic, grammar_focus=grammar_focus, session_notes=session_notes, vocab_words=vocab_words, exercise_catalog=exercise_catalog, max_exchanges_override=exchanges_override, student_name=student_name, student_level=student_level, forge_enabled=forge_enabled, picked_pattern=picked_pattern)
         llm = LangchainProcessor(chain=wrapper)
 
         # Per-client audio recorder.
