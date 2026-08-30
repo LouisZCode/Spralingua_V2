@@ -40,6 +40,7 @@ from database.repository import (
     load_streak,
     load_top_errors,
 )
+from grammar.loader import load_taxonomy
 
 router = APIRouter(tags=["stats"])
 
@@ -81,6 +82,16 @@ async def get_my_stats(
     }
 
     focus = await load_focus_with_recency(db, user_id=user_id, limit=3)
+    # CLARA-19: example pair alongside the description, read live from the
+    # taxonomy (in-process cache, no DB round-trip). An unknown pattern id
+    # is left unenriched rather than raising — the taxonomy is the source
+    # of truth and can drop an id independently of the ledger.
+    taxonomy = load_taxonomy()
+    for entry in focus:
+        pattern = taxonomy.get(entry["patternId"])
+        if pattern:
+            entry["wrong"] = pattern["wrong"]
+            entry["right"] = pattern["right"]
     retired = await load_retired_patterns(db, user_id=user_id, limit=10)
     # DATA-005: 56 days of daily buckets — the frontend derives both the day
     # and the week view from this one series.

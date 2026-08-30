@@ -347,8 +347,8 @@ export default function PracticeMenu() {
             accent="red"
             icon="bulb"
             kicker="Your teacher · in English"
-            title="Ask the Teacher"
-            body="Don't understand why? Clara explains the German you keep getting wrong — simply, in English, one thing at a time."
+            title="Clara the Teacher" // CLARA-19: plain card copy
+            body="Ask her about any topic."
             cta="Ask Clara"
           />
         </div>

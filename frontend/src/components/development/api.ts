@@ -58,6 +58,8 @@ export type FocusPattern = {
   patternId: string;
   label: string;
   description: string;
+  wrong?: string; // CLARA-19: taxonomy example pair, optional (stale-API fallback)
+  right?: string;
   count7d: number;
   lifetime: number;
 };

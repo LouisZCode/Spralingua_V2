@@ -71,11 +71,19 @@ export default function TeacherTopicScreen({
       .then((j) => {
         if (!alive || !j?.starters) return;
         const mapped: FocusPattern[] = (
-          j.starters as { pattern_id: string; label: string; description: string }[]
+          j.starters as {
+            pattern_id: string;
+            label: string;
+            description: string;
+            wrong?: string; // CLARA-19
+            right?: string;
+          }[]
         ).map((s) => ({
           patternId: s.pattern_id,
           label: s.label,
           description: s.description,
+          wrong: s.wrong, // CLARA-19
+          right: s.right,
           count7d: 0,
           lifetime: 0,
         }));
@@ -197,15 +205,30 @@ export default function TeacherTopicScreen({
 }
 
 function FocusCard({ focus, selected, onSelect, size }: { focus: FocusPattern; selected: boolean; onSelect: () => void; size: "large" | "normal" }) {
+  const exampleTextSize = size === "large" ? "text-[15px]" : "text-[13px]";
   return (
-    <button type="button" aria-pressed={selected} onClick={onSelect} className={`block w-full rounded-2xl border-[3px] border-line text-left transition ${size === "large" ? "px-6 py-6" : "px-5 py-4"} ${selected ? "bg-ink-fill text-on-fill" : "bg-flag-gold-soft text-ink hover:bg-card hover:text-flag-red"}`} style={inkShadow}>
+    // CLARA-19: selected state is gold, not ink-fill — ink-fill read as flat
+    // gray in dark mode and no longer looked selected.
+    <button type="button" aria-pressed={selected} onClick={onSelect} className={`block w-full rounded-2xl border-[3px] border-line text-left transition ${size === "large" ? "px-6 py-6" : "px-5 py-4"} ${selected ? "bg-flag-gold text-ink-fixed" : "bg-flag-gold-soft text-ink hover:bg-card hover:text-flag-red"}`} style={inkShadow}>
       <div className="flex items-start justify-between gap-3">
         <p className={`font-display font-black leading-tight ${size === "large" ? "text-[22px]" : "text-[16px]"}`}>{focus.label}</p>
         {focus.count7d > 0 && (
-          <span className={`shrink-0 rounded-full border-2 px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] ${selected ? "border-card text-on-fill" : "border-line text-ink"}`}>{focus.count7d}× this week</span>
+          <span className={`shrink-0 rounded-full border-2 border-line px-2.5 py-0.5 font-body text-[11px] font-bold uppercase tracking-[0.1em] ${selected ? "text-ink-fixed" : "text-ink"}`}>{focus.count7d}× this week</span>
         )}
       </div>
-      <p className={`mt-1.5 font-body leading-relaxed ${size === "large" ? "text-[15px]" : "text-[13px]"} ${selected ? "text-on-fill/80" : "text-ink-soft"}`}>{focus.description}</p>
+      {/* CLARA-19: the taxonomy's wrong/right example pair replaces the
+          abstract description when both are present; never strikethrough —
+          the wrong example is marked by color only. Falls back to the
+          description (today's rendering) for a cached/stale API response
+          missing the new fields. */}
+      {focus.wrong && focus.right ? (
+        <div className={`mt-1.5 flex flex-col gap-0.5 font-body leading-relaxed ${exampleTextSize}`}>
+          <p className={selected ? "text-ink-fixed/70" : "text-flag-red-deep"}>✗ {focus.wrong}</p>
+          <p className={selected ? "text-ink-fixed" : "text-ink"}>✓ {focus.right}</p>
+        </div>
+      ) : (
+        <p className={`mt-1.5 font-body leading-relaxed ${exampleTextSize} ${selected ? "text-ink-fixed" : "text-ink-soft"}`}>{focus.description}</p>
+      )}
     </button>
   );
 }

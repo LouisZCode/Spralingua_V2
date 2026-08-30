@@ -35,12 +35,14 @@ _STARTER_MAP: dict[str, tuple[str, ...]] = {
 def starters_for_level(level: str | None) -> list[dict]:
     """Three curated starter patterns for ``level`` (A1 default, incl. NULL).
 
-    Returns ``[{pattern_id, label, description, level}]`` — the same shape
-    a caller can render as a focus card, or fold into a
+    Returns ``[{pattern_id, label, description, wrong, right, level}]`` —
+    the same shape a caller can render as a focus card, or fold into a
     ``load_grammar_focus``-shaped entry (see ``pipeline/factory.py``).
     ``level`` on each entry is the bucket the starter was picked for, not
     the pattern's own taxonomy level (only relevant for B1 vs B2+, which
-    share content).
+    share content). ``wrong``/``right`` (CLARA-19) are the taxonomy's
+    minimal contrast pair, additive alongside ``description`` — existing
+    consumers that fold this dict into prompt layers are unaffected.
     """
     bucket = bucket_of(level) or DEFAULT_BUCKET
     catalog = load_taxonomy()
@@ -49,6 +51,8 @@ def starters_for_level(level: str | None) -> list[dict]:
             "pattern_id": pattern_id,
             "label": catalog[pattern_id]["label"],
             "description": catalog[pattern_id]["description"],
+            "wrong": catalog[pattern_id]["wrong"],  # CLARA-19
+            "right": catalog[pattern_id]["right"],  # CLARA-19
             "level": bucket,
         }
         for pattern_id in _STARTER_MAP[bucket]
