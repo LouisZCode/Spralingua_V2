@@ -108,6 +108,15 @@ type Exercise =
   // the bespoke ProduceCard below. Keyed by `topic` — the developer's
   // free-text ask — instead of a taxonomy `patternId`, since a forged item
   // has none.
+  // CLARA-17: this exact shape now also rides the DEAL path — GET
+  // /teacher/exercise can roll a generated production task or a
+  // redo-your-own-mistake task, not just a pool card, and sends `topic` on
+  // those responses too so this member's requirement holds either way. A
+  // deal-path produce response may also carry an extra `patternId` field
+  // (it came from a taxonomy pattern); that field isn't part of this
+  // member's shape and is simply ignored on read — see handleExerciseRequest
+  // and handleSkip below, neither of which read `.patternId` off a
+  // `drill: "produce"` value.
   | { drill: "produce"; itemId: string; topic: string; item: ProduceItem };
 
 // D5: the three report shapes, byte-identical to the pre-CLARA-13 template —
@@ -343,8 +352,12 @@ export default function TeacherChat() {
   // CLARA-15: non-null while a forge fetch is in flight (holds the topic
   // being forged, before the item exists) — distinct from `exercise`, which
   // only ever holds a MOUNTABLE item. Drives the "Building your exercise…"
-  // loading state in the slot (see exerciseSlot below). Null for every
-  // other drill's request, which never has a loading phase of its own.
+  // loading state in the slot (see exerciseSlot below).
+  // CLARA-17: reused for the deal path too — a dealt item can now be a
+  // generated produce task (two LLM calls server-side), not just an instant
+  // catalog read, so handleExerciseRequest sets this to the patternId once
+  // the reveal pause has elapsed with no item yet. Render/Skip/clear below
+  // don't care which path filled it.
   const [forging, setForging] = useState<string | null>(null);
   // Guards a fetch in flight from a request that's since been superseded (a
   // NEW exercise_request, or the session ending) — only the most recent
@@ -454,16 +467,30 @@ export default function TeacherChat() {
       // AND this pause, whichever finishes last — fetching starts right away
       // so the data is normally already in hand once the pause elapses.
       let fetched: Exercise | null = null;
+      // CLARA-17: true once the fetch has settled, success OR failure —
+      // distinct from `fetched`, which only means "settled successfully".
+      // The reveal-pause timer below reads this (not `fetched`) to decide
+      // whether to show the loading card, so a fetch that fails FAST (before
+      // the pause elapses) never flashes it a moment later.
+      let settled = false;
       let pauseDone = false;
       const reveal = () => {
         if (requestSeqRef.current !== seq || !fetched || !pauseDone) return;
         setExercise(fetched);
         setExerciseAnswered(false);
+        setForging(null); // CLARA-17: clear the loading card below, if up
         setExerciseKey((k) => k + 1);
       };
       revealTimerRef.current = setTimeout(() => {
         revealTimerRef.current = null;
         pauseDone = true;
+        // CLARA-17: the reveal pause elapsed and the deal fetch still
+        // hasn't settled — likely a generated produce item (two LLM calls
+        // server-side), not a catalog read. Reuse the forge slot's loading
+        // state so the learner sees "Building your exercise…" instead of
+        // nothing. A fast pool deal (or a fast failure) never reaches this
+        // branch — `settled` is already true by the time the timer fires.
+        if (!settled) setForging(patternId);
         reveal();
       }, EXERCISE_REVEAL_DELAY_MS);
 
@@ -474,20 +501,32 @@ export default function TeacherChat() {
         .then(async (res) => {
           if (requestSeqRef.current !== seq) return; // superseded
           if (res.status === 404) {
+            settled = true;
+            setForging(null); // CLARA-17: clear the loading card, if up
             void sendReport(
               `${EXERCISE_RESULT_PREFIX} No exercise was available for pattern ${patternId}.`
             );
             return;
           }
-          if (!res.ok) return; // nothing actionable to show or report
+          if (!res.ok) {
+            settled = true;
+            setForging(null); // CLARA-17: nothing actionable — silent-clear
+            return; // nothing actionable to show or report
+          }
           const data = (await res.json()) as Exercise;
           fetched = data;
+          settled = true;
           reveal();
         })
         .catch(() => {
           // Network error fetching the item — same "nothing actionable" call
           // as a non-ok, non-404 response; the pending pause simply never
           // has anything to reveal.
+          // CLARA-17: guard by seq — a superseded request's own late
+          // failure must not clear a NEWER request's loading card or item.
+          if (requestSeqRef.current !== seq) return;
+          settled = true;
+          setForging(null); // silent-clear, same as a non-ok response
         });
     },
     [token, sendReport, clearRevealTimer, clearDismissTimer]
@@ -1075,6 +1114,11 @@ export default function TeacherChat() {
     // CLARA-15: the forge fetch is in flight (two LLM calls server-side) —
     // same slot header/Skip row as the graded state above, plus a muted
     // loading line in place of the trainer. Existing tokens only.
+    // CLARA-17: also covers a still-in-flight DEAL fetch once the reveal
+    // pause has elapsed with no item yet (a generated produce deal carries
+    // the same multi-second latency) — see handleExerciseRequest's reveal
+    // timer. `forging` holds a patternId in that case instead of a forge
+    // topic; this render and the Skip handling below don't distinguish.
     <div className="flex w-full max-w-[440px] flex-col gap-2">
       <div className="flex items-center justify-between gap-3 rounded-[16px] border-[3px] border-line bg-paper-warm px-4 py-2">
         <span className="font-body text-[10px] font-black uppercase tracking-[0.28em] text-ink-muted">

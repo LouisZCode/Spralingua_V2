@@ -28,6 +28,31 @@ deliberately exempt from every evaluator, and a practice item handed out
 inside that room must never become a side-channel into the learning-state
 tables the exemption exists to keep her out of.
 
+CLARA-17 ("the exercise factory, round 1") adds two more ways to build an
+item, both reused whole by ``teacher/dealer.py`` — the new SERVER-side format
+roll behind ``GET /teacher/exercise``, for ALL users, not just developers:
+
+- :func:`forge_item_for_pattern` — the SAME draft -> sanity-gate -> verify ->
+  one-redraft -> raise loop as :func:`forge_item` above, except the seed is a
+  TAXONOMY ENTRY (label/description/wrong/right/elicit) instead of a
+  free-text topic, and the draft prompt is pitched at the learner's CEFR
+  level via a ``{level_block}`` slot (:data:`PRODUCE_DRAFT_PATTERN_PROMPT`).
+  Two structured-output LLM calls, same as the topic-seeded path — this is
+  the ONE format in CLARA-17 that costs anything, which is why the dealer
+  gates it behind the shared drill throttle before ever calling in here.
+- :func:`build_redo_item` — no LLM at all: builds one item straight from a
+  single example already sitting in the learner's own ``user_errors`` ledger
+  (``database/orm.py::UserError.examples``) — their own past wrong sentence,
+  handed back for them to correct. Every field it uses already came from a
+  judge (the ledger example) or the curated taxonomy, so there is nothing
+  left to verify.
+
+Both return the SAME internal item shape :func:`forge_item` does (plus
+``pattern_id`` on the produce one) and are graded by the SAME
+:func:`grade_produced` through the SAME attempts routes — no new grading
+code this round. Real learners reach both of these; only the free-text
+``ÜBUNG-NEU`` forge above stays developer-only.
+
 The in-memory store below is a DELIBERATE, DOCUMENTED exception to the
 "no module-level singletons" rule in CLAUDE.md: this is process-local,
 dev-preview state by design — losing it on a restart only costs a re-deal,
@@ -50,6 +75,7 @@ from agents.observability import (
     unwrap_structured_output,
 )
 from agents.openrouter_llm import structured_judge_llm
+from grammar import bucket_of  # CLARA-17: normalizes a learner's raw level string
 
 FORGE_MODEL = "openai/gpt-oss-120b"
 
@@ -212,6 +238,89 @@ You draft ONE production task for a German student who asked their teacher about
 - Everyday, concrete, and natural — a real teacher's assignment, not a stilted textbook drill sentence.
 """
 
+# --------------------------------------------------------------------------
+# CLARA-17: the pattern-seeded sibling of PRODUCE_DRAFT_PROMPT above — same
+# schema (ProduceDraft), same hard rules, but the seed is a TAXONOMY ENTRY
+# (label/description/wrong-right/elicit) rather than a free-text topic, and
+# the vocabulary/complexity pitch is a `{level_block}` slot instead of the
+# hardcoded "A2-B1 vocabulary" line, so the SAME pattern reads differently
+# for an A1 beginner than for a B2+ learner. `_level_block` below selects
+# the text; the four blocks are demonstration-flavored guidance rather than
+# a rule list on purpose — this repo's gpt-oss experience (CLAUDE.md) is
+# that worked examples beat abstract prohibitions, hence the WRONG/RIGHT
+# pair inside the B2+ block.
+# --------------------------------------------------------------------------
+
+PRODUCE_DRAFT_PATTERN_PROMPT = """# Role
+You draft ONE production task for a German student, seeded by a specific grammar pattern from the curriculum — not a free-text topic. A production task is an English instruction telling the student to write or say ONE German sentence of their own — never a fill-the-blank, never a sentence to translate.
+
+# Pattern
+- label: {label}
+- rule: {description}
+- minimal contrast: "{wrong}" is WRONG, "{right}" is RIGHT
+- how a conversation partner naturally elicits it: {elicit}
+
+# What to build
+- `task_en` — ONE English instruction describing an everyday, concrete scenario the student could plausibly be in, phrased so that producing it in German REQUIRES the pattern above — not merely allows it. Use the elicit hint as inspiration for a natural scenario, and the wrong/right contrast to know exactly what must go right. The scenario must be answerable with exactly ONE complete German sentence.
+- `target_de` — the exact German word(s) or structure the sentence must contain — short, this is what the frontend shows bold as the student's hint. Draw this from the pattern's right-form contrast, not a paraphrase of the label.
+- `example_de` — ONE natural German sentence that fully satisfies the task — a model answer a real student could give. {level_block}
+- `rule_note` — ONE short English sentence naming the rule the task practices (may reuse the rule above, tightened to one line).
+- `title` — two to four words naming the exercise.
+
+# Hard rules
+- `task_en` is IN ENGLISH — never write the instruction itself in German.
+- The task must be answerable with exactly ONE German sentence — not a paragraph, not a list, not several sentences.
+- The target must be UNAVOIDABLE: a student who genuinely completes the scenario cannot dodge the structure and still succeed. If a task CAN be answered without the target, tighten the scenario until the structure is the only natural way to say it.
+- Never a fill-the-blank (no ___ anywhere in `task_en`) and never a translate-this-sentence task — the student invents their own sentence from the scenario; they never convert one that's handed to them.
+- Everyday, concrete, and natural — a real teacher's assignment, not a stilted textbook drill sentence.
+"""
+
+# The four `{level_block}` texts, keyed by grammar.levels.BUCKETS. A1 keeps
+# PRODUCE_DRAFT_PROMPT's original, unconditional "A2-B1 vocabulary" line —
+# that's the pre-CLARA-17 default, and it's also what a None level (a
+# learner who never answered the level question) still gets.
+_LEVEL_BLOCK_A1 = "A2-B1 vocabulary throughout, unless the topic itself genuinely needs higher."
+
+_LEVEL_BLOCK_A2 = (
+    "Aim for an everyday CONNECTED sentence, not a bare subject-verb-object line — the "
+    "scenario should naturally pull in a reason (weil/deshalb) or a time expression "
+    "alongside the target. Still A2-B1 vocabulary."
+)
+
+_LEVEL_BLOCK_B1 = (
+    "Demand more than a single main clause: the scenario should require a subordinate "
+    "clause or a real connector (weil, obwohl, nachdem, wenn, damit...) to answer "
+    "naturally — a student who gets away with one bare main clause has dodged the "
+    "point. Both Perfekt and Präteritum are fair game wherever the scenario calls for "
+    "a past tense."
+)
+
+_LEVEL_BLOCK_B2 = (
+    "Demand a genuinely complex sentence — layered clauses, natural idiom, nothing a "
+    "beginner could stumble into by accident. The scenario itself needs real "
+    "substance: a three-word answer must be structurally impossible, not merely "
+    "unlikely. For example, for a Konjunktiv II regret: a WEAK task like \"Say you "
+    "would have liked more coffee\" is answerable in three words with no real "
+    "scenario — don't write that. A STRONG task instead: \"A colleague just told you "
+    "they got the promotion you both applied for. Tell a friend afterward what you "
+    "would have done differently if you'd known the deadline was that week.\" — that "
+    "forces a layered Konjunktiv II Vergangenheit sentence, not a reflex phrase."
+)
+
+_LEVEL_BLOCKS = {"A1": _LEVEL_BLOCK_A1, "A2": _LEVEL_BLOCK_A2, "B1": _LEVEL_BLOCK_B1, "B2+": _LEVEL_BLOCK_B2}
+
+
+def _level_block(level: str | None) -> str:
+    """Selects the `{level_block}` slot text for PRODUCE_DRAFT_PATTERN_PROMPT.
+    Normalizes any raw CEFR-ish string through ``grammar.bucket_of`` (``"B2"``,
+    ``"b1 "``, ``None`` all land on one of the four blocks); an unknown or
+    absent level falls to the A1 block, same "serve the pre-personalization
+    default" behavior every other level-aware caller in this repo uses for a
+    learner who hasn't set one (``grammar/levels.py``, ``drills/leveling.py``).
+    """
+    return _LEVEL_BLOCKS.get(bucket_of(level), _LEVEL_BLOCK_A1)
+
+
 PRODUCE_VERIFY_PROMPT = """# Role
 You are a strict second pass on a live-forged German production task, before it ever reaches a student. Answer the task YOURSELF first — do not simply trust the draft.
 
@@ -291,6 +400,33 @@ async def _draft(topic: str, *, reason: Optional[str] = None) -> ProduceDraft:
     # draft calls and satz/enricher.py.
     llm = structured_judge_llm(ProduceDraft, temperature=None)
     prompt = PRODUCE_DRAFT_PROMPT.replace("{topic}", topic)
+    if reason:
+        prompt += (
+            f"\n\n# Your last attempt was rejected\n{reason}\n"
+            f"Fix exactly that; keep everything else that was fine.\n"
+        )
+    with generation_span("teacher-forge-draft", model=FORGE_MODEL, input_text=prompt) as span:
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
+    return result
+
+
+async def _draft_pattern(entry: dict, level: str | None, *, reason: Optional[str] = None) -> ProduceDraft:
+    """CLARA-17 sibling of :func:`_draft`: same schema, same span name
+    (format-agnostic — it names the STAGE, not the seed), but the prompt is
+    seeded by a taxonomy ENTRY plus a level pitch instead of a free-text
+    topic. Same "drafts CONTENT, not a verdict" temperature=None rationale
+    as :func:`_draft`.
+    """
+    llm = structured_judge_llm(ProduceDraft, temperature=None)
+    prompt = (
+        PRODUCE_DRAFT_PATTERN_PROMPT.replace("{label}", entry["label"])
+        .replace("{description}", entry["description"])
+        .replace("{wrong}", entry["wrong"])
+        .replace("{right}", entry["right"])
+        .replace("{elicit}", entry["elicit"])
+        .replace("{level_block}", _level_block(level))
+    )
     if reason:
         prompt += (
             f"\n\n# Your last attempt was rejected\n{reason}\n"
@@ -384,6 +520,89 @@ async def forge_item(topic: str) -> dict:
         reason = verify.reason
 
     raise RuntimeError(f"forge_item: exhausted retries for topic={topic!r} last_reason={reason!r}")
+
+
+async def forge_item_for_pattern(entry: dict, level: str | None) -> dict:
+    """CLARA-17 sibling of :func:`forge_item`: draft -> sanity-gate -> verify
+    -> one-redraft -> raise, IDENTICAL control flow, except the seed is a
+    TAXONOMY ENTRY (:func:`_draft_pattern`) rather than a free-text topic,
+    pitched at ``level`` (:func:`_level_block`). Reuses :func:`_sane_produce`
+    and :func:`_verify` verbatim — the sanity gate and the verify pass don't
+    care where the draft came from.
+
+    Returns the SAME internal dict shape :func:`forge_item` does, PLUS
+    ``pattern_id`` — ``teacher/dealer.py`` needs it to store/attribute the
+    item; ``topic`` is set to the entry's own ``label`` (an English
+    structure name, e.g. "Verb-second word order"), matching what the
+    dealer serves as the exercise's ``topic``.
+    """
+    reason: Optional[str] = None
+    for attempt in (1, 2):
+        draft = await _draft_pattern(entry, level, reason=reason)
+        gate_reason = _sane_produce(draft)
+        if gate_reason is not None:
+            logger.warning(
+                f"[FORGE] pattern draft #{attempt} for {entry['id']!r} failed sanity gate: {gate_reason}"
+            )
+            reason = gate_reason
+            continue
+
+        verify = await _verify(draft)
+        if verify.ok:
+            return {
+                "id": f"forge-{uuid4().hex}",
+                "topic": entry["label"],
+                "pattern_id": entry["id"],
+                "title": draft.title,
+                "task": draft.task_en,
+                "target": draft.target_de,
+                "example": draft.example_de,
+                "rule_note": draft.rule_note,
+            }
+
+        logger.warning(
+            f"[FORGE] pattern draft #{attempt} for {entry['id']!r} rejected by verify: {verify.reason}"
+        )
+        reason = verify.reason
+
+    raise RuntimeError(
+        f"forge_item_for_pattern: exhausted retries for pattern={entry['id']!r} last_reason={reason!r}"
+    )
+
+
+def build_redo_item(entry: dict, example: dict, level: str | None) -> dict:
+    """CLARA-17's third format, built with NO LLM at all: one item straight
+    from a single example already sitting in the learner's own
+    ``user_errors`` ledger (``database/orm.py::UserError.examples`` — a dict
+    with ``sentence``/``corrected``/optional ``note``, produced by whichever
+    judge classified the original slip). The learner's OWN wrong sentence
+    goes into the task VERBATIM — it's their own data, not content this
+    module generated.
+
+    ``level`` is accepted for signature symmetry with
+    :func:`forge_item_for_pattern` (``teacher/dealer.py`` passes the same
+    value to both generators) but doesn't change anything here — the
+    learner's own past sentence already sets its own difficulty; there's no
+    vocabulary knob to turn on someone else's words.
+
+    No verify pass, unlike the LLM-drafted produce format: every piece here
+    came from either a judge (the ledger example) or the curated taxonomy
+    already, so there's nothing left to sanity-check.
+    """
+    return {
+        "id": f"forge-{uuid4().hex}",
+        "topic": entry["label"],
+        "pattern_id": entry["id"],
+        "title": "Fix your sentence",
+        "task": (
+            f'Earlier you said: "{example["sentence"]}" — '
+            f'{example.get("note") or entry["description"]}. '
+            "Say or write it correctly, as one complete German sentence."
+        ),
+        "target": entry["label"],
+        "example": example["corrected"],
+        "rule_note": example.get("note") or entry["description"],
+    }
 
 
 async def _judge_produced(item: dict, sentence: str, *, spoken: bool) -> ProduceVerdict:

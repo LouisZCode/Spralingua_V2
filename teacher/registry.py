@@ -11,7 +11,8 @@ grades each attempt in that drill's own NATIVE shape, so the frontend mounts
 the exact same trainer component Flow does, dealt Flow-style with a round of
 one. Nothing here flattens a card or collapses a verdict anymore (that
 generic-card design was CLARA-13's predecessor, AGENT-00X) — this module is
-pure plumbing: item lookup/pattern-matching (``pick_random_item``) plus two
+pure plumbing: item lookup/pattern-matching (``pick_random_item``,
+``pool_candidates`` since CLARA-17) plus two
 per-drill functions per adapter, ``serve`` and ``grade``, both IMPORTED from
 that drill's own ``<drill>/grading.py`` (grading) and ``<drill>/routes.py``
 (serve-time transforms, e.g. satzbau's chip shuffle) — nothing here
@@ -228,9 +229,12 @@ def get_adapter(drill: str) -> DrillAdapter | None:
     return _ADAPTERS.get(drill)
 
 
-def pick_random_item(pattern_id: str) -> tuple[str, dict] | None:
-    """One random ``(drill_name, item)`` covering ``pattern_id``, or ``None``
-    when no covered drill targets it (uncovered pattern — 404 at the route)."""
+def pool_candidates(pattern_id: str) -> list[tuple[str, dict]]:
+    """Every ``(drill_name, item)`` covering ``pattern_id`` across all six
+    adapters — the full candidate list :func:`pick_random_item` used to pick
+    ONE of at random. Split out for CLARA-17's dealer (``teacher/dealer.py``),
+    which needs the whole set to run through ``drills.leveling.apply_level``
+    BEFORE choosing, not just a single already-random pick."""
     candidates: list[tuple[str, dict]] = []
     for adapter in _ADAPTERS.values():
         if pattern_id not in adapter.patterns():
@@ -240,6 +244,19 @@ def pick_random_item(pattern_id: str) -> tuple[str, dict] | None:
             for item in adapter.load_items().values()
             if item["pattern_id"] == pattern_id
         )
+    return candidates
+
+
+def pick_random_item(pattern_id: str) -> tuple[str, dict] | None:
+    """One random ``(drill_name, item)`` covering ``pattern_id``, or ``None``
+    when no covered drill targets it (uncovered pattern — 404 at the route).
+
+    Since CLARA-17, ``GET /teacher/exercise`` no longer calls this directly
+    (``teacher/dealer.py`` calls :func:`pool_candidates` itself so it can
+    level-narrow before picking) — kept as its own function because it's a
+    small, self-contained, still-correct public helper, not because
+    anything in this repo currently calls it."""
+    candidates = pool_candidates(pattern_id)
     if not candidates:
         return None
     return random.choice(candidates)

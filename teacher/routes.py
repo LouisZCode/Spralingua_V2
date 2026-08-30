@@ -4,10 +4,16 @@ adds the speaking drill), plus the cold-start topic-screen endpoint:
 
 - ``GET /teacher/starters`` — three curated starter topics for a learner
   whose ``user_errors`` ledger is still empty (see ``teacher/starters.py``).
-- ``GET /teacher/exercise?pattern=<taxonomy id>`` — one random item for that
-  pattern, served in that drill's NATIVE round-item shape (exactly what
-  ``GET /<drill>/round`` would emit for it) so the frontend mounts the same
-  trainer component Flow does, dealt Flow-style with a round of one.
+- ``GET /teacher/exercise?pattern=<taxonomy id>`` — CLARA-17 ("the exercise
+  factory, round 1"): the SERVER rolls one of three formats for that
+  pattern — pool (a catalog item, served in that drill's NATIVE round-item
+  shape, exactly what ``GET /<drill>/round`` would emit for it, now LEVEL-
+  filtered), produce (a fresh production task live-generated from the
+  taxonomy entry, pitched at the learner's level) or redo (built with no LLM
+  from the learner's own ``user_errors`` example) — and serves it, for ALL
+  users, not just developers. All the dispatch logic lives in
+  ``teacher/dealer.py::deal``; this route only opens the read-only ``db``
+  session, delegates, and shapes the trace.
 - ``POST /teacher/exercise/attempts`` — grade one typed/typed-order/produced
   answer using that drill's own deterministic check + judge, returning that
   drill's NATIVE verdict shape (see teacher/registry.py). For the sprechen
@@ -46,6 +52,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import (
     get_trace_session,
@@ -54,12 +61,14 @@ from agents.observability import (
     tracer,
 )
 from auth.deps import get_current_user_id
+from database.connection import get_db
 from satz.examiner import transcribe_attempt
 from security import drill_try_admit
 from sprechen import grading as sprechen_grading
 from sprechen.routes import _MAX_AUDIO_BYTES  # SAME cap POST /sprechen/attempts enforces — not re-derived
+from teacher.dealer import deal as deal_exercise
 from teacher.forge import forge_item, get_item as get_forged_item, grade_produced, store_item
-from teacher.registry import get_adapter, pick_random_item
+from teacher.registry import get_adapter
 from teacher.starters import starters_for_level
 from drills.copy import JUDGE_UNAVAILABLE
 
@@ -123,43 +132,68 @@ async def teacher_balance(user_id: str = Depends(get_current_user_id)):
 async def get_exercise(
     pattern: str,
     user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
 ):
-    """One random item for ``pattern``, served in that drill's NATIVE
-    round-item shape (CLARA-13) — the frontend mounts the same trainer
-    component Flow does, so the item must be indistinguishable from a
-    Flow-dealt one. 404 when no covered drill targets this pattern —
-    Clara's own prompt is told to only ever name an id that's actually
-    printed on her page, whether from her rendered focus sections or the
-    full exercise catalog (CLARA-16), but a stale or hallucinated id must
-    still fail closed here, not 500."""
+    """CLARA-17: the server rolls one of three formats — pool (a catalog
+    item, served in that drill's NATIVE round-item shape, exactly what
+    ``GET /<drill>/round`` would emit for it, now LEVEL-filtered), produce
+    (a fresh production task live-generated from the pattern's taxonomy
+    entry) or redo (built with no LLM from the learner's own past mistake)
+    — and serves it, for ALL users, not just developers. All the dispatch
+    mechanics live in ``teacher/dealer.py::deal``; this route only opens the
+    session, delegates, and shapes the trace. 404 when ``pattern`` isn't a
+    real taxonomy id at all — Clara's own prompt is told to only ever name
+    an id that's actually printed on her page, whether from her rendered
+    focus sections or the full exercise catalog (CLARA-16), but a stale or
+    hallucinated id must still fail closed here, not 500.
+
+    ============================================================================
+    THE ``db`` SESSION HERE IS READ-ONLY BY DESIGN. ``teacher/dealer.py::deal``
+    only ever SELECTs (the learner's level, their ``user_errors`` row for this
+    pattern) — no ``db.commit()`` anywhere on this path. Clara's room stays
+    ABSOLUTELY WRITE-FREE (see the ABSOLUTE INVARIANT blocks below): no
+    `record_grammar_error`, no `credit_pattern_success`, no `record_drill_attempt`,
+    no coins. Adding a DB session to this route for CLARA-17's level-narrowing
+    and redo-building changes nothing about that — it's the same read-only
+    pattern ``GET /teacher/starters`` and ``GET /teacher/balance`` already use.
+    ============================================================================
+    """
     # Joins Clara's live conversation Session in Langfuse (server-side lookup;
     # the frontend carries no session id). One trace per dealt exercise =
     # Clara's deal rate is countable per session/user. A 404 is stamped as an
     # ERROR trace deliberately: it means Clara named a pattern her exercise
     # catalog doesn't cover — an agent-quality signal, not client noise.
     session_id = get_trace_session(user_id)
-    with tracer.start_as_current_span("teacher-exercise-deal") as span:
+    # propagate_trace_context so a produce roll's draft/verify generation
+    # spans (fired inside teacher/dealer.py -> teacher/forge.py) nest under
+    # this trace WITH user/session baggage — same convention every other
+    # LLM-touching route in this file already follows (POST /exercise/forge,
+    # POST /exercise/attempts). Pool/redo rolls never call an LLM, so this is
+    # a no-op for them beyond the attributes already set below.
+    with propagate_trace_context(user_id=user_id, session_id=session_id), \
+            tracer.start_as_current_span("teacher-exercise-deal") as span:
         span.set_attribute("user.id", user_id)
         if session_id:
             span.set_attribute("langfuse.session.id", session_id)
         span.set_attribute("langfuse.observation.input", pattern)
         span.set_attribute("langfuse.observation.metadata.pattern", pattern)
-        picked = pick_random_item(pattern)
-        if picked is None:
+        payload = await deal_exercise(db, user_id=user_id, pattern=pattern)
+        if payload is None:
             mark_span_error(span, "no exercise for this pattern (stale/hallucinated id?)")
             raise HTTPException(status_code=404, detail="no exercise for this pattern")
-        drill_name, item = picked
-        adapter = get_adapter(drill_name)
-        native_item = adapter.serve(item)
+        drill_name = payload["drill"]
+        item_id = payload["itemId"]
+        # The abstract format the dealer rolled ("pool" | "produce" |
+        # "redo"), carried explicitly on the payload — `drill` alone can't
+        # distinguish redo from produce, since BOTH serve `drill: "produce"`
+        # (the frontend has exactly one generated-item member/mount, and the
+        # attempts routes grade exactly one generated drill value).
+        format_ = payload["format"]
         span.set_attribute("drill", drill_name)
-        span.set_attribute("item_id", item["id"])
-        span.set_attribute("langfuse.observation.output", f"{drill_name}:{item['id']}")
-        return {
-            "drill": drill_name,
-            "itemId": item["id"],
-            "patternId": item["pattern_id"],
-            "item": native_item,
-        }
+        span.set_attribute("format", format_)
+        span.set_attribute("item_id", item_id)
+        span.set_attribute("langfuse.observation.output", f"{drill_name}:{item_id}")
+        return payload
 
 
 class ForgeIn(BaseModel):
