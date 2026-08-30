@@ -86,7 +86,16 @@ export default function TeacherTopicScreen({
   }, [token, focusLoaded, focus.length]);
 
   const effectiveTopic = useMemo(() => selectedCard?.label ?? custom.trim(), [selectedCard, custom]);
-  const [primary, ...rest] = focus;
+  // CLARA-18: display order is the weekly count, most-frequent first — the
+  // backend hands `focus` back in recency-weighted order, which isn't the
+  // same thing. Sort a COPY (Array.prototype.sort is stable, so ties keep
+  // the backend's original order); `focus` itself is never mutated, and the
+  // fetch + the pattern id sent on Start are both untouched.
+  const sortedFocus = useMemo(
+    () => [...focus].sort((a, b) => b.count7d - a.count7d),
+    [focus]
+  );
+  const [primary, ...rest] = sortedFocus;
 
   return (
     <div className="relative flex min-h-screen flex-col bg-paper text-ink">
@@ -123,16 +132,15 @@ export default function TeacherTopicScreen({
         {primary && (
           <div className="rise-in mt-9" style={{ animationDelay: "80ms" }}>
             <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Topics to focus on — from this week&apos;s practice</p>
-            <div className="mt-3">
+            {/* CLARA-18: stacked full-width rows, most-frequent (by
+                count7d, sorted above) on top — was one large card + a
+                2-col grid for the rest. */}
+            <div className="mt-3 flex flex-col gap-3">
               <FocusCard focus={primary} selected={selectedCard?.patternId === primary.patternId} onSelect={() => setSelectedCard((prev) => (prev?.patternId === primary.patternId ? null : primary))} size="large" />
+              {rest.map((f) => (
+                <FocusCard key={f.patternId} focus={f} selected={selectedCard?.patternId === f.patternId} onSelect={() => setSelectedCard((prev) => (prev?.patternId === f.patternId ? null : f))} size="normal" />
+              ))}
             </div>
-            {rest.length > 0 && (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {rest.map((f) => (
-                  <FocusCard key={f.patternId} focus={f} selected={selectedCard?.patternId === f.patternId} onSelect={() => setSelectedCard((prev) => (prev?.patternId === f.patternId ? null : f))} size="normal" />
-                ))}
-              </div>
-            )}
           </div>
         )}
 

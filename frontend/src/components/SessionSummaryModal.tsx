@@ -135,6 +135,8 @@ export default function SessionSummaryModal({
   endedBy,
   sessionId,
   onClose,
+  hideEval,
+  topic,
 }: {
   lessonTitle: string;
   // Briefing goal can be: a single sentence (string), a list mirroring
@@ -145,6 +147,17 @@ export default function SessionSummaryModal({
   endedBy: "user" | "agent";
   sessionId: string | null;
   onClose: () => void;
+  // CLARA-18: Clara's card is never scored — when true, the polling effect
+  // below never fires (no GET /sessions request at all) and the whole
+  // EvalSection block is omitted. The GAME-001 pass-sound effect simply
+  // never fires either, since it depends on sessionData that never arrives.
+  // Absent/false (every existing caller but Clara) is byte-identical.
+  hideEval?: boolean;
+  // CLARA-18: when non-empty (trimmed), names what the session covered in
+  // the body line instead of the YAML's completion copy — see `message`
+  // below. Empty/absent (every existing caller but Clara) is
+  // byte-identical.
+  topic?: string | null;
 }) {
   const { token } = useAuth();
   const [sessionData, setSessionData] = useState<SessionData | null>(null);
@@ -154,6 +167,9 @@ export default function SessionSummaryModal({
   const [slowLoading, setSlowLoading] = useState(false);
 
   useEffect(() => {
+    // CLARA-18: Clara's card hides the eval block outright — skip the poll
+    // entirely, there's nothing for it to fetch that would ever render.
+    if (hideEval) return;
     if (!sessionId || !token) return;
 
     let cancelled = false;
@@ -207,7 +223,7 @@ export default function SessionSummaryModal({
       if (timeoutId) clearTimeout(timeoutId);
       if (slowTimeoutId) clearTimeout(slowTimeoutId);
     };
-  }, [sessionId, token]);
+  }, [sessionId, token, hideEval]);
 
   // GAME-001: a passed eval is the celebration moment — fires once per load,
   // never on a failed eval.
@@ -221,8 +237,14 @@ export default function SessionSummaryModal({
 
   const title = completion?.title ?? DEFAULT_TITLE;
   const status = completion?.status ?? DEFAULT_STATUS;
-  const message =
-    endedBy === "user"
+  // CLARA-18: a supplied topic names what the session covered instead of
+  // quoting the YAML's completion copy — Clara's card is never scored, so
+  // the generic "session ended" phrasing was noise. Empty/absent topic
+  // falls straight back to the YAML message, unchanged.
+  const trimmedTopic = topic?.trim();
+  const message = trimmedTopic
+    ? `This session was about ${trimmedTopic}. Well done — keep practicing.`
+    : endedBy === "user"
       ? (completion?.message_by_user ?? DEFAULT_MESSAGE_BY_USER)
       : (completion?.message_by_agent ?? DEFAULT_MESSAGE_BY_AGENT);
   const styles = STATUS_STYLES[status];
@@ -252,14 +274,16 @@ export default function SessionSummaryModal({
             {message.trim()}
           </p>
 
-          <div className="mt-7">
-            <EvalSection
-              status={evalStatus}
-              data={sessionData}
-              briefingGoal={briefingGoal ?? null}
-              slowLoading={slowLoading}
-            />
-          </div>
+          {!hideEval && (
+            <div className="mt-7">
+              <EvalSection
+                status={evalStatus}
+                data={sessionData}
+                briefingGoal={briefingGoal ?? null}
+                slowLoading={slowLoading}
+              />
+            </div>
+          )}
 
           <button
             onClick={onClose}

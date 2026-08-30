@@ -44,9 +44,11 @@ import type { ProduceItem, ProduceVerdict } from "./teacher/ProduceCard";
 // CLARA-14 Phase A: sprechen joins the roster (round 2's drill — audio, its
 // own multipart endpoint), and every mounted trainer now gets `hideContinue`
 // — no post-verdict advance click. A graded card stays up showing its
-// feedback and dismisses itself either when Clara's next reply reveals
-// (onBotReply, wired below) or a 15s backstop, whichever comes first. See
-// each closure's own comments below for the specifics.
+// feedback and dismisses itself automatically.
+// CLARA-18: dismissal is now a fixed EXERCISE_DISMISS_MS timer alone (see
+// below), armed the instant the verdict is reported — it no longer races
+// Clara's own spoken reply. See each closure's own comments below for the
+// specifics.
 
 // Sentinel-OUT: kept byte-identical to agents/pipecat_wrapper.py's
 // EXERCISE_RESULT_PREFIX. The backend keys off this exact literal to route a
@@ -60,18 +62,20 @@ const EXERCISE_RESULT_PREFIX = "⟦ÜBUNGSERGEBNIS⟧";
 // that gets rejected.
 const REPORT_MAX_CHARS = 450;
 
-// The card must appear ~2s after Clara finishes SPEAKING her announcement,
+// The card must appear ~1s after Clara finishes SPEAKING her announcement,
 // not the instant the marker arrives (see onExerciseRequest's own comment in
 // ConversationView.tsx — it already fires at the "she finished talking"
 // bubble-reveal moment, so this is purely the extra pause on top of that).
-const EXERCISE_REVEAL_DELAY_MS = 2000;
+const EXERCISE_REVEAL_DELAY_MS = 1000;
 
-// CLARA-14: once a graded verdict has been reported to Clara, the card is
-// meant to dismiss when her spoken reaction to it reveals (see onBotReply
-// below) — but if that reply never arrives (a dropped /say, a session that
-// ends some other way before she replies), this backstop clears it anyway
-// so a learner is never left staring at a stale feedback card.
-const EXERCISE_DISMISS_BACKSTOP_MS = 15000;
+// CLARA-14: originally, a graded verdict's card was meant to dismiss when
+// Clara's spoken reaction to it revealed, with this as a 15s backstop for
+// when that reply never arrived (a dropped /say, a session ending some
+// other way first).
+// CLARA-18: the bot-reply race is gone — this is no longer a backstop, it
+// IS the dismissal: the card closes this long after the verdict lands,
+// full stop, independent of whether or when Clara reacts.
+const EXERCISE_DISMISS_MS = 3000;
 
 function truncateReport(text: string): string {
   return text.length > REPORT_MAX_CHARS
@@ -363,7 +367,7 @@ export default function TeacherChat() {
   // NEW exercise_request, or the session ending) — only the most recent
   // request's resolution is allowed to touch state.
   const requestSeqRef = useRef(0);
-  // The ~2s post-speech pause before a fetched item is allowed to reveal —
+  // The ~1s post-speech pause before a fetched item is allowed to reveal —
   // see EXERCISE_REVEAL_DELAY_MS above and handleExerciseRequest below.
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -374,10 +378,11 @@ export default function TeacherChat() {
     }
   }, []);
 
-  // CLARA-14: the dismissal backstop — armed the instant a graded verdict's
+  // CLARA-18: the dismiss timer — armed the instant a graded verdict's
   // report goes out (see sendGradedReport below), cleared the instant
-  // something else clears the exercise first (Clara's own reply via
-  // onBotReply, a fresh exercise_request, or the session ending).
+  // something else clears the exercise first (a fresh exercise_request, or
+  // the session ending). No longer raced against Clara's own reply — see
+  // EXERCISE_DISMISS_MS above.
   const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const clearDismissTimer = useCallback(() => {
@@ -408,48 +413,35 @@ export default function TeacherChat() {
     [token, user]
   );
 
-  // CLARA-14: the dismissal rework — a graded verdict's report is sent
-  // exactly as before (sendReport, unconditionally, same timing), but now
-  // also arms the 15s backstop timer (see EXERCISE_DISMISS_BACKSTOP_MS)
-  // that stands in for onFlowDone as this card's eventual dismissal.
-  // zeitfaerbung's "unrecognized" reply never reaches this — see D4's guard
-  // in submitZeitfaerbung below, which returns before this would be called.
-  const armDismissBackstop = useCallback(() => {
+  // CLARA-14: a graded verdict's report is sent exactly as before
+  // (sendReport, unconditionally, same timing).
+  // CLARA-18: dismissal is now this fixed EXERCISE_DISMISS_MS timer alone,
+  // armed the instant the report goes out — it no longer stands in for
+  // onFlowDone waiting on Clara's reply, it simply IS the card's eventual
+  // dismissal. zeitfaerbung's "unrecognized" reply never reaches this — see
+  // D4's guard in submitZeitfaerbung below, which returns before this would
+  // be called.
+  const armDismissTimer = useCallback(() => {
     clearDismissTimer();
     dismissTimerRef.current = setTimeout(() => {
       dismissTimerRef.current = null;
       setExercise(null);
-    }, EXERCISE_DISMISS_BACKSTOP_MS);
+    }, EXERCISE_DISMISS_MS);
   }, [clearDismissTimer]);
 
   const sendGradedReport = useCallback(
     (rawText: string) => {
       void sendReport(rawText);
-      armDismissBackstop();
+      armDismissTimer();
     },
-    [sendReport, armDismissBackstop]
+    [sendReport, armDismissTimer]
   );
-
-  // CLARA-14: the other half of the dismissal — ConversationView's onBotReply
-  // fires the instant ANY bot reply reveals (marker or not, see that
-  // component's own doc comment). Once a graded verdict is up
-  // (exerciseAnswered), Clara's next reply IS her reaction to the report we
-  // just sent — that's the natural dismissal moment. Before a verdict lands
-  // (exerciseAnswered still false — the reveal-pause window, or the learner
-  // still working the item), a bot reply is unrelated to this exercise and
-  // must not touch it.
-  const handleBotReply = useCallback(() => {
-    if (exerciseAnswered) {
-      clearDismissTimer();
-      setExercise(null);
-    }
-  }, [exerciseAnswered, clearDismissTimer]);
 
   const handleExerciseRequest = useCallback(
     (patternId: string) => {
       // A fresh request always replaces whatever's open, and cancels any
-      // reveal still pending from a previous one — and, CLARA-14, any
-      // dismissal backstop still armed from the PREVIOUS exercise's graded
+      // reveal still pending from a previous one — and, CLARA-18, any
+      // dismiss timer still armed from the PREVIOUS exercise's graded
       // verdict (that card is gone now regardless of the timer).
       const seq = ++requestSeqRef.current;
       clearRevealTimer();
@@ -535,7 +527,7 @@ export default function TeacherChat() {
   // CLARA-16: the live forge — POST /teacher/exercise/forge, then mount
   // ProduceCard (below), which owns the typed/spoken UI for the returned
   // production task. Expect multi-second latency (two LLM calls
-  // server-side): the fetch, not the ~2s reveal pause, is normally the long
+  // server-side): the fetch, not the ~1s reveal pause, is normally the long
   // pole, so the "Building your exercise…" loading state (see exerciseSlot
   // below) covers that wait. A 403 (a stray message reaching a non-dev —
   // server bug), 502, or any network failure fails safe — Clara already
@@ -637,11 +629,11 @@ export default function TeacherChat() {
 
   // Session winding down (WS closed / Finish confirmed) — drop any open
   // slot silently, whatever state it's in, and cancel a reveal still
-  // pending in its ~2s window so it can never pop up after the fact.
+  // pending in its ~1s window so it can never pop up after the fact.
   const handleSessionEnded = useCallback(() => {
     requestSeqRef.current++;
     clearRevealTimer();
-    clearDismissTimer(); // CLARA-14: no dangling dismiss backstop post-session
+    clearDismissTimer(); // CLARA-18: no dangling dismiss timer post-session
     setExercise(null);
     setExerciseAnswered(false);
     setForging(null); // CLARA-15: including an in-flight forge fetch's slot
@@ -1097,8 +1089,8 @@ export default function TeacherChat() {
           UI (typed textarea OR mic), not a round-of-one of an existing
           trainer, so it doesn't take the flow/allowGiveUp/hideContinue
           contract the mounts above do; TeacherChat still owns dismissal via
-          exerciseAnswered/onBotReply/the backstop timer exactly the same
-          way (see submitProduce* above, which call setExerciseAnswered). */}
+          exerciseAnswered/the dismiss timer (CLARA-18) exactly the same way
+          (see submitProduce* above, which call setExerciseAnswered). */}
       {exercise.drill === "produce" && (
         <ProduceCard
           key={exerciseKey}
@@ -1161,13 +1153,16 @@ export default function TeacherChat() {
       // (TeacherTopicScreen) already served that purpose. Straight into the
       // live phase, auto-connecting on mount.
       skipBriefing
+      // CLARA-18: Clara's classroom layout — header shows only the End
+      // button, and the record/type controls sit directly under the orb
+      // instead of near the transcript. See ConversationView's LivePhase.
+      teacherLayout
       onFinish={() => router.push("/practice")}
       // Backing out of the briefing card returns to the picker, not /practice
       // (mirrors TandemChat's onBack -> setTopic(null)).
       onBack={() => setTopic(null)}
       onExerciseRequest={handleExerciseRequest}
       onExerciseForge={handleExerciseForge}
-      onBotReply={handleBotReply}
       onSessionEnded={handleSessionEnded}
       // CLARA-13: ConversationView renders whatever this is, inline after
       // the last bubble, once it goes non-null — see that file for

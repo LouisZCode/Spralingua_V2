@@ -840,28 +840,55 @@ class ClientWrapper:
         TTS audio length; the frontend uses it (plus the ``botStartedSpeaking``
         timestamp it captures on receive) to reveal the bubble after playback
         finishes in the browser.
+
+        CLARA-18: the bot-output push and the end-of-call block below used to
+        share one early-return guard (``if not text or rtvi_processor is
+        None: return``), which meant a final turn with no flushable text —
+        e.g. a marker-only reply the ``ExerciseMarkerFilter`` withheld in
+        full — returned before ever reaching the end block, stranding
+        ``_end_pending`` forever and hanging the session open exactly like
+        the bug this fixes. The two are now independent: the bot-output push
+        is skipped when there's nothing to send, but the end block always
+        runs when armed, regardless of whether a bot-output message went out.
         """
         text = self._pending_bot_text
-        if not text or self.rtvi_processor is None:
-            self._pending_bot_text = None
-            return
-
-        msg = _BotOutputMessageWithDuration(
-            data=_BotOutputDataWithDuration(
-                text=text,
-                spoken=True,
-                aggregated_by="turn",
-                audio_duration_ms=audio_duration_ms,
-            )
-        )
-        await self.rtvi_processor.push_transport_message(msg)
         self._pending_bot_text = None
+        if text and self.rtvi_processor is not None:
+            msg = _BotOutputMessageWithDuration(
+                data=_BotOutputDataWithDuration(
+                    text=text,
+                    spoken=True,
+                    aggregated_by="turn",
+                    audio_duration_ms=audio_duration_ms,
+                )
+            )
+            await self.rtvi_processor.push_transport_message(msg)
 
         # If end-of-call was detected mid-LLM-stream, NOW is the safe moment
         # to fire stop_when_done(): the bot has finished speaking, the final
         # TTS span is closed under the turn, and the EndFrame can race through
         # the observers without orphaning any in-flight span.
         if self._end_pending and self._end_task is None and self._pipeline_task:
+            # CLARA-18: tell the client NOW, over the still-open socket, that
+            # this session is closing. The WS close frame that follows
+            # stop_when_done() below is not reliably delivered through
+            # Railway's edge (a half-open socket — BUG-009's pathology, in
+            # the server->client direction this time), and a client that
+            # misses it sits in a dead room 404-ing at /say. Guarded: a push
+            # failure here must never block the close itself.
+            if self.rtvi_processor is not None and hasattr(
+                self.rtvi_processor, "send_server_message"
+            ):
+                try:
+                    await self.rtvi_processor.send_server_message(
+                        {"type": "session_ending", "reason": "agent"}
+                    )
+                    logger.info("[END] Pushed session_ending to the client")
+                except Exception as e:
+                    logger.warning(
+                        f"[END] session_ending push failed (non-fatal): "
+                        f"{type(e).__name__}: {e}"
+                    )
             logger.info("[END] Bot finished speaking — closing pipeline")
             self._end_task = asyncio.create_task(self._end_pipeline())
             # BUG-006: nothing awaits this task — without a done-callback an

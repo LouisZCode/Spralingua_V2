@@ -302,7 +302,7 @@ level_examples:
     RIGHT: "Watch der become den even when the sentence carries weight: Den Apfel, den ich eigentlich für später aufgehoben hatte, habe ich meinem Bruder überlassen, und hätte er nicht so gebettelt, wäre das nie passiert."
 
 completion:
-  title: "Good lesson"
+  title: "Great learning session"
   status: success
   message_by_agent: |
     Clara enjoyed that one. Come back with your next "why?" — she's always in.

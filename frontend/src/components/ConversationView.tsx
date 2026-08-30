@@ -83,9 +83,9 @@ export default function ConversationView({
   skipBriefing,
   onExerciseRequest,
   onExerciseForge,
-  onBotReply,
   onSessionEnded,
   exerciseSlot,
+  teacherLayout,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -137,12 +137,6 @@ export default function ConversationView({
   // Server-gated to developers; optional/absent for VoiceChat and
   // TandemChat, which never pass it.
   onExerciseForge?: (topic: string) => void;
-  // AGENT-00X: fires every time ANY bot reply lands visually, marker or not
-  // — same reveal point as onExerciseRequest, just unconditional. The
-  // teacher room uses this to auto-dismiss a graded exercise card once
-  // Clara's follow-up to the ÜBUNGSERGEBNIS report arrives (TeacherChat.tsx).
-  // Optional/absent for VoiceChat and TandemChat.
-  onBotReply?: () => void;
   // AGENT-00X: fires exactly once, the instant a session winds down (WS
   // closed or Finish confirmed) — before the summary/debrief modal even
   // renders. The teacher room uses this to drop a still-open exercise card
@@ -160,6 +154,13 @@ export default function ConversationView({
   // shortcut) — VoiceChat and TandemChat never pass this prop, so none of it
   // is reachable there.
   exerciseSlot?: React.ReactNode;
+  // CLARA-18: Clara's classroom layout. In LivePhase, when set: the header
+  // renders only the End-conversation button (no eyebrow/title), and the
+  // record/type controls sit right under the orb/state-label instead of
+  // near the transcript — see LivePhase's own comments for the exact
+  // placement. Optional/absent (every existing caller but Clara) is
+  // byte-identical to today.
+  teacherLayout?: boolean;
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -208,6 +209,20 @@ export default function ConversationView({
   const botStartedTimeRef = useRef<number | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const REVEAL_SAFETY_MS = 300;
+  // CLARA-18 / BUG-009: the backend pushes an RTVI "session_ending" message
+  // the instant the agent's final reply finishes streaming — right before it
+  // schedules the pipeline close. The WS close frame itself isn't reliably
+  // delivered in prod (Railway's edge proxy leaves a half-open socket, so
+  // onDisconnected never fires — observed 2026-08-30: the learner sat typing
+  // at a dead room, every /say 404ing). This is the extra pause after her
+  // final bubble reveals before the session visibly ends — see
+  // onServerMessage and flushPendingBot below.
+  const AGENT_END_DELAY_MS = 1000;
+  const agentEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // CLARA-18: set true the moment the session_ending message arrives; read
+  // by flushPendingBot to know whether the reply it's about to reveal is the
+  // agent's last one.
+  const sessionEndingRef = useRef(false);
   // BUG-009: Railway's edge proxy silently idle-kills a WebSocket after ~5min
   // of no traffic, and the browser never receives a close frame (half-open
   // socket) — onDisconnected simply never fires, so the UI is stuck on
@@ -280,7 +295,7 @@ export default function ConversationView({
   }, [typeOpen]);
 
   // AGENT-00X: single focus — an exercise reveal wins over an already-open
-  // type overlay (the edge case where the learner opened it during the ~2s
+  // type overlay (the edge case where the learner opened it during the ~1s
   // reveal pause between her reply landing and the card actually appearing).
   useEffect(() => {
     if (exerciseActive && typeOpen) {
@@ -303,6 +318,8 @@ export default function ConversationView({
     const audioEl = audioRef.current;
     return () => {
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+      // CLARA-18: no orphaned agent-end timer past unmount.
+      if (agentEndTimerRef.current) clearTimeout(agentEndTimerRef.current);
       void clientRef.current?.disconnect();
       // Stops the bot's incoming audio track (the mic goes down with
       // disconnect() above). Only ever one stream — each onTrackStarted
@@ -325,13 +342,11 @@ export default function ConversationView({
     setMessages((prev) => [...prev, { speaker: "bot", text }]);
     // AGENT-00X: this is the single place a turn's reply becomes visible to
     // the learner (the timer above, or onBotStoppedSpeaking's fallback,
-    // both funnel through here) — so it's the right place to fire both
+    // both funnel through here) — so it's the right place to fire the
     // exercise-loop hooks, guaranteeing neither can land mid-sentence.
-    // onBotReply is unconditional (every turn); onExerciseRequest only
-    // fires when THIS turn ended in a marker, and the ref is already
-    // populated by now — see the ref's own comment for why the ordering is
-    // safe.
-    onBotReply?.();
+    // onExerciseRequest only fires when THIS turn ended in a marker, and the
+    // ref is already populated by now — see the ref's own comment for why
+    // the ordering is safe.
     if (pendingExercisePatternRef.current) {
       const patternId = pendingExercisePatternRef.current;
       pendingExercisePatternRef.current = null;
@@ -341,6 +356,13 @@ export default function ConversationView({
       const topic = pendingExerciseForgeTopicRef.current;
       pendingExerciseForgeTopicRef.current = null;
       onExerciseForge?.(topic);
+    }
+    // CLARA-18 / BUG-009: the agent's session_ending message (see
+    // onServerMessage below) usually arrives while THIS exact reply is
+    // still pending — its reveal, right here, is the "she finished
+    // speaking" moment the visible end is timed from.
+    if (sessionEndingRef.current) {
+      armAgentEndTimer();
     }
   };
 
@@ -354,6 +376,13 @@ export default function ConversationView({
     if (revealTimerRef.current) {
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
+    }
+    // CLARA-18: no dangling agent-end timer once we've actually finished —
+    // whichever path got us here (the timer itself, a real onDisconnected,
+    // the liveness watchdog, or the user) is the only one that gets to fire.
+    if (agentEndTimerRef.current) {
+      clearTimeout(agentEndTimerRef.current);
+      agentEndTimerRef.current = null;
     }
     if (audioRef.current?.srcObject) {
       (audioRef.current.srcObject as MediaStream)
@@ -375,6 +404,23 @@ export default function ConversationView({
     }
     setEndedBy(reason);
     setShowSummary(true);
+  };
+
+  // CLARA-18 / BUG-009: arms the ~1s visible-end timer once the agent's
+  // session_ending message has been seen AND its final reply has actually
+  // revealed (or there was nothing left to reveal) — see onServerMessage and
+  // flushPendingBot above. Clears any timer already running so a stray
+  // double-arm can't double-fire; disconnect() first (safe no-op if already
+  // dead), then the SAME finish path a real onDisconnected/liveness-watchdog
+  // uses. handleFinish's own finishedRef guard is what keeps this from
+  // double-firing against a real onDisconnected racing in.
+  const armAgentEndTimer = () => {
+    if (agentEndTimerRef.current) clearTimeout(agentEndTimerRef.current);
+    agentEndTimerRef.current = setTimeout(() => {
+      agentEndTimerRef.current = null;
+      void clientRef.current?.disconnect();
+      handleFinish();
+    }, AGENT_END_DELAY_MS);
   };
 
   // BUG-009 liveness watchdog: the client-side counterpart to the ~25s server
@@ -558,6 +604,27 @@ export default function ConversationView({
                 pendingExercisePatternRef.current = null;
                 pendingExerciseForgeTopicRef.current = topic;
               }
+            } else if (
+              data &&
+              typeof data === "object" &&
+              (data as { type?: unknown }).type === "session_ending"
+            ) {
+              // CLARA-18 / BUG-009: the agent's own signal that it's about
+              // to schedule the pipeline close — see the const's own
+              // comment above for why this exists (the WS close frame
+              // isn't reliable in prod). The final bubble normally hasn't
+              // revealed yet (the reveal timer is still waiting out
+              // playback), so the real arming happens in flushPendingBot
+              // once that reveal lands. But if there's nothing left
+              // pending right now, there's nothing left to wait for — arm
+              // immediately.
+              sessionEndingRef.current = true;
+              if (
+                pendingBotTextRef.current == null &&
+                revealTimerRef.current == null
+              ) {
+                armAgentEndTimer();
+              }
             }
           },
           onError: (err: unknown) =>
@@ -633,6 +700,15 @@ export default function ConversationView({
         body: JSON.stringify({ text }),
       });
       if (!r.ok) {
+        if (r.status === 404) {
+          // CLARA-18 / BUG-009: same recovery as handlePracticeStop's 404
+          // branch below — a 404 here means the backend pipeline is gone
+          // (session over / registry dropped). Typed input must never
+          // dead-end in a dead room again.
+          void clientRef.current?.disconnect(); // safe no-op if already dead
+          handleFinish();
+          return;
+        }
         // Send failed — still the user's turn, don't leave the orb thinking.
         setStatus(`Send failed: ${r.status}`);
         setSpeakerState("your_turn");
@@ -761,6 +837,7 @@ export default function ConversationView({
             onStopRecording={recorder.stop}
             onCancelRecording={recorder.cancel}
             exerciseSlot={exerciseSlot}
+            teacherLayout={teacherLayout}
           />
         )}
 
@@ -834,6 +911,13 @@ export default function ConversationView({
             endedBy={endedBy}
             sessionId={sessionId}
             onClose={onFinish}
+            // CLARA-18: Clara's card is minimal — no eval box, and the body
+            // line names her topic instead of quoting the YAML's generic
+            // completion copy.
+            hideEval={params.lesson === TEACHER_LESSON}
+            topic={
+              params.lesson === TEACHER_LESSON ? (params.topic ?? null) : null
+            }
           />
         ))}
 
@@ -1030,6 +1114,7 @@ function LivePhase({
   onCancelRecording,
   onOpenType,
   exerciseSlot,
+  teacherLayout,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -1068,6 +1153,13 @@ function LivePhase({
   // see that component's props for the contract. Absent for
   // VoiceChat/TandemChat.
   exerciseSlot?: React.ReactNode;
+  // CLARA-18: Clara's classroom layout, forwarded verbatim from
+  // ConversationView — see that component's props for the contract. When
+  // set: the header shows only the End button (eyebrow/title suppressed)
+  // and the record/type controls (see `controls` below) render right under
+  // the orb/state-label instead of near the transcript. Absent/false is
+  // byte-identical to today.
+  teacherLayout?: boolean;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   // No barge-in by design: while Lena is composing or speaking, recording a
@@ -1081,18 +1173,114 @@ function LivePhase({
   // ignored (see ConversationView's keydown effect). Gated purely on
   // `exerciseSlot` being present, same as every other focus-mode check.
   const exerciseActive = exerciseSlot != null;
+  // CLARA-18: the record controls + "Type instead" button, extracted so the
+  // SAME JSX renders in one of two spots — right under the orb/state-label
+  // (teacherLayout) or in their old place near the transcript (everything
+  // else, byte-identical). Only the wrapper spacing classes differ by
+  // teacherLayout; the content itself is untouched either way. Still gated
+  // on `exerciseActive` internally, same as today, in both placements.
+  const controls = (
+    <>
+      {/* TAND-003 Practice mode: tap-record / tap-stop, auto-sends on stop —
+          same interaction language as SprechenTrainer/SzenarioTrainer's own
+          record controls. Hidden entirely in Natural mode, and hidden (not
+          just disabled) while an exercise card is up — AGENT-00X single
+          focus. */}
+      {practiceMode && !exerciseActive && (
+        <div
+          className={`rise-in flex flex-col items-center ${
+            teacherLayout ? "gap-[5px] mt-[5px]" : "gap-2 pb-2"
+          }`}
+          style={{ animationDelay: "120ms" }}
+        >
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={recording ? onStopRecording : onStartRecording}
+              disabled={recordDisabled}
+              className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
+                recording
+                  ? "animate-pulse border-red-line bg-card text-flag-red"
+                  : "border-red-line bg-flag-red-fill text-on-fill"
+              }`}
+              style={
+                { ["--shadow-color"]: "var(--color-red-line)" } as React.CSSProperties
+              }
+            >
+              {recording ? `Stop · ${elapsed}s` : sending ? "Sending…" : "Record"}
+            </button>
+            {/* UI-006: visible only mid-recording — the escape hatch for a
+                take you don't want sent. */}
+            {recording && (
+              <button
+                type="button"
+                onClick={onCancelRecording}
+                aria-label="Discard recording"
+                title="Discard recording"
+                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-line bg-card font-display text-[18px] font-black text-ink"
+                style={{ ["--shadow-color"]: "var(--color-line)" } as React.CSSProperties}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+            {recording
+              ? "speak, then tap stop — ✕ discards"
+              : botBusy
+                ? "wait for your partner to finish"
+                : sending
+                  ? "sending your turn…"
+                  : "tap record, then speak"}
+          </p>
+          {recordError && (
+            <p className="max-w-[320px] text-center font-body text-[13px] font-semibold text-flag-red-deep">
+              {recordError}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* AGENT-001: visible text-input entry — same overlay "/" opens.
+          AGENT-00X: hidden while an exercise card is up — single focus. */}
+      {onOpenType && !exerciseActive && (
+        <div
+          className={`rise-in flex justify-center ${
+            teacherLayout ? "mt-[5px]" : "pb-2"
+          }`}
+          style={{ animationDelay: "120ms" }}
+        >
+          <button
+            type="button"
+            onClick={onOpenType}
+            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-line bg-card px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
+            style={{ ["--shadow-color"]: "var(--color-line)" } as React.CSSProperties}
+          >
+            ⌨ Type instead
+          </button>
+        </div>
+      )}
+    </>
+  );
   return (
     <>
-      {/* Header */}
-      <header className="rise-in flex items-start justify-between gap-3">
-        <div>
-          <p className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
-            In session
-          </p>
-          <h1 className="mt-1 font-display text-[26px] leading-tight font-black tracking-tight text-ink">
-            {title}
-          </h1>
-        </div>
+      {/* Header. CLARA-18: Clara's classroom layout drops the eyebrow +
+          title block entirely and right-aligns just the button. */}
+      <header
+        className={`rise-in flex ${
+          teacherLayout ? "justify-end" : "items-start justify-between gap-3"
+        }`}
+      >
+        {!teacherLayout && (
+          <div>
+            <p className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
+              In session
+            </p>
+            <h1 className="mt-1 font-display text-[26px] leading-tight font-black tracking-tight text-ink">
+              {title}
+            </h1>
+          </div>
+        )}
         {prominentFinish ? (
           <button
             onClick={onFinish}
@@ -1167,88 +1355,24 @@ function LivePhase({
             ? PRACTICE_STATE_LABEL[speakerState]
             : STATE_LABEL[speakerState]}
         </p>
+        {/* CLARA-18: Clara's classroom layout hugs the controls right under
+            the state-label, inside this same hero container — see
+            `controls` above. */}
+        {teacherLayout && controls}
       </div>
 
-      {/* TAND-003 Practice mode: tap-record / tap-stop, auto-sends on stop —
-          same interaction language as SprechenTrainer/SzenarioTrainer's own
-          record controls. Hidden entirely in Natural mode, and hidden (not
-          just disabled) while an exercise card is up — AGENT-00X single
-          focus. */}
-      {practiceMode && !exerciseActive && (
-        <div
-          className="rise-in flex flex-col items-center gap-2 pb-2"
-          style={{ animationDelay: "120ms" }}
-        >
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={recording ? onStopRecording : onStartRecording}
-              disabled={recordDisabled}
-              className={`btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] px-7 py-3.5 font-display text-[14px] font-black uppercase tracking-[0.16em] disabled:cursor-not-allowed disabled:opacity-50 ${
-                recording
-                  ? "animate-pulse border-red-line bg-card text-flag-red"
-                  : "border-red-line bg-flag-red-fill text-on-fill"
-              }`}
-              style={
-                { ["--shadow-color"]: "var(--color-red-line)" } as React.CSSProperties
-              }
-            >
-              {recording ? `Stop · ${elapsed}s` : sending ? "Sending…" : "Record"}
-            </button>
-            {/* UI-006: visible only mid-recording — the escape hatch for a
-                take you don't want sent. */}
-            {recording && (
-              <button
-                type="button"
-                onClick={onCancelRecording}
-                aria-label="Discard recording"
-                title="Discard recording"
-                className="btn-3d inline-flex h-[52px] w-[52px] items-center justify-center rounded-[20px] border-[3px] border-line bg-card font-display text-[18px] font-black text-ink"
-                style={{ ["--shadow-color"]: "var(--color-line)" } as React.CSSProperties}
-              >
-                ✕
-              </button>
-            )}
-          </div>
-          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
-            {recording
-              ? "speak, then tap stop — ✕ discards"
-              : botBusy
-                ? "wait for your partner to finish"
-                : sending
-                  ? "sending your turn…"
-                  : "tap record, then speak"}
-          </p>
-          {recordError && (
-            <p className="max-w-[320px] text-center font-body text-[13px] font-semibold text-flag-red-deep">
-              {recordError}
-            </p>
-          )}
-        </div>
-      )}
+      {/* Everyone else: the controls sit where they always have, between
+          the orb hero and the transcript — see `controls` above. */}
+      {!teacherLayout && controls}
 
-      {/* AGENT-001: visible text-input entry — same overlay "/" opens.
-          AGENT-00X: hidden while an exercise card is up — single focus. */}
-      {onOpenType && !exerciseActive && (
-        <div
-          className="rise-in flex justify-center pb-2"
-          style={{ animationDelay: "120ms" }}
-        >
-          <button
-            type="button"
-            onClick={onOpenType}
-            className="btn-3d inline-flex items-center gap-2 rounded-[20px] border-[3px] border-line bg-card px-6 py-3 font-display text-[13px] font-black uppercase tracking-[0.16em] text-ink"
-            style={{ ["--shadow-color"]: "var(--color-line)" } as React.CSSProperties}
-          >
-            ⌨ Type instead
-          </button>
-        </div>
-      )}
-
-      {/* Transcript — caps at ~35vh so the orb stays the hero */}
+      {/* Transcript — caps at ~35vh so the orb stays the hero. CLARA-18:
+          a bit more breathing room before it, now that the controls above
+          moved up to hug the orb. */}
       <section
         ref={transcriptRef}
-        className="rise-in mt-4 flex flex-col gap-3 overflow-y-auto pr-1"
+        className={`rise-in ${
+          teacherLayout ? "mt-7" : "mt-4"
+        } flex flex-col gap-3 overflow-y-auto pr-1`}
         style={{ animationDelay: "160ms", maxHeight: "35vh" }}
         aria-label="Conversation transcript"
       >
