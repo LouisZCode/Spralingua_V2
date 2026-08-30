@@ -1403,10 +1403,10 @@ function LivePhase({
   return (
     <>
       {/* Header. CLARA-18: Clara's classroom layout drops the eyebrow +
-          title block entirely and right-aligns just the button. */}
+          title block entirely and centers just the button. */}
       <header
         className={`rise-in flex ${
-          teacherLayout ? "justify-end" : "items-start justify-between gap-3"
+          teacherLayout ? "justify-center" : "items-start justify-between gap-3"
         }`}
       >
         {!teacherLayout && (
