@@ -155,10 +155,12 @@ export default function ConversationView({
   // is reachable there.
   exerciseSlot?: React.ReactNode;
   // CLARA-18: Clara's classroom layout. In LivePhase, when set: the header
-  // renders only the End-conversation button (no eyebrow/title), and the
-  // record/type controls sit right under the orb/state-label instead of
-  // near the transcript — see LivePhase's own comments for the exact
-  // placement. Optional/absent (every existing caller but Clara) is
+  // renders only the End-conversation button (no eyebrow/title), the
+  // record/type controls keep tighter 5px gaps inside their cluster, and
+  // the transcript gets a roomier top margin — see LivePhase's own
+  // comments. (The controls briefly moved up to hug the orb; owner
+  // feedback 2026-08-30 brought them back to the classic spot above the
+  // transcript.) Optional/absent (every existing caller but Clara) is
   // byte-identical to today.
   teacherLayout?: boolean;
 }) {
@@ -1309,12 +1311,12 @@ function LivePhase({
   // ignored (see ConversationView's keydown effect). Gated purely on
   // `exerciseSlot` being present, same as every other focus-mode check.
   const exerciseActive = exerciseSlot != null;
-  // CLARA-18: the record controls + "Type instead" button, extracted so the
-  // SAME JSX renders in one of two spots — right under the orb/state-label
-  // (teacherLayout) or in their old place near the transcript (everything
-  // else, byte-identical). Only the wrapper spacing classes differ by
-  // teacherLayout; the content itself is untouched either way. Still gated
-  // on `exerciseActive` internally, same as today, in both placements.
+  // CLARA-18: the record controls + "Type instead" button, extracted as one
+  // cluster. It renders in the classic spot between the orb hero and the
+  // transcript for EVERY surface — only the wrapper spacing classes differ
+  // by teacherLayout (5px gaps for Clara, the original gap-2/pb-2
+  // otherwise); the content itself is identical either way. Still gated on
+  // `exerciseActive` internally, same as today.
   const controls = (
     <>
       {/* TAND-003 Practice mode: tap-record / tap-stop, auto-sends on stop —
@@ -1491,19 +1493,19 @@ function LivePhase({
             ? PRACTICE_STATE_LABEL[speakerState]
             : STATE_LABEL[speakerState]}
         </p>
-        {/* CLARA-18: Clara's classroom layout hugs the controls right under
-            the state-label, inside this same hero container — see
-            `controls` above. */}
-        {teacherLayout && controls}
       </div>
 
-      {/* Everyone else: the controls sit where they always have, between
-          the orb hero and the transcript — see `controls` above. */}
-      {!teacherLayout && controls}
+      {/* Controls sit in their classic spot for every surface, between the
+          orb hero and the transcript — see `controls` above. CLARA-18
+          briefly moved Clara's set up to hug the orb; owner feedback
+          (2026-08-30): that was too close, bring them back down. Clara
+          keeps only the tightened 5px gaps INSIDE the cluster and the
+          roomier transcript margin below. */}
+      {controls}
 
       {/* Transcript — caps at ~35vh so the orb stays the hero. CLARA-18:
-          a bit more breathing room before it, now that the controls above
-          moved up to hug the orb. */}
+          Clara's room gets a bit more breathing room between the controls
+          above and the chat. */}
       <section
         ref={transcriptRef}
         className={`rise-in ${
