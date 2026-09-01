@@ -346,10 +346,20 @@ def _format_teacher_focus(focus: list) -> str:
     ``(id: ...)`` parenthetical — the ONLY ids the "Practice items" section of
     ``teacher.yaml`` gives Clara to build a valid `[[ÜBUNG: <id>]]` marker
     from. Without this she has no legal id to hand back at all.
+
+    AGENT-002: a second line renders the taxonomy's ``wrong``/``right``
+    minimal-contrast pair as a "Typical slip" anchor, right after the label
+    line and before the learner's own slips. ``.get()`` on both keys — a
+    caller that hasn't been updated to carry them (an old cached
+    lesson_snapshot, a not-yet-updated builder) simply omits the line, same
+    tolerance as every other layer in this prompt.
     """
     blocks: list[str] = []
     for p in focus:
         lines = [f"- {p['label']} (id: {p['pattern_id']}): {p['description']}"]
+        wrong, right = p.get("wrong"), p.get("right")
+        if wrong and right:
+            lines.append(f'  Typical slip: "{wrong}" → correct: "{right}"')
         for ex in p.get("examples", []):
             sentence, corrected = ex.get("sentence"), ex.get("corrected")
             if sentence and corrected:
@@ -538,13 +548,32 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
         # list is the fallback net. `.get` tolerance matches every sibling
         # layer above: a lesson_snapshot frozen before this key existed
         # simply renders without it, same as the fallback_wunsch/forge keys.
+        #
+        # AGENT-002: each line is enriched from the taxonomy with its
+        # description and wrong→right pair — the catalog's membership still
+        # comes only from `ctx.exercise_catalog` (teacher/registry coverage),
+        # never from the taxonomy; the taxonomy is looked up here purely to
+        # decorate an id that's already in the catalog. An id absent from
+        # `load_taxonomy()` (stale registry entry) degrades to the old bare
+        # label line rather than dropping — CLARA-19's precedent.
         if ctx.exercise_catalog:
             catalog_header = lesson.get("catalog_header")
             if catalog_header:
-                lines = "\n".join(
-                    f"- {e['label']} (id: {e['pattern_id']})" for e in ctx.exercise_catalog
-                )
-                parts.append(catalog_header + lines)
+                from grammar.loader import load_taxonomy
+
+                taxonomy = load_taxonomy()
+                catalog_lines = []
+                for e in ctx.exercise_catalog:
+                    taxon = taxonomy.get(e["pattern_id"])
+                    if taxon is None:
+                        catalog_lines.append(f"- {e['label']} (id: {e['pattern_id']})")
+                        continue
+                    line = f"- {e['label']} (id: {e['pattern_id']}): {taxon['description']}"
+                    wrong, right = taxon.get("wrong"), taxon.get("right")
+                    if wrong and right:
+                        line += f' Typical slip: "{wrong}" → correct: "{right}"'
+                    catalog_lines.append(line)
+                parts.append(catalog_header + "\n".join(catalog_lines))
         assembled = "\n---\n\n".join(parts)
     elif lesson_type == "respond":
         assembled = lesson["persona_prompt"]

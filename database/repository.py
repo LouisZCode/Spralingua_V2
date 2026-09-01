@@ -791,7 +791,9 @@ async def load_grammar_focus(
     erased, just deprioritized behind anything live.
 
     Each result is enriched from the taxonomy with ``label`` / ``description``
-    / ``elicit`` and carries the learner's own most-recent examples
+    / ``elicit`` / ``wrong`` / ``right`` (AGENT-002: the taxonomy's minimal-
+    contrast pair, so the teacher prompt has a concrete anchor for the
+    pattern) and carries the learner's own most-recent examples
     ``[{sentence, corrected}]``. A pattern whose slug is no longer in the
     taxonomy (a removed catalog entry) is skipped.
 
@@ -828,6 +830,8 @@ async def load_grammar_focus(
                 "label": pattern["label"],
                 "description": pattern["description"],
                 "elicit": pattern["elicit"],
+                "wrong": pattern["wrong"],  # AGENT-002: minimal-contrast anchor
+                "right": pattern["right"],  # AGENT-002: minimal-contrast anchor
                 "examples": recent,
             }
         )

@@ -567,6 +567,12 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                     "pattern_id": s["pattern_id"],
                                     "label": s["label"],
                                     "description": s["description"],
+                                    # AGENT-002: starters_for_level (CLARA-19)
+                                    # already carries the taxonomy's
+                                    # wrong/right pair — just stopped short of
+                                    # propagating here before.
+                                    "wrong": s["wrong"],
+                                    "right": s["right"],
                                     "examples": [],
                                     "seeded": True,
                                 }
@@ -606,6 +612,8 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                         "pattern_id": pattern,
                                         "label": taxon["label"],
                                         "description": taxon["description"],
+                                        "wrong": taxon["wrong"],  # AGENT-002
+                                        "right": taxon["right"],  # AGENT-002
                                         "examples": examples,
                                         # No `seeded` key — this is the
                                         # learner's actual choice, not a
