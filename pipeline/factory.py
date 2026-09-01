@@ -1,4 +1,5 @@
 import asyncio
+import resource
 import wave
 from datetime import datetime
 from pathlib import Path
@@ -85,6 +86,26 @@ from teacher.starters import starters_for_level
 # taxonomy pattern ids), used below to build Context.exercise_catalog for
 # teacher sessions. Same top-level-import layering as teacher.starters above.
 from teacher.registry import coverage as teacher_coverage
+
+# MEMORY-003 (2026-09-01): one helper, no new dependency. Reads the current
+# process RSS from Linux's /proc (production runs uvicorn in a Linux container
+# under Railway's cgroup memory accounting, which is exactly what the billing
+# graph measures); returns None off-Linux (local dev on macOS), where the log
+# line simply omits the number. The point is attribution: the next memory
+# anomaly should name the session that caused it, straight from the logs.
+def _rss_mb() -> float | None:
+    try:
+        with open("/proc/self/statm") as f:
+            resident_pages = int(f.read().split()[1])
+        return resident_pages * resource.getpagesize() / (1024 * 1024)
+    except Exception:  # noqa: BLE001 — diagnostics only, must never throw
+        return None
+
+
+def _rss_log_suffix() -> str:
+    mb = _rss_mb()
+    return f" rss={mb:.0f}MB" if mb is not None else ""
+
 
 # Live pipeline tasks keyed by user_id. Used by /say/{user_id} in main.py
 # to inject typed turns into an active session. Per-client isolation rule
@@ -706,13 +727,19 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # Per-client audio recorder.
         # `sample_rate=16000` matches Deepgram nova-3 (no resampling cost) and
         # is what Azure Pronunciation Assessment expects natively.
-        # `enable_turn_audio=True` activates the `_process_turn_recording` code
-        # path that fires `on_user_turn_audio_data` on each UserStoppedSpeakingFrame
-        # — that event drives the post-session pronunciation evaluator (PRON-001).
+        # `enable_turn_audio` gates the per-user-turn audio stashing that the
+        # post-session pronunciation evaluator (PRON-001) consumes — it is the
+        # ONLY consumer (factory.py `_run_pronunciation`, itself gated on the
+        # same `locale is not None`). Lessons without a `locale:` (teacher,
+        # lesson_zero, welcome, …) would buffer every user turn in RAM for an
+        # evaluator that provably skips them — pure waste, so the recorder
+        # never collects those turns in the first place. (Memory review
+        # 2026-09-01: AudioBufferProcessor + the turn stash are the 1.5 GB
+        # spike class; this halves them for locale-less rooms.)
         audiobuffer = AudioBufferProcessor(
             num_channels=1,
             sample_rate=16000,
-            enable_turn_audio=True,
+            enable_turn_audio=load_pronunciation_locale(lesson_id) is not None,
         )
 
         def _export_session_audio(wav_path, mp3_path, audio, sample_rate, num_channels):
@@ -741,7 +768,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     _export_session_audio,
                     wav_path, mp3_path, audio, sample_rate, num_channels,
                 )
-                logger.info(f"Audio saved to: {mp3_path}")
+                # MEMORY-003: RSS right after the encode spike (full PCM is
+                # loaded a third time by AudioSegment) — this is where the
+                # graph's tall narrow peaks were born.
+                logger.info(
+                    f"Audio saved to: {mp3_path} "
+                    f"(session_audio={len(audio) / (1024 * 1024):.1f}MB PCM{_rss_log_suffix()})"
+                )
             except Exception as e:  # noqa: BLE001 — audio export must not block cleanup
                 logger.warning(f"Audio export failed (non-fatal): {type(e).__name__}: {e}")
             finally:
@@ -987,7 +1020,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             else None
         )
 
-        logger.info(f"Client connected: user_id={user_id} session_id={session_id} | lesson={lesson_id} voice={voice}")
+        logger.info(
+            f"Client connected: user_id={user_id} session_id={session_id} | "
+            f"lesson={lesson_id} voice={voice}{_rss_log_suffix()}"
+        )
 
         # Hoisted out of the inner try-blocks so the DB finalize step below
         # can read them. They stay None when the corresponding evaluator
@@ -1028,6 +1064,13 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             # so it is safe outside the identity guard above. Must match what
             # register_trace_session stored above (the prefixed form).
             clear_trace_session(user_id, trace_session_id)
+            # MEMORY-003: per-session RSS at teardown — paired with the
+            # connect-time reading, this is the whole leak story per session
+            # in two log lines.
+            logger.info(
+                f"Session ended: user_id={user_id} session_id={session_id} | "
+                f"lesson={lesson_id}{_rss_log_suffix()}"
+            )
             # B3: must not be bare — an unhandled raise here would skip every
             # step after it in this `finally` (evaluators, DB finalize, OTel
             # flush), leaving the activity_session row ended_at=NULL forever.

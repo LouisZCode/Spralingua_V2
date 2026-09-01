@@ -74,6 +74,16 @@ allowed_origins = [
 # time and total cost even if the visitor never trips max_exchanges.
 demo_session_timeout_s = int(os.getenv("DEMO_SESSION_TIMEOUT_S", "180"))
 
+# Wall-clock cap (seconds) on a single authenticated session (MEMORY-002,
+# 2026-09-01). Authenticated routes ran with no watchdog at all: a learner who
+# closes the tab without ending the session keeps a half-open socket alive
+# (BUG-009's keepalive frames actively feed Railway's edge), and the pipeline's
+# AudioBufferProcessor keeps accumulating session audio (~3.8 MB/min with turn
+# recording) for as long as it lives. 2h is far beyond any real lesson — the
+# production p90 is ~17 min (Langfuse, Aug 30 – Sep 1) — while still forgiving
+# a paused "I'll be right back" stretch.
+learned_session_timeout_s = int(os.getenv("LEARNED_SESSION_TIMEOUT_S", "7200"))
+
 # Concurrency + rate caps for the public demo.
 demo_max_concurrent        = int(os.getenv("DEMO_MAX_CONCURRENT", "25"))        # global live demo pipelines
 demo_per_ip_concurrent     = int(os.getenv("DEMO_PER_IP_CONCURRENT", "2"))

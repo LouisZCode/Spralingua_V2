@@ -47,7 +47,7 @@ from zeitfaerbung import (
     router as zeitfaerbung_router,
 )
 from config import database_url
-from config.settings import allowed_origins, demo_session_timeout_s, say_max_chars
+from config.settings import allowed_origins, demo_session_timeout_s, learned_session_timeout_s, say_max_chars
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_LESSONS, ACTIVE_TASKS, lesson_language, validate_lesson_languages
@@ -436,6 +436,10 @@ async def ws_endpoint(
         await run_pipeline(
             websocket, sub, voice, lesson, topic=topic,
             exchanges=exchanges_n, pattern=pattern or None,
+            # MEMORY-002: same watchdog the demo route always had — without it
+            # an abandoned tab kept a zombie pipeline (and its growing audio
+            # buffers) alive for as long as the half-open socket lasted.
+            session_timeout_s=learned_session_timeout_s,
         )
     finally:
         learn_release(sub)
