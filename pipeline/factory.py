@@ -988,9 +988,12 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # Cleared in lockstep with the two above.
         register_trace_session(user_id, trace_session_id)
 
-        # Wall-clock session cap (SEC-001). Armed only when a timeout is passed
-        # (the public demo route does; /learn passes None → no watchdog, so its
-        # behavior is unchanged). Cancelled first thing in `finally` so a session
+        # Wall-clock session cap (SEC-001 + MEMORY-002). The public demo route
+        # always passed a timeout; authenticated /learn routes passed None
+        # until MEMORY-002 (2026-09-01) gave them LEARNED_SESSION_TIMEOUT_S
+        # (default 2h) — an abandoned tab used to keep a zombie pipeline (and
+        # its growing audio buffers) alive for as long as the half-open
+        # socket lasted. Cancelled first thing in `finally` so a session
         # that ends on its own never races the watchdog.
         watchdog = (
             asyncio.create_task(_session_watchdog(task, session_timeout_s, user_id))
