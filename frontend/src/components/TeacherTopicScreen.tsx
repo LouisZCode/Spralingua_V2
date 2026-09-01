@@ -179,7 +179,7 @@ export default function TeacherTopicScreen({
         {exhausted && !isFreeLocked && (
           <div className="rise-in mt-7 rounded-2xl border-[3px] border-line bg-paper-warm px-6 py-5" style={{ animationDelay: "240ms" }}>
             <p className="font-display text-[16px] font-black text-ink">All talks used today</p>
-            <p className="mt-1 font-body text-[14px] text-ink-soft">You&apos;ve used {used} of {limit} today. Come back after 05:00 — or upgrade for more.</p>
+            <p className="mt-1 font-body text-[14px] text-ink-soft">You&apos;ve used {used} of {limit} today — or upgrade for more.</p>
             <Link href="/pricing" className="btn-3d mt-4 inline-flex rounded-2xl border-[3px] border-line bg-card px-5 py-2.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink" style={inkShadow}>See pricing →</Link>
           </div>
         )}

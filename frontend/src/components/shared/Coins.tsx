@@ -11,38 +11,19 @@ import { useAuth } from "../auth/AuthContext";
 
 export function CoinPill({
   balance,
-  nextResetAt,
 }: {
   balance: number;
-  nextResetAt: string | null;
+  // nextResetAt stays in the props for API compatibility with existing
+  // callers, but the "· return at HH:MM" suffix was dropped (the reset time
+  // reads like a deadline in every screen that shows the pill).
+  nextResetAt?: string | null;
 }) {
-  // PAY-002: nextResetAt is a UTC ISO string; render in the USER's browser tz.
-  let resetLabel: string | null = null;
-  if (nextResetAt) {
-    try {
-      const d = new Date(nextResetAt);
-      if (!isNaN(d.getTime())) {
-        resetLabel = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      }
-    } catch {
-      // ignore
-    }
-  }
-
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-line bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink"
-      title={
-        resetLabel ? `Coins return at ${resetLabel}` : undefined
-      }
     >
       <span aria-hidden>🪙</span>
       <span>{balance}</span>
-      {resetLabel && (
-        <span className="hidden font-body text-[11px] font-semibold text-ink-muted sm:inline">
-          · return at {resetLabel}
-        </span>
-      )}
     </span>
   );
 }
