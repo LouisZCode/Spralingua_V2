@@ -235,6 +235,7 @@ You draft ONE production task for a German student who asked their teacher about
 - The task must be answerable with exactly ONE German sentence — not a paragraph, not a list, not several sentences.
 - The target must be UNAVOIDABLE: a student who genuinely completes the scenario cannot dodge the structure and still succeed. If a task CAN be answered without the target, tighten the scenario until the structure is the only natural way to say it.
 - Never a fill-the-blank (no ___ anywhere in `task_en`) and never a translate-this-sentence task — the student invents their own sentence from the scenario; they never convert one that's handed to them.
+- The scenario must be SELF-CONTAINED: every detail the answer depends on — which thing, which person, which event — must be stated in the task itself, or be freely inventable by the student. Never hinge the task on a specific the task text never names: "the movie you both planned to watch" names no movie, so the student cannot possibly refer to it. If the natural answer needs to identify something, name it in the task or rephrase so any plausible instance counts.
 - Everyday, concrete, and natural — a real teacher's assignment, not a stilted textbook drill sentence.
 """
 
@@ -272,6 +273,7 @@ You draft ONE production task for a German student, seeded by a specific grammar
 - The task must be answerable with exactly ONE German sentence — not a paragraph, not a list, not several sentences.
 - The target must be UNAVOIDABLE: a student who genuinely completes the scenario cannot dodge the structure and still succeed. If a task CAN be answered without the target, tighten the scenario until the structure is the only natural way to say it.
 - Never a fill-the-blank (no ___ anywhere in `task_en`) and never a translate-this-sentence task — the student invents their own sentence from the scenario; they never convert one that's handed to them.
+- The scenario must be SELF-CONTAINED: every detail the answer depends on — which thing, which person, which event — must be stated in the task itself, or be freely inventable by the student. Never hinge the task on a specific the task text never names ("the movie you both planned to watch" names no movie). If the natural answer needs to identify something, name it in the task or rephrase so any plausible instance counts.
 - Everyday, concrete, and natural — a real teacher's assignment, not a stilted textbook drill sentence.
 """
 
@@ -332,11 +334,12 @@ You are a strict second pass on a live-forged German production task, before it 
 
 # What to do
 1. Read ONLY the task. Write your own one-sentence German answer to it in `own_answer` — before weighing anything the draft claimed.
-2. Check three things, in order:
+2. Check four things, in order:
    - Is the task clear and doable with ONE German sentence — not vague, not requiring more?
+   - Is the task SELF-CONTAINED — could a student with no other context answer it fully? If a correct answer must identify a specific the task never states (a name, which movie, what was planned), the task is broken.
    - Does the target genuinely belong in ANY correct answer to this task — is it truly unavoidable, not just one option among several?
    - Does the draft's `example_de` fully satisfy the task, and is it correct, natural German?
-3. Set `ok` to true only if all three hold. Otherwise false, with `reason` naming the problem in one short line (else "ok").
+3. Set `ok` to true only if all four hold. Otherwise false, with `reason` naming the problem in one short line (else "ok").
 """
 
 # CLARA-16: the spoken-attempt tolerance rules, injected as `{modality_block}`
@@ -360,6 +363,12 @@ def _modality_block(spoken: bool) -> str:
     return SPOKEN_TOLERANCE_BLOCK if spoken else _TYPED_TOLERANCE_LINE
 
 
+# CLARA-22 (2026-09-01): scope rule in STEP 1 + the cinema worked example —
+# a live session's forge task demanded "the specific movie you both planned
+# to watch" while naming no movie, and the judge failed the student's
+# grammatically perfect accusative sentence for not referencing it. Draft
+# and verify prompts gained the SELF-CONTAINED rule; the judge may now never
+# grade details the task text does not establish.
 PRODUCE_JUDGE_PROMPT = """# Role
 You grade ONE learner sentence against a live-forged German production task. There is no accept-list here — the learner invented their own sentence, so you judge it directly against the task, never against the reference answer word-for-word.
 
@@ -379,6 +388,7 @@ Grade ONLY two things:
 1. Does the sentence answer the TASK — is it a plausible, complete response to the scenario?
 2. Is the TARGET structure present in the sentence and used CORRECTLY?
 An unrelated slip anywhere ELSE in the sentence — a different word choice, a minor typo, an equally valid way of phrasing the rest — must NEVER flip `correct` to false. Note it as a small tip if you like, nothing more.
+Grade only what the task text itself establishes. If the task references a specific the text never states — a name, which movie, what was planned — that reference can never create a pass/fail requirement: judge the sentence as a plausible response to what IS stated, with the target used correctly. The reference answer's invented details (which film, which city, which friend) are one possibility, never the required one. A grammatically correct sentence on the target that plausibly answers the stated scenario is CORRECT even when it picks different details than the reference.
 
 # STEP 2 — worked examples
 - task "Make a wish about your weekend using 'hätte'" · target "hätte" · reference "Ich hätte gern mehr Zeit für meine Familie gehabt." · learner "Ich hätte gerne mal wieder richtig ausgeschlafen." → **correct: true**. A completely different sentence from the reference, still a genuine wish, `hätte` used correctly — that's the whole point of free production.
@@ -386,6 +396,7 @@ An unrelated slip anywhere ELSE in the sentence — a different word choice, a m
 - same task/target · learner "Ich habe letztes Wochenende viel geschlafen." → **correct: false**. CONTROL — `hätte` never appears at all, the target structure is simply missing. note: "no 'hätte' — that's the whole point of a wish", corrected: "Ich hätte letztes Wochenende gerne viel geschlafen."
 - task "Explain what you would do if you won the lottery, using a Konjunktiv II sentence with 'würde'" · target "würde" · learner "Wenn ich im Lotto gewinne, kaufe ich ein Haus." → **correct: false**. DODGE — the learner answered with a real-condition sentence instead of the hypothetical the task asked for; `würde` (or an equivalent Konjunktiv II form) never appears. note: "that's a real condition, not the hypothetical 'würde' asks for", corrected: "Wenn ich im Lotto gewinnen würde, würde ich ein Haus kaufen."
 - task "Tell a friend they should see a doctor, using 'solltest'" · target "solltest" · learner "Du solltest zum Arzt gehen." → **correct: true**. Answers the task, target present and correctly formed.
+- task "Tell your friend what you saw last night at the cinema, referring to the specific movie you both planned to watch." · target "accusative article for direct objects" · reference "Ich habe den Film gestern Abend im Kino gesehen." · learner "Ich habe einen Film im Kino gesehen." → **correct: true**. The task names no movie — "the movie you both planned" tells the student nothing to be specific about, so an indefinite article is a fully plausible answer and the accusative usage is correct. The reference's "den Film" is ONE possibility, not the required answer. NEVER fail correct target grammar because the sentence doesn't match a scenario detail the task text didn't state.
 
 # STEP 3 — grade
 - `correct` — true iff BOTH step-1 conditions pass.
