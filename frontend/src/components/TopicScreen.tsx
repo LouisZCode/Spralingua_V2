@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { HTTP_BASE } from "@/lib/api";
 import { useCoinBalance, useCoinsBypassed } from "./shared/Coins";
 import type { TandemPartner } from "./shared/tandem";
+import AppHeader from "@/components/shared/AppHeader";
 
 // The Grammatik-Tandem pre-conversation screen (TANDEM-001, Phase 3 MVP;
 // TAND-005 grew the topic pool and reworked the suggestions below; TAND-008
@@ -154,29 +154,9 @@ export default function TopicScreen({
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <Link href="/practice" className="flex items-center gap-2.5">
-            <Image
-              src="/mascot/raven.png"
-              alt="Spralingua raven mascot"
-              width={40}
-              height={40}
-              priority
-              className="mascot-keyline h-9 w-9 select-none"
-            />
-            <span className="font-display text-[22px] font-black tracking-tight text-ink">
-              Spralingua
-            </span>
-          </Link>
-          <Link
-            href="/practice"
-            className="font-body text-[13px] font-bold text-ink-soft hover:text-ink"
-          >
-            ← All modes
-          </Link>
-        </div>
-      </header>
+      {/* APPHDR-001: shared header — teacher/tandem topic screens sit in
+                the narrower container. */}
+      <AppHeader back={{ href: "/practice", label: "← All modes" }} maxWidth="max-w-3xl" />
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-14">
         <div className="rise-in">

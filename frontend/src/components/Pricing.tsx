@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
-import Image from "next/image";
 import { useAuth } from "./auth/AuthContext";
 import StartCta from "./auth/StartCta";
 import { createCheckout, fetchBillingPortal } from "@/lib/api";
+import AppHeader from "@/components/shared/AppHeader";
 
 // PAY-001 (Phase 3): the pricing page. Linked from the landing page nav,
 // the landing footer and the practice menu — it's a real, reachable route.
@@ -126,29 +125,12 @@ export default function Pricing() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Link href={signedIn ? "/practice" : "/"} className="flex items-center gap-2.5">
-            <Image
-              src="/mascot/raven.png"
-              alt="Spralingua raven mascot"
-              width={40}
-              height={40}
-              priority
-              className="mascot-keyline h-9 w-9 select-none"
-            />
-            <span className="font-display text-[22px] font-black tracking-tight text-ink">
-              Spralingua
-            </span>
-          </Link>
-          <Link
-            href={signedIn ? "/practice" : "/"}
-            className="font-body text-[13px] font-bold uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red"
-          >
-            ← Back
-          </Link>
-        </div>
-      </header>
+      {/* APPHDR-001: shared header — auth-aware: signed-in learners come
+          back to /practice, visitors to the landing page. */}
+      <AppHeader
+        logoHref={signedIn ? "/practice" : "/"}
+        back={{ href: signedIn ? "/practice" : "/", label: "← Back" }}
+      />
 
       <main className="relative mx-auto max-w-5xl px-6 py-16">
         <div className="rise-in text-center">

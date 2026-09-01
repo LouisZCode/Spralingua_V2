@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AppHeader from "@/components/shared/AppHeader";
 
 // LEGAL-001: shared chrome for the three legal documents (Impressum, Privacy
 // Policy, Terms of Service) — a quiet, readable column rather than a
@@ -24,14 +25,14 @@ export default function LegalLayout({
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="relative border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl flex-col gap-3 px-6 py-6 sm:flex-row sm:items-center sm:justify-between">
-          <Link
-            href="/"
-            className="font-body text-[13px] font-bold uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red"
-          >
-            ← Back to Spralingua
-          </Link>
+      {/* APPHDR-001: shared header — moment pages (legal) scroll away with
+          the content; the legal nav rides in the right slot, and the
+          wordmark now leads back to the landing page. */}
+      <AppHeader
+        logoHref="/"
+        sticky={false}
+        maxWidth="max-w-3xl"
+        right={
           <nav className="flex flex-wrap gap-x-5 gap-y-1">
             {LEGAL_NAV.map((l) => (
               <Link
@@ -43,8 +44,8 @@ export default function LegalLayout({
               </Link>
             ))}
           </nav>
-        </div>
-      </header>
+        }
+      />
 
       <main className="relative mx-auto max-w-3xl px-6 py-14">
         <article>{children}</article>

@@ -4,6 +4,7 @@ import ThemeToggle from "./shared/ThemeToggle";
 import Link from "next/link";
 import HeroDemo from "./HeroDemo";
 import StartCta from "./auth/StartCta";
+import AppHeader from "@/components/shared/AppHeader";
 
 type Accent = "red" | "gold" | "ink";
 
@@ -83,22 +84,13 @@ export default function LandingPage() {
       />
 
       {/* Top bar */}
-      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-2.5">
-            <Image
-              src="/mascot/raven.png"
-              alt="Spralingua raven mascot"
-              width={40}
-              height={40}
-              priority
-              className="mascot-keyline h-9 w-9 select-none"
-            />
-            <span className="font-display text-[22px] font-black tracking-tight text-ink">
-              Spralingua
-            </span>
-          </div>
-          <nav className="flex items-center gap-6">
+      {/* APPHDR-001: shared header — the landing page keeps its marketing
+          nav (Pricing, gated Start CTA, theme switch), and the wordmark is
+          now an honest link home. */}
+      <AppHeader
+        logoHref="/"
+        right={
+          <>
             <Link
               href="/pricing"
               className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
@@ -111,9 +103,9 @@ export default function LandingPage() {
             {/* DARK-001: reachable before sign-in — the landing page is the
                 first impression, and a visitor on a dark OS lands here first. */}
             <ThemeToggle />
-          </nav>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <main className="relative overflow-x-clip">
         <div className="mx-auto max-w-6xl px-6">

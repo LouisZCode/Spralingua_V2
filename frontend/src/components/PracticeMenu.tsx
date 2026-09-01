@@ -14,6 +14,7 @@ import {
   type Recommendation,
   type Streak,
 } from "./development/api";
+import AppHeader from "@/components/shared/AppHeader";
 
 // Post-login hub. After the Google sign-in flow (StartCta) the user lands here
 // instead of dropping straight into a lesson, and picks which practice mode to
@@ -211,23 +212,12 @@ export default function PracticeMenu() {
       />
 
       {/* Top bar — same wordmark as the landing header */}
-      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image
-              src="/mascot/raven.png"
-              alt="Spralingua raven mascot"
-              width={40}
-              height={40}
-              priority
-              className="mascot-keyline h-9 w-9 select-none"
-            />
-            <span className="font-display text-[22px] font-black tracking-tight text-ink">
-              Spralingua
-            </span>
-          </Link>
-
-          <div className="flex items-center gap-4">
+      {/* APPHDR-001: shared header — the hub carries the learner's real
+          state (theme, coins, pricing door, level) and, when signed in, the
+          profile avatar. The landing page passes its own marketing nav. */}
+      <AppHeader
+        right={
+          <>
             {/* DARK-001: the light/dark switch lives here because /practice is
                 the one header every learner passes through. */}
             <ThemeToggle />
@@ -253,9 +243,9 @@ export default function PracticeMenu() {
             >
               {user?.level ?? "Set level"}
             </button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       <main className="relative mx-auto flex w-full max-w-5xl flex-1 flex-col justify-center px-6 py-16">
         <div className="rise-in">

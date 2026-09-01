@@ -28,6 +28,7 @@ import { postModeComplete } from "./development/api";
 import SoundToggle from "./shared/SoundToggle";
 import { loadError } from "./shared/copy";
 import ThemeToggle from "./shared/ThemeToggle";
+import AppHeader from "@/components/shared/AppHeader";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-red-line)",
@@ -321,33 +322,16 @@ export default function Satzschmiede() {
           className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
         />
 
-        <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-            <Link href="/" className="flex items-center gap-2.5">
-              <Image
-                src="/mascot/raven.png"
-                alt="Spralingua raven mascot"
-                width={40}
-                height={40}
-                priority
-                className="mascot-keyline h-9 w-9 select-none"
-              />
-              <span className="font-display text-[22px] font-black tracking-tight text-ink">
-                Spralingua
-              </span>
-            </Link>
-            <div className="flex items-center gap-4">
+        {/* APPHDR-001: shared header; the toggles ride in the right slot. */}
+        <AppHeader
+          right={
+            <>
               <ThemeToggle />
               <SoundToggle />
-              <Link
-                href="/practice"
-                className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
-              >
-                ← Menu
-              </Link>
-            </div>
-          </div>
-        </header>
+            </>
+          }
+          back={{ href: "/practice", label: "← Menu" }}
+        />
 
         <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
           <SatzschmiedePicker onStart={handlePickerStart} />
@@ -363,33 +347,16 @@ export default function Satzschmiede() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image
-              src="/mascot/raven.png"
-              alt="Spralingua raven mascot"
-              width={40}
-              height={40}
-              priority
-              className="mascot-keyline h-9 w-9 select-none"
-            />
-            <span className="font-display text-[22px] font-black tracking-tight text-ink">
-              Spralingua
-            </span>
-          </Link>
-          <div className="flex items-center gap-4">
+      {/* APPHDR-001: shared header; the toggles ride in the right slot. */}
+      <AppHeader
+        right={
+          <>
             <ThemeToggle />
             <SoundToggle />
-            <Link
-              href="/practice"
-              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
-            >
-              ← Menu
-            </Link>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+        back={{ href: "/practice", label: "← Menu" }}
+      />
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
         {/* Page title — the module name reads as a heading; the pool count

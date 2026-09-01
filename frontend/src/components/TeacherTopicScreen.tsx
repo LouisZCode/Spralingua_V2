@@ -2,11 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useAuth } from "./auth/AuthContext";
 import { fetchStats, UnauthorizedError, type FocusPattern } from "./development/api";
 import { TEACHER_NAME } from "./shared/teacher";
 import { HTTP_BASE } from "@/lib/api";
+import AppHeader from "@/components/shared/AppHeader";
 
 const inkShadow = {
   ["--shadow-color"]: "var(--color-line)",
@@ -108,15 +108,12 @@ export default function TeacherTopicScreen({
   return (
     <div className="relative flex min-h-screen flex-col bg-paper text-ink">
       <div aria-hidden className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50" />
-      <header className="sticky top-0 z-50 border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <Link href="/practice" className="flex items-center gap-2.5">
-            <Image src="/mascot/raven.png" alt="Spralingua raven mascot" width={40} height={40} priority className="mascot-keyline h-9 w-9 select-none" />
-            <span className="font-display text-[22px] font-black tracking-tight text-ink">Spralingua</span>
-          </Link>
-          <Link href="/practice" className="font-body text-[13px] font-bold text-ink-soft hover:text-ink">← All modes</Link>
-        </div>
-      </header>
+      {/* APPHDR-001: shared header — topic screens sit in the narrower
+          container. */}
+      <AppHeader
+        back={{ href: "/practice", label: "← All modes" }}
+        maxWidth="max-w-3xl"
+      />
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-14">
         <div className="rise-in">
@@ -129,11 +126,11 @@ export default function TeacherTopicScreen({
           {isDeveloper ? (
             <p className="font-body text-[12px] text-ink-muted">🪙 developer · unlimited talks</p>
           ) : isFreeLocked ? (
-            <p className="font-body text-[12px] text-ink-muted">Clara is included with Basic (1/day) and Premium (3/day) · resets 05:00</p>
+            <p className="font-body text-[12px] text-ink-muted">Clara is included with Basic (1/day) and Premium (3/day)</p>
           ) : exhausted ? (
-            <p className="font-body text-[12px] font-semibold text-flag-red-deep">Daily limit reached — {used}/{limit} today · resets 05:00</p>
+            <p className="font-body text-[12px] font-semibold text-flag-red-deep">Daily limit reached — {used}/{limit} today</p>
           ) : (
-            <p className="font-body text-[12px] text-ink-muted">{remaining} of {limit} talk{limit !== 1 ? "s" : ""} left today · {used}/{limit} used · resets 05:00</p>
+            <p className="font-body text-[12px] text-ink-muted">{remaining} of {limit} talk{limit !== 1 ? "s" : ""} left today · {used}/{limit} used</p>
           )}
         </div>
 

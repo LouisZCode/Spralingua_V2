@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import AppHeader from "@/components/shared/AppHeader";
 
 // PAY-001: lands here after Stripe Checkout redirects back
 // (payments/routes.py's success_url is /pricing/success?session_id=...).
@@ -231,23 +231,9 @@ export default function PricingSuccess() {
         className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
       />
 
-      <header className="relative border-b-[3px] border-line bg-card/85 backdrop-blur">
-        <div className="mx-auto flex max-w-3xl items-center px-6 py-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <Image
-              src="/mascot/raven.png"
-              alt="Spralingua raven mascot"
-              width={36}
-              height={36}
-              priority
-              className="mascot-keyline h-8 w-8 select-none"
-            />
-            <span className="font-display text-[19px] font-black tracking-tight text-ink">
-              Spralingua
-            </span>
-          </Link>
-        </div>
-      </header>
+      {/* APPHDR-001: shared header — moment page, so it scrolls away with
+          the content (sticky=false), in the narrower container. */}
+      <AppHeader sticky={false} maxWidth="max-w-3xl" />
 
       <main className="relative mx-auto flex w-full max-w-md flex-1 flex-col items-center justify-center px-6 py-16 text-center">
         {body}
