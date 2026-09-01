@@ -85,6 +85,7 @@ export default function ConversationView({
   onExerciseForge,
   onSessionEnded,
   exerciseSlot,
+  localEchoRef,
   teacherLayout,
 }: {
   params: SessionParams;
@@ -154,6 +155,14 @@ export default function ConversationView({
   // shortcut) — VoiceChat and TandemChat never pass this prop, so none of it
   // is reachable there.
   exerciseSlot?: React.ReactNode;
+  // AGENT-00X (answer echo): optional ref the caller hands in; on mount this
+  // component writes a one-arg function onto it that appends a plain "you"
+  // bubble to the transcript WITHOUT any network round trip. The teacher room
+  // uses it to echo a graded exercise answer back for review (the typed text,
+  // or the audio endpoint's returned transcript) — an attempt never rides
+  // /say as the learner's turn, so without this it is invisible in the chat.
+  // Optional/absent (every existing caller but Clara) changes nothing.
+  localEchoRef?: { current: ((text: string) => void) | null };
   // CLARA-18: Clara's classroom layout. In LivePhase, when set: the header
   // renders only the End-conversation button (no eyebrow/title), the
   // record/type controls keep tighter 5px gaps inside their cluster, and
@@ -204,6 +213,19 @@ export default function ConversationView({
   // BUG-005: guards against two fast Enter presses firing sendText twice
   // before React clears `draft`.
   const sendingRef = useRef(false);
+  // AGENT-00X (answer echo): publish the local-bubble appender onto the
+  // caller's ref — see the `localEchoRef` prop contract above. Re-registered
+  // every render (cheap: setMessages is stable); the cleanup nulls it so a
+  // stale caller can never append into an unmounted view.
+  useEffect(() => {
+    if (!localEchoRef) return;
+    localEchoRef.current = (text: string) => {
+      setMessages((prev) => [...prev, { speaker: "you", text }]);
+    };
+    return () => {
+      localEchoRef.current = null;
+    };
+  });
   const [sessionId, setSessionId] = useState<string | null>(null);
   // SESS-001: mirrors `sessionId` but as a ref, set in the SAME
   // session_started handler below. handleFinish is invoked from callbacks

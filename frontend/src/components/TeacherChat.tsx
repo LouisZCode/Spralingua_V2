@@ -648,6 +648,14 @@ export default function TeacherChat() {
     };
   }, [clearRevealTimer, clearDismissTimer]);
 
+  // ─── AGENT-00X (answer echo) ─────────────────────────────────────────
+  // ConversationView publishes its local "you"-bubble appender onto this ref
+  // (see localEchoRef there). Every graded attempt below echoes the learner's
+  // own answer through it BEFORE sendGradedReport, so the chat reads:
+  // announcement → their answer → Clara's reaction. Give-ups and skips echo
+  // nothing — there is no answer of the learner's own to review.
+  const echoAnswerRef = useRef<((text: string) => void) | null>(null);
+
   // ─── D5 per-drill report mapping + POST closures ─────────────────────
   // Each of the five mirrors the SAME shape: POST the attempt to the
   // teacher-only endpoint, mark the item answered (so the Skip row above
@@ -671,6 +679,7 @@ export default function TeacherChat() {
       });
       setExerciseAnswered(true);
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      if (!giveUp) echoAnswerRef.current?.(displayAnswer);
       // Old adapter's rule: meansInstead rides along on the SAME note line.
       let note = verdict.note;
       if (verdict.meansInstead) {
@@ -717,6 +726,7 @@ export default function TeacherChat() {
       const displayAnswer = giveUp
         ? "(gave up)"
         : [ex.item.given, ...(order ?? [])].filter(Boolean).join(" ");
+      if (!giveUp) echoAnswerRef.current?.(displayAnswer);
       // Mirrors the old adapter's collapse: `variant` only ever accompanies
       // a TRUE verdict, `note` only a FALSE one — never both.
       const note = verdict.correct ? verdict.variant : verdict.note;
@@ -752,6 +762,7 @@ export default function TeacherChat() {
       });
       setExerciseAnswered(true);
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      if (!giveUp) echoAnswerRef.current?.(displayAnswer);
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
       sendGradedReport(
@@ -785,6 +796,7 @@ export default function TeacherChat() {
       });
       setExerciseAnswered(true);
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      if (!giveUp) echoAnswerRef.current?.(displayAnswer);
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
       sendGradedReport(
@@ -825,6 +837,7 @@ export default function TeacherChat() {
       if (verdict.kind === "unrecognized") return verdict;
       setExerciseAnswered(true);
       const displayAnswer = giveUp ? "(gave up)" : answer ?? "";
+      if (!giveUp) echoAnswerRef.current?.(displayAnswer);
       const alsoCorrectFit =
         verdict.correct && displayAnswer.trim() !== verdict.expected.trim();
       sendGradedReport(
@@ -870,6 +883,12 @@ export default function TeacherChat() {
             "sprechen"
           );
       setExerciseAnswered(true);
+      // AGENT-00X: the transcript IS the learner's answer here — echo exactly
+      // what STT heard, so they can review what was understood (a mis-hearing
+      // shows up as their bubble reading wrong, not as a mystery verdict).
+      if (!giveUp && verdict.transcript) {
+        echoAnswerRef.current?.(verdict.transcript);
+      }
       sendGradedReport(
         giveUp
           ? buildSprechenGiveUpReport(
@@ -913,6 +932,7 @@ export default function TeacherChat() {
         answer,
       });
       setExerciseAnswered(true);
+      echoAnswerRef.current?.(answer);
       sendGradedReport(
         buildProduceReport({
           topic: ex.topic,
@@ -942,6 +962,7 @@ export default function TeacherChat() {
         "produce"
       );
       setExerciseAnswered(true);
+      if (verdict.transcript) echoAnswerRef.current?.(verdict.transcript);
       sendGradedReport(
         buildProduceReport({
           topic: ex.topic,
@@ -1169,6 +1190,10 @@ export default function TeacherChat() {
       // placement/animation/single-focus. This file only decides WHEN that
       // happens (handleExerciseRequest above) and what's inside it.
       exerciseSlot={exerciseSlot}
+      // AGENT-00X: where graded attempts echo the learner's own answer as a
+      // "you" bubble (see the submit closures above) — typed text or the
+      // audio endpoint's transcript, no feedback attached, just their turn.
+      localEchoRef={echoAnswerRef}
     />
   );
 }
