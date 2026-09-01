@@ -223,14 +223,21 @@ export default function PracticeMenu() {
             <ThemeToggle />
             {/* PAY-002: balance chip — informative even at 0, hidden when signed out */}
             <PracticeMenuCoinChip />
-            {/* PAY-001: the signed-in door to /pricing — upgrade for free
-                users, plan management (portal) for paying ones. */}
-            <Link
-              href="/pricing"
-              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
-            >
-              Pricing
-            </Link>
+            {/* PAY-001/PAYHUB-001: the door to /pricing adapts to the plan.
+                Signed out or free → visible (compare plans, upgrade, top-up).
+                Paying → not in the header at all; /profile's "Manage plan →"
+                is their plan door (portal, tier switch), so the hub's
+                money-nav is reserved for the people it converts. The
+                out-of-coins panels stay tier-blind — running dry is a
+                money moment for every plan. */}
+            {(user?.tier ?? "free") !== "basic" && (user?.tier ?? "free") !== "premium" && (
+              <Link
+                href="/pricing"
+                className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+              >
+                Pricing
+              </Link>
+            )}
 
             {/* LEVEL-001: the level is always visible and always changeable —
                 a self-declared level goes stale as the learner improves, and
