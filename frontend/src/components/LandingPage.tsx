@@ -18,52 +18,70 @@ const FEATURES: {
     accent: "red",
     icon: "mic",
     title: "Talk, don't tap.",
-    body: "Your microphone is the keyboard. Speak out loud, the way you actually would in the moment.",
+    body: "Your microphone is the keyboard. Speak your vocabulary answers out loud, and a strict examiner checks each one.",
   },
   {
     accent: "gold",
     icon: "chat",
-    title: "Real scenarios.",
-    body: "Run into a neighbor, introduce yourself on the street. Your partner stays in character the whole way through.",
+    title: "Only German, from real partners.",
+    body: "Lena and Paul answer only in German and remember what you talked about last time. A letter arrives in your Briefkasten and you write back.",
   },
   {
     accent: "ink",
     icon: "check",
     title: "Get feedback.",
-    body: "After each session: whether you hit the scenario's goals, plus your best and toughest phrase by pronunciation.",
+    body: "Every mistake goes into a personal grammar ledger of 33 patterns — it's what your partners and your drills focus on next.",
   },
 ];
 
 const STEPS: { n: string; title: string; body: string }[] = [
   {
     n: "01",
-    title: "Pick a scenario",
-    body: "Choose your level and the situation you want to practice.",
+    title: "Sign in with Google",
+    body: "No forms to fill out — one tap and you're in.",
   },
   {
     n: "02",
-    title: "Have the conversation",
-    body: "Mic on. Talk in real time — it listens, thinks, and answers back.",
+    title: "Pick your round",
+    body: "Choose how long you've got. The coin cost shows before you start.",
   },
   {
     n: "03",
-    title: "See your results",
-    body: "Goals checked off, and a pronunciation read on the phrases you said.",
+    title: "Practice in German",
+    body: "Vocabulary cards, one stream of every exercise, a tandem chat, or a letter to answer — every mistake goes into a ledger that shapes what's next.",
   },
 ];
 
 const LEVELS: { tag: string; level: string; title: string; sub: string }[] = [
   {
-    tag: "A1",
-    level: "Beginner",
-    title: "Sidewalk Hello",
-    sub: "First encounters · introducing yourself",
+    tag: "01",
+    level: "Vocabulary",
+    title: "Satzschmiede",
+    sub: "Mic-first cards. A strict examiner checks every one.",
   },
   {
-    tag: "B1",
-    level: "Intermediate",
-    title: "Waiting Room Run-In",
-    sub: "Small talk while you both wait",
+    tag: "02",
+    level: "Every exercise",
+    title: "Flow",
+    sub: "Every exercise in one stream. You choose how long.",
+  },
+  {
+    tag: "03",
+    level: "Conversation",
+    title: "Tandem",
+    sub: "Chat with Lena or Paul — they answer only in German.",
+  },
+  {
+    tag: "04",
+    level: "Letters",
+    title: "Briefkasten",
+    sub: "A letter arrives. You write back in German.",
+  },
+  {
+    tag: "05",
+    level: "Grammar",
+    title: "Clara",
+    sub: "Ask her anything. She explains in English, with German examples.",
   },
 ];
 
@@ -122,7 +140,7 @@ export default function LandingPage() {
 
             <div className="rise-in">
               <h1 className="font-display text-[clamp(38px,6.5vw,68px)] font-black leading-[0.98] tracking-tight text-ink">
-                Learn a language by{" "}
+                Learn German by{" "}
                 <span className="goal-shimmer">speaking</span>
                 {/* Raven end-cap: inline so it rides at the end of the line and
                     reflows with the headline — no absolute coords to break on
@@ -141,9 +159,10 @@ export default function LandingPage() {
                 </span>
               </h1>
               <p className="mt-5 max-w-[440px] font-body text-[17px] leading-relaxed text-ink-soft">
-                Real-time voice conversations with an AI partner.
+                Vocabulary cards judged by an examiner, tandem chats that
+                answer only in German.
                 <br />
-                Practice real situations, get immediate feedback.
+                Every mistake goes into a ledger that shapes what&apos;s next.
               </p>
               <div className="mt-8 flex flex-col gap-3 sm:flex-row">
                 <StartCta
@@ -153,7 +172,7 @@ export default function LandingPage() {
                   <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
                     <path d="M6 4 L20 12 L6 20 Z" />
                   </svg>
-                  Start a lesson
+                  Start practicing
                 </StartCta>
                 <a
                   href="#how"
@@ -209,7 +228,7 @@ export default function LandingPage() {
 
           {/* ─── Levels ───────────────────────────────────────────── */}
           <section className="py-16 lg:py-24">
-            <SectionHeading eyebrow="Levels" title="Start where you are." />
+            <SectionHeading eyebrow="Inside the app" title="Five ways to practice." />
             <div className="mx-auto mt-12 flex max-w-md flex-col">
               {LEVELS.map((lv, i) => (
                 <Fragment key={lv.tag}>
@@ -251,7 +270,7 @@ export default function LandingPage() {
                     More on the way
                   </h3>
                   <p className="font-body text-[14px] leading-snug text-ink-muted">
-                    New levels and situations are in the works.
+                    New ways to practice are in the works.
                   </p>
                 </div>
               </div>
@@ -275,8 +294,8 @@ export default function LandingPage() {
                   Ready to talk?
                 </h2>
                 <p className="mx-auto mt-4 max-w-md font-body text-[16px] leading-relaxed text-on-fill/70">
-                  Pick a scenario and start speaking. Mic on, 15-minute cap,
-                  ends naturally when you say goodbye.
+                  Sign in, pick how long you&apos;ve got, and start speaking
+                  German. It ends when you&apos;re done, not on a clock.
                 </p>
                 <StartCta
                   className="btn-3d mt-8 inline-flex items-center justify-center gap-2.5 rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-8 py-4 font-display text-[16px] font-black uppercase tracking-[0.16em] text-on-fill"
@@ -285,7 +304,7 @@ export default function LandingPage() {
                   <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current">
                     <path d="M6 4 L20 12 L6 20 Z" />
                   </svg>
-                  Start a lesson
+                  Start practicing
                 </StartCta>
               </div>
             </div>
@@ -309,7 +328,7 @@ export default function LandingPage() {
             </span>
           </div>
           <span className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted">
-            Voice-powered language learning
+            Voice-powered German practice
           </span>
           {/* LEGAL-001: quiet links to the three legal documents.
               UX-16: py-3.5 -my-3.5 grows each tap target to ~44px tall without

@@ -57,8 +57,7 @@ const PLANS: Plan[] = [
       "500 coins every day",
       "30+ new words a day",
       "Long tandem conversations, every day",
-      "Interview practice with real-life audio",
-      "Upload your own audio",
+      "Clara the teacher — 3 talks a day (Basic gets 1)",
       "Early access to new features",
     ],
   },
@@ -146,7 +145,7 @@ export default function Pricing() {
               "Speak the words you want to learn",
               "Talk to a tandem partner every day",
               "Grammar practice built into real conversations",
-              "Rehearse real German situations before they happen",
+              "Answer a letter in your Briefkasten and get it corrected",
             ].map((benefit) => (
               <p
                 key={benefit}

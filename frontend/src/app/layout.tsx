@@ -20,9 +20,37 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const SITE_URL = "https://spralingua.com";
+const SITE_TITLE = "Spralingua — Speak German, Get Corrected";
+const SITE_DESCRIPTION =
+  "Practice German out loud: vocabulary cards judged by an examiner, tandem chats that answer only in German, and letters to write back. Free to start.";
+
 export const metadata: Metadata = {
-  title: "Spralingua",
-  description: "Voice-powered language learning",
+  metadataBase: new URL(SITE_URL),
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    siteName: "Spralingua",
+    url: SITE_URL,
+    locale: "en_US",
+    type: "website",
+    images: [
+      {
+        url: "/mascot/raven.png",
+        width: 1024,
+        height: 1024,
+        alt: "Spralingua raven mascot",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/mascot/raven.png"],
+  },
 };
 
 export default function RootLayout({
