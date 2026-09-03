@@ -180,7 +180,7 @@ items:
     level: a2
     frame: "Der Kaffeeduft kommt aus ___ Küche."
     answer: "der"
-    hint: "aus is fixed-case as well — same feminine ending as zu and von."
+    hint: "aus always takes the dative — what's the feminine dative article?"
     rule: "aus always takes Dativ. die Küche → der Küche."
 
   - id: dp-kindheit-seit
@@ -277,7 +277,7 @@ items:
     level: a2
     frame: "Ich fahre nie ohne ___ Handy."
     answer: "mein"
-    hint: "Another neuter noun, no visible change — same reasoning as before."
+    hint: "ohne always takes the accusative — does this neuter possessive visibly change here?"
     rule: "ohne always takes Akkusativ; neuter 'mein' stays the same there. mein Handy → mein Handy."
 
   - id: ap-gegen-wand
@@ -367,7 +367,7 @@ items:
     level: a1
     frame: "Wir haben ___ Hund."
     answer: "einen"
-    hint: "Same pattern as the coffee — masculine indefinite article as a direct object."
+    hint: "Masculine direct object — does 'ein' visibly change here?"
     rule: "Direct object, masculine → einen. der Hund → einen Hund."
 
   - id: aa-katze-haben

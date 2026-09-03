@@ -428,7 +428,7 @@ export default function GenusTrainer({
             className="btn-3d inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
             style={redShadow}
           >
-            Start · {round.length} words
+            Start · {round.length} Wörter
           </button>
         </div>
       </div>

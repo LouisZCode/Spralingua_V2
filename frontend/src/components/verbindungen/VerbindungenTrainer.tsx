@@ -244,7 +244,7 @@ export default function VerbindungenTrainer({
           className="btn-3d mt-7 inline-flex items-center rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3 font-display text-[14px] font-black uppercase tracking-[0.16em] text-on-fill"
           style={redShadow}
         >
-          Start · {round.length} chunks
+          Start · {round.length} Sätze
         </button>
       </div>
     );

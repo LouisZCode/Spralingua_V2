@@ -821,7 +821,7 @@ items:
     frame: "Ich trinke ___ Tee als Kaffee. (gern)"
     answer: "lieber"
     chunk: "irregular comparatives: gut → besser, viel → mehr, gern → lieber, hoch → höher"
-    hint: "This comparative doesn't come from an adjective at all — which word?"
+    hint: "I drink tea more gladly than coffee — which word means 'more gladly'?"
 
   - id: komp-hoch
     pattern_id: komparativ-form

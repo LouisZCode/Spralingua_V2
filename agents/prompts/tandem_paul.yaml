@@ -120,7 +120,7 @@ grammar_focus_header: |
 # Vocab layer header — same rendering contract as tandem.yaml.
 vocab_header: |
   # Words to weave in
-  Your partner is currently learning these German words. Work EVERY one of them into your own side of the conversation at some point — naturally, inside sentences that genuinely fit what you two are talking about, spread across the whole chat rather than crammed together. Never announce that you're doing this, never quiz them on a word, never translate. The English gloss only tells you which sense they're learning — use the word in that sense:
+  Your partner is currently learning these German words. Treat them as opportunities, not a checklist: use one only when the conversation genuinely passes through its sense, inside a sentence you'd say anyway. A word that never fits stays unused — that's completely fine. Never bend the conversation toward a word, and never stack two of them into the same sentence. Never announce that you're doing this, never quiz them on a word, never translate. The English gloss only tells you which sense they're learning — use the word in that sense:
 
 # Long-term layer header — Paul's own memory. `load_tandem_notes` filters by
 # lesson_id, so Paul only ever remembers HIS sessions — he never knows what
