@@ -8,8 +8,10 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
+import sentry_sdk
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from loguru import logger
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -47,7 +49,15 @@ from zeitfaerbung import (
     router as zeitfaerbung_router,
 )
 from config import database_url
-from config.settings import allowed_origins, demo_session_timeout_s, learned_session_timeout_s, say_max_chars
+from config.settings import (
+    allowed_origins,
+    demo_session_timeout_s,
+    learned_session_timeout_s,
+    say_max_chars,
+    sentry_dsn,
+    sentry_environment,
+    sentry_release,
+)
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
 from pipeline.factory import ACTIVE_LESSONS, ACTIVE_TASKS, lesson_language, validate_lesson_languages
@@ -140,6 +150,26 @@ async def lifespan(app: FastAPI):
     await dispose_engine()
 
 
+# Sentry error reporting (OBS-013), env-gated and inert by default. Must run
+# before FastAPI(...) is constructed so its Starlette/FastAPI integration
+# can instrument the app. Errors only — traces_sample_rate=0.0 because
+# Langfuse already owns latency (see CLAUDE.md's Langfuse section), and
+# send_default_pii=False keeps request bodies/headers/user data out of a
+# third-party SDK by default. When SENTRY_DSN is unset nothing below runs
+# and the app boots exactly as it did before this feature existed.
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        environment=sentry_environment,
+        send_default_pii=False,
+        traces_sample_rate=0.0,
+        release=sentry_release,
+    )
+    logger.info(f"Sentry error reporting: ON (environment={sentry_environment!r})")
+else:
+    logger.info("Sentry error reporting: OFF (SENTRY_DSN not set)")
+
+
 app = FastAPI(lifespan=lifespan)
 
 # The /say, /auth, /sessions, and /satz HTTP endpoints are CORS-checked
@@ -157,6 +187,70 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+
+def _cors_headers_for(request: Request) -> dict[str, str]:
+    """Echo the ``Access-Control-Allow-Origin`` header CORSMiddleware would
+    have added, for use by the catch-all exception handler below.
+
+    Starlette/FastAPI special-case an ``Exception``-keyed handler: it's
+    pulled out of ``ExceptionMiddleware`` and installed on
+    ``ServerErrorMiddleware`` instead, which sits OUTSIDE ``CORSMiddleware``
+    in the stack (see ``fastapi.applications.FastAPI.build_middleware_stack``
+    — ``if key in (500, Exception): error_handler = value``). A response
+    built by that handler is sent directly, bypassing CORSMiddleware's
+    header injection entirely, so a browser ``fetch()`` from an allowed
+    origin would see an opaque CORS failure instead of the 500 body. This
+    mirrors ``CORSMiddleware.send``'s "simple response" origin-echo branch
+    (the only branch this app's config ever takes — ``allow_origins`` here
+    is never ``["*"]`` and ``allow_credentials`` is never set).
+    """
+    origin = request.headers.get("origin")
+    if origin and origin in allowed_origins:
+        return {"Access-Control-Allow-Origin": origin, "Vary": "Origin"}
+    return {}
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """OBS-013: last-resort safety net for an unhandled exception in any route.
+
+    Without this, an unhandled exception was a bare 500 plus one stdout line
+    with nothing watching it. Logs the full traceback with method + path +
+    the caller's user id (best-effort — this app has no ``request.state``
+    attachment for the current user; ``Depends(get_current_user_id)``/
+    ``_bearer_subject`` resolve it per-route instead, so we reuse the same
+    Authorization-header decode ``_bearer_subject`` already uses elsewhere)
+    and returns a generic JSON 500 that never leaks internals to the client.
+
+    ``HTTPException`` is untouched: FastAPI registers its own handler for
+    that exact class, and Starlette's handler lookup walks the raised
+    exception's MRO from most to least specific, so an ``HTTPException``
+    always matches its own handler before ever falling through to this one.
+
+    Sentry: Starlette hoists the ``Exception``-keyed handler into
+    ``ServerErrorMiddleware``, which sentry-sdk's Starlette patch does not
+    instrument, so the event would otherwise arrive only via the auto-enabled
+    LoguruIntegration hooking the log call below. The explicit
+    ``capture_exception`` makes that independent of loguru; the SDK's
+    DedupeIntegration drops the duplicate (same exception object).
+    """
+    user_id = None
+    try:
+        user_id = _bearer_subject(request)
+    except Exception:
+        pass
+    logger.opt(exception=exc).error(
+        f"Unhandled exception on {request.method} {request.url.path} (user={user_id!r})"
+    )
+    if sentry_dsn:
+        sentry_sdk.capture_exception(exc)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "internal error"},
+        headers=_cors_headers_for(request),
+    )
+
 
 # Google sign-in + session-JWT routes (AUTH-001).
 app.include_router(auth_router)

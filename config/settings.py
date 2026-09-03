@@ -143,6 +143,21 @@ frontend_base_url = os.getenv("FRONTEND_BASE_URL", "http://localhost:3000")
 # "billing not configured", same fail-soft contract as the PAY-001 price ids.
 stripe_topup_price_id = os.getenv("STRIPE_TOPUP_PRICE_ID")
 
+# --- Error reporting (Sentry, OBS-013) ---
+# Absent -> sentry_sdk.init() is never called in main.py; the app boots and
+# runs identically to before this feature existed (fail-soft, same contract
+# as azure_speech_key / google_client_id). Set SENTRY_DSN in any deployed
+# environment to turn it on.
+sentry_dsn = os.getenv("SENTRY_DSN")
+# Reuses the same environment label Langfuse tracing already exposes so the
+# two systems agree on which deploy an event/trace came from, rather than
+# introducing a second, possibly-drifting label.
+sentry_environment = os.getenv("SENTRY_ENVIRONMENT", langfuse_environment)
+# Railway auto-injects this on every service (see ARCHITECTURE.md's
+# DEPLOYMENT section) — no env to set by hand. None locally, which is fine:
+# Sentry just omits the release tag rather than failing.
+sentry_release = os.getenv("RAILWAY_GIT_COMMIT_SHA")
+
 # --- Interview audio bucket (INTV-003 slice 2) ---
 # Railway Bucket "audio" (S3-compatible, Tigris-backed) credentials for
 # presigning GET URLs to interview chunk mp3s (interview/bucket.py). All
