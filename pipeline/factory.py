@@ -74,6 +74,7 @@ from database.repository import (
     load_user_level,
     load_user_name,
     load_vocab_words,
+    record_drill_attempt,
     record_grammar_error,
 )
 
@@ -1196,6 +1197,9 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                 transcript=wrapper.render_transcript(),
                                 session_id=trace_session_id,
                                 user_id=db_user_id,
+                                # STT-006: a voice transcript — the leading-word
+                                # ASR-dropout guards apply, as for satz/szenario.
+                                check_asr_artifacts=True,
                             )
                             if error_result.errors:
                                 async with get_sessionmaker()() as db:
@@ -1285,6 +1289,39 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                         logger.exception(
                                             f"Tandem ledger write failed (target {p.pattern_id})"
                                         )
+                                    # DATA-008: mirror a missed target pattern
+                                    # with a drill_attempts row too — the
+                                    # tandem debrief previously never called
+                                    # record_drill_attempt at all, so its
+                                    # correctly-earned ledger rows were
+                                    # structurally invisible to
+                                    # load_top_errors/GET /me/stats (which
+                                    # require a non-null pattern_id AND
+                                    # correct=False on a drill_attempts row).
+                                    # Own try/except, same non-fatal contract
+                                    # — must never block the ledger write
+                                    # above.
+                                    try:
+                                        if (
+                                            p.elicited
+                                            and not p.produced_correctly
+                                            and p.evidence
+                                            and p.evidence.strip().lower() != "none"
+                                        ):
+                                            await record_drill_attempt(
+                                                db,
+                                                user_id=db_user_id,
+                                                exercise="tandem",
+                                                item_ref=p.pattern_id,
+                                                pattern_id=p.pattern_id,
+                                                correct=False,
+                                                modality="spoken",
+                                                session_id=trace_session_id,
+                                            )
+                                    except Exception:  # noqa: BLE001 — one row must not block the rest
+                                        logger.exception(
+                                            f"Tandem drill-attempt log write failed (target {p.pattern_id})"
+                                        )
                                 # New (non-target) errors: plain ledger upserts, same as
                                 # the drill harvester, source="tandem".
                                 for e in debrief_result.new_errors:
@@ -1302,6 +1339,25 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                     except Exception:  # noqa: BLE001 — one row must not block the rest
                                         logger.exception(
                                             f"Tandem ledger write failed (new {e.pattern_id})"
+                                        )
+                                    # DATA-008: same drill_attempts mirror as the
+                                    # target-pattern branch above, for
+                                    # un-elicited/new errors — own try/except,
+                                    # must never block the ledger write above.
+                                    try:
+                                        await record_drill_attempt(
+                                            db,
+                                            user_id=db_user_id,
+                                            exercise="tandem",
+                                            item_ref=e.pattern_id,
+                                            pattern_id=e.pattern_id,
+                                            correct=False,
+                                            modality="spoken",
+                                            session_id=trace_session_id,
+                                        )
+                                    except Exception:  # noqa: BLE001 — one row must not block the rest
+                                        logger.exception(
+                                            f"Tandem drill-attempt log write failed (new {e.pattern_id})"
                                         )
                             # Enrich for the debrief modal: taxonomy labels + which
                             # patterns retired this session. `session_note` rides along in
