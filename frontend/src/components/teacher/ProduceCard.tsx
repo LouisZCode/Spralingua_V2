@@ -63,6 +63,13 @@ const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
 // than sprechen's 90s still generously covers a forgotten stop tap.
 const MAX_RECORD_SECONDS = 30;
 
+// STT-006: Deepgram nova-3 can drop a leading unstressed word when speech
+// starts at t≈0 of the clip (VERIFY-3 bisected it — 200-400ms of leading
+// silence recovers the word). The recorder starts immediately as before;
+// only the visible "recording" cue (and its elapsed timer) is held back
+// this long, so the clip's opening frames are real captured silence.
+const STT_LEAD_IN_MS = 300;
+
 // Splits `task` on every literal (case-insensitive) occurrence of `target`,
 // bolding the matches in place. `found` is false when the target string
 // never appears verbatim in the instruction (e.g. the task paraphrases it),
@@ -127,12 +134,21 @@ export default function ProduceCard({
   const chunksRef = useRef<Blob[]>([]);
   const discardRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // STT-006: the pending "flip recording on" timer, live only during the
+  // lead-in window right after rec.start(). Any stop path must clear it so a
+  // stop/discard/unmount that lands mid-lead-in never leaves a delayed
+  // setRecording(true) to fire after the clip is already gone.
+  const leadInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (verdict === null && !expired) textareaRef.current?.focus();
   }, [verdict, expired]);
 
   const stopRecording = useCallback(() => {
+    if (leadInTimerRef.current) {
+      clearTimeout(leadInTimerRef.current);
+      leadInTimerRef.current = null;
+    }
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -153,6 +169,7 @@ export default function ProduceCard({
   useEffect(() => {
     return () => {
       discardRef.current = true;
+      if (leadInTimerRef.current) clearTimeout(leadInTimerRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
         recorderRef.current.stop();
@@ -176,7 +193,16 @@ export default function ProduceCard({
 
   async function submitTyped() {
     const trimmed = answer.trim();
-    if (!trimmed || checking || recording) return;
+    // STT-006: `recording` is now delayed by the lead-in — also check the
+    // recorder directly so a typed submit during that window can't race a
+    // mic that's already hot in the background.
+    if (
+      !trimmed ||
+      checking ||
+      recording ||
+      (recorderRef.current && recorderRef.current.state !== "inactive")
+    )
+      return;
     setChecking(true);
     setFailed(null);
     try {
@@ -203,7 +229,16 @@ export default function ProduceCard({
   }
 
   async function giveUp() {
-    if (checking || recording) return;
+    // STT-006: `recording` is now delayed by the lead-in — also check the
+    // recorder directly so a give-up tapped in that window (mic already
+    // hot, cue not shown yet) doesn't leave an orphaned recorder running
+    // behind the give-up verdict.
+    if (
+      checking ||
+      recording ||
+      (recorderRef.current && recorderRef.current.state !== "inactive")
+    )
+      return;
     setChecking(true);
     setFailed(null);
     try {
@@ -217,7 +252,15 @@ export default function ProduceCard({
   }
 
   async function startRecording() {
-    if (checking || verdict) return;
+    // STT-006: also guard against a re-trigger during the lead-in window —
+    // the recorder is already live but `checking`/`verdict` alone wouldn't
+    // catch a second tap on a button that still reads "Record".
+    if (
+      checking ||
+      verdict ||
+      (recorderRef.current && recorderRef.current.state !== "inactive")
+    )
+      return;
     let stream: MediaStream;
     try {
       stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -243,9 +286,14 @@ export default function ProduceCard({
       };
       recorderRef.current = rec;
       rec.start();
-      setRecording(true);
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      // STT-006: capture starts now; the "recording" cue (and its timer)
+      // waits out the lead-in so the clip's opening frames are real silence.
+      leadInTimerRef.current = setTimeout(() => {
+        leadInTimerRef.current = null;
+        setRecording(true);
+        setElapsed(0);
+        timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      }, STT_LEAD_IN_MS);
     } catch (e) {
       stream.getTracks().forEach((t) => t.stop());
       console.warn("Produce mic recorder init failed:", e);

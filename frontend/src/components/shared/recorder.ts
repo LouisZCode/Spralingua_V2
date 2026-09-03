@@ -18,6 +18,14 @@ const MAX_RECORD_SECONDS = 90;
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
 
+// STT-006: Deepgram nova-3 can drop a leading unstressed word when speech
+// starts at t≈0 of the clip (VERIFY-3 bisected it — 200-400ms of leading
+// silence recovers the word, 0.5-3.4% of spoken attempts hit this). The
+// recorder starts immediately as before; only the visible "recording" cue
+// (and the elapsed timer) is held back this long, so the clip's opening
+// frames are real captured silence before the learner is invited to speak.
+const STT_LEAD_IN_MS = 300;
+
 export interface UseRecorderResult {
   recording: boolean;
   elapsed: number;
@@ -42,6 +50,11 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   // Set when the clip must NOT be handed to onStop (unmount mid-recording).
   const discardRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // STT-006: the pending "flip recording on" timer, live only during the
+  // lead-in window right after rec.start(). Any stop path must clear it so a
+  // stop/discard/unmount that lands mid-lead-in never leaves a delayed
+  // setRecording(true) to fire after the clip is already gone.
+  const leadInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Ref mirror so `stop`'s onstop handler always calls the latest callback
   // without needing it in `start`'s dependency array. Same "latest ref" idiom
   // as VocabNudge.tsx's fetchRef / GenusTrainer's submitDropRef — safe because
@@ -51,6 +64,10 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   onStopRef.current = onStop;
 
   const stop = useCallback(() => {
+    if (leadInTimerRef.current) {
+      clearTimeout(leadInTimerRef.current);
+      leadInTimerRef.current = null;
+    }
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -65,6 +82,10 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   // the next start() resets discardRef, so the caller just records again.
   const cancel = useCallback(() => {
     discardRef.current = true;
+    if (leadInTimerRef.current) {
+      clearTimeout(leadInTimerRef.current);
+      leadInTimerRef.current = null;
+    }
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -86,6 +107,7 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   useEffect(() => {
     return () => {
       discardRef.current = true;
+      if (leadInTimerRef.current) clearTimeout(leadInTimerRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
         recorderRef.current.stop();
@@ -94,6 +116,10 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
   }, []);
 
   const start = useCallback(async () => {
+    // STT-006: a caller re-invoking start() during the lead-in window (e.g.
+    // a stale "not recording yet" UI still wired to the start action) must
+    // not spin up a second stream/recorder on top of the one already live.
+    if (recorderRef.current && recorderRef.current.state !== "inactive") return;
     setError(null);
     let stream: MediaStream;
     try {
@@ -121,9 +147,14 @@ export function useRecorder(onStop: (blob: Blob) => void): UseRecorderResult {
       };
       recorderRef.current = rec;
       rec.start();
-      setRecording(true);
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      // STT-006: capture starts now; the "recording" cue (and its timer)
+      // waits out the lead-in so the clip's opening frames are real silence.
+      leadInTimerRef.current = setTimeout(() => {
+        leadInTimerRef.current = null;
+        setRecording(true);
+        setElapsed(0);
+        timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      }, STT_LEAD_IN_MS);
     } catch {
       stream.getTracks().forEach((t) => t.stop());
       setError("We need the microphone for this one — check the browser permission.");

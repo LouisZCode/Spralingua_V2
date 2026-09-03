@@ -29,6 +29,13 @@ const MAX_RECORD_SECONDS = 90;
 // Chrome/Firefox record opus-in-webm, Safari aac-in-mp4 — Deepgram takes both.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
 
+// STT-006: Deepgram nova-3 can drop a leading unstressed word when speech
+// starts at t≈0 of the clip (VERIFY-3 bisected it — 200-400ms of leading
+// silence recovers the word). The recorder starts immediately as before;
+// only the visible "recording" cue (and its elapsed timer) is held back
+// this long, so the clip's opening frames are real captured silence.
+const STT_LEAD_IN_MS = 300;
+
 export default function SprechenTrainer({
   round,
   onAttempt,
@@ -102,10 +109,19 @@ export default function SprechenTrainer({
   // Set when the clip must NOT be submitted (unmount mid-recording).
   const discardRef = useRef(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // STT-006: the pending "flip recording on" timer, live only during the
+  // lead-in window right after rec.start(). Any stop path must clear it so a
+  // stop/discard/unmount that lands mid-lead-in never leaves a delayed
+  // setRecording(true) to fire after the clip is already gone.
+  const leadInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const task = round[index];
 
   const stopRecording = useCallback(() => {
+    if (leadInTimerRef.current) {
+      clearTimeout(leadInTimerRef.current);
+      leadInTimerRef.current = null;
+    }
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
@@ -144,6 +160,7 @@ export default function SprechenTrainer({
   useEffect(() => {
     return () => {
       discardRef.current = true;
+      if (leadInTimerRef.current) clearTimeout(leadInTimerRef.current);
       if (timerRef.current) clearInterval(timerRef.current);
       if (recorderRef.current && recorderRef.current.state !== "inactive") {
         recorderRef.current.stop();
@@ -170,6 +187,10 @@ export default function SprechenTrainer({
   });
 
   async function startRecording() {
+    // STT-006: a re-trigger during the lead-in window (Space, or a second
+    // tap while the button still reads "Record") must not spin up a second
+    // stream on top of the one already capturing.
+    if (recorderRef.current && recorderRef.current.state !== "inactive") return;
     setFailed(null);
     setVerdict(null);
     let stream: MediaStream;
@@ -198,9 +219,14 @@ export default function SprechenTrainer({
       };
       recorderRef.current = rec;
       rec.start();
-      setRecording(true);
-      setElapsed(0);
-      timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      // STT-006: capture starts now; the "recording" cue (and its timer)
+      // waits out the lead-in so the clip's opening frames are real silence.
+      leadInTimerRef.current = setTimeout(() => {
+        leadInTimerRef.current = null;
+        setRecording(true);
+        setElapsed(0);
+        timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+      }, STT_LEAD_IN_MS);
     } catch {
       stream.getTracks().forEach((t) => t.stop());
       setFailed("We need the microphone for this one — check the browser permission.");
@@ -238,7 +264,17 @@ export default function SprechenTrainer({
   // endpoint instead of `submit`, but lands in the same `verdict`/`results`
   // state a real (failed) attempt would, so `next()` below needs no change.
   async function giveUp() {
-    if (checking || recording || !onGiveUp) return;
+    // STT-006: `recording` itself is now delayed by the lead-in — also check
+    // the recorder directly so a give-up tapped in that window (mic already
+    // hot, cue not shown yet) doesn't leave an orphaned recorder running
+    // behind the give-up verdict screen.
+    if (
+      checking ||
+      recording ||
+      (recorderRef.current && recorderRef.current.state !== "inactive") ||
+      !onGiveUp
+    )
+      return;
     setChecking(true);
     setFailed(null);
     try {

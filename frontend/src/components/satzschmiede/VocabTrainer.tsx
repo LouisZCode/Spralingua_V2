@@ -101,6 +101,14 @@ const MISS_CAP = 3;
 // as-is, so we just pick the first container the browser supports.
 const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
 
+// STT-006: Deepgram nova-3 can drop a leading unstressed word when speech
+// starts at t≈0 of the clip (VERIFY-3 bisected it — 200-400ms of leading
+// silence recovers the word). The recorder starts immediately as before;
+// only the visible "recording" cue (and the elapsed-timer effect, keyed on
+// `recording` below) is held back this long, so the clip's opening frames
+// are real captured silence before the learner is invited to speak.
+const STT_LEAD_IN_MS = 300;
+
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -283,6 +291,17 @@ export default function VocabTrainer({
   const recorderRef = useRef<MediaRecorder | null>(null);
   // Set when the clip must NOT be submitted (unmount mid-recording).
   const discardRef = useRef(false);
+  // STT-006: the pending "flip recording on" timer, live only during the
+  // lead-in window right after rec.start(). Any stop path must clear it so a
+  // stop/discard/unmount that lands mid-lead-in never leaves a delayed
+  // setRecording(true) to fire after the clip is already gone.
+  const leadInTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // STT-006: true from rec.start() until the lead-in elapses. `recording`
+  // is still false in that window, so without this the busy-gated nav
+  // (Prev/Next/Browse/Remove) stayed live for 300 ms with a hot mic bound
+  // to the card being navigated away from — a coin-charged attempt graded
+  // against the wrong card. Folded into `busy` below.
+  const [arming, setArming] = useState(false);
   // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
   // first attempt (pure browsing never creates a session), then held for the
   // whole mount — mode toggles, retries, and top-ups all share it. Unmount
@@ -351,7 +370,7 @@ export default function VocabTrainer({
   // the verdict that comes back always belongs to the card on screen. The
   // wrong-gender flash locks it too: its queued advance (pickGender's timer)
   // must be the only move that fires during that beat.
-  const busy = recording || checking || wrongPick !== null;
+  const busy = recording || arming || checking || wrongPick !== null;
 
   // SATZ-010: nouns must commit to a gender before the mic unlocks. Practice
   // and Flow gate; browse is just looking. Unwired parents (Verbformen's
@@ -429,6 +448,7 @@ export default function VocabTrainer({
   useEffect(
     () => () => {
       discardRef.current = true;
+      if (leadInTimerRef.current) clearTimeout(leadInTimerRef.current);
       if (recorderRef.current?.state === "recording") {
         recorderRef.current.stop();
       }
@@ -472,7 +492,15 @@ export default function VocabTrainer({
   });
 
   async function startRecording() {
-    if (busy || flipped || !card) return;
+    // STT-006: `busy` alone doesn't catch a re-trigger during the lead-in
+    // window — `recording` is delayed, so also check the recorder directly.
+    if (
+      busy ||
+      flipped ||
+      !card ||
+      (recorderRef.current && recorderRef.current.state !== "inactive")
+    )
+      return;
     setAttemptError(null);
     setResult(null);
     setExplanation(null);
@@ -498,14 +526,23 @@ export default function VocabTrainer({
       };
       rec.onstop = () => {
         stream.getTracks().forEach((t) => t.stop());
+        setArming(false);
         setRecording(false);
         if (discardRef.current) return;
         void check(new Blob(chunks, { type: rec.mimeType || "audio/webm" }));
       };
       discardRef.current = false;
       recorderRef.current = rec;
+      setArming(true);
       rec.start();
-      setRecording(true);
+      // STT-006: capture starts now; the "recording" cue (and the elapsed
+      // effect keyed on it, above) waits out the lead-in so the clip's
+      // opening frames are real silence.
+      leadInTimerRef.current = setTimeout(() => {
+        leadInTimerRef.current = null;
+        setArming(false);
+        setRecording(true);
+      }, STT_LEAD_IN_MS);
     } catch {
       stream.getTracks().forEach((t) => t.stop());
       setAttemptError(
@@ -515,6 +552,11 @@ export default function VocabTrainer({
   }
 
   function stopRecording() {
+    if (leadInTimerRef.current) {
+      clearTimeout(leadInTimerRef.current);
+      leadInTimerRef.current = null;
+      setArming(false);
+    }
     if (recorderRef.current?.state === "recording") {
       recorderRef.current.stop();
     }
@@ -523,6 +565,11 @@ export default function VocabTrainer({
   // UI-006: a messed-up take — stop and throw the clip away; onstop sees
   // discardRef and never submits. startRecording resets the flag.
   function discardRecording() {
+    if (leadInTimerRef.current) {
+      clearTimeout(leadInTimerRef.current);
+      leadInTimerRef.current = null;
+      setArming(false);
+    }
     if (recorderRef.current?.state === "recording") {
       discardRef.current = true;
       recorderRef.current.stop();
@@ -1373,7 +1420,17 @@ export default function VocabTrainer({
               onClick={() => {
                 // Mid-recording peek: stop and discard the pending clip so
                 // it never submits a verdict over the peek. The peek itself
-                // is the lapse (onReveal below).
+                // is the lapse (onReveal below). STT-006: also clear the
+                // lead-in timer — this can fire mid-lead-in (recorder is
+                // "recording" throughout that window too), and a delayed
+                // setRecording(true) landing after the card has flipped
+                // would otherwise stick the mic button in a phantom
+                // "recording" state with no live recorder behind it.
+                if (leadInTimerRef.current) {
+                  clearTimeout(leadInTimerRef.current);
+                  leadInTimerRef.current = null;
+                  setArming(false);
+                }
                 if (recorderRef.current?.state === "recording") {
                   discardRef.current = true;
                   recorderRef.current.stop();
