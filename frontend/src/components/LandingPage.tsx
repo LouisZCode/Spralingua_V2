@@ -91,9 +91,12 @@ export default function LandingPage() {
         logoHref="/"
         right={
           <>
+            {/* APPHDR-002: hidden on a phone so it can't collide with the
+                wordmark; UX-16: py-3.5 -my-3.5 grows the tap target to ~44px
+                without shifting anything visually. */}
             <Link
               href="/pricing"
-              className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+              className="hidden -my-3.5 py-3.5 font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red sm:inline"
             >
               Pricing
             </Link>
@@ -308,29 +311,32 @@ export default function LandingPage() {
           <span className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted">
             Voice-powered language learning
           </span>
-          {/* LEGAL-001: quiet links to the three legal documents. */}
+          {/* LEGAL-001: quiet links to the three legal documents.
+              UX-16: py-3.5 -my-3.5 grows each tap target to ~44px tall without
+              shifting anything visually (the negative margin cancels the
+              padding's effect on layout). */}
           <nav className="flex items-center gap-4">
             <Link
               href="/pricing"
-              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+              className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
             >
               Pricing
             </Link>
             <Link
               href="/legal/impressum"
-              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+              className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
             >
               Impressum
             </Link>
             <Link
               href="/legal/privacy"
-              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+              className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
             >
               Privacy
             </Link>
             <Link
               href="/legal/terms"
-              className="font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+              className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
             >
               Terms
             </Link>

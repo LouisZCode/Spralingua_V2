@@ -42,7 +42,7 @@ type AppHeaderProps = {
 };
 
 const BACK_LINK_CLASS =
-  "font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red";
+  "shrink-0 whitespace-nowrap font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red";
 
 export default function AppHeader({
   logoHref = "/practice",
@@ -64,7 +64,7 @@ export default function AppHeader({
         priority
         className="mascot-keyline h-9 w-9 select-none"
       />
-      <span className="font-display text-[22px] font-black tracking-tight text-ink">
+      <span className="hidden truncate font-display text-[22px] font-black tracking-tight text-ink sm:inline">
         Spralingua
       </span>
     </>
@@ -82,14 +82,17 @@ export default function AppHeader({
         className={`mx-auto flex ${maxWidth} items-center justify-between px-6 py-4`}
       >
         {logoHref === null ? (
-          <div className="flex items-center gap-2.5">{logo}</div>
+          <div className="flex min-w-0 items-center gap-2.5">{logo}</div>
         ) : (
-          <Link href={logoHref} className="flex items-center gap-2.5">
+          <Link href={logoHref} className="flex min-w-0 items-center gap-2.5">
             {logo}
           </Link>
         )}
 
-        <div className="flex items-center gap-4">
+        {/* APPHDR-002: shrink-0 keeps this cluster at its natural width so
+            the logo side (min-w-0 + truncate above) gives way first on a
+            narrow phone instead of the document scrolling sideways. */}
+        <div className="flex shrink-0 items-center gap-2 sm:gap-4">
           {right}
           {back && (
             <Link href={back.href} className={BACK_LINK_CLASS}>
@@ -122,26 +125,31 @@ function ProfileAvatar() {
       .join("") || "·";
 
   return (
+    // UX-16: the visible circle stays 36x36 (h-9 w-9 below); p-1 -m-1 on the
+    // link grows the tap target to 44x44 without moving it, since the
+    // negative margin cancels the padding's effect on surrounding layout.
     <Link
       href="/profile"
       aria-label="My profile"
       title="My profile"
-      className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-[3px] border-line bg-paper-warm transition-transform hover:scale-105"
+      className="-m-1 flex shrink-0 items-center justify-center rounded-full p-1 transition-transform hover:scale-105"
     >
-      {user.picture ? (
-        <Image
-          src={user.picture}
-          alt=""
-          width={36}
-          height={36}
-          unoptimized
-          className="h-full w-full object-cover"
-        />
-      ) : (
-        <span className="font-display text-[13px] font-black text-ink">
-          {initials}
-        </span>
-      )}
+      <span className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border-[3px] border-line bg-paper-warm">
+        {user.picture ? (
+          <Image
+            src={user.picture}
+            alt=""
+            width={36}
+            height={36}
+            unoptimized
+            className="h-full w-full object-cover"
+          />
+        ) : (
+          <span className="font-display text-[13px] font-black text-ink">
+            {initials}
+          </span>
+        )}
+      </span>
     </Link>
   );
 }

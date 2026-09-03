@@ -230,10 +230,13 @@ export default function PracticeMenu() {
                 money-nav is reserved for the people it converts. The
                 out-of-coins panels stay tier-blind — running dry is a
                 money moment for every plan. */}
+            {/* APPHDR-002: hidden on a phone so it can't collide with the
+                wordmark/avatar; UX-16: py-3.5 -my-3.5 grows the tap target to
+                ~44px without shifting anything visually. */}
             {(user?.tier ?? "free") !== "basic" && (user?.tier ?? "free") !== "premium" && (
               <Link
                 href="/pricing"
-                className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+                className="hidden -my-3.5 py-3.5 font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red sm:inline"
               >
                 Pricing
               </Link>
@@ -492,23 +495,26 @@ export default function PracticeMenu() {
 
         {/* LEGAL-001: discreet in-app reachability for the legal docs — the
             two-click rule (home footer is the other click). Small and muted
-            on purpose; this isn't a feature, just a reachable link. */}
+            on purpose; this isn't a feature, just a reachable link.
+            UX-16: py-3.5 -my-3.5 grows each tap target to ~44px tall without
+            shifting anything visually (the negative margin cancels the
+            padding's effect on layout). */}
         <footer className="mt-10 flex justify-center gap-4">
           <Link
             href="/legal/impressum"
-            className="font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
           >
             Impressum
           </Link>
           <Link
             href="/legal/privacy"
-            className="font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
           >
             Privacy
           </Link>
           <Link
             href="/legal/terms"
-            className="font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
           >
             Terms
           </Link>
