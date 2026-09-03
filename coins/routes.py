@@ -110,25 +110,18 @@ async def put_timezone(
         raise HTTPException(status_code=400, detail=f"Unknown timezone: {tz_name!r}")
     user = await db.get(User, user_id)
     if user is None:
-        # Valid JWT but no users row (DB wipe that outlived the token) — same
-        # fail-soft as GET /balance for an unknown user: create the row
-        # idempotently so PUT doesn't 404 on a legitimate first-time learner.
-        from sqlalchemy.dialects.postgresql import insert as pg_insert
-
-        await db.execute(
-            pg_insert(User).values(id=user_id, timezone=tz_name).on_conflict_do_nothing(index_elements=["id"])
-        )
-        # Re-read for the case where the row already existed — the insert was
-        # a no-op and the timezone wasn't updated.
-        user2 = await db.get(User, user_id)
-        if user2 is not None and user2.timezone != tz_name:
-            user2.timezone = tz_name
-        try:
-            await db.commit()
-        except Exception:
-            await db.rollback()
-            raise
-        return {"timezone": tz_name}
+        # SEC-006 side finding: a valid JWT with no users row used to get a
+        # row minted right here, with no signup grant and no ledger row —
+        # unlike every other path that creates a user (upsert_user on
+        # sign-in, credit()'s ON CONFLICT DO NOTHING fallback for a webhook
+        # that beats the first login). That silently orphaned a user with a
+        # 0-coin purchased bucket. Match auth/routes.py's ``GET /auth/me`` /
+        # ``PUT /auth/level`` pattern instead: a JWT is only ever issued
+        # after ``upsert_user`` has already created the row, so no row here
+        # means something is actually wrong (e.g. a DB wipe that outlived
+        # the token) — 404 rather than silently minting an under-provisioned
+        # account.
+        raise HTTPException(status_code=404, detail="User not found.")
     user.timezone = tz_name
     try:
         await db.commit()

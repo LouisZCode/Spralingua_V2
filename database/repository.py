@@ -384,7 +384,9 @@ async def get_subscription(db: AsyncSession, *, user_id: str) -> Subscription | 
 _VALID_TIERS = frozenset({"free", "basic", "premium"})
 
 
-async def set_user_tier(db: AsyncSession, *, user_id: str, tier: str) -> None:
+async def set_user_tier(
+    db: AsyncSession, *, user_id: str, tier: str, lift_allowance: bool = True
+) -> None:
     """Write ``users.tier`` (PAY-001), called from the Stripe webhook
     handler once a subscription's tier is known. Validated against
     ``_VALID_TIERS`` in code before touching the row.
@@ -400,13 +402,29 @@ async def set_user_tier(db: AsyncSession, *, user_id: str, tier: str) -> None:
     already spent some of the fresh allowance is a bounded, non-exploitable
     side effect — the alternative (tracking "already lifted for this event")
     would add state for no real abuse vector.
+
+    ``lift_allowance`` (SEC-006, default ``True`` — every pre-existing call
+    site keeps today's behaviour): pass ``False`` to write ``users.tier``
+    without touching the allowance bucket at all. This exists for
+    ``payments/webhook.py``'s ``customer.subscription.updated`` handler,
+    which Stripe fires on ANY change to a subscription — including a no-op
+    billing-portal toggle (e.g. flipping ``cancel_at_period_end``) that
+    leaves the tier exactly where it was. Before this parameter, that branch
+    called ``set_user_tier`` unconditionally whenever status was
+    ``active``/``trialing``, so every such no-op re-minted the FULL daily
+    allowance — user-triggerable simply by opening the billing portal
+    repeatedly, and (after PAY-004's 75-coin free allowance) not even
+    limited to paying customers, since a lapsed-then-reactivated free-tier
+    subscription can hit this branch too. The caller is responsible for
+    deciding when the tier actually changed; this function just honors the
+    flag.
     """
     _assert_test_user(user_id)
     if tier not in _VALID_TIERS:
         raise ValueError(f"Unknown tier: {tier!r}")
     try:
         await db.execute(update(User).where(User.id == user_id).values(tier=tier))
-        if tier in ("basic", "premium"):
+        if lift_allowance and tier in ("basic", "premium"):
             # Lift today's allowance immediately (PAY-002). Read the user's
             # timezone for the day-key, then overwrite the bucket — same
             # semantics as refresh_allowance but forced to full even if the

@@ -220,6 +220,13 @@ async def _handle_subscription_updated(db: AsyncSession, sub_obj) -> None:
     price_tier = _tier_for_price_id(price_id)
     current_period_end = _current_period_end(sub_obj)
 
+    # SEC-006: read the tier already on file BEFORE this event's write, so a
+    # same-tier update can be told apart from a genuine change below. Single
+    # read reused by both the past_due branch (unchanged) and the new
+    # lift_allowance decision — same access pattern the past_due branch
+    # already used.
+    existing = await get_subscription(db, user_id=user_id)
+
     set_tier = True
     if status in ("active", "trialing"):
         # cancel_at_period_end=true also arrives here with status still
@@ -240,7 +247,6 @@ async def _handle_subscription_updated(db: AsyncSession, sub_obj) -> None:
         # explicit cancel) drops the tier to free. Leave users.tier alone;
         # still mirror the row's status/price so anything reading the local
         # subscriptions row directly sees the truth.
-        existing = await get_subscription(db, user_id=user_id)
         new_tier = existing.tier if existing else (price_tier or "free")
         set_tier = False
     else:  # canceled | unpaid | incomplete_expired | any other terminal status
@@ -257,7 +263,16 @@ async def _handle_subscription_updated(db: AsyncSession, sub_obj) -> None:
         current_period_end=current_period_end,
     )
     if set_tier:
-        await set_user_tier(db, user_id=user_id, tier=new_tier)
+        # SEC-006: only lift the daily allowance when the tier actually
+        # changed. Stripe fires `.updated` on every change to a
+        # subscription, not only plan changes — a billing-portal toggle
+        # (e.g. flipping cancel_at_period_end, or any other no-op resend)
+        # still lands here with status active/trialing and the SAME price,
+        # and must not re-mint the learner's full daily allowance. The
+        # subscription row above is still upserted either way — only the
+        # allowance lift is conditional.
+        lift_allowance = existing is None or existing.tier != new_tier
+        await set_user_tier(db, user_id=user_id, tier=new_tier, lift_allowance=lift_allowance)
 
 
 async def _handle_subscription_deleted(db: AsyncSession, sub_obj) -> None:

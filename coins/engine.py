@@ -113,9 +113,39 @@ async def refresh_allowance(db: AsyncSession, user: User) -> None:
     keeps a stale ``allowance_day`` until their next read/spend, at which
     point it snaps to today's ``DAILY_ALLOWANCE[tier]``. Unused prior-day
     coins are discarded (they do not roll over) — overwriting is correct.
+
+    SEC-006: the comparison is deliberately ``key > user.allowance_day``
+    (monotonic), NOT ``!=``. The old ``!=`` refilled on ANY key change in
+    EITHER direction, and ``PUT /coins/timezone`` accepts any zoneinfo name,
+    unlimited times, with no ledger row — a learner could bounce between two
+    zones whose ``today_key`` disagrees (they only need to straddle the
+    05:00-local boundary from opposite sides) and re-mint the full daily
+    allowance on every ``GET /coins/balance`` in between. Since PAY-004
+    (2026-09-03) the free tier carries a 75-coin allowance too, so this was
+    exploitable on every account, not just paid ones. A strictly later key
+    still refills normally (the ordinary next-day case, or ``allowance_day
+    is None`` for a never-refreshed row); a key that goes backward or stays
+    put is left untouched, so hopping to an "earlier" zone can only shrink
+    what ``today_key`` reports, never bump the stored ``allowance_day``
+    forward — no second refill.
+
+    A westward-relocation carve-out (also refill when the stored key is MORE
+    THAN a day ahead of the current one, i.e. a learner who genuinely flew
+    from a far-east zone to a far-west one) was considered but dropped after
+    checking ``today_key`` across the extremes: ``Pacific/Kiritimati``
+    (UTC+14) and ``Pacific/Midway``/``Etc/GMT+12`` (UTC-12) span 26 hours,
+    so at some instants their keys differ by TWO calendar days, not one —
+    the same pair an attacker would use to fake a "relocation" and trip the
+    carve-out for a second same-day refill. Strict ``>`` with no exception
+    is the whole fix; see the SEC-006 write-up for the verification.
+    Accepted cost for a genuine westward move: the stored key can sit AHEAD of
+    the new zone's date, so the next refill is delayed — measured worst case
+    Berlin → Los Angeles is 33 h (the 05:00-local boundaries are 9 h apart),
+    never indefinite, and no coins are lost. An eastward move gets one extra
+    refill on arrival, once.
     """
     key = today_key(user.timezone)
-    if user.allowance_day != key:
+    if user.allowance_day is None or key > user.allowance_day:
         user.allowance_day = key
         user.allowance_remaining = DAILY_ALLOWANCE.get(user.tier or "free", 0)
 
