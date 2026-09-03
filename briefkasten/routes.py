@@ -71,7 +71,16 @@ async def _background_harvest(text: str, session_id: str | None, user_id: str) -
     ledger write in the repo.
     """
     try:
-        extraction = await extract_errors(transcript=text, session_id=session_id, user_id=user_id)
+        # STT-006: `text` is the learner's TYPED letter, never a Deepgram
+        # transcript — no leading-silence dropout, no ASR misheard reorder
+        # — so the STT-006 guards must stay off, or a learner who genuinely
+        # typed a subjectless sentence would be forgiven.
+        extraction = await extract_errors(
+            transcript=text,
+            session_id=session_id,
+            user_id=user_id,
+            check_asr_artifacts=False,
+        )
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:

@@ -31,6 +31,7 @@ from database.connection import get_db
 from database.orm import DrillAttempt, Pack, PackCard, User, UserCard, VocabCard, WordGloss
 from database.repository import _assert_test_user, record_drill_attempt, record_grammar_error
 from drills import forge_items_for_card
+from grammar.ledger_guard import ledger_guard_reason
 from satz.content import _validate_card
 from satz.enricher import EnrichedCard, enrich_word
 from satz.example_forge import backfill_card_examples, forge_card_examples
@@ -937,21 +938,47 @@ async def submit_attempt(
         # a rehearsal (SATZ-015): the original graded attempt already
         # harvested whatever pattern applied — a rehearsal must not
         # double-write it.
+        #
+        # STT-006: this is the one spoken-drill ledger writer with no
+        # deterministic guard in front of it (the tandem debrief and the
+        # error extractor both go through `ledger_guard_reason` — see
+        # agents/debrief.py, agents/error_extractor.py). `submit_attempt`
+        # always transcribes audio (never a typed path — see the route
+        # docstring), so the guard applies unconditionally here, same as
+        # every other caller of `satz/examiner.py` (SATZ-022's module note).
+        # `quote`/`source_text` are both the same raw transcript: there is
+        # no separate "evidence span" field on `Judgement` the way the
+        # debrief/harvest have one, the judged sentence IS the transcript.
         if judgement.pattern_id and not rehearsal:
-            try:
-                await record_grammar_error(
-                    db,
-                    user_id=user_id,
-                    pattern_id=judgement.pattern_id,
-                    sentence=transcript,
-                    corrected=judgement.corrected,
-                    note=judgement.error,
-                    source="satz",
+            guard_reason = ledger_guard_reason(
+                pattern_id=judgement.pattern_id,
+                quote=transcript,
+                corrected=judgement.corrected,
+                source_text=transcript,
+                check_das_dass=True,
+                check_asr_artifacts=True,
+                strip_punctuation=True,
+            )
+            if guard_reason:
+                logger.info(
+                    "Ledger guard dropped satz row: pattern={} reason={} card={} session={}",
+                    judgement.pattern_id, guard_reason, card_id, session_id,
                 )
-            except Exception:
-                logger.exception(
-                    "Grammar-ledger write failed (pattern {})", judgement.pattern_id
-                )
+            else:
+                try:
+                    await record_grammar_error(
+                        db,
+                        user_id=user_id,
+                        pattern_id=judgement.pattern_id,
+                        sentence=transcript,
+                        corrected=judgement.corrected,
+                        note=judgement.error,
+                        source="satz",
+                    )
+                except Exception:
+                    logger.exception(
+                        "Grammar-ledger write failed (pattern {})", judgement.pattern_id
+                    )
 
         # Append to the cross-drill attempt log (DATA-004) — its own commit,
         # non-fatal like the ledger write above; an attempt-log outage must

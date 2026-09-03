@@ -157,7 +157,11 @@ transcript:
 
 
 async def extract_errors(
-    *, transcript: str, session_id: str | None = None, user_id: str | None = None
+    *,
+    transcript: str,
+    session_id: str | None = None,
+    user_id: str | None = None,
+    check_asr_artifacts: bool = False,
 ) -> ErrorExtraction:
     """Classify the learner's grammar slips in a drill transcript.
 
@@ -171,6 +175,15 @@ async def extract_errors(
     briefkasten/interview), where the request's baggage context is gone and
     the harvest becomes its own root trace: without it the trace is invisible
     in every user-filtered Langfuse view (found by the 2026-08-20 trace test).
+
+    ``check_asr_artifacts`` (STT-006) is threaded straight through to
+    ``ledger_guard_reason`` — this function's own ``transcript`` is spoken
+    for some callers (``szenario/routes.py``, ``interview/routes.py``) and
+    TYPED for others (Briefkasten's letter), and only the caller knows
+    which, so it can't be decided in here. Spoken callers must pass
+    ``True``; Briefkasten must pass ``False`` (the default) — an unguarded
+    ``True`` would forgive a learner who genuinely typed a sentence missing
+    its subject, since there is no ASR leading-silence dropout to blame.
     """
     rendered = (
         PROMPT
@@ -206,14 +219,19 @@ async def extract_errors(
 
     # LEDGER-001: deterministic guards at the ledger write boundary — a
     # spoken-German schwa-drop the judge misfiled as a real subjekt-verb-
-    # endung break, a quote that isn't actually in the transcript/letter, or
-    # a "correction" that doesn't correct anything. `check_das_dass` stays
-    # off here: this harvest's `transcript` is typed (Briefkasten) for one
-    # caller and spoken (a lesson or Szenario transcript) for the others,
-    # and the guard can't tell which from inside this function — see
-    # agents/debrief.py, whose source is always voice, for that check.
-    # Nothing filters between this and the `record_grammar_error` calls in
-    # pipeline/factory.py, briefkasten/routes.py and szenario/routes.py.
+    # endung break, an ASR-dropout artifact (STT-006), a quote that isn't
+    # actually in the transcript/letter, or a "correction" that doesn't
+    # correct anything. `check_das_dass` stays off here (unconditionally,
+    # for every caller): this harvest's `transcript` is typed (Briefkasten)
+    # for one caller and spoken (a lesson or Szenario transcript) for the
+    # others, and the guard can't tell which from inside this function on
+    # its own — see agents/debrief.py, whose source is always voice, for
+    # that check. `check_asr_artifacts` is different: it's threaded in from
+    # the caller (this function's own `check_asr_artifacts` parameter)
+    # instead, because unlike das/dass it's cheap for each caller to know
+    # its own modality. Nothing filters between this and the
+    # `record_grammar_error` calls in pipeline/factory.py,
+    # briefkasten/routes.py and szenario/routes.py.
     guarded: list[ExtractedError] = []
     for err in deduped:
         # Re-anchor the quote to the learner's own text first (BRIEF-003:
@@ -228,6 +246,7 @@ async def extract_errors(
             quote=err.sentence,
             corrected=err.corrected,
             source_text=transcript,
+            check_asr_artifacts=check_asr_artifacts,
             # Punctuation-insensitive substring check: the model normalises
             # curly quotes / dashes / line breaks when it copies, and a real
             # error row must not be dropped for an apostrophe glyph. Word

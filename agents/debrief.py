@@ -298,13 +298,15 @@ async def debrief(
 
     # LEDGER-001: deterministic guards at the ledger write boundary — a
     # spoken-German schwa-drop or das/dass homophone the judge misfiled as a
-    # real break, a quote that isn't actually in the transcript, or a
-    # "correction" that doesn't correct anything. `strip_punctuation=True`
-    # because this is a Deepgram transcript, not something the learner
-    # typed; `check_das_dass=True` because a tandem session is always voice
-    # (the harvest's source varies by caller, so it keeps this off — see
-    # error_extractor.py). Nothing filters between this and the disconnect
-    # handler's `record_grammar_error` calls in pipeline/factory.py.
+    # real break, an ASR-dropout artifact (STT-006), a quote that isn't
+    # actually in the transcript, or a "correction" that doesn't correct
+    # anything. `strip_punctuation=True` because this is a Deepgram
+    # transcript, not something the learner typed; `check_das_dass=True`
+    # and `check_asr_artifacts=True` because a tandem session is always
+    # voice (the harvest's source varies by caller, so it keeps both off —
+    # see error_extractor.py). Nothing filters between this and the
+    # disconnect handler's `record_grammar_error` calls in
+    # pipeline/factory.py.
     guarded_patterns: list[PatternOutcome] = []
     for p in kept_patterns:
         # Only a wrong, elicited production ever reaches record_grammar_error
@@ -322,6 +324,7 @@ async def debrief(
             corrected=p.corrected,
             source_text=transcript,
             check_das_dass=True,
+            check_asr_artifacts=True,
             strip_punctuation=True,
         )
         if reason:
@@ -341,6 +344,7 @@ async def debrief(
             corrected=e.corrected,
             source_text=transcript,
             check_das_dass=True,
+            check_asr_artifacts=True,
             strip_punctuation=True,
         )
         if reason:

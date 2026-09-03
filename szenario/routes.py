@@ -68,7 +68,15 @@ async def _background_harvest(transcript: str, session_id: str, user_id: str) ->
     like the conversation flow's Harvester B. Same non-fatal, log-and-
     swallow contract as the inline block this replaces."""
     try:
-        extraction = await extract_errors(transcript=transcript, session_id=session_id, user_id=user_id)
+        # STT-006: this transcript is always a Deepgram spoken transcript
+        # (transcribe_attempt) — never typed — so the ASR-dropout guards
+        # apply.
+        extraction = await extract_errors(
+            transcript=transcript,
+            session_id=session_id,
+            user_id=user_id,
+            check_asr_artifacts=True,
+        )
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:
