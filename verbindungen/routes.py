@@ -196,12 +196,26 @@ async def get_round(
     # ledger weighting below — weighting a pool that shouldn't be served in
     # the first place just picks the least-bad wrong item. Personal (forged)
     # items get the same ceiling: they're built from the learner's own gaps,
-    # but a gap in a B1 pattern still isn't A1 practice.
+    # but a gap in a B1 pattern still isn't A1 practice. LEVEL-002: the
+    # drill's own target patterns are exempted from that ceiling
+    # (`always_allow`) so an A1/A2 learner still gets Verbindungen's full
+    # catalog rather than collapsing to whichever patterns happen to sit at
+    # or below their level — the same fix as Bauteil, for the matching gap.
+    # Practical effect: the whole catalog is TARGET_PATTERNS, so level
+    # filtering is OFF for Verbindungen's own pool (ceiling and floor).
     items = await apply_level(
-        db, user_id=user_id, items=list(load_items().values()), drill="verbindungen"
+        db,
+        user_id=user_id,
+        items=list(load_items().values()),
+        drill="verbindungen",
+        always_allow=set(TARGET_PATTERNS),
     )
     personal = await apply_level(
-        db, user_id=user_id, items=personal, drill="verbindungen/personal"
+        db,
+        user_id=user_id,
+        items=personal,
+        drill="verbindungen/personal",
+        always_allow=set(TARGET_PATTERNS),
     )
     generic_size = ROUND_SIZE - len(personal)
     try:

@@ -141,7 +141,7 @@ def _at_or_below(user_level: str | None, pattern_id: str) -> bool:
     return BUCKETS.index(item_bucket) <= user_rank
 
 
-def select(items, user_level, weak_patterns=None, *, pattern_of=None):
+def select(items, user_level, weak_patterns=None, *, pattern_of=None, always_allow=None):
     """Apply the serving rule to a pool of items, degrading gracefully.
 
     Not every drill has content at every level — ``faelle`` is entirely
@@ -159,12 +159,28 @@ def select(items, user_level, weak_patterns=None, *, pattern_of=None):
        whole change exists to stop. The caller decides what to show.
 
     **The ceiling is never crossed.** Only the ledger floor relaxes.
+
+    ``always_allow`` (LEVEL-002) is a narrower, opt-in exception to that
+    rule: a set of pattern ids that bypass the ceiling entirely, for a drill
+    whose own catalog spans levels above the learner but which has nothing
+    else to serve instead — a 3-pattern drill (e.g. Bauteil) collapsing to 1
+    pattern at A1/A2 is functionally the same failure as the empty-round
+    case step 2 above already exists to avoid. Unlike the ledger floor,
+    this does not require a demonstrated gap; it is a per-drill declaration
+    ("these are MY patterns, serve them regardless of level"), so callers
+    should pass only a drill's own target-pattern set, never the full
+    taxonomy. Every other pattern in the pool still obeys the ceiling.
     """
     key = pattern_of or (lambda i: i.get("pattern_id"))
     if not items or rank(user_level) is None:
         return list(items)
 
-    strict = [i for i in items if allows(user_level, key(i), weak_patterns)]
+    always_allow = always_allow or ()
+    strict = [
+        i
+        for i in items
+        if key(i) in always_allow or allows(user_level, key(i), weak_patterns)
+    ]
     if strict:
         return strict
     return [i for i in items if _at_or_below(user_level, key(i))]

@@ -87,12 +87,27 @@ async def get_round(
         personal = []
 
     # LEVEL-001: narrow before the ledger weighting below; the personal
-    # (forged) items get the same ceiling.
+    # (forged) items get the same ceiling. LEVEL-002: Bauteil only has
+    # three patterns total (one A1, two B1) — letting the ceiling apply to
+    # them collapses an A1/A2 round to a single pattern, so the drill's own
+    # target set is exempted from its own ceiling (`always_allow`); other
+    # drills' patterns in the ledger floor still obey it normally. Note the
+    # practical effect: every catalog item's pattern is in TARGET_PATTERNS,
+    # so `apply_level` no longer filters Bauteil's own pool at all (ceiling
+    # AND floor) — accepted until A1/A2 content exists (LEVEL-002 Proposal-2).
     items = await apply_level(
-        db, user_id=user_id, items=list(load_items().values()), drill="bauteil"
+        db,
+        user_id=user_id,
+        items=list(load_items().values()),
+        drill="bauteil",
+        always_allow=set(TARGET_PATTERNS),
     )
     personal = await apply_level(
-        db, user_id=user_id, items=personal, drill="bauteil/personal"
+        db,
+        user_id=user_id,
+        items=personal,
+        drill="bauteil/personal",
+        always_allow=set(TARGET_PATTERNS),
     )
     generic_size = ROUND_SIZE - len(personal)
     try:
