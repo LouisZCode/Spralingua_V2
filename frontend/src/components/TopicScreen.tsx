@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { HTTP_BASE } from "@/lib/api";
+import { VOICE_EXCHANGE_COST } from "@/lib/coins";
 import { useCoinBalance, useCoinsBypassed } from "./shared/Coins";
 import type { TandemPartner } from "./shared/tandem";
 import AppHeader from "@/components/shared/AppHeader";
@@ -49,12 +50,13 @@ const EXCHANGE_OPTIONS = [
   { value: 15, label: "Long · 15 · 225 coins" },
 ] as const;
 
-function readExchanges(): number {
+function readExchanges(): number | null {
   try {
     const raw = parseInt(localStorage.getItem(EXCHANGES_STORAGE_KEY) ?? "", 10);
-    return raw === 5 || raw === 10 || raw === 15 ? raw : 10;
+    return raw === 5 || raw === 10 || raw === 15 ? raw : null;
   } catch {
-    return 10;
+    // PAY-005: no stored preference — the affordable default decides.
+    return null;
   }
 }
 
@@ -99,17 +101,36 @@ export default function TopicScreen({
     }
   }, []);
 
-  // TAND-012: default to 10 and hydrate from localStorage in an effect —
-  // same SSR-safe pattern as the input-mode toggle just above.
-  const [exchanges, setExchanges] = useState<number>(10);
+  // TAND-012 → PAY-005: the smallest option renders until the balance
+  // resolves; the seed then picks the largest affordable exchange count,
+  // with the stored choice winning only while it is still affordable. The
+  // default can only ever move UP, so there is no downgrade flash, and
+  // developers seed immediately at the largest option through the bypass
+  // (same guard as SatzschmiedePicker). Replaces the mount-only localStorage
+  // hydration — same SSR-safe pattern as the input-mode toggle above; the
+  // setState is the whole point, hence the disables.
+  const [exchanges, setExchanges] = useState<number>(EXCHANGE_OPTIONS[0].value);
+  const [exchangesSeeded, setExchangesSeeded] = useState(false);
+  const bal = useCoinBalance();
+  const bypassed = useCoinsBypassed();
 
   useEffect(() => {
+    if (exchangesSeeded) return;
+    if (bal === null && !bypassed) return; // balance not resolved yet
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setExchangesSeeded(true);
+    const max = bypassed
+      ? EXCHANGE_OPTIONS[EXCHANGE_OPTIONS.length - 1].value
+      : bal !== null
+        ? Math.floor(bal.balance / VOICE_EXCHANGE_COST)
+        : 0;
+    const largest =
+      [...EXCHANGE_OPTIONS].reverse().find((o) => o.value <= max)?.value ??
+      EXCHANGE_OPTIONS[0].value;
     const stored = readExchanges();
-    if (stored !== 10) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setExchanges(stored);
-    }
-  }, []);
+     
+    setExchanges(stored !== null && stored <= max ? stored : largest);
+  }, [exchangesSeeded, bal, bypassed]);
 
   // Load the topic pool once; seed today's 3 recommendations from it. A
   // fetch failure leaves both lists empty — the free-text field still works,

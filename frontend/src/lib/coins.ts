@@ -8,6 +8,10 @@ import { HTTP_BASE } from "./api";
 export const SATZ_ATTEMPT_COST = 5;
 export const LETTER_COST = 15;
 
+// PAY-005: mirrors coins/prices.py::VOICE_EXCHANGE — the tandem length
+// picker derives its affordable default from it.
+export const VOICE_EXCHANGE_COST = 15;
+
 // PAY-002: GET /coins/balance response shape (verified backend contract).
 export type CoinBalance = {
   tier: "free" | "basic" | "premium";

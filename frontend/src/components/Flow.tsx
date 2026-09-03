@@ -8,6 +8,7 @@ import { useAuth } from "./auth/AuthContext";
 import { playSound } from "./shared/sound";
 import { loadError } from "./shared/copy";
 import { SATZ_ATTEMPT_COST } from "@/lib/coins";
+import { useCoinBalance, useCoinsBypassed } from "./shared/Coins";
 import SoundToggle from "./shared/SoundToggle";
 import ThemeToggle from "./shared/ThemeToggle";
 
@@ -585,7 +586,7 @@ function clampRounds(n: number): number {
   return Math.min(50, Math.max(1, Math.trunc(n)));
 }
 
-function loadStoredRoundChoice(): StoredRoundChoice {
+function loadStoredRoundChoice(): StoredRoundChoice | null {
   try {
     const raw = localStorage.getItem(ROUND_STORAGE_KEY);
     if (raw === "10" || raw === "20" || raw === "30") return raw;
@@ -594,7 +595,8 @@ function loadStoredRoundChoice(): StoredRoundChoice {
       if (Number.isFinite(n)) return clampRounds(n);
     }
   } catch {}
-  return "30";
+  // PAY-005: no stored preference — the affordable default decides.
+  return null;
 }
 
 function persistRoundChoice(choice: StoredRoundChoice) {
@@ -672,20 +674,44 @@ export default function Flow() {
   const [screen, setScreen] = useState<"picker" | "playing">("picker");
   const startedDealingRef = useRef(false);
 
-  const [presetChoice, setPresetChoice] = useState<RoundPreset>("30");
+  // PAY-005: the smallest preset renders until the balance resolves — the
+  // affordable seed can then only ever move the default UP, never 30→10.
+  const [presetChoice, setPresetChoice] = useState<RoundPreset>("10");
   const [customText, setCustomText] = useState<string>("");
 
-  // SSR-safe hydration from localStorage, same idiom as TopicScreen's input
-  // mode toggle — reading storage during render would mismatch the
+  // PAY-005: seed the picker once the balance resolves — the stored choice
+  // wins only while it is still affordable; otherwise the default is the
+  // largest preset the account can actually buy. Developers seed
+  // immediately at the largest preset through the bypass (same guard as
+  // SatzschmiedePicker). Replaces the mount-only localStorage hydration —
+  // same SSR-safe idiom, reading storage during render would mismatch the
   // server-rendered HTML.
+  const bal = useCoinBalance();
+  const bypassed = useCoinsBypassed();
+  const affordableMax = bypassed
+    ? 50
+    : bal !== null
+      ? Math.floor(bal.balance / SATZ_ATTEMPT_COST)
+      : null;
+  const [roundSeeded, setRoundSeeded] = useState(false);
   useEffect(() => {
+    if (roundSeeded) return;
+    if (affordableMax === null) return; // balance not resolved yet
+    setRoundSeeded(true);
     const stored = loadStoredRoundChoice();
-    if (typeof stored === "number") {
-      setCustomText(String(stored));
+    const largest =
+      [...ROUND_PRESETS].reverse().find((p) => p.value <= affordableMax) ??
+      ROUND_PRESETS[0];
+    const seed =
+      stored !== null && targetFromChoice(stored) <= affordableMax
+        ? stored
+        : largest.key;
+    if (typeof seed === "number") {
+      setCustomText(String(seed));
     } else {
-      setPresetChoice(stored);
+      setPresetChoice(seed);
     }
-  }, []);
+  }, [roundSeeded, affordableMax]);
 
   const customNumber = customText === "" ? null : Number(customText);
   const roundChoice: StoredRoundChoice = customNumber ?? presetChoice;

@@ -12,7 +12,7 @@ const SATZ_PRESETS = [
 
 const SATZ_STORAGE_KEY = "satzschmiede-rounds-v1";
 
-function readStoredChoice(): number {
+function readStoredChoice(): number | null {
   try {
     const raw = localStorage.getItem(SATZ_STORAGE_KEY);
     if (raw) {
@@ -20,7 +20,8 @@ function readStoredChoice(): number {
       if (Number.isFinite(n) && n >= 1 && n <= 50) return n;
     }
   } catch {}
-  return 30;
+  // PAY-005: no stored preference — the affordable default decides.
+  return null;
 }
 
 function persistChoice(choice: number) {
@@ -33,38 +34,61 @@ function clampRounds(n: number): number {
   return Math.min(50, Math.max(1, Math.trunc(n)));
 }
 
+// PAY-005: the largest preset the balance can cover, or the smallest preset
+// when nothing is affordable — the Start button stays the gate; the default
+// just never opens on a round the account can't buy.
+function largestAffordablePreset(max: number): number {
+  const affordable = SATZ_PRESETS.filter((p) => p.value <= max);
+  return affordable.length > 0
+    ? affordable[affordable.length - 1].value
+    : SATZ_PRESETS[0].value;
+}
+
 interface SatzschmiedePickerProps {
   onStart: (count: number) => void;
 }
 
 export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps) {
-  const [presetChoice, setPresetChoice] = useState<number>(30);
+  // PAY-005: the smallest preset renders until the balance resolves — the
+  // affordable seed can then only ever move the default UP, never 30→10.
+  const [presetChoice, setPresetChoice] = useState<number>(SATZ_PRESETS[0].value);
   const [customText, setCustomText] = useState<string>("");
   const bal = useCoinBalance();
   const bypassed = useCoinsBypassed();
-
-  // SSR-safe hydration from localStorage, same idiom as Flow.tsx's round
-  // picker — reading storage during render would mismatch the server HTML.
-  // The setState is the whole point of the effect, hence the disable: the
-  // rule fires here but not on Flow's identical effect, which sits in a
-  // component too large for the compiler's analysis to reach.
-  useEffect(() => {
-    const stored = readStoredChoice();
-    if (SATZ_PRESETS.some((p) => p.value === stored)) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setPresetChoice(stored);
-    } else {
-      setCustomText(String(stored));
-    }
-  }, []);
-
-  const customNumber = customText === "" ? null : Number(customText);
-  const roundChoice = customNumber ?? presetChoice;
-  const cost = roundChoice * SATZ_ATTEMPT_COST;
   const maxAffordable = bal ? Math.floor(bal.balance / SATZ_ATTEMPT_COST) : 50;
   // PAY-002: developer bypass — never cap affordable to 0 for devs (balance is
   // frozen at 100 by design; clamping to 0 would lock Start for any 10/20/30).
   const effectiveMax = bypassed ? 50 : Math.min(50, maxAffordable);
+
+  // PAY-005: seed once the balance resolves. The stored choice wins only
+  // while it is still affordable; otherwise the default is the largest
+  // preset the account can actually buy. Developers seed immediately at the
+  // largest preset via the bypass. Replaces the mount-only localStorage
+  // hydration — same SSR-safe idiom, the setState is the whole point of the
+  // effect, hence the disables.
+  const [affordableSeeded, setAffordableSeeded] = useState(false);
+  useEffect(() => {
+    if (affordableSeeded) return;
+    if (bal === null && !bypassed) return; // balance not resolved yet
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAffordableSeeded(true);
+    const stored = readStoredChoice();
+    const seed =
+      stored !== null && stored <= effectiveMax
+        ? stored
+        : largestAffordablePreset(effectiveMax);
+    if (SATZ_PRESETS.some((p) => p.value === seed)) {
+       
+      setPresetChoice(seed);
+    } else {
+       
+      setCustomText(String(seed));
+    }
+  }, [affordableSeeded, bal, bypassed, effectiveMax]);
+
+  const customNumber = customText === "" ? null : Number(customText);
+  const roundChoice = customNumber ?? presetChoice;
+  const cost = roundChoice * SATZ_ATTEMPT_COST;
   const insufficient = !bypassed && bal !== null && bal.balance < cost;
   const disabled = insufficient || roundChoice < 1 || roundChoice > effectiveMax;
 
