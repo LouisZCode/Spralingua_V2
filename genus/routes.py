@@ -82,7 +82,11 @@ _DECK_ADJECTIVES = (
     "modern", "wichtig", "nett", "ruhig", "stark", "schnell",
 )
 # Fail loud at import if the tuple ever drifts outside the concat-safe set —
-# a non-safe adjective would silently produce wrong gold endings.
+# a non-safe adjective would silently produce wrong gold endings. GEN-002:
+# this same tuple now also doubles as the vetted-neutral membership set
+# _safe_deck_adjectives() intersects the learner's deck against below, so
+# this assert is the one guard for "whatever set we intersect against"
+# staying concat-safe too.
 assert set(_DECK_ADJECTIVES) <= SAFE_ADJECTIVES, "deck adjective not concat-safe"
 
 
@@ -108,7 +112,28 @@ def _concat_safe(adjective: str) -> bool:
 
 
 def _safe_deck_adjectives(cards) -> tuple[str, ...]:
-    """The learner's own concat-safe adjectives, sorted for determinism.
+    """The learner's own concat-safe, vetted-neutral adjectives, sorted for
+    determinism.
+
+    GEN-002: ``_concat_safe`` is pure morphology (isalpha, no elision-shape
+    endings) — no part-of-speech or semantic filter at all. A community-
+    forged card like adj-gleichzeitig ("simultaneously", actually an adverb
+    with invented comparative forms) sailed through it and produced
+    nonsense phrases ("eine gleichzeitige Kleidung"). Two independent gates
+    now guard that, on top of concat-safety: the adjective must also be one
+    of the ``_DECK_ADJECTIVES`` words — the only set in this module actually
+    documented as pairing sanely with ANY noun, including a person or an
+    abstract. ``SAFE_ADJECTIVES`` (content.py) is NOT a substitute here even
+    though it's larger: it's a purely morphological concat-safety set for
+    curated pool items (where a human already chose the specific noun+
+    adjective pairing), and it still contains topically-narrow words like
+    "lecker"/"frisch" — the exact pairing-goes-absurd risk the comment above
+    ``_DECK_ADJECTIVES`` already names. And the card's gloss must not end in
+    "-ly" (the adverb tell), independent of the wordlist check, so a future
+    mis-glossed community card is caught even if its German form happens to
+    look like a normal adjective. Accepted trade-off: fewer of the learner's
+    own adjectives appear in Genus — see ``_deck_item``'s fallback to the
+    curated pool when this returns empty.
 
     GEN-001b: sorted so the crc32 pick below is stable across requests as
     long as the deck's adjective set is unchanged. (If the set changes
@@ -125,6 +150,8 @@ def _safe_deck_adjectives(cards) -> tuple[str, ...]:
                 and (t := (card.target or "").strip())
                 and " " not in t
                 and _concat_safe(t)
+                and t in _DECK_ADJECTIVES
+                and not (card.gloss or "").strip().lower().endswith("ly")
             }
         )
     )
