@@ -347,6 +347,11 @@ export default function PracticeMenu() {
             title="Clara the Teacher" // CLARA-19: plain card copy
             body="Ask her about any topic."
             cta="Ask Clara"
+            // PAY-004: the wall should be visible on the menu, not after a
+            // friend has already picked a topic and typed a question.
+            badge={
+              isDev || (user?.tier ?? "free") !== "free" ? undefined : "Basic"
+            }
           />
         </div>
 
@@ -584,6 +589,7 @@ function ModeCard({
   body,
   cta,
   done,
+  badge,
 }: {
   href: string;
   accent: "red" | "gold" | "ink";
@@ -596,6 +602,10 @@ function ModeCard({
   // disables the card — done just means "already counted today", not
   // "nothing left to do here".
   done?: boolean;
+  // PAY-004: small tier chip top-right (e.g. Clara's "Basic"), so the pay
+  // wall is visible before a learner invests time picking a topic. Rendered
+  // in the same accent as the icon chip so the card keeps one palette.
+  badge?: string;
 }) {
   // DARK-003: chip tint and card wash come off the same accent — one
   // lookup instead of two parallel ternary chains that could drift apart.
@@ -634,6 +644,14 @@ function ModeCard({
             </div>
           )}
         </div>
+        {/* PAY-004: tier chip on the opposite corner of the icon row. */}
+        {badge && (
+          <span
+            className={`rounded-full border-[3px] border-line px-3 py-1 font-body text-[11px] font-bold uppercase tracking-[0.14em] ${chip}`}
+          >
+            {badge}
+          </span>
+        )}
       </div>
       {kicker && (
         <p className="mt-6 font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">

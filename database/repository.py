@@ -197,16 +197,20 @@ async def upsert_user(
         role, tier, xmax = row[0], row[1], row[2]
         is_insert = xmax == 0
         if is_insert:
-            # PAY-002: one-time 100-coin grant into the persistent bucket.
-            # Must be inside the same transaction as the insert so a crash
-            # between "row created" and "grant credited" can't orphan a user
-            # with no coins. Use an explicit UPDATE (not relying on the
-            # server_default) so the in-DB value is 100 regardless of what
-            # the column default was at migration time.
+            # PAY-002: one-time signup grant into the persistent bucket.
+            # PAY-004 (2026-09-03): the literal `100`s became SIGNUP_GRANT
+            # (ECON-08) so the next grant re-tuning is one constant, not two
+            # literals to hunt. Must be inside the same transaction as the
+            # insert so a crash between "row created" and "grant credited"
+            # can't orphan a user with no coins. Use an explicit UPDATE (not
+            # relying on the server_default) so the in-DB value matches
+            # regardless of what the column default was at migration time.
+            from coins.prices import SIGNUP_GRANT
+
             await db.execute(
                 update(User)
                 .where(User.id == user_id)
-                .values(purchased_coins=100)
+                .values(purchased_coins=SIGNUP_GRANT)
             )
             # Ledger row for the grant — idempotency key (user_id, kind, ref)
             # where ref = users.id, so a retry that re-enters this branch
@@ -225,7 +229,7 @@ async def upsert_user(
                     kind="signup_grant",
                     ref=user_id,
                     delta_allowance=0,
-                    delta_purchased=100,
+                    delta_purchased=SIGNUP_GRANT,
                 )
                 .on_conflict_do_nothing(index_elements=["user_id", "kind", "ref"])
             )

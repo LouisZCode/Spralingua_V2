@@ -33,7 +33,7 @@ const PLANS: Plan[] = [
     kicker: "Free",
     price: "Free",
     priceNote: "",
-    bullets: ["100 coins are yours to try", "No card needed"],
+    bullets: ["75 coins a day — plus 100 to start", "No card needed"],
   },
   {
     id: "basic",

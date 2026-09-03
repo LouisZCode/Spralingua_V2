@@ -32,8 +32,10 @@ built on these rounded numbers.
 Free: idiom rephrase, gloss hover, nudge suggestions, explain, add-a-word
 pool links — not on the unit table, priced at 0.
 
-DAILY_ALLOWANCE: free 0 (but a one-time 100-coin grant at signup covers day
-one), basic 200, premium 500 — the hard cost ceiling per day. Unused daily
+DAILY_ALLOWANCE: free 75 (PAY-004, 2026-09-03: ~15 graded attempts, or a letter + 12
+attempts, or 5 voice exchanges a day — the free tier must be able to form a habit and
+reach GAME-001's streak; the one-time 100-coin grant at signup covers day one on top
+of that), basic 200, premium 500 — the hard cost ceiling per day. Unused daily
 coins do NOT roll over; purchased coins (grant + top-ups) survive resets.
 
 TOPUP_COINS: 500 per €2 — the only way to buy past today's allowance.
@@ -48,7 +50,7 @@ VOICE_EXCHANGE = 15
 INTERVIEW_ANSWER = 20
 
 DAILY_ALLOWANCE: dict[str, int] = {
-    "free": 0,
+    "free": 75,
     "basic": 200,
     "premium": 500,
 }

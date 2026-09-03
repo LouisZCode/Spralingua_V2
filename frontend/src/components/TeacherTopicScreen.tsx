@@ -126,7 +126,17 @@ export default function TeacherTopicScreen({
           {isDeveloper ? (
             <p className="font-body text-[12px] text-ink-muted">🪙 developer · unlimited talks</p>
           ) : isFreeLocked ? (
-            <p className="font-body text-[12px] text-ink-muted">Clara is included with Basic (1/day) and Premium (3/day)</p>
+            /* PAY-004: the free lock was a 12px ink-muted line above the topic
+               cards — easy to miss (VERIFY-2 C04). A free learner now meets a
+               bordered panel before investing time in a topic. */
+            <div className="flex items-center gap-3 rounded-2xl border-[3px] border-line bg-flag-gold-soft px-5 py-4">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl border-[3px] border-line bg-flag-gold font-display text-[16px] font-black text-ink-fixed">
+                B
+              </span>
+              <p className="font-display text-[13px] font-black uppercase tracking-[0.06em] text-ink">
+                Clara is included with Basic (1/day) and Premium (3/day)
+              </p>
+            </div>
           ) : exhausted ? (
             <p className="font-body text-[12px] font-semibold text-flag-red-deep">Daily limit reached — {used}/{limit} today</p>
           ) : (
