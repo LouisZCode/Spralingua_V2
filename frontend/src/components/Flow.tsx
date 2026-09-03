@@ -717,6 +717,24 @@ export default function Flow() {
   const roundChoice: StoredRoundChoice = customNumber ?? presetChoice;
   const roundTarget = targetFromChoice(roundChoice);
 
+  // PAY-006: the picker's own coin gate — mirrors SatzschmiedePicker's
+  // cost/maxAffordable/effectiveMax/insufficient/disabled chain, adapted to
+  // Flow's ROUND_PRESETS/targetFromChoice shape. Computed here (not inside
+  // RoundPicker) since bal/bypassed are already resolved by the hooks above;
+  // only the derived gate values cross the prop boundary, so the balance
+  // isn't fetched a second time.
+  const roundMaxAffordable = bal
+    ? Math.floor(bal.balance / SATZ_ATTEMPT_COST)
+    : 50;
+  // PAY-002: developer bypass — never cap affordable to 0 for devs (balance
+  // is frozen at 100 by design; clamping would lock Start for any preset).
+  const roundEffectiveMax = bypassed ? 50 : Math.min(50, roundMaxAffordable);
+  const roundCost = roundTarget * SATZ_ATTEMPT_COST;
+  const roundInsufficient =
+    !bypassed && bal !== null && bal.balance < roundCost;
+  const roundDisabled =
+    roundInsufficient || roundTarget < 1 || roundTarget > roundEffectiveMax;
+
   const handlePickPreset = useCallback((preset: RoundPreset) => {
     setPresetChoice(preset);
     setCustomText("");
@@ -1478,6 +1496,8 @@ export default function Flow() {
             onPickPreset={handlePickPreset}
             onCustomChange={handleCustomChange}
             onStart={handleStart}
+            insufficient={roundInsufficient}
+            disabled={roundDisabled}
           />
         ) : (
           <>
@@ -1777,12 +1797,16 @@ function RoundPicker({
   onPickPreset,
   onCustomChange,
   onStart,
+  insufficient,
+  disabled,
 }: {
   presetChoice: RoundPreset;
   customText: string;
   onPickPreset: (preset: RoundPreset) => void;
   onCustomChange: (raw: string) => void;
   onStart: () => void;
+  insufficient: boolean;
+  disabled: boolean;
 }) {
   const customActive = customText !== "";
   return (
@@ -1846,7 +1870,8 @@ function RoundPicker({
         <button
           type="button"
           onClick={onStart}
-          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-red-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill"
+          disabled={disabled}
+          className="btn-3d inline-flex items-center gap-2 rounded-2xl border-[3px] border-red-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill disabled:cursor-not-allowed disabled:opacity-40"
           style={redShadow}
         >
           Start
@@ -1862,6 +1887,15 @@ function RoundPicker({
             <path d="M5 12h14M13 6l6 6-6 6" />
           </svg>
         </button>
+        {insufficient && (
+          <p className="mt-2 font-body text-[13px] font-semibold text-flag-red-deep">
+            Not enough coins for this round —{" "}
+            <a href="/pricing" className="underline underline-offset-2">
+              get more coins
+            </a>{" "}
+            or pick a smaller round.
+          </p>
+        )}
       </div>
     </div>
   );
