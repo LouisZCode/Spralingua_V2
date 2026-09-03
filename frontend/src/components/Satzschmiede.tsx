@@ -87,12 +87,16 @@ export default function Satzschmiede() {
       });
   }, [token, signOut]);
 
-  // Load deck when picker completes
+  // SATZ-028: fetch the deck as soon as a token exists, not once the picker
+  // commits — the empty-pool check below has to run before the picker
+  // (which prices a round) is allowed to render at all, so a cold-start
+  // account never sees "30 words · ≈ 150 coins" only to land on an empty
+  // pool afterward. A deck change from the pack modal is already re-read via
+  // its own onPoolChanged={refreshDeck} wiring below, so no further refetch
+  // is needed once a round actually starts.
   useEffect(() => {
-    if (phase === "playing") {
-      refreshDeck();
-    }
-  }, [phase, refreshDeck]);
+    refreshDeck();
+  }, [refreshDeck]);
 
   const handlePickerStart = useCallback((count: number) => {
     setRoundTarget(count);
@@ -313,8 +317,44 @@ export default function Satzschmiede() {
         ? "your pool"
         : `your pool · ${deck.length} words`;
 
-  // Show picker first
-  if (phase === "picker") {
+  // SATZ-028: block the picker on the deck fetch first — the picker prices
+  // a round, so it must never render before we know whether there's a pool
+  // to deal from. A bare loading line (same treatment as ItemPicker's and
+  // PackGallery's initial state) keeps this from flashing loading → picker
+  // → empty in three frames.
+  if (phase === "picker" && deck === null && !error) {
+    return (
+      <div className="relative flex min-h-screen flex-col bg-paper text-ink">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
+        />
+
+        {/* APPHDR-001: shared header; the toggles ride in the right slot. */}
+        <AppHeader
+          right={
+            <>
+              <ThemeToggle />
+              <SoundToggle />
+            </>
+          }
+          back={{ href: "/practice", label: "← Menu" }}
+        />
+
+        <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
+          <p className="text-center font-body text-[12px] font-semibold uppercase tracking-[0.26em] text-ink-muted">
+            Loading…
+          </p>
+        </main>
+      </div>
+    );
+  }
+
+  // Show the picker only once the deck has resolved AND isn't empty — a
+  // cold-start pool skips straight to the "+ Add Cards" state in the main
+  // shell below instead of pricing a round the learner cannot deal
+  // (SATZ-028). The main shell also covers the error and playing states.
+  if (phase === "picker" && !emptyPool && !error) {
     return (
       <div className="relative flex min-h-screen flex-col bg-paper text-ink">
         <div
