@@ -56,11 +56,32 @@ def _validate_lesson(data: dict, path: Path) -> None:
 
 
 def load_prompts(lesson_id: str) -> dict:
-    """Load a lesson's YAML. Falls back to `lesson_zero` on missing file."""
+    """Load a lesson's YAML. Falls back to `lesson_zero` on missing/unknown id.
+
+    SEC-005: `lesson_id` arrives from caller input (the WS `?lesson=` param,
+    the unauthenticated `GET /lessons/{lesson_id}`) and used to be joined
+    straight into a filesystem path (`_PROMPTS_DIR / f"{lesson_id}.yaml"`)
+    with no containment check — `../../etc/passwd` (or any relative escape
+    landing on a real `*.yaml` file elsewhere) would have been read and
+    handed to `yaml.safe_load`. Whitelisting against `list_lesson_ids()`
+    (every stem under `prompts/` that has a `type:` key) BEFORE the path is
+    ever built makes an escape impossible: everything past this check is
+    only ever a name this function already confirmed is a real lesson on
+    disk. Unknown ids keep the pre-existing behavior — log + fall back to
+    `lesson_zero` — they just can no longer touch the filesystem outside
+    this directory to get there.
+    """
+    if lesson_id != _FALLBACK and lesson_id not in list_lesson_ids():
+        logger.warning(f"Unknown lesson_id={lesson_id!r}; falling back to {_FALLBACK!r}")
+        return load_prompts(_FALLBACK)
+
     path = _PROMPTS_DIR / f"{lesson_id}.yaml"
     if not path.exists():
         if lesson_id == _FALLBACK:
             raise FileNotFoundError(f"Fallback lesson YAML missing: {path}")
+        # Defensive only now that the whitelist above is the real guard —
+        # covers a race where the file is deleted between that check and
+        # this read, not the primary path-containment defense.
         logger.warning(f"Unknown lesson_id={lesson_id!r}; falling back to {_FALLBACK!r}")
         return load_prompts(_FALLBACK)
     with open(path, "r", encoding="utf-8") as f:

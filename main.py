@@ -51,6 +51,7 @@ from zeitfaerbung import (
 from config import database_url
 from config.settings import (
     allowed_origins,
+    app_env,
     demo_session_timeout_s,
     learned_session_timeout_s,
     say_max_chars,
@@ -106,8 +107,39 @@ for _ln in ("uvicorn.error", "uvicorn.access"):
     logging.getLogger(_ln).addFilter(_RedactTokenFilter())
 
 
+# SEC-005: ALLOWED_ORIGINS defaulted to localhost with no startup check — a
+# deployed env that forgot to set it (or set it to an empty string) would
+# boot cleanly and then reject every browser request from the real
+# frontend origin, with CORSMiddleware's silent same-origin-only behavior
+# the only symptom. `app_env` is the same prod/dev signal
+# `auth/tokens.py`'s JWT_SECRET check already uses: "dev" (the default)
+# preserves local ergonomics, anything else is a deployed environment.
+_DEFAULT_ALLOWED_ORIGINS = ["http://localhost:3000"]
+
+
+def _check_allowed_origins() -> None:
+    """Fail loud in a deployed env when ALLOWED_ORIGINS is empty or still
+    the localhost dev default; warn (don't block boot) in dev."""
+    if allowed_origins and allowed_origins != _DEFAULT_ALLOWED_ORIGINS:
+        return
+    reason = "empty" if not allowed_origins else "still the localhost dev default"
+    msg = (
+        f"ALLOWED_ORIGINS is {reason} ({allowed_origins!r}) with APP_ENV={app_env!r}. "
+        "Every browser request from the real frontend origin will be rejected by "
+        "CORS. Set ALLOWED_ORIGINS to the real frontend origin(s) before deploying."
+    )
+    if app_env == "dev":
+        logger.warning(msg)
+        return
+    raise RuntimeError(msg)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Ordered first and deliberately ahead of init_engine below: it needs no
+    # Postgres connection, so a misconfigured ALLOWED_ORIGINS fails loud (or
+    # warns, in dev) before spending time on anything that does.
+    _check_allowed_origins()
     # Fail-loud: if Postgres is unreachable, init_engine raises here and
     # uvicorn exits non-zero. Saves us from silent broken-persistence builds.
     await init_engine(database_url)
@@ -170,7 +202,18 @@ else:
     logger.info("Sentry error reporting: OFF (SENTRY_DSN not set)")
 
 
-app = FastAPI(lifespan=lifespan)
+# SEC-005: /docs, /redoc and the raw /openapi.json schema stay on in dev
+# (APP_ENV=dev, the default) but are switched off in any deployed
+# environment — an unauthenticated, world-readable map of every route,
+# request/response shape and auth scheme is free recon for an attacker and
+# serves no learner-facing purpose.
+_DEV = app_env == "dev"
+app = FastAPI(
+    lifespan=lifespan,
+    docs_url="/docs" if _DEV else None,
+    redoc_url="/redoc" if _DEV else None,
+    openapi_url="/openapi.json" if _DEV else None,
+)
 
 # The /say, /auth, /sessions, and /satz HTTP endpoints are CORS-checked
 # (WebSockets aren't). Origins come from ALLOWED_ORIGINS (config.settings) so

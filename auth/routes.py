@@ -7,13 +7,14 @@
 
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.exc import SQLAlchemyError
 
 from database import User, get_sessionmaker, upsert_user
 from database.repository import load_user_level, set_user_level
 from grammar import BUCKETS
+from security import auth_try_admit, client_ip
 
 from .deps import get_current_user_id
 from .tokens import AuthError, issue_session_jwt, verify_google_id_token
@@ -54,14 +55,21 @@ class AuthOut(BaseModel):
 
 
 @router.post("/google", response_model=AuthOut)
-async def auth_google(body: GoogleAuthBody) -> AuthOut:
+async def auth_google(body: GoogleAuthBody, request: Request) -> AuthOut:
     """Verify a Google ID token, upsert the user, and return a session JWT.
 
     401 if the token is invalid or the Google email isn't verified; 503 if the
     server has no GOOGLE_CLIENT_ID configured yet (verify raises AuthError, which
     we treat as "auth not available"). The returned ``token`` is what the
     frontend stores and replays on the WS handshake and ``/say``.
+
+    SEC-005: throttled per-IP (``auth_try_admit``) ahead of any Google
+    verification work — this route is unauthenticated by definition, so IP
+    is the only identity available, and a scripted loop hammering it with
+    garbage credentials would otherwise cost a Google verify call per hit.
     """
+    if not auth_try_admit(client_ip(request)):
+        raise HTTPException(status_code=429, detail="too many requests")
     try:
         claims = await verify_google_id_token(body.credential)
     except AuthError as e:

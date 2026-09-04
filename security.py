@@ -78,6 +78,18 @@ DRILL_MAX_PER_USER_PER_HOUR = 2000
 DRILL_HOUR_WINDOW_S = 3600.0
 _drill_by_user: dict[str, deque] = {}    # user_id -> timestamps of recent paid drill calls (shared across all drill routes)
 
+# POST /auth/google throttle (SEC-005): the route is unauthenticated by
+# definition -- no session JWT exists until it returns one -- so the only
+# identity available is the caller's IP. Generous on purpose: a shared
+# office/NAT can legitimately push many sign-ins through one IP, and
+# Google's own verify_oauth2_token call already bounds the downstream cost
+# of any one garbage token. This is a floor against a scripted
+# credential-stuffing/enumeration loop, not a tight budget like the paid
+# drill caps above.
+AUTH_MAX_PER_IP_PER_MIN = 20
+AUTH_WINDOW_S = 60.0
+_auth_by_ip: dict[str, deque] = {}   # IP -> timestamps of recent /auth/google calls
+
 # Opportunistic memory reclaim so a long-running process under IP-rotation abuse
 # doesn't accumulate dead per-IP entries forever.
 _last_prune = 0.0
@@ -123,6 +135,11 @@ def _maybe_prune(now: float) -> None:
         _evict(dq, now, DRILL_HOUR_WINDOW_S)
         if not dq:
             del _drill_by_user[user_id]
+    for ip in list(_auth_by_ip.keys()):
+        dq = _auth_by_ip[ip]
+        _evict(dq, now, AUTH_WINDOW_S)
+        if not dq:
+            del _auth_by_ip[ip]
 
 
 def client_ip(conn) -> str:
@@ -309,6 +326,29 @@ def drill_try_admit(user_id: str) -> bool:
         logger.warning(
             "drill_try_admit: hour window exhausted for user_id={} ({}/{} in {}s)",
             user_id, len(dq), DRILL_MAX_PER_USER_PER_HOUR, DRILL_HOUR_WINDOW_S,
+        )
+        return False
+    dq.append(now)
+    return True
+
+
+def auth_try_admit(ip: str) -> bool:
+    """Sliding-window admit for POST /auth/google: at most
+    ``AUTH_MAX_PER_IP_PER_MIN`` calls per IP per ``AUTH_WINDOW_S`` seconds.
+
+    Exempt IPs (local dev) always pass, same carve-out every other per-IP
+    gate in this module honors.
+    """
+    if _is_exempt(ip):
+        return True
+    now = time.monotonic()
+    _maybe_prune(now)
+    dq = _auth_by_ip.setdefault(ip, deque())
+    _evict(dq, now, AUTH_WINDOW_S)
+    if len(dq) >= AUTH_MAX_PER_IP_PER_MIN:
+        logger.warning(
+            "auth_try_admit: rate limited ip={} ({}/{} in {}s)",
+            ip, len(dq), AUTH_MAX_PER_IP_PER_MIN, AUTH_WINDOW_S,
         )
         return False
     dq.append(now)
