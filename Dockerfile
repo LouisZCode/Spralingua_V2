@@ -28,13 +28,20 @@ RUN uv sync --frozen --no-install-project --no-dev
 FROM python:3.12-slim AS runtime
 
 # ffmpeg: pydub MP3 export. libssl3/libasound2: Azure Speech SDK. libgomp1:
-# onnxruntime (silero VAD).
+# onnxruntime (silero VAD). postgresql-client: pg_dump for the REL-002
+# offsite backup cron (scripts/pg_dump_to_bucket.py) -- python:3.12-slim is
+# Debian 13 "trixie" as of this image, whose postgresql-client metapackage
+# already resolves to postgresql-client-17, so no PGDG apt repo is needed to
+# match Railway's Postgres 16/17 (an older trixie/bookworm base pinned to
+# postgresql-client-15 would need one; re-check this if the base image ever
+# moves back to bookworm).
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ffmpeg \
         ca-certificates \
         libssl3 \
         libasound2 \
         libgomp1 \
+        postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHONUNBUFFERED=1 \

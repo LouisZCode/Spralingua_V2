@@ -120,6 +120,29 @@ ACTIVE_TASKS: dict[str, PipelineTask] = {}
 # caller of this registry.
 ACTIVE_LESSONS: dict[str, str] = {}
 
+# REL-002: the ClientWrapper behind each live session, keyed the same as
+# ACTIVE_TASKS — registered and popped in run_pipeline in exactly the same
+# places, under the same identity guard, as ACTIVE_TASKS/ACTIVE_LESSONS.
+# Exists so a SIGTERM drain (begin_drain() below) can reach
+# ClientWrapper.request_wrap_up() for every live session — ACTIVE_TASKS
+# alone only gives you the PipelineTask to queue a frame into, not the
+# wrapper that needs to force its exchange cap down first.
+ACTIVE_WRAPPERS: dict[str, ClientWrapper] = {}
+
+# REL-002: flips True exactly once per process, the moment the first
+# SIGTERM is caught (main.py's signal handler -> begin_drain() below).
+# Read via is_draining() rather than importing the bare name — a plain
+# `from pipeline.factory import DRAINING` binds the boolean's VALUE at
+# import time (booleans are immutable), so a later flip here would never
+# be visible through that binding. GET /health and both WS accept paths
+# (main.py) gate on is_draining().
+DRAINING = False
+
+
+def is_draining() -> bool:
+    """True once a SIGTERM drain has started. See DRAINING above."""
+    return DRAINING
+
 
 # The voice runtime is German. These lessons stay English: `lesson_zero` is the
 # open-conversation default (kept English by decision — its fake_profiles profile
@@ -269,6 +292,142 @@ async def _kickoff_turn(task: PipelineTask, text: str, user_id: str) -> None:
         logger.warning(
             f"Kickoff turn failed (non-fatal): {type(e).__name__}: {e} user_id={user_id}"
         )
+
+
+# REL-002: how often begin_drain()'s wait loop polls ACTIVE_TASKS while
+# waiting for every wrap-up turn to finish. config.settings.shutdown_drain_s
+# (the overall deadline) is read at CALL time inside begin_drain(), not at
+# module import, so an env change picked up right before this process
+# started is honored even though this module was already imported earlier
+# in startup.
+_DRAIN_POLL_INTERVAL_S = 0.5
+
+
+async def _wrap_up_turn(task: PipelineTask, wrapper: ClientWrapper, user_id: str) -> None:
+    """REL-002: end one live session gracefully as part of a SIGTERM drain
+    (see begin_drain() below).
+
+    Reuses the exact ``LLMContext``/``LLMContextFrame`` injection mechanism
+    ``/say`` (main.py) and ``_kickoff_turn`` (above) use to inject one
+    synthetic user turn whose text is a stage direction, not dialogue.
+    ``ClientWrapper.request_wrap_up()`` builds that text (English for
+    `type: teacher`, German otherwise — the same split
+    ``ClientWrapper``'s PERF-005 fallback reply already uses) and, in the
+    same call, forces ``_max_exchanges`` down to ``_exchange_count + 1`` —
+    so the reply this turn produces IS the session's last exchange.
+    ``ClientWrapper.astream``'s own ``_exchange_count >= _max_exchanges``
+    branch then schedules ``_end_pipeline()`` after the reply streams,
+    exactly like any other agent-driven ending: the frontend gets its
+    normal close + summary modal, and ``activity_session.ended_by`` records
+    "agent", not "crash" — no new end-reason plumbing needed anywhere.
+
+    Skips a session that is already ending on its own
+    (``wrapper._end_pending`` already True) — injecting a second closing
+    turn into a session that's already mid-goodbye would just add a stray
+    unanswered turn behind the EndFrame that's already queued.
+
+    Wrapped end-to-end, same contract as ``_kickoff_turn`` above: a failure
+    here (a race with a session finishing on its own between
+    ``begin_drain()``'s ``ACTIVE_TASKS`` snapshot and this call, a
+    ``queue_frame`` error on an already-tearing-down task) only logs a
+    warning — draining one session must never crash the drain of every
+    other session, or the shutdown itself.
+    """
+    if wrapper._end_pending:
+        logger.info(
+            f"[DRAIN] Session already ending on its own — skipping wrap-up: "
+            f"user_id={user_id}"
+        )
+        return
+    try:
+        text = wrapper.request_wrap_up()
+        context = LLMContext([{"role": "user", "content": text}])
+        await task.queue_frame(LLMContextFrame(context=context))
+        logger.info(f"[DRAIN] Wrap-up turn injected: user_id={user_id}")
+    except Exception as e:  # noqa: BLE001 — draining must never crash shutdown
+        logger.warning(
+            f"[DRAIN] Wrap-up turn injection failed (non-fatal): "
+            f"{type(e).__name__}: {e} user_id={user_id}"
+        )
+
+
+async def begin_drain() -> None:
+    """REL-002: the backend half of a graceful SIGTERM drain — see
+    main.py's ``_install_sigterm_drain_handler`` for how this gets called
+    and what happens around it (the ordering comment there explains the
+    whole mechanism end to end).
+
+    Sets ``DRAINING`` FIRST, synchronously, before any ``await`` — so every
+    connect that reaches a WS accept path after this point
+    (``main.py``'s ``is_draining()`` check, right after ``accept()``) sees
+    the flag already True, with no window where a connect could slip in
+    believing the server is still healthy. ``GET /health`` reads the same
+    flag.
+
+    Then triggers ``_wrap_up_turn`` (above) for every session currently in
+    ``ACTIVE_TASKS`` — one fire-and-forget task per session, so a slow or
+    stuck session's wrap-up can never block another session's — and waits,
+    polling every ``_DRAIN_POLL_INTERVAL_S``, until ``ACTIVE_TASKS`` empties
+    out or ``config.settings.shutdown_drain_s`` elapses, whichever comes
+    first. With zero live sessions this returns immediately (the loop
+    condition is false on its first check).
+
+    Idempotency (a second SIGTERM landing mid-drain) is main.py's job, not
+    this function's — it's what schedules this coroutine at most once per
+    process. Calling it twice would just re-trigger wrap-up on whatever
+    session's first attempt hasn't resolved yet, which ``_wrap_up_turn``'s
+    own ``_end_pending`` skip already tolerates, but there's no reason to
+    exercise that path.
+    """
+    global DRAINING
+    DRAINING = True
+    from config.settings import shutdown_drain_s  # read the live value at call time
+
+    sessions = list(ACTIVE_TASKS.items())
+    if not sessions:
+        logger.info("[DRAIN] No live sessions at SIGTERM — nothing to wrap up")
+        return
+
+    logger.info(
+        f"[DRAIN] SIGTERM drain starting: {len(sessions)} live session(s), "
+        f"up to {shutdown_drain_s}s"
+    )
+    for drain_user_id, drain_task in sessions:
+        wrapper = ACTIVE_WRAPPERS.get(drain_user_id)
+        if wrapper is None:
+            logger.warning(
+                f"[DRAIN] No wrapper registered for a live task — skipping "
+                f"wrap-up: user_id={drain_user_id}"
+            )
+            continue
+        wrap_up_task = asyncio.create_task(_wrap_up_turn(drain_task, wrapper, drain_user_id))
+        # Mirrors the BUG-006 pattern on ClientWrapper._end_task below —
+        # nothing else awaits this task, so without a done-callback an
+        # exception would vanish silently instead of showing up in logs.
+        wrap_up_task.add_done_callback(
+            lambda t, uid=drain_user_id: t.cancelled()
+            or t.exception() is None
+            or logger.error(f"[DRAIN] wrap-up task failed unexpectedly for {uid}: {t.exception()!r}")
+        )
+
+    elapsed = 0.0
+    ticks = 0
+    while ACTIVE_TASKS and elapsed < shutdown_drain_s:
+        await asyncio.sleep(_DRAIN_POLL_INTERVAL_S)
+        elapsed += _DRAIN_POLL_INTERVAL_S
+        ticks += 1
+        if ticks % 10 == 0:  # ~every 5s — the 0.5s poll interval itself would be log spam
+            logger.info(
+                f"[DRAIN] {len(ACTIVE_TASKS)} session(s) still live after {elapsed:.1f}s"
+            )
+
+    if ACTIVE_TASKS:
+        logger.warning(
+            f"[DRAIN] Deadline hit ({shutdown_drain_s}s) — {len(ACTIVE_TASKS)} "
+            f"session(s) still live; handing off to normal shutdown anyway"
+        )
+    else:
+        logger.info(f"[DRAIN] All session(s) wrapped up after {elapsed:.1f}s")
 
 
 async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None, exchanges: int | None = None, pattern: str | None = None):
@@ -988,6 +1147,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         await audiobuffer.start_recording()
         ACTIVE_TASKS[user_id] = task  # register so /say can inject typed turns
         ACTIVE_LESSONS[user_id] = lesson_id  # AGENT-001: this session's runtime language
+        ACTIVE_WRAPPERS[user_id] = wrapper  # REL-002: kept in lockstep — same guard, same branch, below
         # Langfuse: let sibling HTTP requests (Clara's exercise routes) join
         # this conversation's Session. Prefixed form — teacher/routes.py only
         # ever uses this value as a `langfuse.session.id` span attribute.
@@ -1069,6 +1229,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             if ACTIVE_TASKS.get(user_id) is task:
                 ACTIVE_TASKS.pop(user_id, None)
                 ACTIVE_LESSONS.pop(user_id, None)  # kept in lockstep — same guard, same branch
+                ACTIVE_WRAPPERS.pop(user_id, None)  # REL-002: kept in lockstep — same guard, same branch
             # Value-guarded internally (only removes if still OUR session id),
             # so it is safe outside the identity guard above. Must match what
             # register_trace_session stored above (the prefixed form).

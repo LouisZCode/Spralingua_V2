@@ -95,6 +95,21 @@ learned_session_timeout_s = int(os.getenv("LEARNED_SESSION_TIMEOUT_S", "7200"))
 # retry site.
 conversation_first_token_s = float(os.getenv("CONVERSATION_FIRST_TOKEN_S", "8.0"))
 
+# Bound (seconds) on the graceful SIGTERM drain (REL-002) — how long
+# pipeline/factory.py::begin_drain() waits for every live session's
+# wrap-up turn to finish (ClientWrapper.request_wrap_up() + the injected
+# stage-direction turn) before handing shutdown back to uvicorn's own
+# captured SIGTERM handler regardless. See main.py's
+# `_install_sigterm_drain_handler` for the full ordering. Operator note:
+# Railway's `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` (set in the dashboard,
+# not here — that's the developer's own step) must exceed this value by a
+# healthy margin, roughly +15s, so the post-session evaluators (goal /
+# grammar / pronunciation, run under asyncio.gather in
+# `post-session-analysis`) still have time to finish AFTER the wrap-up
+# turn's EndFrame closes the pipeline — otherwise Railway SIGKILLs the
+# container mid-evaluator.
+shutdown_drain_s = float(os.getenv("SHUTDOWN_DRAIN_S", "60.0"))
+
 # Concurrency + rate caps for the public demo.
 demo_max_concurrent        = int(os.getenv("DEMO_MAX_CONCURRENT", "25"))        # global live demo pipelines
 demo_per_ip_concurrent     = int(os.getenv("DEMO_PER_IP_CONCURRENT", "2"))
@@ -180,3 +195,11 @@ bucket_region = os.getenv("BUCKET_REGION")
 bucket_name = os.getenv("BUCKET_NAME")
 bucket_access_key_id = os.getenv("BUCKET_ACCESS_KEY_ID")
 bucket_secret_access_key = os.getenv("BUCKET_SECRET_ACCESS_KEY")
+
+# --- Postgres offsite backups (REL-002) ---
+# Railway's own snapshots don't survive project deletion, so a weekly
+# pg_dump ships offsite to the same Bucket above (scripts/pg_dump_to_bucket.py,
+# run by a Railway cron service). This is how many days of dumps under
+# backups/postgres/ that script keeps before pruning older ones. Optional --
+# default 35 keeps ~5 weekly backups beyond the most recent.
+backup_retention_days = int(os.getenv("BACKUP_RETENTION_DAYS", "35"))

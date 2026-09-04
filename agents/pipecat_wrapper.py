@@ -99,6 +99,30 @@ _FALLBACK_REPLY_DE = (
 _FALLBACK_REPLY_EN = "Sorry, I didn't quite catch that — could you say it again?"
 
 
+# REL-002: stage-direction sentinel injected as a synthetic user turn during
+# a SIGTERM drain (see pipeline/factory.py::_wrap_up_turn / begin_drain, and
+# ClientWrapper.request_wrap_up below). Written as an instruction TO the
+# model, in English, the same way _augment_tandem_last_turn's own stage
+# direction below is — an English instruction reads fine even inside a
+# German session, and naming the target language explicitly removes any
+# ambiguity about which language the actual goodbye sentence should land in.
+# German for tandem/conversation/respond (the German runtime); English for
+# teacher (Clara speaks English) — the same _is_teacher_lesson split
+# ClientWrapper already uses to pick _FALLBACK_REPLY_DE/EN above.
+_WRAP_UP_SENTINEL_DE = (
+    "(Stage direction — this session must end immediately for technical "
+    "reasons. Briefly react to what was just said, then say one short, "
+    "warm goodbye sentence in German and close the conversation — ask no "
+    "new question of your own.)"
+)
+_WRAP_UP_SENTINEL_EN = (
+    "(Stage direction — this session must end immediately for technical "
+    "reasons. Briefly react to what was just said, then say one short, "
+    "warm goodbye sentence in English and close the conversation — ask no "
+    "new question of your own.)"
+)
+
+
 # AGENT-00X: Clara's interactive-exercise loop. `teacher.yaml`'s "Practice
 # items" section teaches the model to end a reply with this exact marker —
 # see teacher/routes.py for what happens once the pattern id reaches the
@@ -489,6 +513,14 @@ class ClientWrapper:
         # here or in the factory.
         self._kickoff = (lesson.get("kickoff") or "").strip() or None
 
+        # REL-002: set by request_wrap_up() (below) the moment a SIGTERM
+        # drain injects a wrap-up turn into this session — the exact text
+        # returned by that call, so `astream` can recognize it on whatever
+        # turn actually carries it and keep it out of the stored transcript
+        # / BUG-002 audio<->text pairing, same treatment as the kickoff
+        # sentinel above. None for the life of a session that never drains.
+        self._wrap_up_sentinel: str | None = None
+
         # Bot reply is buffered here at the end of each LLM stream. The push to
         # the client happens later, when TTSDurationTracker fires its on_turn_complete
         # callback (`flush_bot_output`) with the authoritative audio duration. That
@@ -511,6 +543,35 @@ class ClientWrapper:
         self._user_turn_audio: list[tuple[int, bytes, int]] = []
         self._user_turn_text: list[tuple[int, str]] = []
         self._dropped_audio_count: int = 0
+
+    def request_wrap_up(self) -> str:
+        """REL-002: force this session to end after exactly one more
+        exchange, and return the stage-direction text for the caller
+        (``pipeline/factory.py``'s ``_wrap_up_turn``, invoked from a
+        SIGTERM drain) to inject as that exchange's synthetic user turn —
+        same ``LLMContext``/``LLMContextFrame`` mechanism ``/say`` and
+        ``_kickoff_turn`` use.
+
+        Setting ``_max_exchanges`` to ``_exchange_count + 1`` forces
+        ``astream``'s own ``_exchange_count >= _max_exchanges`` branch to
+        fire once this reply's tokens stream — regardless of
+        ``_goodbye_after`` arming or whether the model's own reply happens
+        to contain a GOODBYE_PHRASES match, so the session ends on the very
+        next reply no matter what.
+
+        The returned text is also stashed on ``self._wrap_up_sentinel`` so
+        ``astream`` can recognize it on whatever turn actually carries it
+        and keep it out of ``activity_session.transcript`` and the BUG-002
+        audio<->text pairing — the same treatment the kickoff sentinel and
+        the exercise-result sentinel already get. Idempotent: calling this
+        twice (e.g. a stray double-drain) just re-pins ``_max_exchanges``
+        to the same value when ``_exchange_count`` hasn't moved between
+        calls, and returns the same text either way.
+        """
+        self._max_exchanges = self._exchange_count + 1
+        text = _WRAP_UP_SENTINEL_EN if self._is_teacher_lesson else _WRAP_UP_SENTINEL_DE
+        self._wrap_up_sentinel = text
+        return text
 
     def _augment_first_result(self, text: str) -> str:
         """CLARA-20 fix round: inject the held-back ``native_note`` as a
@@ -585,6 +646,11 @@ class ClientWrapper:
         """
         if not self._is_tandem_lesson or self._last_turn_augmented:
             return text
+        # REL-002: a drain's wrap-up turn carries its own goodbye direction
+        # and bumps _max_exchanges so this trigger would fire on top of it —
+        # skip, exactly as the kickoff sentinel is skipped elsewhere.
+        if self._wrap_up_sentinel is not None and text == self._wrap_up_sentinel:
+            return text
         if self._exchange_count != self._max_exchanges - 1:
             return text
         self._last_turn_augmented = True
@@ -635,6 +701,11 @@ class ClientWrapper:
             self._exercise_open = False
             return text
         if self._kickoff is not None and text == self._kickoff:
+            return text
+        # REL-002: the drain's wrap-up direction says "end now, no new
+        # question"; "remind them you're waiting for the answer" would
+        # contradict it on the same turn — the session is ending anyway.
+        if self._wrap_up_sentinel is not None and text == self._wrap_up_sentinel:
             return text
         if not self._exercise_open:
             return text
@@ -1089,7 +1160,14 @@ class ClientWrapper:
                 # counts (the increment at the top of astream is unconditional)
                 # and the reply streams normally either way.
                 is_exercise_result = text.startswith(EXERCISE_RESULT_PREFIX)
-                if not is_kickoff and not is_exercise_result:
+                # REL-002: the SIGTERM-drain wrap-up turn (see
+                # request_wrap_up above) is a stage direction WE injected,
+                # not something the learner said — same reasoning and same
+                # treatment as the kickoff sentinel just above.
+                is_wrap_up = (
+                    self._wrap_up_sentinel is not None and text == self._wrap_up_sentinel
+                )
+                if not is_kickoff and not is_exercise_result and not is_wrap_up:
                     self._transcript.append(("user", text))
                 self._transcript.append(("bot", output_text))
                 # Stamp the user text with the current VAD-stop seq so the
@@ -1097,10 +1175,11 @@ class ClientWrapper:
                 # at disconnect (BUG-002). Empty/whitespace inputs are skipped
                 # — `/say` injection or the (extremely rare) all-whitespace
                 # transcript shouldn't reach Azure as a reference text anyway.
-                # The kickoff and exercise-result sentinel are skipped for the
-                # same reason: neither has a matching VAD-stop seq / audio clip
-                # to pair with (AGENT-001 / AGENT-00X).
-                if text.strip() and not is_kickoff and not is_exercise_result:
+                # The kickoff, exercise-result sentinel, and wrap-up sentinel
+                # are skipped for the same reason: none has a matching
+                # VAD-stop seq / audio clip to pair with (AGENT-001 /
+                # AGENT-00X / REL-002).
+                if text.strip() and not is_kickoff and not is_exercise_result and not is_wrap_up:
                     self._user_turn_text.append((self._current_vad_seq, text))
 
                 # AGENT-00X / CLARA-15 P3: push the confirmed exercise

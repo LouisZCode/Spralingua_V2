@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import re
+import signal
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -61,7 +62,13 @@ from config.settings import (
 )
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
 from pipeline import run_pipeline
-from pipeline.factory import ACTIVE_LESSONS, ACTIVE_TASKS, lesson_language, validate_lesson_languages
+from pipeline.factory import (
+    ACTIVE_LESSONS,
+    ACTIVE_TASKS,
+    is_draining,
+    lesson_language,
+    validate_lesson_languages,
+)
 from satz import router as satz_router, sync_curated_content
 from satz.examiner import transcribe_attempt
 from security import (
@@ -134,9 +141,150 @@ def _check_allowed_origins() -> None:
     raise RuntimeError(msg)
 
 
+# REL-002 (code half): let a live voice session end gracefully on Railway's
+# deploy SIGTERM instead of dying mid-sentence.
+#
+# The problem: Railway sends SIGTERM to the OLD container's process group on
+# every redeploy. uvicorn's own `Server.capture_signals()` installs a
+# Python-level SIGTERM handler (`Server.handle_exit`, a plain
+# `signal.signal(sig, self.handle_exit)` call made *inside* `Server.serve()`,
+# BEFORE this app's lifespan startup ever runs) that, on receipt, flips
+# `should_exit`, which — per Starlette/uvicorn's WebSocket protocol
+# implementation — closes every open socket with a 1012 close frame almost
+# immediately. The lifespan's OWN "wait up to ~10s for ACTIVE_TASKS" tail
+# (below the `yield` further down) runs only AFTER that has already
+# happened, so it only ever protected the DB finalize step, never the
+# conversation itself.
+#
+# The fix intercepts SIGTERM one level higher, in asyncio, ahead of
+# uvicorn's own handler:
+#   1. `signal.getsignal(SIGTERM)` captures whatever uvicorn already
+#      installed (`Server.handle_exit`, bound method) BEFORE we touch
+#      anything — this is the handoff target once draining is done.
+#   2. `loop.add_signal_handler(SIGTERM, ...)` REPLACES the Python-level
+#      handler uvicorn just installed (asyncio's signal handling is not
+#      additive — it takes over the slot). Only the main thread's running
+#      loop can do this, hence the try/except below.
+#   3. On the FIRST SIGTERM, our handler schedules
+#      `pipeline.factory.begin_drain()`, which (a) flips `DRAINING` —
+#      read by `GET /health` (503 `{"status": "draining"}`) and by both WS
+#      accept paths below (close 1013 right after `accept()`, before any
+#      DB insert / coin gate / Clara talk-count tally) — and (b) injects
+#      one graceful wrap-up turn into every session in `ACTIVE_TASKS`
+#      (`ClientWrapper.request_wrap_up()` + the same
+#      `LLMContext`/`LLMContextFrame` mechanism `/say` and the kickoff
+#      turn use). That reuses the EXACT end-of-session machinery an
+#      agent-driven goodbye already uses — `stop_when_done()` -> graceful
+#      `EndFrame` -> normal WS close -> `activity_session.ended_by =
+#      "agent"` -> the frontend's normal SessionSummaryModal — so nothing
+#      downstream of "a session ended" needs to learn a new code path.
+#   4. `begin_drain()` waits (bounded by `SHUTDOWN_DRAIN_S`, polling every
+#      0.5s) for `ACTIVE_TASKS` to empty out, or gives up at the deadline.
+#      Either way, we then call the ORIGINAL uvicorn handler captured in
+#      step 1 — `original(signal.SIGTERM, None)`, matching
+#      `Server.handle_exit(self, sig, frame)`'s signature — so uvicorn's
+#      normal shutdown proceeds exactly as it does today with zero live
+#      sessions: any sockets still open get uvicorn's own 1012, then this
+#      very lifespan's existing post-`yield` tail runs.
+#   5. A second SIGTERM landing while a drain is already in flight just
+#      logs and returns — it does NOT start a second drain, and (unlike
+#      uvicorn's own stock behavior) does NOT escalate to a forced exit;
+#      the bounded deadline in step 4 is what caps worst-case shutdown
+#      time instead.
+#
+# Operator note (the developer's own step, not this code's): Railway's
+# `RAILWAY_DEPLOYMENT_DRAINING_SECONDS` dashboard setting must exceed
+# `SHUTDOWN_DRAIN_S` (config/settings.py) by a healthy margin — roughly
+# +15s — so the post-session evaluators (goal / grammar / pronunciation,
+# `asyncio.gather`ed under `post-session-analysis` in
+# `pipeline/factory.py`'s disconnect `finally:` block) still have time to
+# run AFTER the wrap-up turn's `EndFrame` closes the pipeline, or Railway
+# force-kills the container mid-evaluator.
+#
+# SIGINT is untouched — only SIGTERM is intercepted here.
+def _install_sigterm_drain_handler() -> None:
+    try:
+        original_handler = signal.getsignal(signal.SIGTERM)
+    except (ValueError, OSError) as e:
+        # getsignal() itself can fail off the main thread.
+        logger.warning(
+            f"SIGTERM drain handler not installed (getsignal failed): "
+            f"{type(e).__name__}: {e} — keeping default uvicorn shutdown behavior"
+        )
+        return
+
+    loop = asyncio.get_running_loop()
+    state = {"draining": False}
+
+    def _on_sigterm() -> None:
+        if state["draining"]:
+            logger.info("SIGTERM received again while already draining — ignoring")
+            return
+        state["draining"] = True
+        logger.info("SIGTERM received — starting graceful drain before shutdown")
+
+        async def _drain_then_handoff() -> None:
+            try:
+                from pipeline.factory import begin_drain
+
+                await begin_drain()
+            except Exception:  # noqa: BLE001 — draining must never block shutdown
+                logger.exception(
+                    "Graceful drain failed (non-fatal) — handing off to uvicorn's "
+                    "own shutdown anyway"
+                )
+            finally:
+                logger.info("Drain complete — handing off to uvicorn's own SIGTERM handler")
+                if callable(original_handler):
+                    try:
+                        original_handler(signal.SIGTERM, None)
+                    except Exception:  # noqa: BLE001 — a stranded process is worse than a log line
+                        logger.exception(
+                            "uvicorn's SIGTERM handler raised during handoff — "
+                            "the process may not exit until Railway's SIGKILL"
+                        )
+                else:
+                    # Defensive only: in every real deployment uvicorn installs a
+                    # real bound-method handler here, so this branch should be
+                    # unreachable in practice. Nothing sane to hand off to.
+                    logger.error(
+                        f"No callable original SIGTERM handler to hand off to "
+                        f"(was {original_handler!r}) — process may not exit cleanly"
+                    )
+
+        drain_task = asyncio.create_task(_drain_then_handoff())
+        # BUG-006 pattern: nothing awaits this task, so without a
+        # done-callback an exception would vanish into asyncio's default
+        # handler instead of the log.
+        drain_task.add_done_callback(
+            lambda t: t.cancelled()
+            or t.exception() is None
+            or logger.error(f"SIGTERM drain task failed unexpectedly: {t.exception()!r}")
+        )
+
+    try:
+        loop.add_signal_handler(signal.SIGTERM, _on_sigterm)
+        logger.info("SIGTERM graceful-drain handler installed")
+    except (NotImplementedError, RuntimeError, ValueError) as e:
+        # NotImplementedError: unsupported platform (Windows). RuntimeError:
+        # not the main thread, or no running loop the way we expect (an
+        # in-process ASGI test client can hit this). ValueError: bad signal
+        # number (shouldn't happen for a hardcoded SIGTERM, kept defensive).
+        # Either way: log and keep uvicorn's own default SIGTERM behavior —
+        # this is a best-effort upgrade, never a hard boot requirement.
+        logger.warning(
+            f"SIGTERM drain handler not installed ({type(e).__name__}: {e}) — "
+            "keeping default uvicorn shutdown behavior"
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Ordered first and deliberately ahead of init_engine below: it needs no
+    # REL-002: installed first — no dependency on Postgres or anything else
+    # below, and every second before Railway's SIGTERM can arrive is a
+    # second closer to a container recycling out from under a live session.
+    _install_sigterm_drain_handler()
+    # Ordered next and deliberately ahead of init_engine below: it needs no
     # Postgres connection, so a misconfigured ALLOWED_ORIGINS fails loud (or
     # warns, in dev) before spending time on anything that does.
     _check_allowed_origins()
@@ -173,8 +321,13 @@ async def lifespan(app: FastAPI):
     # is the shape the writer and both judges depend on.
     load_briefkasten_seeds()
     yield
-    # Graceful drain: let in-flight pipelines finalize their DB rows before the
-    # engine is disposed (a redeploy mid-session otherwise orphans them).
+    # Belt and braces for the DB finalize: ACTIVE_TASKS empties early in each
+    # session's disconnect block (before its evaluators and activity_session
+    # UPDATE), and uvicorn already waits for the WebSocket handler tasks that
+    # run that finalize before it reaches this lifespan tail — so on the
+    # normal path (and the REL-002 drain path, which hands off to uvicorn)
+    # this loop breaks at once. It still guards the case where a pipeline
+    # is registered but its handler is not among uvicorn's tracked tasks.
     for _ in range(20):  # up to ~10s
         if not ACTIVE_TASKS:
             break
@@ -372,7 +525,14 @@ async def health():
     session writes are non-fatal by design, so nothing else would surface
     it. Returning 503 here lets Railway's healthcheck stop routing to an
     instance that has silently stopped persisting.
+
+    REL-002: also 503s once a SIGTERM drain has started — Railway (or any
+    load balancer polling this route) should stop sending new traffic to an
+    instance that's already shutting down, same intent as the DB check
+    above but checked first since it's free (no DB round trip).
     """
+    if is_draining():
+        return JSONResponse(status_code=503, content={"status": "draining"})
     try:
         async with asyncio.timeout(2):
             async with get_sessionmaker()() as db:
@@ -580,6 +740,16 @@ async def ws_endpoint(
     exchanges_n = n if n in (5, 10, 15) else None
     try:
         await websocket.accept()
+        # REL-002: reject a new connect started during a SIGTERM drain,
+        # right after accept() and BEFORE run_pipeline does any DB insert /
+        # coin gate / Clara talk-count tally — mirrors where the 4001-4004
+        # rejections below (inside run_pipeline) already sit, just one gate
+        # earlier so nothing is ever charged/counted for a connect that's
+        # about to be told to retry elsewhere.
+        if is_draining():
+            logger.info(f"drain: rejecting new connect for user {sub} (1013)")
+            await websocket.close(code=1013, reason="Server is draining — try again shortly")
+            return
         # `topic` is the tandem conversation theme (ignored by non-tandem lessons).
         await run_pipeline(
             websocket, sub, voice, lesson, topic=topic,
@@ -623,6 +793,11 @@ async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
         return
     try:
         await websocket.accept()
+        # REL-002: same drain gate as /ws/{user_id} above.
+        if is_draining():
+            logger.info(f"drain: rejecting new demo connect for {user_id} (1013)")
+            await websocket.close(code=1013, reason="Server is draining — try again shortly")
+            return
         await run_pipeline(
             websocket,
             user_id,
