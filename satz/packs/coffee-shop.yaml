@@ -51,6 +51,16 @@ cards:
     gloss: to order
     example: Wir möchten gern bestellen.
 
+  # CONT-003: spoken-past sibling — inseparable be- prefix, no ge-.
+  - id: v-bestellen-past
+    type: verb
+    target: bestellen
+    level: A1
+    gloss: to order
+    tense: past
+    tense_form: hat bestellt
+    example: Wir haben zwei Kaffee bestellt.
+
   - id: v-empfehlen
     type: verb
     target: empfehlen
@@ -58,12 +68,33 @@ cards:
     gloss: to recommend
     example: Können Sie etwas empfehlen?
 
+  # CONT-003: spoken-past sibling — strong verb, inseparable emp- prefix
+  # (empfehlen/empfahl/empfohlen), no ge-.
+  - id: v-empfehlen-past
+    type: verb
+    target: empfehlen
+    level: A2
+    gloss: to recommend
+    tense: past
+    tense_form: hat empfohlen
+    example: Der Kellner hat uns den Kuchen empfohlen.
+
   - id: v-schmecken
     type: verb
     target: schmecken
     level: A1
     gloss: to taste (good)
     example: Hat es Ihnen geschmeckt?
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-schmecken-past
+    type: verb
+    target: schmecken
+    level: A1
+    gloss: to taste (good)
+    tense: past
+    tense_form: hat geschmeckt
+    example: Der Kuchen hat mir sehr gut geschmeckt.
 
   - id: p-haette-gern
     type: phrase

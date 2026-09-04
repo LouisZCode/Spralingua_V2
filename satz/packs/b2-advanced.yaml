@@ -50,12 +50,33 @@ cards:
     gloss: to apply for (officially)
     example: Ich habe ein Visum beantragt.
 
+  # CONT-003: spoken-past sibling — inseparable be- prefix, no ge-.
+  - id: v-beantragen-past
+    type: verb
+    target: beantragen
+    level: B2
+    gloss: to apply for (officially)
+    tense: past
+    tense_form: hat beantragt
+    example: Er hat letzten Monat eine Baugenehmigung beantragt.
+
   - id: v-vermeiden
     type: verb
     target: vermeiden
     level: B2
     gloss: to avoid
     example: Ich vermeide es, spät zu essen.
+
+  # CONT-003: spoken-past sibling — inseparable ver- prefix (meiden/
+  # gemieden), no ge-.
+  - id: v-vermeiden-past
+    type: verb
+    target: vermeiden
+    level: B2
+    gloss: to avoid
+    tense: past
+    tense_form: hat vermieden
+    example: Sie hat den Streit vermieden.
 
   - id: v-auseinandersetzen
     type: verb
@@ -65,12 +86,35 @@ cards:
     gloss: to engage with / examine (a topic) critically
     example: Wir setzen uns mit dem Thema Klimawandel auseinander.
 
+  # CONT-003: spoken-past sibling — reflexive, separable (auseinander +
+  # setzen), ge- lands between the prefix and the stem.
+  - id: v-auseinandersetzen-past
+    type: verb
+    target: auseinandersetzen
+    reflexive: true
+    level: B2
+    gloss: to engage with / examine (a topic) critically
+    tense: past
+    tense_form: hat sich auseinandergesetzt
+    example: Wir haben uns mit dem Thema auseinandergesetzt.
+
   - id: v-einschaetzen
     type: verb
     target: einschätzen
     level: B2
     gloss: to assess / estimate
     example: Es ist schwer einzuschätzen, wie lange das dauert.
+
+  # CONT-003: spoken-past sibling — separable (ein + schätzen), ge- lands
+  # between the prefix and the stem.
+  - id: v-einschaetzen-past
+    type: verb
+    target: einschätzen
+    level: B2
+    gloss: to assess / estimate
+    tense: past
+    tense_form: hat eingeschätzt
+    example: Er hat die Lage richtig eingeschätzt.
 
   - id: p-im-grossen-und-ganzen
     type: phrase

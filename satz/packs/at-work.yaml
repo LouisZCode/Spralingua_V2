@@ -51,12 +51,33 @@ cards:
     gloss: to take part in
     example: Sie nimmt an dem Kurs teil.
 
+  # CONT-003: spoken-past sibling — separable (teil + nehmen, strong:
+  # nehmen/nahm/genommen), ge- lands between the prefix and the stem.
+  - id: v-teilnehmen-past
+    type: verb
+    target: teilnehmen
+    level: B1
+    gloss: to take part in
+    tense: past
+    tense_form: hat teilgenommen
+    example: Sie hat an dem Kurs teilgenommen.
+
   - id: v-erledigen
     type: verb
     target: erledigen
     level: B1
     gloss: to get done / take care of
     example: Ich erledige das bis morgen.
+
+  # CONT-003: spoken-past sibling — inseparable er- prefix, no ge-.
+  - id: v-erledigen-past
+    type: verb
+    target: erledigen
+    level: B1
+    gloss: to get done / take care of
+    tense: past
+    tense_form: hat erledigt
+    example: Ich habe das gestern erledigt.
 
   - id: v-verschieben
     type: verb
@@ -65,6 +86,17 @@ cards:
     gloss: to postpone
     example: Können wir den Termin verschieben?
 
+  # CONT-003: spoken-past sibling — inseparable ver- prefix (schieben/
+  # geschoben), no ge-.
+  - id: v-verschieben-past
+    type: verb
+    target: verschieben
+    level: B1
+    gloss: to postpone
+    tense: past
+    tense_form: hat verschoben
+    example: Wir haben den Termin verschoben.
+
   - id: v-melden
     type: verb
     target: melden
@@ -72,6 +104,17 @@ cards:
     level: B1
     gloss: to get in touch
     example: Ich melde mich morgen bei Ihnen.
+
+  # CONT-003: spoken-past sibling — reflexive, weak verb, hat sich + ge-.
+  - id: v-melden-past
+    type: verb
+    target: melden
+    reflexive: true
+    level: B1
+    gloss: to get in touch
+    tense: past
+    tense_form: hat sich gemeldet
+    example: Er hat sich gestern bei mir gemeldet.
 
   - id: p-geht-klar
     type: phrase

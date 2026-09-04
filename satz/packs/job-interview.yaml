@@ -54,6 +54,18 @@ cards:
     gloss: to apply (for a job)
     example: Ich bewerbe mich um diese Stelle.
 
+  # CONT-003: spoken-past sibling — reflexive, strong verb (werben/geworben),
+  # inseparable be- prefix, no ge-.
+  - id: v-bewerben-past
+    type: verb
+    target: bewerben
+    reflexive: true
+    level: B1
+    gloss: to apply (for a job)
+    tense: past
+    tense_form: hat sich beworben
+    example: Sie hat sich um die Stelle beworben.
+
   - id: v-vorstellen
     type: verb
     target: vorstellen
@@ -62,6 +74,18 @@ cards:
     gloss: to introduce oneself
     example: Darf ich mich kurz vorstellen?
 
+  # CONT-003: spoken-past sibling — reflexive, separable (vor + stellen),
+  # ge- lands between the prefix and the stem.
+  - id: v-vorstellen-past
+    type: verb
+    target: vorstellen
+    reflexive: true
+    level: B1
+    gloss: to introduce oneself
+    tense: past
+    tense_form: hat sich vorgestellt
+    example: Er hat sich kurz vorgestellt.
+
   - id: v-verhandeln
     type: verb
     target: verhandeln
@@ -69,12 +93,33 @@ cards:
     gloss: to negotiate
     example: Über das Gehalt kann man verhandeln.
 
+  # CONT-003: spoken-past sibling — inseparable ver- prefix, no ge-.
+  - id: v-verhandeln-past
+    type: verb
+    target: verhandeln
+    level: B2
+    gloss: to negotiate
+    tense: past
+    tense_form: hat verhandelt
+    example: Sie haben lange über den Preis verhandelt.
+
   - id: v-einstellen
     type: verb
     target: einstellen
     level: B2
     gloss: to hire
     example: Die Firma stellt dieses Jahr neue Leute ein.
+
+  # CONT-003: spoken-past sibling — separable (ein + stellen), ge- lands
+  # between the prefix and the stem.
+  - id: v-einstellen-past
+    type: verb
+    target: einstellen
+    level: B2
+    gloss: to hire
+    tense: past
+    tense_form: hat eingestellt
+    example: Die Firma hat letztes Jahr zehn neue Mitarbeiter eingestellt.
 
   - id: p-unter-druck
     type: phrase

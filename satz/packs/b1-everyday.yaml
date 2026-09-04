@@ -52,6 +52,21 @@ cards:
     gloss: to look forward to
     example: Ich freue mich auf das Wochenende.
 
+  # CONT-003: spoken-past sibling. NOTE — this id already existed as a
+  # community card (a learner forged "freuen" by hand before this pack
+  # sibling was authored); its content is reused verbatim (already fact-
+  # checked by the SATZ-021 verify gate) rather than re-authored, so the
+  # seed's upsert-on-id is a content no-op. See results.md for why.
+  - id: v-freuen-past
+    type: verb
+    target: freuen
+    reflexive: true
+    level: B1
+    gloss: to look forward to
+    tense: past
+    tense_form: freute sich · hat sich gefreut
+    example: Er freute sich über das Geschenk.
+
   - id: v-erinnern
     type: verb
     target: erinnern
@@ -60,6 +75,17 @@ cards:
     gloss: to remember
     example: Ich erinnere mich an meinen ersten Schultag.
 
+  # CONT-003: spoken-past sibling — reflexive, inseparable er- prefix, no ge-.
+  - id: v-erinnern-past
+    type: verb
+    target: erinnern
+    reflexive: true
+    level: B1
+    gloss: to remember
+    tense: past
+    tense_form: hat sich erinnert
+    example: Er hat sich an seinen ersten Schultag erinnert.
+
   - id: v-vorschlagen
     type: verb
     target: vorschlagen
@@ -67,12 +93,34 @@ cards:
     gloss: to suggest
     example: Ich schlage vor, dass wir früher anfangen.
 
+  # CONT-003: spoken-past sibling — separable (vor + schlagen, strong:
+  # schlagen/geschlagen), ge- lands between the prefix and the stem.
+  - id: v-vorschlagen-past
+    type: verb
+    target: vorschlagen
+    level: B1
+    gloss: to suggest
+    tense: past
+    tense_form: hat vorgeschlagen
+    example: Ich habe vorgeschlagen, dass wir früher anfangen.
+
   - id: v-verbringen
     type: verb
     target: verbringen
     level: B1
     gloss: to spend (time)
     example: Wir verbringen den Sommer am See.
+
+  # CONT-003: spoken-past sibling — inseparable ver- prefix, mixed verb
+  # (bringen/brachte/gebracht), no ge-.
+  - id: v-verbringen-past
+    type: verb
+    target: verbringen
+    level: B1
+    gloss: to spend (time)
+    tense: past
+    tense_form: hat verbracht
+    example: Wir haben den Sommer am See verbracht.
 
   - id: p-kommt-darauf-an
     type: phrase

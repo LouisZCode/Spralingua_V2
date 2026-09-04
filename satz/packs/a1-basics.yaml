@@ -50,12 +50,32 @@ cards:
     gloss: to live (reside)
     example: Ich wohne in Berlin.
 
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-wohnen-past
+    type: verb
+    target: wohnen
+    level: A1
+    gloss: to live (reside)
+    tense: past
+    tense_form: hat gewohnt
+    example: Er hat lange in München gewohnt.
+
   - id: v-brauchen
     type: verb
     target: brauchen
     level: A1
     gloss: to need
     example: Wir brauchen Milch und Brot.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-brauchen-past
+    type: verb
+    target: brauchen
+    level: A1
+    gloss: to need
+    tense: past
+    tense_form: hat gebraucht
+    example: Ich habe gestern deine Hilfe gebraucht.
 
   - id: v-helfen
     type: verb
@@ -64,12 +84,36 @@ cards:
     gloss: to help
     example: Kannst du mir helfen?
 
+  # CONT-003: spoken-past sibling — strong verb (helfen, half, geholfen), hat + ge-.
+  - id: v-helfen-past
+    type: verb
+    target: helfen
+    level: A1
+    gloss: to help
+    tense: past
+    tense_form: hat geholfen
+    example: Er hat mir bei den Hausaufgaben geholfen.
+
   - id: v-verstehen
     type: verb
     target: verstehen
     level: A1
     gloss: to understand
     example: Ich verstehe die Frage nicht.
+
+  # CONT-003: spoken-past sibling. NOTE — this id already existed as a
+  # community card (a learner forged "verstehen" by hand before this pack
+  # sibling was authored); its content is reused verbatim (already fact-
+  # checked by the SATZ-021 verify gate) rather than re-authored, so the
+  # seed's upsert-on-id is a content no-op. See results.md for why.
+  - id: v-verstehen-past
+    type: verb
+    target: verstehen
+    level: A1
+    gloss: to understand
+    tense: past
+    tense_form: hat verstanden
+    example: Er hat die Erklärung nicht verstanden.
 
   - id: p-wie-bitte
     type: phrase
