@@ -38,7 +38,7 @@ class CardVerdict(BaseModel):
     """Fact-check verdict on one forged Satzschmiede card: is the German
     itself TRUE, not just correctly shaped.
 
-    Deliberately THREE booleans rather than one ``ok``, with the overall
+    Deliberately FOUR booleans rather than one ``ok``, with the overall
     verdict derived in Python below. The first draft asked for a single
     ``ok`` and let the model form a global impression of the card — it then
     passed both a false-friend gloss ("familiär" = "familiar") and an
@@ -75,13 +75,37 @@ class CardVerdict(BaseModel):
             "case, an adverb's note (only real when it states a genuine "
             "comparison — never an invented one), and for verbs the past "
             "form with the auxiliary that verb actually takes. True when "
-            "the card states no such facts"
+            "the card states no such facts. This checks whether the FORM "
+            "is well-built — not whether the word should carry that form "
+            "at all; see idiom_ok for that question"
+        )
+    )
+    idiom_ok: bool = Field(
+        description=(
+            "False when an adjective's stated comparison forms are not "
+            "ones a native speaker would actually use — a non-gradable, "
+            "absolute adjective (tot, schwanger, gleichzeitig, einzig, and "
+            "similar 'either/or' state adjectives that cannot be 'more' "
+            "or 'most') handed an invented comparative/superlative. Those "
+            "invented forms are often grammatically well-built, which is "
+            "exactly why this is judged separately from forms_ok. Also "
+            "false when a phrase's gloss and example give its literal, "
+            "word-for-word meaning instead of the real idiomatic sense a "
+            "native speaker means by it. True for every ordinary "
+            "comparable adjective — do not reject one just for being "
+            "uncommon — and true when the card is neither an adjective "
+            "with a comparison note nor a phrase, since there is nothing "
+            "to check"
         )
     )
     example_ok: bool = Field(
         description=(
             "Is every example sentence grammatical, natural German that "
-            "genuinely uses THIS headword? True when there is no example"
+            "genuinely uses THIS headword — including its natural NUMBER? "
+            "A mass or normally-plural noun (e.g. Pollen — natives say "
+            "'die Pollen fliegen', not a one-off singular 'der Pollen "
+            "liegt...') forced into the other number reads as invented "
+            "even though it parses. True when there is no example"
         )
     )
     problem: Optional[str] = Field(
@@ -99,7 +123,7 @@ class CardVerdict(BaseModel):
         """The card passes only when every check passed — computed here, not
         asked of the model, so a tidy-looking card cannot talk its way past
         a specific failure."""
-        return self.gloss_sense_ok and self.forms_ok and self.example_ok
+        return self.gloss_sense_ok and self.forms_ok and self.idiom_ok and self.example_ok
 
 
 PROMPT = """# Role
@@ -109,35 +133,42 @@ You fact-check ONE German vocabulary flashcard before it reaches a learner ("Sat
 {facts}
 
 # STEP 1 — isolate what you are checking
-Read every field as one connected claim about ONE word: the gloss claims a meaning, the example must SHOW that same meaning, the note (nouns: plural; adjectives: comparison; prepositions: case; adverbs: none, or a real comparison (gern → lieber)) must be the real grammatical fact, and — for a verb — the past form's auxiliary must be the one that verb actually takes. A card is wrong if ANY of these disagree with real German, even when every field looks fine read on its own.
+Read every field as one connected claim about ONE word: the gloss claims a meaning, the example must SHOW that same meaning, the note (nouns: plural; adjectives: comparison; prepositions: case; adverbs: none, or a real comparison (gern → lieber)) must be the real grammatical fact, and — for a verb — the past form's auxiliary must be the one that verb actually takes. A card is wrong if ANY of these disagree with real German, even when every field looks fine read on its own. Two more questions sit outside "is the field internally well-formed": for an adjective, CAN it be compared in real German at all; for a phrase, IS its gloss/example the sense a native actually means, not a literal word-for-word rendering.
 
 # What breaks a card — check every one
 (a) Gloss vs. example, same sense. The gloss names ONE meaning; the example must use the word in THAT meaning, not a different sense and not a different (e.g. separable-prefix) verb that merely looks related. A false friend or a homograph glossed with the wrong sense is the single most common failure.
 (b) Perfekt auxiliary. Every past form must carry the auxiliary that verb actually takes. Motion and change-of-state verbs (fliegen, gehen, kommen, aufstehen, sterben, werden, and verbs like beitreten) take SEIN in the Perfekt — "hat" on one of these is wrong even if the rest of the form looks fine.
 (c) Invented or wrong grammar facts — a noun's plural that Duden does not list (some nouns genuinely have none, and "no plural" is a correct note; an invented plural form is not), a wrong gender, a wrong preposition case.
 (d) Internal inconsistency — e.g. reflexive marked false while the gloss and example both use the word reflexively.
+(e) Gradability. Some German adjectives are absolute/state adjectives — they describe an either/or condition, not a scale, so native speakers never compare them: tot (dead), schwanger (pregnant), gleichzeitig (simultaneous), einzig (only/sole), and the like. A card that hands one of these an invented comparative/superlative is wrong even though "gleichzeitiger"/"am gleichzeitigsten" are perfectly regular, well-formed German morphology — the error is deciding to compare the word at all, not how the forms were built. An ORDINARY comparable adjective, however rare or bookish, must still pass — only reject the specific absolute/state class, never "this adjective sounds uncommon."
+(f) Idiom literalism. A phrase's gloss and example must give the sense a native speaker actually means by it, not a literal, word-for-word translation of its parts. "hoch tragen" does not mean "to wear something high" — a native means "to carry something up/upstairs" — even though "Sie trug den Hut hoch" parses as a grammatical sentence.
+(g) Unnatural number. An example can be flawless grammar and still be invented usage: a noun natives normally use in one number (e.g. Pollen — "die Pollen fliegen", not a one-off singular) forced into the other number is not how anyone actually talks, the same way (e) and (f) are not how anyone actually talks.
 
 # Worked examples
 Note how each one fails ONE specific check while the others pass — that is why they are answered separately.
 
-1. adjective "familiär" · gloss "familiar" · example "Die Atmosphäre ist sehr familiär." → `gloss_sense_ok: false`, forms_ok true, example_ok true. Translate the example first: "the atmosphere is very cosy/informal". That is not "familiar" (= vertraut/bekannt) — "familiär" is a false friend, so the gloss names a sense the example does not show. The sentence itself is perfectly good German, which is exactly why only the first check fails.
-2. noun "Wachstum" · note "neuter · plural: die Wachstums" → `forms_ok: false`, the others true. "Wachstum" has no plural; the note invents one. `problem` must say "no plural" — do not swap in a different invented form.
-3. verb "halten" · gloss "to hold" · past_example "Er hielt das Buch fest." → `gloss_sense_ok: false`, the others true. The sentence is correct German, but "festhalten" (to hold onto) is a different, separable verb from the headword "halten" — the example demonstrates the wrong word, not a sense of this one.
-4. verb "beitreten" · past_form "hat beigetreten" → `forms_ok: false`, the others true. "beitreten" (to join) is a change-of-state verb; its Perfekt takes sein: "ist beigetreten".
-5. verb "vorstellen" · gloss "to introduce oneself" · past_example "Ich habe mir das Ergebnis vorgestellt." → `gloss_sense_ok: false`, the others true. "sich³ etwas vorstellen" means "to imagine something" — a different sense of the same verb from the one the gloss names.
-6. noun "Termin" · article "der" · note "masculine · plural: die Termine" · gloss "appointment" · example "Ich habe morgen einen wichtigen Termin." → all three TRUE. CONTROL — gender, plural, gloss and example all agree and are correct German. A genuinely fine card must pass; do not reject on principle.
+1. adjective "familiär" · gloss "familiar" · example "Die Atmosphäre ist sehr familiär." → `gloss_sense_ok: false`, the other three true. Translate the example first: "the atmosphere is very cosy/informal". That is not "familiar" (= vertraut/bekannt) — "familiär" is a false friend, so the gloss names a sense the example does not show. The sentence itself is perfectly good German, which is exactly why only the first check fails.
+2. noun "Wachstum" · note "neuter · plural: die Wachstums" → `forms_ok: false`, the other three true. "Wachstum" has no plural; the note invents one. `problem` must say "no plural" — do not swap in a different invented form.
+3. verb "halten" · gloss "to hold" · past_example "Er hielt das Buch fest." → `gloss_sense_ok: false`, the other three true. The sentence is correct German, but "festhalten" (to hold onto) is a different, separable verb from the headword "halten" — the example demonstrates the wrong word, not a sense of this one.
+4. verb "beitreten" · past_form "hat beigetreten" → `forms_ok: false`, the other three true. "beitreten" (to join) is a change-of-state verb; its Perfekt takes sein: "ist beigetreten".
+5. verb "vorstellen" · gloss "to introduce oneself" · past_example "Ich habe mir das Ergebnis vorgestellt." → `gloss_sense_ok: false`, the other three true. "sich³ etwas vorstellen" means "to imagine something" — a different sense of the same verb from the one the gloss names.
+6. noun "Termin" · article "der" · note "masculine · plural: die Termine" · gloss "appointment" · example "Ich habe morgen einen wichtigen Termin." → all four TRUE. CONTROL — gender, plural, gloss and example all agree and are correct German, and there is no comparison or phrase gloss to question. A genuinely fine card must pass; do not reject on principle.
+7. adjective "gleichzeitig" · gloss "simultaneous" · note "comparative: gleichzeitiger · superlative: am gleichzeitigsten" · example "Die beiden Veranstaltungen finden gleichzeitig statt." → `idiom_ok: false`, the other three true. The example is fine and the gloss is fine, and "gleichzeitiger"/"am gleichzeitigsten" are morphologically well-built — which is exactly why forms_ok stays true. But "gleichzeitig" is an absolute state adjective: two things either happen at the same time or they don't, so no native speaker says "gleichzeitiger". `problem` should name the class: "gleichzeitig is a non-gradable (absolute) adjective — it has no comparative/superlative, the way tot/schwanger/einzig don't."
+8. phrase "hoch tragen" · gloss "to wear (something) high" · example "Sie trug den Hut hoch." → `idiom_ok: false`, the other three true. `example_meaning` reads "she carried/wore the hat high" and the example does match the gloss's own (wrong) claim, so `gloss_sense_ok` stays true — the internal pair agrees with each other, just not with real German. The actual idiom "hoch tragen" means "to carry something up/upstairs" (e.g. carrying a box up the stairs); "to wear something high" is not a sense a native speaker means by it.
 
-# Verdict — answer these THREE questions separately
+# Verdict — answer these FOUR questions separately
 Do not form an overall impression of the card. Answer each question on its own, about this card only; a card can look tidy and still fail exactly one of them.
 
 - `example_meaning` — WRITE THIS FIRST, before any verdict: translate the example sentence into literal English, and name which German word it is actually demonstrating (watch for a separable prefix sitting at the end of the clause — "Er hielt das Buch **fest**" is demonstrating *festhalten*, not *halten*). Null only when there is no example. Do not skip this: the whole point is that you decide what the sentence means before you decide whether it matches the gloss.
 - `gloss_sense_ok` — Now compare the meaning you just wrote against the gloss. Do they name the same sense of the same word? False for a false friend, for a homograph glossed with the wrong sense, and when the example demonstrates a different word. True when the card carries no example.
-- `forms_ok` — Are the stated grammar facts real? Gender, plural, comparison forms, preposition case, and for verbs the past form and its auxiliary. True when the card states no such facts.
-- `example_ok` — Is every example sentence grammatical, natural German that genuinely uses THIS headword? True when the card carries no example.
-- `problem` — REQUIRED whenever any check is false: ONE short, specific English line naming exactly what is wrong (name the wrong form/word — this is fed straight back to the card writer). Null when all three pass.
+- `forms_ok` — Are the stated grammar facts real, i.e. correctly built? Gender, plural, comparison forms, preposition case, and for verbs the past form and its auxiliary. True when the card states no such facts.
+- `idiom_ok` — For an adjective with a comparison note: is this word actually gradable in real German, or is it an absolute/state adjective (tot, schwanger, gleichzeitig, einzig, …) handed an invented comparative/superlative? For a phrase: do the gloss and example give the real idiomatic sense, or a literal word-for-word one? True for every ordinary comparable adjective and every genuinely idiomatic phrase, and true when the card is neither.
+- `example_ok` — Is every example sentence grammatical, natural German that genuinely uses THIS headword, including its natural number (a normally-plural or mass noun like Pollen forced into an artificial singular is invented, even though it parses)? True when the card carries no example.
+- `problem` — REQUIRED whenever any check is false: ONE short, specific English line naming exactly what is wrong (name the wrong form/word — this is fed straight back to the card writer). Null when all four pass.
 
-Two rules for `problem`, because it is fed back verbatim and a wrong fix becomes the next wrong card:
+Three rules for `problem`, because it is fed back verbatim and a wrong fix becomes the next wrong card:
 - If a noun has NO plural, say "no plural" — never invent a plural form to replace another invented one.
+- If an adjective is not gradable, say so by name ("X is a non-gradable/absolute adjective") — never invent a corrected comparative/superlative the way the original card did; there is no fix to hand back except removing the comparison.
 - If you are sure something is wrong but not sure of the correct replacement, describe the error and say the right form must be checked. Never assert a replacement you are not confident in.
 """
 
