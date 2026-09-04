@@ -9,6 +9,59 @@ import {
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import { loadError } from "./shared/copy";
 
+// PRODUCT-017: honest failure copy for the demo. A rejection on
+// `/ws/demo/{id}` closes the socket *before* `accept()` (1008/1013), which
+// uvicorn turns into an HTTP 403 handshake rejection — the browser's
+// WebSocket API collapses that (and every other handshake failure) into a
+// bare onerror/1006 with no code or reason ever exposed to JS. So there is
+// no way to tell "server is draining" from "you're rate-limited" from "the
+// network is down" by inspecting a failed connection; `GET /demo/status`
+// (main.py) exists to answer that question directly, both before connecting
+// and again if a connect attempt still fails.
+type DemoAvailability = "ok" | "draining" | "busy" | "rate_limited" | "offline";
+
+const DEMO_STATUS_TIMEOUT_MS = 4000;
+// `.type-overlay`'s slide-up runs 240ms; focus the sheet's input just after.
+const TYPE_SHEET_ENTER_MS = 260;
+
+const DEMO_NOTES = {
+  draining: "We're rolling out an update — try again in a minute.",
+  busy: "The demo is full right now — every seat is taken. Try again in a minute.",
+  rate_limited: "You've used the demo a lot just now — try again in a few minutes.",
+  offline: "The demo is offline right now — try again in a moment.",
+  // Backend reported "ok" but the connect still failed (e.g. lost the race
+  // to a slot, or some other one-off failure) — never blame the mic here.
+  connectFailure: "Couldn't start the demo — try again in a moment.",
+  // Empirical finding (PRODUCT-017): a denied or missing microphone never
+  // rejects client.connect() and never fires onError — see HeroDemo's
+  // start() for the mechanism. The session joins with no mic track instead,
+  // so this is shown *after* a successful connect, not as a connect failure.
+  noMic: "Your mic isn't available right now.",
+} as const;
+
+async function classifyDemoAvailability(): Promise<DemoAvailability> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), DEMO_STATUS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${HTTP_BASE}/demo/status`, { signal: controller.signal });
+    if (!res.ok) return "offline";
+    const data = (await res.json().catch(() => null)) as { status?: string } | null;
+    if (
+      data?.status === "ok" ||
+      data?.status === "draining" ||
+      data?.status === "busy" ||
+      data?.status === "rate_limited"
+    ) {
+      return data.status;
+    }
+    return "offline";
+  } catch {
+    return "offline";
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // Front-page voice demo — the Spralingua "welcome" concierge (a `respond`
 // lesson, no evaluator). Connects to the hardened public demo socket
 // `/ws/demo/{id}`, which forces the welcome lesson + fixed voice server-side
@@ -95,6 +148,12 @@ export default function HeroDemo() {
   const botStartedTimeRef = useRef<number | null>(null);
   const revealTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stoppingRef = useRef(false);
+  // PRODUCT-017 (review finding): every start() takes a fresh attempt number
+  // and stop() bumps it, so callbacks belonging to an abandoned attempt (a
+  // Stop pressed while the mic dialog or the handshake was still pending)
+  // bail out instead of overwriting the idle state — or nulling the NEXT
+  // attempt's clientRef from a late onDisconnected.
+  const attemptRef = useRef(0);
 
   const flushBot = useCallback(() => {
     const t = pendingBotRef.current;
@@ -118,6 +177,7 @@ export default function HeroDemo() {
   const stop = useCallback(async () => {
     if (stoppingRef.current) return;
     stoppingRef.current = true;
+    attemptRef.current += 1;
     if (revealTimerRef.current) {
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
@@ -138,6 +198,7 @@ export default function HeroDemo() {
   }, [cleanupAudio]);
 
   const start = useCallback(async () => {
+    const attempt = ++attemptRef.current;
     setMode("connecting");
     setNote("");
     setMessages([]);
@@ -149,6 +210,19 @@ export default function HeroDemo() {
       clearTimeout(revealTimerRef.current);
       revealTimerRef.current = null;
     }
+
+    // Pre-flight: know why before we try, rather than guessing after a
+    // failure with no code/reason attached (see the DEMO_NOTES comment
+    // above). Checked before the client is created and before the mic is
+    // ever requested.
+    const availability = await classifyDemoAvailability();
+    if (attemptRef.current !== attempt) return;
+    if (availability !== "ok") {
+      setNote(DEMO_NOTES[availability]);
+      setMode("idle");
+      return;
+    }
+
     try {
       const transport = new WebSocketTransport({
         serializer: new ProtobufFrameSerializer(),
@@ -160,8 +234,29 @@ export default function HeroDemo() {
         enableCam: false,
         enableMic: true,
         callbacks: {
-          onConnected: () => setMode("live"),
+          onConnected: () => {
+            if (attemptRef.current !== attempt) return;
+            setMode("live");
+            // Empirical finding (PRODUCT-017): this backend never calls
+            // Pipecat's RTVI set_bot_ready() (true for every surface, not
+            // just the demo), so client.connect()'s own returned promise
+            // never resolves on a successful connect -- only a pre-accept
+            // rejection settles it (via reject), which is why nothing here
+            // can be placed after `await client.connect(...)` and expect to
+            // run. onConnected is the one reliable "we're live" signal.
+            // Separately: a denied/missing mic never rejects connect() or
+            // fires onError either -- initDevices() tolerates a missing mic
+            // by design (the transport's media manager treats it as a soft
+            // failure, matching how a real conferencing client tolerates a
+            // participant joining with no working mic) -- so this is the
+            // one place left to notice a live session came up with no mic
+            // and let the visitor know they can type instead.
+            if (client.mediaState.mic.state !== "granted") {
+              setNote(DEMO_NOTES.noMic);
+            }
+          },
           onDisconnected: () => {
+            if (attemptRef.current !== attempt) return;
             // Safety net: if the session ended before the reveal timer fired,
             // show the bot's final line (stop() nulls this on user teardown).
             flushBot();
@@ -217,11 +312,18 @@ export default function HeroDemo() {
             }
           },
           onError: () => {
-            setNote("Couldn't reach the agent — check your mic and try again.");
+            if (attemptRef.current !== attempt) return;
+            // Back to idle first — the re-classification below can take up
+            // to DEMO_STATUS_TIMEOUT_MS, and the orb must not sit in
+            // "connecting" for that long. The note lands when it's known.
             cleanupAudio();
             clientRef.current = null;
             setMode("idle");
             setSpeakerState("idle");
+            void classifyDemoAvailability().then((retry) => {
+              if (attemptRef.current !== attempt) return;
+              setNote(retry === "ok" ? DEMO_NOTES.connectFailure : DEMO_NOTES[retry]);
+            });
           },
         },
       });
@@ -230,13 +332,21 @@ export default function HeroDemo() {
       const demoUserId = `demo-${crypto.randomUUID()}`;
       demoUserIdRef.current = demoUserId;
       const wsUrl = `${BASE_WS}/ws/demo/${demoUserId}`;
+      // NOTE: this never resolves on a successful connect (see the
+      // onConnected comment above) -- it only ever settles by throwing, on a
+      // genuine pre-accept connection failure. Nothing may be placed after
+      // this line and expect to run; that's why the mic check lives in
+      // onConnected instead.
       await client.connect({ wsUrl });
     } catch {
-      setNote(loadError("the demo"));
+      if (attemptRef.current !== attempt) return;
       cleanupAudio();
       clientRef.current = null;
       setMode("idle");
       setSpeakerState("idle");
+      const retry = await classifyDemoAvailability();
+      if (attemptRef.current !== attempt) return;
+      setNote(retry === "ok" ? DEMO_NOTES.connectFailure : DEMO_NOTES[retry]);
     }
   }, [cleanupAudio, flushBot]);
 
@@ -303,9 +413,22 @@ export default function HeroDemo() {
     return () => window.removeEventListener("keydown", onKey);
   }, [mode, typeOpen]);
 
-  // Focus the input when the overlay opens.
+  // Focus the input once the sheet has finished sliding in. The sheet is
+  // `fixed` at the bottom of the viewport and animates up from
+  // `translateY(100%)` over 240ms (`.type-overlay` in globals.css), so at
+  // mount time the input sits BELOW the viewport — focusing it there made
+  // Chromium reveal the caret by scrolling the document ~600-700px, and
+  // once the sheet closed the whole demo card (Stop button included) was
+  // above the fold. `preventScroll` alone only guards the focus call's own
+  // scroll, not the caret reveal that follows, so the focus waits for the
+  // entrance to settle (PRODUCT-017 review finding).
   useEffect(() => {
-    if (typeOpen) typeInputRef.current?.focus();
+    if (!typeOpen) return;
+    const t = setTimeout(
+      () => typeInputRef.current?.focus({ preventScroll: true }),
+      TYPE_SHEET_ENTER_MS,
+    );
+    return () => clearTimeout(t);
   }, [typeOpen]);
 
   const onOrbClick = () => {
@@ -412,6 +535,22 @@ export default function HeroDemo() {
         {note && (
           <p className="mt-3 text-center font-body text-[12px] leading-snug text-flag-red">
             {note}
+            {note === DEMO_NOTES.noMic && mode === "live" && (
+              <>
+                {" "}
+                <button
+                  type="button"
+                  onClick={() => setTypeOpen(true)}
+                  // Don't let the click park focus on this button: the
+                  // sheet's input takes focus a moment later, and a focused
+                  // in-flow element under a fixed sheet has nothing to gain.
+                  onMouseDown={(e) => e.preventDefault()}
+                  className="underline underline-offset-2"
+                >
+                  Type instead
+                </button>
+              </>
+            )}
           </p>
         )}
       </div>

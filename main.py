@@ -73,6 +73,7 @@ from satz import router as satz_router, sync_curated_content
 from satz.examiner import transcribe_attempt
 from security import (
     client_ip,
+    demo_admission_reason,
     demo_release,
     demo_try_admit,
     learn_release,
@@ -768,6 +769,46 @@ async def ws_endpoint(
 _DEMO_USER_ID_RE = re.compile(r"^demo-[A-Za-z0-9_-]{1,64}$")
 
 
+@app.get("/demo/status")
+async def demo_status(request: Request):
+    """Public, unauthenticated pre-flight for the front-page demo (PRODUCT-017).
+
+    The demo websocket rejects an inadmissible visitor by closing *before*
+    ``accept()`` with a WS code (1008 policy / 1013 try-again) — the docstring
+    on ``ws_demo_endpoint`` below used to claim this reaches the browser as
+    that code, but it doesn't: uvicorn's websockets implementation turns a
+    close-before-accept into an HTTP 403 handshake rejection (see
+    ``asgi_send`` in ``uvicorn/protocols/websockets/websockets_impl.py``), and
+    the browser's WebSocket API collapses ANY handshake failure — including
+    that 403 — into a bare ``onerror``/``onclose(1006)`` with no code or
+    reason ever exposed to JS. So the frontend has no way to tell "the server
+    is draining" from "you're rate-limited" from "the network is down" by
+    inspecting the failed connection. This route exists to give it that
+    signal *before* it tries to connect at all, by re-running the exact same,
+    side-effect-free admission check (`security.demo_admission_reason` —
+    doesn't touch the rate-limit windows or concurrency counters) the socket
+    itself will run.
+
+    Always 200 (never 503) so the frontend can read the JSON body — a 503
+    would be indistinguishable from "the backend itself is unreachable",
+    which is the "offline" case this route needs to be distinguishable from.
+    Draining (REL-002) takes priority over the demo-specific admission
+    reasons since it's the same condition ``/health`` reports first and for
+    the same reason (free, no DB round trip). No DB access, no coin gate —
+    this must stay cheap since a bored visitor's frontend may poll it.
+    """
+    if is_draining():
+        return {"status": "draining"}
+    reason = demo_admission_reason(client_ip(request))
+    status = {
+        "ok": "ok",
+        "server_busy": "busy",
+        "too_many_concurrent": "rate_limited",
+        "rate_limited": "rate_limited",
+    }[reason]
+    return {"status": status}
+
+
 @app.websocket("/ws/demo/{user_id}")
 async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
     """Public, unauthenticated front-page demo socket (SEC-001).
@@ -775,10 +816,14 @@ async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
     Hardened sibling of /ws/{user_id}: the lesson and voice are forced
     server-side (a visitor can't drive an arbitrary lesson or voice), the Origin
     header is checked (WebSocket handshakes bypass browser CORS), and global +
-    per-IP concurrency/rate caps gate admission. Rejections close *before*
-    accept with a WS status code (1008 policy / 1013 try-again) so the browser's
-    onError fires cleanly. A successful admit owns one concurrency slot, released
-    in ``finally`` no matter how the session ends.
+    per-IP concurrency/rate caps gate admission. Rejections before ``accept()``
+    (1008 policy / 1013 try-again) do NOT reach the browser as that code —
+    uvicorn turns a close-before-accept into an HTTP 403 handshake rejection,
+    which the WebSocket API surfaces as an opaque ``onerror``/1006 with no
+    code or reason (see ``GET /demo/status`` above, which exists precisely so
+    the frontend can learn the real reason before it ever opens this socket).
+    A successful admit owns one concurrency slot, released in ``finally`` no
+    matter how the session ends.
     """
     if not origin_allowed(websocket.headers.get("origin")):
         await websocket.close(code=1008)

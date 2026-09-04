@@ -169,6 +169,53 @@ def origin_allowed(origin: str | None) -> bool:
     return origin in allowed_origins
 
 
+def demo_admission_reason(ip: str, *, now: float | None = None) -> str:
+    """Would-admit check for `ip`, with no side effects on the rate limiters.
+
+    Runs exactly the same checks, in exactly the same order, as
+    `demo_try_admit()` below, but never appends to either sliding window and
+    never touches the concurrency counters -- so it's safe to call on every
+    poll of `GET /demo/status` without spending a visitor's rate-limit budget.
+    The only mutation it performs is the existing `_evict`/`_maybe_prune`
+    housekeeping (dropping stale timestamps from a deque it's already
+    inspecting), which is idempotent and would happen on the next real call
+    anyway.
+
+    The global concurrency cap is enforced for everyone (including exempt IPs) as
+    a hard cost ceiling; per-IP concurrency and both rate windows are skipped for
+    exempt IPs (local dev). Returns one of: "ok", "server_busy",
+    "too_many_concurrent", "rate_limited".
+    """
+    if now is None:
+        now = time.monotonic()
+    _maybe_prune(now)
+
+    # Global concurrency -- always enforced.
+    if _demo_concurrent_total >= demo_max_concurrent:
+        return "server_busy"
+
+    if not _is_exempt(ip):
+        # Per-IP concurrency.
+        if _demo_concurrent_by_ip.get(ip, 0) >= demo_per_ip_concurrent:
+            return "too_many_concurrent"
+
+        # Per-IP new-session sliding window -- read-only: evict stale
+        # timestamps from the existing deque (if any) but don't create one
+        # and don't append.
+        ip_hits = _demo_new_by_ip.get(ip)
+        if ip_hits is not None:
+            _evict(ip_hits, now, demo_per_ip_window_s)
+            if len(ip_hits) >= demo_per_ip_new_per_window:
+                return "rate_limited"
+
+        # Global new-session sliding window (60s) -- blunts IP rotation.
+        _evict(_demo_new_global, now, 60.0)
+        if len(_demo_new_global) >= demo_global_new_per_min:
+            return "server_busy"
+
+    return "ok"
+
+
 def demo_try_admit(ip: str) -> tuple[bool, str]:
     """Try to admit a new demo session from `ip`.
 
@@ -176,36 +223,22 @@ def demo_try_admit(ip: str) -> tuple[bool, str]:
     concurrency counters and recorded the new-session timestamps, so a True
     result MUST be paired with exactly one later `demo_release(ip)`.
 
-    The global concurrency cap is enforced for everyone (including exempt IPs) as
-    a hard cost ceiling; per-IP concurrency and both rate windows are skipped for
-    exempt IPs (local dev). `reason` is one of: "ok", "server_busy",
-    "too_many_concurrent", "rate_limited".
+    The decision itself is delegated to `demo_admission_reason()` (same
+    checks, same order, sharing one `now` timestamp with the commit below) so
+    the two can never drift; this function's only job on top of that is
+    committing the sliding windows and concurrency counters once the decision
+    is "ok". `reason` is one of: "ok", "server_busy", "too_many_concurrent",
+    "rate_limited".
     """
     global _demo_concurrent_total
     now = time.monotonic()
-    _maybe_prune(now)
-
-    # Global concurrency -- always enforced.
-    if _demo_concurrent_total >= demo_max_concurrent:
-        return False, "server_busy"
+    reason = demo_admission_reason(ip, now=now)
+    if reason != "ok":
+        return False, reason
 
     if not _is_exempt(ip):
-        # Per-IP concurrency.
-        if _demo_concurrent_by_ip.get(ip, 0) >= demo_per_ip_concurrent:
-            return False, "too_many_concurrent"
-
-        # Per-IP new-session sliding window.
-        ip_hits = _demo_new_by_ip.setdefault(ip, deque())
-        _evict(ip_hits, now, demo_per_ip_window_s)
-        if len(ip_hits) >= demo_per_ip_new_per_window:
-            return False, "rate_limited"
-
-        # Global new-session sliding window (60s) -- blunts IP rotation.
-        _evict(_demo_new_global, now, 60.0)
-        if len(_demo_new_global) >= demo_global_new_per_min:
-            return False, "server_busy"
-
         # All checks passed: commit to both windows.
+        ip_hits = _demo_new_by_ip.setdefault(ip, deque())
         ip_hits.append(now)
         _demo_new_global.append(now)
 
