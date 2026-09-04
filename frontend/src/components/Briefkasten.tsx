@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import BriefTrainer from "./briefkasten/BriefTrainer";
