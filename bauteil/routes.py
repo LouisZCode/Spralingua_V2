@@ -181,12 +181,16 @@ async def submit_attempt(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
     # PAY-002: AFTER the 404 (stale/forged id must not burn coins) but BEFORE the judge.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    # LEDGER-002: a give-up never reaches the judge — nothing to grade, no
+    # provider budget spent — so it isn't charged either. Only a real,
+    # judged attempt spends a coin.
+    if not body.give_up:
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
@@ -256,19 +260,18 @@ async def submit_attempt(
                     session_id=body.session_id,
                     source="bauteil",
                 )
-            else:
+            elif not body.give_up:
+                # LEDGER-002: a give-up carries no evidence of what the
+                # learner would actually have written — writing "the learner
+                # broke this pattern" off a concession is a false row, and a
+                # wrong ledger row is worse than a wrong verdict (CLAUDE.md).
+                # record_drill_attempt below still logs the concession for
+                # DATA-004's cross-drill view.
                 await record_grammar_error(
                     db,
                     user_id=user_id,
                     pattern_id=item["pattern_id"],
-                    # A give-up never typed a phrase — leave the gap
-                    # unfilled rather than substitute an empty string; the
-                    # literal "___" is the give-up sentinel in the ledger.
-                    sentence=(
-                        item["frame"]
-                        if body.give_up
-                        else item["frame"].replace("___", answer)
-                    ),
+                    sentence=item["frame"].replace("___", answer),
                     corrected=item["frame"].replace("___", item["answer"]),
                     note=note,
                     source="bauteil",

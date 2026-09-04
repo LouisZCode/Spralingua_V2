@@ -1244,7 +1244,27 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     # `load_tandem_notes` feeds into the next session's
                     # memory layer.
                     try:
-                        if wrapper._transcript and lesson_snapshot.get("type") == "tandem":
+                        if (
+                            wrapper._transcript
+                            and lesson_snapshot.get("type") == "tandem"
+                            and wrapper._exchange_count < TANDEM_STREAK_MIN_EXCHANGES
+                        ):
+                            # LEDGER-002(c): a hello-and-quit tandem carries no
+                            # real evidence to harvest — reuse the same floor
+                            # GAME-001's streak credit already applies (below,
+                            # at the `TANDEM_STREAK_MIN_EXCHANGES` check near
+                            # the end of this function) rather than hardcoding
+                            # a second `5`. Skip the debrief entirely: no LLM
+                            # call, no ledger write, no drill_attempts mirror —
+                            # a thin debrief off 0-1 turns is worse than none
+                            # (CLAUDE.md's user_errors rule: a wrong row is
+                            # worse than a wrong verdict, and the verdict here
+                            # would be near-random on so little transcript).
+                            logger.info(
+                                f"Tandem debrief skipped: {wrapper._exchange_count} "
+                                f"exchange(s) < floor {TANDEM_STREAK_MIN_EXCHANGES} (LEDGER-002)"
+                            )
+                        elif wrapper._transcript and lesson_snapshot.get("type") == "tandem":
                             focus = wrapper.context.grammar_focus
                             debrief_result = await run_debrief(
                                 transcript=wrapper.render_transcript(),

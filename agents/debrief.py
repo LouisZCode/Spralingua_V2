@@ -214,6 +214,34 @@ transcript:
 """
 
 
+def _demote_self_contradicted_patterns(
+    patterns: list[PatternOutcome], new_errors: list[NewError], target_ids: set[str]
+) -> None:
+    """LEDGER-002(c): a judge that marks a target pattern
+    ``produced_correctly=True`` in ``patterns`` while ALSO filing a fresh
+    error for that exact ``pattern_id`` in the RAW ``new_errors`` (before the
+    dedup loop below silently drops it for being a target id) is
+    contradicting itself in the same debrief. That dropped duplicate is real
+    evidence, not noise — using it to credit a success anyway is exactly the
+    STU-A-22 case ("mit meine Schwester" credited as correct
+    dativ-praepositionen). Demote in place: clear ``produced_correctly`` and
+    the evidence/corrected fields so the caller (pipeline/factory.py) neither
+    credits a success nor manufactures an error row from evidence that was
+    written to support the opposite verdict — CLAUDE.md's ledger rule is that
+    withholding a row beats writing a wrong one."""
+    contradicted_ids = {e.pattern_id for e in new_errors if e.pattern_id in target_ids}
+    for p in patterns:
+        if p.produced_correctly and p.pattern_id in contradicted_ids:
+            logger.info(
+                f"Debrief self-contradiction: pattern={p.pattern_id} was "
+                "produced_correctly but also filed in new_errors — demoting "
+                "(LEDGER-002)"
+            )
+            p.produced_correctly = False
+            p.evidence = "none"
+            p.corrected = ""
+
+
 def _render_targets(focus: list[dict]) -> str:
     """One line per target pattern: ``id — label: description``.
 
@@ -278,6 +306,10 @@ async def debrief(
             continue
         seen_targets.add(p.pattern_id)
         kept_patterns.append(p)
+    # LEDGER-002(c): use the raw `result.new_errors` (still un-filtered) to
+    # catch a target the model contradicted itself on, BEFORE the dedup loop
+    # below discards any target-id duplicate as noise.
+    _demote_self_contradicted_patterns(kept_patterns, result.new_errors, target_ids)
     result.patterns = kept_patterns
 
     # `new_errors` must be valid catalog ids, NOT targets (those are handled

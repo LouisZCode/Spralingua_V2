@@ -125,12 +125,16 @@ async def submit_attempt(
     if item is None:
         raise HTTPException(status_code=404, detail="Unknown item.")
     # PAY-002: AFTER the 404 but BEFORE grading/logging — stale id must not burn coins.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    # LEDGER-002: a give-up never reaches the recognizer — nothing to grade,
+    # no provider budget spent — so it isn't charged either. Only a real,
+    # graded attempt spends a coin.
+    if not body.give_up:
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
     answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
@@ -188,7 +192,13 @@ async def submit_attempt(
                     session_id=body.session_id,
                     source="zeitfaerbung",
                 )
-            else:
+            elif not body.give_up:
+                # LEDGER-002: a give-up carries no evidence of what the
+                # learner would actually have typed — writing "the learner
+                # broke this pattern" off a concession is a false row, and a
+                # wrong ledger row is worse than a wrong verdict (CLAUDE.md).
+                # record_drill_attempt below still logs the concession for
+                # DATA-004's cross-drill view.
                 expected_for_ledger = expected if expected is not None else item["answers"][0]
                 await record_grammar_error(
                     db,

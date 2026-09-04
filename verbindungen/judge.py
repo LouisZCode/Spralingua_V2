@@ -174,6 +174,12 @@ A typo, a missing umlaut, or a wrong ending in a FRAME word is NOT an error in t
 - pattern reflexivpronomen · expected "mich auf" · typed "Ich freue mich auf das Wochenened." → **correct: true**. "Wochenened" is a typo in a given word; the gap holds "mich auf", which is right.
 - pattern nicht-vs-kein · expected "kein" · typed "Ich habe nicht Auto." → **correct: false**. THIS is a real error — the wrong negator landed IN the gap.
 
+## A keystroke slip INSIDE the gap is not a form error either
+The gap word itself can carry a typo too — a doubled letter, a dropped letter, a swapped letter — and still show the RIGHT form. Read past the keystroke: if the intended stem and ending are unambiguous and correct, the pattern is exercised correctly. A DIFFERENT stem, a DIFFERENT ending, or a missing stem-change is a real error whether or not it also looks like a typo.
+
+- pattern partizip2-form · expected "getragen" · typed "getraagen" → **correct: true**. A doubled-letter slip on the correct participle "getragen" — the strong-verb stem change and the participle ending are both right; a keystroke, not a grammar mistake.
+- pattern partizip2-form · expected "getragen" · typed "getragt" → **correct: false**. CONTROL: not a typo — "getragt" bolts the regular -t ending onto the unchanged stem, exactly the strong-verb participle error this pattern tests.
+
 # STEP 2 — the reference solution is not an answer key
 The solution above is ONE right answer. German usually allows several. Ask TWO questions, and mark correct=true only if BOTH pass:
 
@@ -194,7 +200,7 @@ Whatever the pattern does not pin is free. A **possessive instead of a definite 
 - pattern reflexivpronomen · reference "mich auf" · typed "auf" → **correct: false**. CONTROL: the missing reflexive pronoun IS the pattern.
 
 # STEP 3 — grade
-- `correct` — apply the two prongs above. Capitalization, stray punctuation, and typos OUTSIDE the gap never matter. A wrong ENDING, a wrong CASE, a wrong fixed PREPOSITION or a missing/extra REFLEXIVE PRONOUN inside the gap always matters.
+- `correct` — apply the two prongs above. Capitalization, stray punctuation, and typos OUTSIDE the gap never matter, and a keystroke slip INSIDE the gap that still leaves the intended form unambiguous doesn't either (see above). A genuinely wrong ENDING, wrong CASE, wrong fixed PREPOSITION, wrong STEM, or a missing/extra REFLEXIVE PRONOUN inside the gap always matters.
 - `note` — REQUIRED whenever correct=false: ONE short English line (AT MOST 14 words) naming exactly what broke, scoped to the ONE decision this item's pattern tests (see below). Describe the learner's actual mistake, NOT the distance from the reference — "that's dative, the chunk needs accusative" teaches; "should be 'an die'" does not. The correct answer/chunk is shown to the learner separately — never restate the full fix. Null only when correct.
 
 ## How to diagnose — this pattern's decision

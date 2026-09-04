@@ -345,25 +345,13 @@ async def give_up_attempt(
             attempt_span.set_attribute("langfuse.session.id", body.session_id)
         attempt_span.set_attribute("langfuse.observation.output", "gave_up=True")
 
-        # Feed the ledger (design rule 4) — non-fatal, same contract as a
-        # real slip. There's no transcript to quote, so `sentence` carries a
-        # sentinel instead — the give-up marker itself — and `corrected` is
-        # left null rather than fabricating a "correct" spoken answer.
-        try:
-            await record_grammar_error(
-                db,
-                user_id=user_id,
-                pattern_id=task["pattern_id"],
-                sentence="(gave up)",
-                corrected=None,
-                note="Gave up — no recording submitted.",
-                source="sprechen",
-                session_id=body.session_id,
-            )
-        except Exception:
-            logger.exception(
-                "Sprechen ledger write failed (pattern {})", task["pattern_id"]
-            )
+        # LEDGER-002: a give-up is deliberately NOT fed to the ledger — there
+        # is no recording, so no evidence of what the learner would actually
+        # have said, and a manufactured row ("Gave up — no recording
+        # submitted.") taught a tandem partner to chase a weakness that was
+        # never demonstrated. A wrong ledger row is worse than a wrong
+        # verdict (CLAUDE.md). The cross-drill log below still records the
+        # concession — that's DATA-004's job, not user_errors'.
 
         # Append to the cross-drill attempt log (DATA-004) — its own commit,
         # non-fatal like the ledger write above. ":giveup" suffix marks the
