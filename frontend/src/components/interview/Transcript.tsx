@@ -82,7 +82,7 @@ export default function Transcript({
             key={i}
             ref={isCenter ? activeRef : undefined}
             className={`font-body text-[15px] leading-relaxed transition-colors ${
-              isActive ? "font-bold text-ink" : "text-ink-faint"
+              isActive ? "font-bold text-ink" : "text-ink-muted"
             }`}
           >
             {seg.text}

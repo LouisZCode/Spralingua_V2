@@ -55,7 +55,7 @@ function writeSeen(list: string[]): void {
 // round state (mirrors Bauteil.tsx); SprechenTrainer owns the interaction
 // and remounts per round via `key`.
 export default function Sprechen() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [round, setRound] = useState<SpokenTask[] | null>(null); // null = loading
@@ -98,12 +98,12 @@ export default function Sprechen() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   useEffect(() => {
     loadRound();
@@ -123,16 +123,16 @@ export default function Sprechen() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // The vocab nudge is decorative — any failure resolves to "no pill", the
-  // drill never waits on it or surfaces its errors (401 still signs out).
+  // drill never waits on it or surfaces its errors (401 still triggers the session-expiry modal).
   const handleNudge = useCallback(
     async (taskId: string): Promise<NudgeWord[]> => {
       if (!token) return [];
@@ -142,12 +142,12 @@ export default function Sprechen() {
         return await fetchNudge(token, taskId, practiceSessionRef.current);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         return [];
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // UI-007: word-gloss popover wiring — same auth-guarded pattern as
@@ -164,12 +164,12 @@ export default function Sprechen() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAddWord = useCallback(
@@ -187,12 +187,12 @@ export default function Sprechen() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

@@ -227,7 +227,7 @@ export function PatternWhy({ patternId }: { patternId?: string | null }) {
           <p className="mt-2 font-body text-[13px] leading-snug text-ink-soft">
             {entry.point}
           </p>
-          <p className="mt-2 font-body text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+          <p className="mt-2 font-body text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
             Check: {entry.test}
           </p>
         </div>

@@ -24,7 +24,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // non-reflexive verbs mixed so nothing is predictable. Auth-guarded page
 // shell + round state (mirrors Bauteil.tsx); the trainer remounts per round.
 export default function Verbindungen() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [round, setRound] = useState<ChunkItem[] | null>(null); // null = loading
@@ -51,12 +51,12 @@ export default function Verbindungen() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   useEffect(() => {
     loadRound();
@@ -76,12 +76,12 @@ export default function Verbindungen() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // UI-007: word-gloss popover wiring — same auth-guarded pattern as
@@ -98,12 +98,12 @@ export default function Verbindungen() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAddWord = useCallback(
@@ -121,12 +121,12 @@ export default function Verbindungen() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

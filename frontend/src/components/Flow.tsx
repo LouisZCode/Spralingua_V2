@@ -621,7 +621,7 @@ export default function Flow() {
   // FLOW-006: `user` is read only for `user?.level` — the account-level
   // bucket szenario's tier guess is derived from (SZEN-007), same as the
   // standalone Szenario page.
-  const { token, ready, user, signOut } = useAuth();
+  const { token, ready, user, expireSession } = useAuth();
   const router = useRouter();
 
   const [phase, setPhase] = useState<"loading" | "error" | "ready">("loading");
@@ -832,7 +832,7 @@ export default function Flow() {
 
   // Initial load: every source fetches independently. A source that fails
   // or comes back empty just drops out of the rotation (console-silent); an
-  // expired token signs out (same policy as every other practice page). Only
+  // expired token triggers the session-expiry modal (same policy as every other practice page). Only
   // when every single source is unavailable does the page show an error.
   useEffect(() => {
     if (!token) return;
@@ -853,7 +853,7 @@ export default function Flow() {
         if (!cancelled) assign(value);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
       }
     }
@@ -913,7 +913,7 @@ export default function Flow() {
     return () => {
       cancelled = true;
     };
-  }, [token, signOut, dealNext, user?.level]);
+  }, [token, expireSession, dealNext, user?.level]);
 
   const handleItemDone = useCallback(
     (kind: SourceKind, correct: boolean) => {
@@ -998,11 +998,11 @@ export default function Flow() {
       try {
         return await submitBauteilAttempt(token, itemId, answer, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   // FLOW-002: the deliberate "give up" escape — same auth-guarded shape as
@@ -1014,11 +1014,11 @@ export default function Flow() {
       try {
         return await giveUpBauteil(token, itemId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleVerbindungenAttempt = useCallback(
@@ -1027,11 +1027,11 @@ export default function Flow() {
       try {
         return await submitVerbindungenAttempt(token, itemId, answer, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleVerbindungenGiveUp = useCallback(
@@ -1040,11 +1040,11 @@ export default function Flow() {
       try {
         return await giveUpVerbindungen(token, itemId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleFaelleAttempt = useCallback(
@@ -1053,11 +1053,11 @@ export default function Flow() {
       try {
         return await submitFaelleAttempt(token, itemId, answer, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleFaelleGiveUp = useCallback(
@@ -1066,11 +1066,11 @@ export default function Flow() {
       try {
         return await giveUpFaelle(token, itemId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleSatzbauAttempt = useCallback(
@@ -1079,11 +1079,11 @@ export default function Flow() {
       try {
         return await submitSatzbauAttempt(token, itemId, order, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleSatzbauGiveUp = useCallback(
@@ -1092,11 +1092,11 @@ export default function Flow() {
       try {
         return await giveUpSatzbau(token, itemId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleZeitfaerbungAttempt = useCallback(
@@ -1105,11 +1105,11 @@ export default function Flow() {
       try {
         return await submitZeitfaerbungAttempt(token, itemId, answer, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleZeitfaerbungGiveUp = useCallback(
@@ -1118,11 +1118,11 @@ export default function Flow() {
       try {
         return await giveUpZeitfaerbung(token, itemId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleSprechenAttempt = useCallback(
@@ -1131,11 +1131,11 @@ export default function Flow() {
       try {
         return await submitSprechenAttempt(token, taskId, audio, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleSprechenGiveUp = useCallback(
@@ -1144,11 +1144,11 @@ export default function Flow() {
       try {
         return await giveUpSprechen(token, taskId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleSzenarioAttempt = useCallback(
@@ -1167,11 +1167,11 @@ export default function Flow() {
           sid(),
         );
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   // FLOW-006: szenario has no backend /give-up route yet — unlike bauteil,
@@ -1204,11 +1204,11 @@ export default function Flow() {
       try {
         return await submitGenusArticle(token, itemId, article, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleGenusGiveUp = useCallback(
@@ -1217,11 +1217,11 @@ export default function Flow() {
       try {
         return await giveUpGenusArticle(token, itemId, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleSatzAttempt = useCallback(
@@ -1247,11 +1247,11 @@ export default function Flow() {
           satzRehearsalRef.current,
         );
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleVerbformenAttempt = useCallback(
@@ -1264,11 +1264,11 @@ export default function Flow() {
       try {
         return await submitVerbformenAttempt(token, cardId, audio, sessionId);
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleSatzRemove = useCallback(
@@ -1278,7 +1278,7 @@ export default function Flow() {
         await removeSatzCard(token, cardId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
           return;
         }
       }
@@ -1292,7 +1292,7 @@ export default function Flow() {
         rehearsalOrder: bag.satz.rehearsalOrder.filter((id) => id !== cardId),
       };
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleVerbformenRemove = useCallback(
@@ -1302,7 +1302,7 @@ export default function Flow() {
         await removeVerbformenCard(token, cardId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
           return;
         }
       }
@@ -1312,7 +1312,7 @@ export default function Flow() {
         order: bag.verbformen.order.filter((id) => id !== cardId),
       };
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleSatzReveal = useCallback(
@@ -1323,10 +1323,10 @@ export default function Flow() {
       // through this side door while the graded attempt path is flagged off.
       if (satzRehearsalRef.current) return;
       revealSatzCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
@@ -1337,10 +1337,10 @@ export default function Flow() {
       // FLOW-003: same write-free guarantee as the reveal above.
       if (satzRehearsalRef.current) return;
       genderMissSatzCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // The Artikel item's peekable "Endungen" sheet. GenusTrainer renders the
@@ -1359,9 +1359,9 @@ export default function Flow() {
       .then((m) => setGenusEndings(m.endings))
       .catch((e) => {
         // Decorative — a missing sheet just means no toggle, as before.
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
-  }, [token, deal, signOut]);
+  }, [token, deal, expireSession]);
 
   // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
   const handleSatzGenderCues = useCallback(async () => {
@@ -1369,19 +1369,19 @@ export default function Flow() {
     try {
       return (await fetchGenusMeta(token)).endings;
     } catch (e) {
-      if (e instanceof UnauthorizedError) signOut();
+      if (e instanceof UnauthorizedError) expireSession();
       throw e;
     }
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   const handleVerbformenReveal = useCallback(
     (cardId: string) => {
       if (!token) return;
       revealVerbformenCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleExplain = useCallback(
@@ -1403,11 +1403,11 @@ export default function Flow() {
           sessionId,
         );
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleFlag = useCallback(
@@ -1429,11 +1429,11 @@ export default function Flow() {
           sessionId,
         );
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // UI-009: word-gloss popover wiring. Threaded into every trainer that
@@ -1451,11 +1451,11 @@ export default function Flow() {
       try {
         return await fetchGloss(token, word, context, sid());
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   const handleAddWord = useCallback(
@@ -1466,11 +1466,11 @@ export default function Flow() {
         const res = await addWord(token, lemma, sid(), "gloss");
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut, sid],
+    [token, expireSession, sid],
   );
 
   if (!ready || !token) {

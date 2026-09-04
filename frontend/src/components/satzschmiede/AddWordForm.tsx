@@ -92,7 +92,7 @@ export default function AddWordForm({
           onChange={(e) => setWord(e.target.value)}
           disabled={busy}
           placeholder="e.g. Feierabend"
-          className="min-w-0 flex-1 rounded-2xl border-[3px] border-line bg-paper-warm px-4 py-2.5 font-body text-[15px] text-ink placeholder:text-ink-faint focus:border-flag-red focus:outline-none disabled:opacity-60"
+          className="min-w-0 flex-1 rounded-2xl border-[3px] border-line bg-paper-warm px-4 py-2.5 font-body text-[15px] text-ink placeholder:text-ink-muted focus:border-flag-red focus:outline-none disabled:opacity-60"
         />
         <button
           type="submit"

@@ -964,7 +964,7 @@ export default function ConversationView({
               <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
                 {typedInput ? "Type a message" : "Dev · type a turn"}
               </span>
-              <span className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+              <span className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
                 Esc to close
               </span>
             </div>
@@ -978,7 +978,7 @@ export default function ConversationView({
                   if (e.key === "Enter") sendText();
                 }}
                 placeholder={typedInput ? "Ask about German…" : "Hallo, ich heiße…"}
-                className="flex-1 rounded-2xl border-[3px] border-line bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+                className="flex-1 rounded-2xl border-[3px] border-line bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
               />
               <button
                 onClick={sendText}
@@ -1202,7 +1202,7 @@ function BriefingPhase({
           session — see Privacy Policy §8. Additive-only: no behavior/timing
           change to the briefing flow itself. */}
       <p
-        className="rise-in mt-3 text-center font-body text-[12px] leading-relaxed text-ink-faint"
+        className="rise-in mt-3 text-center font-body text-[12px] leading-relaxed text-ink-muted"
         style={{ animationDelay: "220ms" }}
       >
         You&apos;ll be speaking with an AI conversation partner — the voice
@@ -1219,7 +1219,7 @@ function BriefingPhase({
         >
           ← back to lessons
         </button>
-        <span className="font-body text-[10px] uppercase tracking-[0.2em] text-ink-faint">
+        <span className="font-body text-[10px] uppercase tracking-[0.2em] text-ink-muted">
           {status}
         </span>
       </div>
@@ -1384,7 +1384,7 @@ function LivePhase({
               </button>
             )}
           </div>
-          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+          <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
             {recording
               ? "speak, then tap stop — ✕ discards"
               : botBusy

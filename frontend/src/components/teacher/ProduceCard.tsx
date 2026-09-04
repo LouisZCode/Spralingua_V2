@@ -358,7 +358,7 @@ export default function ProduceCard({
           <button
             type="button"
             onClick={() => setHintShown(true)}
-            className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline"
+            className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
           >
             Hint
           </button>
@@ -386,7 +386,7 @@ export default function ProduceCard({
             rows={2}
             maxLength={240}
             disabled={checking || recording}
-            className="w-full min-w-0 resize-none rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red disabled:opacity-60"
+            className="w-full min-w-0 resize-none rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-muted focus:border-flag-red disabled:opacity-60"
           />
           <div className="flex flex-wrap items-center justify-center gap-3">
             <button
@@ -414,7 +414,7 @@ export default function ProduceCard({
             </button>
           </div>
           {recording && (
-            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
               speak your sentence, then tap stop
             </p>
           )}

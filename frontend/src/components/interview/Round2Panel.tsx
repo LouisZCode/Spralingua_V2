@@ -172,7 +172,7 @@ export default function Round2Panel({
                 </button>
               )}
             </div>
-            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+            <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
               {recorder.recording
                 ? "speak, then tap stop — ✕ discards"
                 : "answer out loud, in German"}
@@ -338,7 +338,7 @@ function GrammarCard({
                           t.kind === "ghost" ? (
                             <span
                               key={k}
-                              className="mr-1.5 align-middle font-body text-[11px] font-semibold text-ink-faint"
+                              className="mr-1.5 align-middle font-body text-[11px] font-semibold text-ink-muted"
                             >
                               ×{t.word}
                             </span>

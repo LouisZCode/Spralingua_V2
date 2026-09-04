@@ -47,7 +47,7 @@ const REVIEW_CAP = 15;
 // into that popup instead of cards. This component is the auth-guarded page
 // shell + state; VocabTrainer owns the card interaction.
 export default function Satzschmiede() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
@@ -78,14 +78,15 @@ export default function Satzschmiede() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          // Expired session JWT — clear it; the guard above then routes to
-          // the landing page for a fresh Google sign-in (AUTH-001, no refresh).
-          signOut();
+          // Expired session JWT (AUTH-001, no refresh) — UI-016: this shows
+          // the shared session-expiry modal instead of a silent sign-out,
+          // so the deck/round in progress stays in memory.
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   // SATZ-028: fetch the deck as soon as a token exists, not once the picker
   // commits — the empty-pool check below has to run before the picker
@@ -110,14 +111,14 @@ export default function Satzschmiede() {
         await removeCard(token, cardId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
           return;
         }
         // Non-fatal (e.g. already gone): the refetch below re-syncs the UI.
       }
       refreshDeck();
     },
-    [token, signOut, refreshDeck],
+    [token, expireSession, refreshDeck],
   );
 
   // Record a reveal-lapse. Fire-and-forget: the trainer's queue behaviour is
@@ -127,10 +128,10 @@ export default function Satzschmiede() {
     (cardId: string) => {
       if (!token) return;
       revealCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
@@ -139,10 +140,10 @@ export default function Satzschmiede() {
     (cardId: string) => {
       if (!token) return;
       genderMissCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // SATZ-018: word-gloss popover wiring (UI-007/UI-009 machinery) for the
@@ -164,12 +165,12 @@ export default function Satzschmiede() {
         return await fetchGloss(token, word, context, glossSessionRef.current);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   const handleAddWord = useCallback(
@@ -187,12 +188,12 @@ export default function Satzschmiede() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
@@ -201,14 +202,14 @@ export default function Satzschmiede() {
     try {
       return (await fetchMeta(token)).endings;
     } catch (e) {
-      if (e instanceof UnauthorizedError) signOut();
+      if (e instanceof UnauthorizedError) expireSession();
       throw e;
     }
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
-  // Judge one recorded sentence. Auth errors sign out here (same policy as
-  // every other call); everything else rethrows so the trainer can show a
-  // learner-facing message next to the mic.
+  // Judge one recorded sentence. Auth errors show the session-expiry modal
+  // here (same policy as every other call); everything else rethrows so the
+  // trainer can show a learner-facing message next to the mic.
   const handleAttempt = useCallback(
     async (
       cardId: string,
@@ -220,17 +221,18 @@ export default function Satzschmiede() {
         return await submitAttempt(token, cardId, audio, sessionId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
-  // SATZ-007: unpack a correction on demand. Auth errors sign out here (same
-  // policy as every other call); everything else rethrows so the trainer can
-  // show its own fallback message next to the button.
+  // SATZ-007: unpack a correction on demand. Auth errors show the
+  // session-expiry modal here (same policy as every other call); everything
+  // else rethrows so the trainer can show its own fallback message next to
+  // the button.
   const handleExplain = useCallback(
     async (
       cardId: string,
@@ -251,17 +253,18 @@ export default function Satzschmiede() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // SATZ-008: file a "this verdict seems wrong" flag on the judgement's own
-  // Langfuse trace. Auth errors sign out here (same policy as every other
-  // call); everything else rethrows so the trainer can fall back its button.
+  // Langfuse trace. Auth errors show the session-expiry modal here (same
+  // policy as every other call); everything else rethrows so the trainer
+  // can fall back its button.
   const handleFlag = useCallback(
     async (
       traceId: string,
@@ -282,12 +285,12 @@ export default function Satzschmiede() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut],
+    [token, expireSession],
   );
 
   // GAME-001: ping the streak the moment the post-round end screen shows —
@@ -469,7 +472,7 @@ export default function Satzschmiede() {
           <PackModal
             token={token}
             onPoolChanged={refreshDeck}
-            onUnauthorized={signOut}
+            onUnauthorized={expireSession}
             onClose={() => setPacksOpen(false)}
             canPractice={deck.length > 0}
           />

@@ -463,7 +463,7 @@ export default function SprechenTrainer({
                     </button>
                   )}
                 </div>
-                <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                   {recording
                     ? "speak, then tap stop — ✕ discards"
                     : "take a breath, plan your sentences, tap record"}
@@ -598,7 +598,7 @@ export default function SprechenTrainer({
                             t.kind === "ghost" ? (
                               <span
                                 key={k}
-                                className="mr-1.5 align-middle font-body text-[11px] font-semibold text-ink-faint"
+                                className="mr-1.5 align-middle font-body text-[11px] font-semibold text-ink-muted"
                               >
                                 ×{t.word}
                               </span>

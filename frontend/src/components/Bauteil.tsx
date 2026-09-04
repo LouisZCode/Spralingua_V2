@@ -19,7 +19,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // page shell + round state (mirrors Satzschmiede.tsx); BauteilTrainer owns
 // the drill interaction and remounts per round via `key`.
 export default function Bauteil() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [round, setRound] = useState<RoundItem[] | null>(null); // null = loading
@@ -49,20 +49,21 @@ export default function Bauteil() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          // Expired session JWT — clear it; the guard above then routes to
-          // the landing page for a fresh Google sign-in (AUTH-001).
-          signOut();
+          // Expired session JWT (AUTH-001, no refresh) — UI-016: this shows
+          // the shared session-expiry modal instead of a silent sign-out,
+          // so the round in progress stays in memory.
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   useEffect(() => {
     loadRound();
   }, [loadRound]);
 
-  // Judge one typed phrase. Auth errors sign out here (same policy as every
+  // Judge one typed phrase. Auth errors show the session-expiry modal here (same policy as every
   // other call); everything else rethrows so the trainer can show a message.
   const handleAttempt = useCallback(
     async (itemId: string, answer: string): Promise<BauteilVerdict> => {
@@ -78,12 +79,12 @@ export default function Bauteil() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

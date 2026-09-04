@@ -621,7 +621,7 @@ export default function GenusTrainer({
                 >
                   Next
                 </button>
-                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                   or press Enter
                 </span>
               </div>
@@ -660,7 +660,7 @@ export default function GenusTrainer({
                     autoCorrect="off"
                     spellCheck={false}
                     maxLength={140}
-                    className="min-w-0 flex-1 rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
+                    className="min-w-0 flex-1 rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-muted focus:border-flag-red"
                   />
                   <button
                     type="submit"
@@ -711,7 +711,7 @@ export default function GenusTrainer({
                   >
                     {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
                   </button>
-                  <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                  <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                     or press Enter
                   </span>
                 </div>

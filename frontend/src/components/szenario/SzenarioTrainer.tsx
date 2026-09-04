@@ -713,7 +713,7 @@ export default function SzenarioTrainer({
                   </button>
                 )}
               </div>
-              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                 {recording
                   ? "speak, then tap stop — ✕ discards"
                   : "tap record — answer in German, short and simple"}

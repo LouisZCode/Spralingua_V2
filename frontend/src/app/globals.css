@@ -31,7 +31,17 @@
   /* Ink */
   --color-ink: #0f0f10;
   --color-ink-soft: #2d2d30;
-  --color-ink-muted: #7a7973;
+  /* UI-016: darkened from #7a7973 (4.18:1 on paper, 4.37:1 on card — both
+     below AA's 4.5:1 for body text) to clear 4.5:1 against both surfaces
+     this token is actually used on. Computed with scratchpad/ui016's WCAG
+     script, not eyeballed: 4.89:1 on paper (#fafaf7), 5.11:1 on card
+     (#ffffff). */
+  --color-ink-muted: #6f6e68;
+  /* Retired from every TEXT role (UI-016) — measured 1.78-1.87:1 on the
+     surfaces it carried text on, far below AA. Stays defined ONLY for
+     genuinely decorative, non-text uses: borders (dashed empty-state boxes,
+     spinners) and the gradient below. Any new `text-ink-faint` usage is a
+     regression — use ink-muted or ink-soft instead. */
   --color-ink-faint: #bfbeb6;
 
   /* DARK-004: keylines + hard-offset "sticker" shadows — borders,

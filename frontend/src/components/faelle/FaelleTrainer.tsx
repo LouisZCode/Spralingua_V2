@@ -362,7 +362,7 @@ export default function FaelleTrainer({
             <button
               type="button"
               onClick={() => setHintShown(true)}
-              className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline"
+              className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
             >
               Show English
             </button>
@@ -384,7 +384,7 @@ export default function FaelleTrainer({
                 autoCorrect="off"
                 spellCheck={false}
                 maxLength={120}
-                className="min-w-0 flex-1 rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-faint focus:border-flag-red"
+                className="min-w-0 flex-1 rounded-[18px] border-[3px] border-line bg-card px-4 py-3 font-body text-[16px] text-ink outline-none placeholder:text-ink-muted focus:border-flag-red"
               />
               <button
                 type="submit"
@@ -463,7 +463,7 @@ export default function FaelleTrainer({
                 >
                   {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
                 </button>
-                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                   or press Enter
                 </span>
               </div>

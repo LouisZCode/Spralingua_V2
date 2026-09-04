@@ -365,7 +365,7 @@ export default function HeroDemo() {
             {/* AI Act Art. 50(1): in-product disclosure, shown before this
                 demo connects — HeroDemo doesn't mount ConversationView, so
                 it needs its own copy of the line (see Privacy Policy §8). */}
-            <p className="mt-5 max-w-[220px] text-center font-body text-[11px] leading-relaxed text-ink-faint">
+            <p className="mt-5 max-w-[220px] text-center font-body text-[12px] leading-relaxed text-ink-muted">
               You&apos;ll be speaking with an AI conversation partner — the
               voice is computer-generated.
             </p>
@@ -385,7 +385,7 @@ export default function HeroDemo() {
               aria-label="Demo transcript"
             >
               {messages.length === 0 ? (
-                <p className="text-center font-body text-[12px] uppercase tracking-[0.2em] text-ink-faint">
+                <p className="text-center font-body text-[12px] uppercase tracking-[0.2em] text-ink-muted">
                   say hello to start
                 </p>
               ) : (
@@ -435,7 +435,7 @@ export default function HeroDemo() {
               <span className="font-body text-[10px] font-bold uppercase tracking-[0.32em] text-ink-muted">
                 Dev · type a turn
               </span>
-              <span className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+              <span className="font-body text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
                 Esc to close
               </span>
             </div>
@@ -449,7 +449,7 @@ export default function HeroDemo() {
                   if (e.key === "Enter") void sendText();
                 }}
                 placeholder="Hi! What is Spralingua?"
-                className="flex-1 rounded-2xl border-[3px] border-line bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-faint focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
+                className="flex-1 rounded-2xl border-[3px] border-line bg-card px-4 py-3 font-display text-[15px] font-semibold text-ink placeholder:text-ink-muted focus:outline-none focus:ring-4 focus:ring-flag-gold-soft"
               />
               <button
                 onClick={() => void sendText()}

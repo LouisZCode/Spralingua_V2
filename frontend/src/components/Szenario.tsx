@@ -27,7 +27,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // Sprechen.tsx); SzenarioTrainer owns the interaction and remounts per
 // question via `key`.
 export default function Szenario() {
-  const { token, ready, user, signOut } = useAuth();
+  const { token, ready, user, expireSession } = useAuth();
   const router = useRouter();
 
   const [scenario, setScenario] = useState<Scenario | null>(null); // null = loading
@@ -93,12 +93,12 @@ export default function Szenario() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut, user?.level]);
+  }, [token, expireSession, user?.level]);
 
   useEffect(() => {
     loadScenario();
@@ -123,12 +123,12 @@ export default function Szenario() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // UI-007: word-gloss popover wiring — same auth-guarded pattern as
@@ -145,12 +145,12 @@ export default function Szenario() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAddWord = useCallback(
@@ -168,12 +168,12 @@ export default function Szenario() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

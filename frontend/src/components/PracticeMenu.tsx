@@ -502,19 +502,19 @@ export default function PracticeMenu() {
         <footer className="mt-10 flex justify-center gap-4">
           <Link
             href="/legal/impressum"
-            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-ink"
           >
             Impressum
           </Link>
           <Link
             href="/legal/privacy"
-            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-ink"
           >
             Privacy
           </Link>
           <Link
             href="/legal/terms"
-            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-ink-muted"
+            className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-ink"
           >
             Terms
           </Link>

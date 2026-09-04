@@ -222,7 +222,7 @@ export default function InterviewPlayer({
         >
           ← All interviews
         </button>
-        <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+        <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
           {chunkIndex + 1} / {item.chunks.length}
         </span>
       </div>
@@ -302,7 +302,7 @@ export default function InterviewPlayer({
           </p>
         )}
         {chunk.kind && (
-          <p className="mt-2 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink-faint">
+          <p className="mt-2 font-body text-[10px] font-bold uppercase tracking-[0.18em] text-ink-muted">
             {KIND_LABEL[chunk.kind] ?? chunk.kind}
           </p>
         )}

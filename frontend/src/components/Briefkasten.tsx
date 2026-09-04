@@ -52,7 +52,7 @@ function writeSeen(list: string[]): void {
 // Szenario.tsx); BriefTrainer owns the interaction and remounts per letter
 // via `key`.
 export default function Briefkasten() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [letter, setLetter] = useState<Letter | null>(null); // null = loading
@@ -109,7 +109,7 @@ export default function Briefkasten() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else if (e instanceof InsufficientCoinsError) {
           setInsufficient({ needed: e.needed, available: e.available });
           refreshCoins();
@@ -117,7 +117,7 @@ export default function Briefkasten() {
           setError(true);
         }
       });
-  }, [token, signOut, sid]);
+  }, [token, expireSession, sid]);
 
   const isRoundComplete = roundTarget !== null && lettersCompleted >= roundTarget;
 
@@ -170,12 +170,12 @@ export default function Briefkasten() {
         });
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // UI-007: word-gloss popover wiring — same auth-guarded pattern as
@@ -192,12 +192,12 @@ export default function Briefkasten() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAddWord = useCallback(
@@ -215,12 +215,12 @@ export default function Briefkasten() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // When BriefTrainer signals "New letter", count the just-finished letter

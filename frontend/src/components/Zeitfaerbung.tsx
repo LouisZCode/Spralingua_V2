@@ -20,7 +20,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // meaning. Auth-guarded page shell + round state (mirrors Verbindungen.tsx);
 // the trainer remounts per round.
 export default function Zeitfaerbung() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [round, setRound] = useState<ZeitItem[] | null>(null); // null = loading
@@ -47,12 +47,12 @@ export default function Zeitfaerbung() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   useEffect(() => {
     loadRound();
@@ -72,12 +72,12 @@ export default function Zeitfaerbung() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

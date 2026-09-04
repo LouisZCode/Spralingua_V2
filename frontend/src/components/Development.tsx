@@ -28,7 +28,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // since there's nothing to attempt here.
 
 export default function Development() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [stats, setStats] = useState<DevelopmentStats | null>(null); // null = loading
@@ -53,7 +53,7 @@ export default function Development() {
       .catch((e) => {
         if (cancelled) return;
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
@@ -61,7 +61,7 @@ export default function Development() {
     return () => {
       cancelled = true;
     };
-    // signOut is a stable ref — token is the real trigger.
+    // expireSession is a stable ref — token is the real trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
@@ -73,7 +73,7 @@ export default function Development() {
         if (!cancelled) setSessions(s);
       })
       .catch((e) => {
-        if (!cancelled && e instanceof UnauthorizedError) signOut();
+        if (!cancelled && e instanceof UnauthorizedError) expireSession();
         // Any other failure: keep [] and hide the block — the stats above
         // are the page's core, session history must not take it down.
       });
@@ -195,7 +195,7 @@ function AllExercisesCard() {
             <span className="font-display text-[14px] font-black tracking-tight text-ink">
               {ex.name}
             </span>
-            <span className="font-body text-[11px] font-semibold text-ink-faint">
+            <span className="font-body text-[11px] font-semibold text-ink-muted">
               {ex.note}
             </span>
           </Link>
@@ -660,7 +660,7 @@ function AttemptsChart({ series }: { series: SeriesPoint[] }) {
               </div>
               {/*   keeps the label slot's height on unlabeled buckets —
                   a bare " " collapses and un-aligns the baselines. */}
-              <span className="mt-1.5 font-body text-[9px] font-semibold text-ink-faint">
+              <span className="mt-1.5 font-body text-[9px] font-semibold text-ink-muted">
                 {view === "day" ? (i % 2 === 0 ? b.label : " ") : b.label}
               </span>
             </div>

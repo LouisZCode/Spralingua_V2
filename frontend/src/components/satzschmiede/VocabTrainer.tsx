@@ -327,7 +327,7 @@ export default function VocabTrainer({
   // Satzschmiede API itself — bypassing the parent's `onAttempt` (which
   // some hosts, e.g. Verbformen, wire to a different exercise's endpoint)
   // without adding a new prop to this component.
-  const { token: authToken, signOut: authSignOut } = useAuth();
+  const { token: authToken, expireSession: authExpireSession } = useAuth();
 
   const total = deck.length;
   const byId = new Map(deck.map((c) => [c.id, c] as const));
@@ -611,11 +611,11 @@ export default function VocabTrainer({
       }
       setFlipped(true);
     } catch (err) {
-      // The non-rehearsal path's UnauthorizedError is already signed out by
-      // the parent's onAttempt; the rehearsal bypass bypasses that too, so
-      // handle it here instead.
+      // The non-rehearsal path's UnauthorizedError already triggers the
+      // session-expiry modal via the parent's onAttempt; the rehearsal
+      // bypass bypasses that too, so handle it here instead (UI-016).
       if (isRehearsal && err instanceof UnauthorizedError) {
-        authSignOut();
+        authExpireSession();
       }
       if (err instanceof InsufficientCoinsError) {
         setInsufficient({ needed: err.needed, available: err.available });
@@ -995,7 +995,7 @@ export default function VocabTrainer({
           type="button"
           onClick={toggleMode}
           disabled={busy}
-          className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-faint transition-colors hover:text-flag-red disabled:opacity-40"
+          className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red disabled:opacity-40"
         >
           {browsing ? "← Back to practice" : `Browse all ${total} →`}
         </button>
@@ -1183,7 +1183,7 @@ export default function VocabTrainer({
                     {result.traceId && onFlag && (
                       <p className="mt-3">
                         {flagState === "sent" ? (
-                          <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint">
+                          <span className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted">
                             Flagged — thanks, this tunes the examiner
                           </span>
                         ) : (
@@ -1191,7 +1191,7 @@ export default function VocabTrainer({
                             type="button"
                             onClick={handleFlag}
                             disabled={flagState === "sending"}
-                            className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-faint transition-colors hover:text-flag-red disabled:opacity-50"
+                            className="font-body text-[11px] font-semibold uppercase tracking-[0.16em] text-ink-muted transition-colors hover:text-flag-red disabled:opacity-50"
                           >
                             {flagState === "sending"
                               ? "Flagging…"
@@ -1332,7 +1332,7 @@ export default function VocabTrainer({
                 <button
                   type="button"
                   onClick={toggleCues}
-                  className="mt-1 font-body text-[11px] font-black uppercase tracking-[0.18em] text-ink-faint transition-colors hover:text-flag-red"
+                  className="mt-1 font-body text-[11px] font-black uppercase tracking-[0.18em] text-ink-muted transition-colors hover:text-flag-red"
                 >
                   {showCues ? "Hide endings hint" : "Endings hint"}
                 </button>
@@ -1349,7 +1349,7 @@ export default function VocabTrainer({
                       </p>
                     ))
                   ) : (
-                    <p className="font-body text-[12px] text-ink-faint">…</p>
+                    <p className="font-body text-[12px] text-ink-muted">…</p>
                   )}
                 </div>
               )}

@@ -216,7 +216,7 @@ export default function PricingSuccess() {
           Setting up your plan — this only takes a moment…
         </p>
         {sessionId && (
-          <p className="mt-6 font-body text-[11px] uppercase tracking-[0.18em] text-ink-faint">
+          <p className="mt-6 font-body text-[11px] uppercase tracking-[0.18em] text-ink-muted">
             Session {sessionId.slice(-8)}
           </p>
         )}

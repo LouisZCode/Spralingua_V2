@@ -62,7 +62,7 @@ export function LegalLines({ lines }: { lines: string[] }) {
 
 export function LegalUL({ children }: { children: React.ReactNode }) {
   return (
-    <ul className="mt-4 list-disc space-y-2 pl-6 font-body text-[16px] leading-[1.7] text-ink-soft marker:text-ink-faint">
+    <ul className="mt-4 list-disc space-y-2 pl-6 font-body text-[16px] leading-[1.7] text-ink-soft marker:text-ink-muted">
       {children}
     </ul>
   );

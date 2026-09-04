@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { HTTP_BASE } from "@/lib/api";
+import SignInModal from "./SignInModal";
 
 // localStorage key holding { token, user }. The session JWT is replayed on the
 // WS handshake (?token=) and on /say (Authorization: Bearer) — see AUTH-001.
@@ -46,6 +47,17 @@ type AuthState = {
   ready: boolean;
   signInWithGoogle: (credential: string) => Promise<void>;
   signOut: () => void;
+  // UI-016: the one shared reaction to a 401 mid-round. Call sites used to
+  // each call signOut() themselves — silent, and it discarded whatever
+  // round/draft state the page held (the guard `if (ready && !token)
+  // router.replace(...)` every page carries would fire the moment signOut()
+  // cleared the token, unmounting the component). expireSession() does NOT
+  // touch token/user — it only flips a flag that makes the provider render
+  // a "session expired" modal above the page. The stale token stays in
+  // place (so no guard fires, so no navigation, so in-memory state
+  // survives); signing in again through the modal replaces it with a fresh
+  // one via the same signInWithGoogle() path used everywhere else.
+  expireSession: () => void;
   setLevel: (level: Level | null) => Promise<void>;
   // PAY-001: re-pull the signed-in user from /auth/me and mirror it into
   // localStorage. Needed after a Stripe Checkout/portal round trip, where the
@@ -191,6 +203,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("spralingua_dev_unlocked");
   }
 
+  // UI-016: see the AuthState docstring above.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const expireSession = useCallback(() => {
+    setSessionExpired(true);
+  }, []);
+
   return (
     <AuthContext.Provider
       value={{
@@ -199,11 +217,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ready,
         signInWithGoogle,
         signOut,
+        expireSession,
         setLevel,
         refreshUser,
       }}
     >
       {children}
+      {/* UI-016: overlay ABOVE the page, not a route — the round/draft state
+          the trainer holds in memory is never touched by this. Reuses the
+          same Google sign-in control StartCta's modal does; onSuccess just
+          clears the flag (no navigation), so the trainer keeps running with
+          the fresh token now sitting in context. */}
+      {sessionExpired && (
+        <SignInModal
+          signInWithGoogle={signInWithGoogle}
+          title="Your session expired"
+          message="Sign in again, then try that once more."
+          onSuccess={() => setSessionExpired(false)}
+          onClose={() => setSessionExpired(false)}
+        />
+      )}
     </AuthContext.Provider>
   );
 }

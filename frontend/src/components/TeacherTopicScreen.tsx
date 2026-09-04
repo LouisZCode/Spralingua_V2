@@ -20,7 +20,7 @@ export default function TeacherTopicScreen({
 }: {
   onStart: (topic: string, patternId?: string) => void;
 }) {
-  const { token, signOut, user } = useAuth();
+  const { token, expireSession, user } = useAuth();
   const isDeveloper = user?.role === "developer";
   const [bal, setBal] = useState<TeacherBal>(null);
   useEffect(() => {
@@ -62,10 +62,10 @@ export default function TeacherTopicScreen({
         setFocusLoaded(true);
       })
       .catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     return () => { alive = false; };
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   // Cold-start slice: an empty ledger means an empty `stats.focus` — fetch
   // the curated starters ONLY once we know that for certain (gated on

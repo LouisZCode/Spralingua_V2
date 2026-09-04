@@ -261,7 +261,7 @@ export default function LandingPage() {
               <div aria-hidden className="dot-connector ml-[38px] h-12 w-1" />
               <div className="flex items-center gap-5 opacity-60">
                 <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[4px] border-dashed border-ink-faint bg-paper">
-                  <span className="font-display text-[26px] font-black leading-none text-ink-faint">
+                  <span className="font-display text-[26px] font-black leading-none text-ink-muted">
                     +
                   </span>
                 </div>

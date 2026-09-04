@@ -417,7 +417,7 @@ function GlossableInner({ text, onGloss, onAdd, className, exclude }: GlossableP
                           {addState === "pending" ? "…" : "＋ Zu meinen Wörtern"}
                         </button>
                         {typeof glossData.glossAddsRemaining === "number" && (
-                          <span className="mt-1 block text-[10px] font-semibold text-ink-faint">
+                          <span className="mt-1 block text-[10px] font-semibold text-ink-muted">
                             {`noch ${glossData.glossAddsRemaining} heute`}
                           </span>
                         )}

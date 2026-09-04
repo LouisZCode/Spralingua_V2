@@ -31,7 +31,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // A dev door on /development (MVP-001) — not one of the four surfaces
 // /practice reaches.
 export default function Interview() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [items, setItems] = useState<InterviewItemSummary[] | null>(null); // null = loading
@@ -63,7 +63,7 @@ export default function Interview() {
       .catch((e) => {
         if (cancelled) return;
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setItemsError(true);
         }
@@ -89,7 +89,7 @@ export default function Interview() {
       .catch((e) => {
         if (cancelled) return;
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setItemError(true);
         }
@@ -106,11 +106,11 @@ export default function Interview() {
       try {
         return await fetchAudioUrl(token, chunkId);
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleComprehension = useCallback(
@@ -120,11 +120,11 @@ export default function Interview() {
       try {
         return await submitComprehension(token, chunkId, audio, sessionIdRef.current);
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAnswer = useCallback(
@@ -134,11 +134,11 @@ export default function Interview() {
       try {
         return await submitAnswer(token, chunkId, audio, sessionIdRef.current);
       } catch (e) {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

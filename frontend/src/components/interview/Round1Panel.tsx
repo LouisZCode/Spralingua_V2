@@ -173,7 +173,7 @@ export default function Round1Panel({
               )}
             </div>
             {!listenUnlocked && !recorder.recording && (
-              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                 listen to most of the clip to unlock recording
               </p>
             )}

@@ -27,7 +27,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // Auth-guarded page shell + round state (mirrors Zeitfaerbung.tsx); the
 // trainer remounts per round.
 export default function Genus() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [round, setRound] = useState<GenusItem[] | null>(null); // null = loading
@@ -88,12 +88,12 @@ export default function Genus() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, pool, signOut]);
+  }, [token, pool, expireSession]);
 
   useEffect(() => {
     loadRound();
@@ -112,12 +112,12 @@ export default function Genus() {
         return await submitArticle(token, itemId, article, sessionId());
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut, sessionId]
+    [token, expireSession, sessionId]
   );
 
   const handlePhrase = useCallback(
@@ -127,16 +127,16 @@ export default function Genus() {
         return await submitPhrase(token, itemId, answer, sessionId());
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut, sessionId]
+    [token, expireSession, sessionId]
   );
 
   // The vocab nudge is decorative — any failure resolves to "no pill", the
-  // drill never waits on it or surfaces its errors (401 still signs out).
+  // drill never waits on it or surfaces its errors (401 still triggers the session-expiry modal).
   const handleNudge = useCallback(
     async (itemId: string): Promise<NudgeWord[]> => {
       if (!token) return [];
@@ -144,12 +144,12 @@ export default function Genus() {
         return await fetchNudge(token, itemId, sessionId());
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         return [];
       }
     },
-    [token, signOut, sessionId]
+    [token, expireSession, sessionId]
   );
 
   if (!ready || !token) {

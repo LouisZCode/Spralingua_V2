@@ -33,7 +33,7 @@ const redShadow = {
 // same examiner (Perfekt OR Präteritum both pass); the OBS-007 session
 // prefix ("vf-") groups Verbformen sittings apart in Langfuse.
 export default function Verbformen() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
@@ -51,12 +51,12 @@ export default function Verbformen() {
       .then(setDeck)
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   useEffect(() => {
     refreshDeck();
@@ -69,23 +69,23 @@ export default function Verbformen() {
         await removeCard(token, cardId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
           return;
         }
       }
       refreshDeck();
     },
-    [token, signOut, refreshDeck]
+    [token, expireSession, refreshDeck]
   );
 
   const handleReveal = useCallback(
     (cardId: string) => {
       if (!token) return;
       revealCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) signOut();
+        if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAttempt = useCallback(
@@ -99,12 +99,12 @@ export default function Verbformen() {
         return await submitAttempt(token, cardId, audio, sessionId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // SATZ-007: unpack a correction on demand — same /satz/explain call as
@@ -130,17 +130,18 @@ export default function Verbformen() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // SATZ-008: file a "this verdict seems wrong" flag on the judgement's own
-  // Langfuse trace. Auth errors sign out here (same policy as every other
-  // call); everything else rethrows so the trainer can fall back its button.
+  // Langfuse trace. Auth errors show the session-expiry modal here (same
+  // policy as every other call); everything else rethrows so the trainer
+  // can fall back its button.
   const handleFlag = useCallback(
     async (
       traceId: string,
@@ -154,12 +155,12 @@ export default function Verbformen() {
         await flagVerdict(token, traceId, cardId, transcript, verdict, sessionId);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

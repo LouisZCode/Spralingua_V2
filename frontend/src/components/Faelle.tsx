@@ -26,7 +26,7 @@ import AppHeader from "@/components/shared/AppHeader";
 // learner coast. Auth-guarded page shell + round state (mirrors
 // Verbindungen.tsx); the trainer remounts per round.
 export default function Faelle() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
 
   const [round, setRound] = useState<CaseItem[] | null>(null); // null = loading
@@ -53,12 +53,12 @@ export default function Faelle() {
       })
       .catch((e) => {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         } else {
           setError(true);
         }
       });
-  }, [token, signOut]);
+  }, [token, expireSession]);
 
   useEffect(() => {
     loadRound();
@@ -78,12 +78,12 @@ export default function Faelle() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // UI-007: word-gloss popover wiring — same auth-guarded pattern as
@@ -100,12 +100,12 @@ export default function Faelle() {
         );
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAddWord = useCallback(
@@ -123,12 +123,12 @@ export default function Faelle() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   if (!ready || !token) {

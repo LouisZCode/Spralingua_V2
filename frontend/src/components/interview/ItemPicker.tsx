@@ -78,7 +78,7 @@ export default function ItemPicker({
                   with {item.interviewer}
                 </span>
               )}
-              <span className="mt-1 font-body text-[12px] font-bold uppercase tracking-[0.16em] text-ink-faint">
+              <span className="mt-1 font-body text-[12px] font-bold uppercase tracking-[0.16em] text-ink-muted">
                 {item.nChunks} {item.nChunks === 1 ? "chunk" : "chunks"}
               </span>
             </button>

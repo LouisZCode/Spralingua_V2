@@ -1018,7 +1018,7 @@ export default function TeacherChat() {
           <button
             type="button"
             onClick={handleSkip}
-            className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline disabled:pointer-events-none disabled:opacity-40"
+            className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted underline-offset-2 hover:text-ink hover:underline disabled:pointer-events-none disabled:opacity-40"
           >
             Skip
           </button>
@@ -1140,7 +1140,7 @@ export default function TeacherChat() {
         <button
           type="button"
           onClick={handleSkip}
-          className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline"
+          className="font-body text-[10px] font-bold uppercase tracking-[0.2em] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
         >
           Skip
         </button>

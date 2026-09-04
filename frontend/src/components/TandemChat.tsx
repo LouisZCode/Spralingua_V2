@@ -21,7 +21,7 @@ import { PARTNERS, type PartnerId } from "./shared/tandem";
 // is no voice picker — the persona owns its voice (shared/tandem.ts).
 
 export default function TandemChat() {
-  const { token, ready, signOut } = useAuth();
+  const { token, ready, expireSession } = useAuth();
   const router = useRouter();
   const [partnerId, setPartnerId] = useState<PartnerId | null>(null);
   const [topic, setTopic] = useState<string | null>(null);
@@ -46,12 +46,12 @@ export default function TandemChat() {
         return await fetchGloss(token, word, context, glossSessionRef.current);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   const handleAddWord = useCallback(
@@ -68,12 +68,12 @@ export default function TandemChat() {
         return { glossRemaining: res.glossRemaining };
       } catch (e) {
         if (e instanceof UnauthorizedError) {
-          signOut();
+          expireSession();
         }
         throw e;
       }
     },
-    [token, signOut]
+    [token, expireSession]
   );
 
   // Same guard the /learn route uses: once hydration settles, a missing token

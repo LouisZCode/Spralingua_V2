@@ -3,21 +3,31 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { GoogleLogin } from "@react-oauth/google";
-import { useAuth } from "./AuthContext";
 
 // Modal hosting Google's official <GoogleLogin> button. That component is the
 // only web path that yields a Google *ID token* (cred.credential) — which is
 // what our backend's /auth/google expects. (The useGoogleLogin hook returns an
 // access token instead, the wrong shape for us.) onSuccess fires only after our
 // own session JWT is minted and stored by signInWithGoogle.
+//
+// UI-016: signInWithGoogle is a prop, not read via useAuth() here — that
+// keeps this component free of a dependency on AuthContext, which is what
+// lets AuthContext.tsx itself render this modal (for the session-expiry
+// overlay) without an import cycle. title/message default to the original
+// StartCta copy so that caller is unaffected.
 export default function SignInModal({
+  signInWithGoogle,
   onSuccess,
   onClose,
+  title = "Sign in to start",
+  message = "Sign in with Google to begin your lesson and save your progress.",
 }: {
+  signInWithGoogle: (credential: string) => Promise<void>;
   onSuccess: () => void;
   onClose: () => void;
+  title?: string;
+  message?: string;
 }) {
-  const { signInWithGoogle } = useAuth();
   const [error, setError] = useState<string | null>(null);
 
   // Portal to <body>: the landing page's CTA sits inside a `.rise-in` column
@@ -52,10 +62,10 @@ export default function SignInModal({
         </button>
 
         <h2 className="font-display text-[26px] font-black leading-tight text-ink">
-          Sign in to start
+          {title}
         </h2>
         <p className="mx-auto mt-3 max-w-[260px] font-body text-[14px] leading-relaxed text-ink-soft">
-          Sign in with Google to begin your lesson and save your progress.
+          {message}
         </p>
 
         <div className="mt-7 flex justify-center">

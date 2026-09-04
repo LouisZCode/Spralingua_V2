@@ -20,7 +20,7 @@ export default function StartCta({
   style?: CSSProperties;
   children: ReactNode;
 }) {
-  const { token, ready } = useAuth();
+  const { token, ready, signInWithGoogle } = useAuth();
   const router = useRouter();
   const [showModal, setShowModal] = useState(false);
 
@@ -47,6 +47,7 @@ export default function StartCta({
       </button>
       {showModal && (
         <SignInModal
+          signInWithGoogle={signInWithGoogle}
           onSuccess={() => {
             setShowModal(false);
             router.push("/practice");

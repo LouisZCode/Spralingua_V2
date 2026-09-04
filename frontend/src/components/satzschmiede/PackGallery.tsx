@@ -35,7 +35,8 @@ export default function PackGallery({
   onPoolChanged: () => void;
   // Jump to the trainer; parent hides the button while the pool is empty.
   onPractice: (() => void) | null;
-  // Session JWT expired mid-browse — parent signs out for a fresh sign-in.
+  // Session JWT expired mid-browse — parent shows the session-expiry modal
+  // for a fresh sign-in (UI-016).
   onUnauthorized: () => void;
 }) {
   const [packs, setPacks] = useState<PackSummary[] | null>(null);
@@ -59,7 +60,7 @@ export default function PackGallery({
     return () => {
       cancelled = true;
     };
-    // onUnauthorized is a stable signOut ref — token is the real trigger.
+    // onUnauthorized is a stable expireSession ref — token is the real trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 

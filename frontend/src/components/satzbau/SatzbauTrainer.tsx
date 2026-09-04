@@ -399,7 +399,7 @@ export default function SatzbauTrainer({
                 </span>
               )}
               {placedIdx.length === 0 && !item.given && (
-                <span className="font-body text-[13px] font-semibold text-ink-faint">
+                <span className="font-body text-[13px] font-semibold text-ink-soft">
                   Tap chips below to build the sentence
                 </span>
               )}
@@ -457,7 +457,7 @@ export default function SatzbauTrainer({
             <button
               type="button"
               onClick={() => setHintShown(true)}
-              className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-faint underline-offset-2 hover:text-ink-muted hover:underline"
+              className="font-body text-[11px] font-bold uppercase tracking-[0.2em] text-ink-muted underline-offset-2 hover:text-ink hover:underline"
             >
               Show hint
             </button>
@@ -540,7 +540,7 @@ export default function SatzbauTrainer({
                 >
                   {flow ? "Next" : index + 1 >= queue.length ? "Finish" : "Next"}
                 </button>
-                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-faint">
+                <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
                   or press Enter
                 </span>
               </div>
