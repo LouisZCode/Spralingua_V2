@@ -16,6 +16,7 @@ import GermanWay from "../shared/GermanWay";
 import type { GlossInfo } from "../satzschmiede/api";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 // PAY-002 note: Briefkasten charges the LETTER, not the attempt — the 15
 // coins are taken at GET /briefkasten/letter and both attempts ride free on
 // that ticket, so the real out-of-coins surface is Briefkasten.tsx's mint.
@@ -398,9 +399,7 @@ export default function BriefTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {
@@ -430,9 +429,7 @@ export default function BriefTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {

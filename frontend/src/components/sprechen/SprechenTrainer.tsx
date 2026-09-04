@@ -12,6 +12,7 @@ import { diffWords, segmentTranscript } from "./slipDiff";
 import { playSound } from "../shared/sound";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 
 type Phase = "drill" | "done";
 
@@ -250,9 +251,7 @@ export default function SprechenTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {
@@ -287,9 +286,7 @@ export default function SprechenTrainer({
       });
     } catch (err) {
       setFailed(
-        err instanceof Error && err.message && !err.message.includes("failed (")
-          ? err.message
-          : "Couldn't check that — try again in a moment."
+        safeMessage(err, "Couldn't check that — try again in a moment.")
       );
     } finally {
       setChecking(false);

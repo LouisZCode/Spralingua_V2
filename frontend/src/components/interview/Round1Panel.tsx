@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRecorder } from "../shared/recorder";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 import type { ComprehensionResult } from "./api";
 
 const redShadow = {
@@ -103,9 +104,7 @@ export default function Round1Panel({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {

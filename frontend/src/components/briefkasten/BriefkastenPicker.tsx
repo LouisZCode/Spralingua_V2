@@ -96,7 +96,14 @@ export default function BriefkastenPicker({ onStart }: BriefkastenPickerProps) {
       <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">
         How many letters to write?
       </h1>
+      {/* UI-014 (d): first-run framing — Briefkasten has no empty-state
+          onboarding of its own (unlike Satzschmiede's pool-building step),
+          so a first-timer reaches this picker with no prior sense of what
+          a "letter" even is here. */}
       <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
+        A letter arrives in German — you write the reply.
+      </p>
+      <p className="mt-2 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
         Each letter includes hints first, then corrections, then how a German would really say it. One letter costs 15 coins.
       </p>
 

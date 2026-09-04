@@ -5,6 +5,7 @@ import { useAuth } from "./auth/AuthContext";
 import StartCta from "./auth/StartCta";
 import { createCheckout, fetchBillingPortal } from "@/lib/api";
 import AppHeader from "@/components/shared/AppHeader";
+import { safeMessage } from "@/components/shared/copy";
 import {
   SATZ_ATTEMPT_COST,
   LETTER_COST,
@@ -124,11 +125,17 @@ export default function Pricing() {
   }
 
   function handleFailure(e: unknown) {
-    const message = e instanceof Error ? e.message : "Something went wrong.";
-    if (/not configured/i.test(message)) {
+    // The "not configured" signal is a deliberate backend detail string
+    // (payments/routes.py::_require_configured's 503) — check the raw
+    // message for it before running it through safeMessage below, which
+    // would otherwise treat an unrecognized string the same as any other
+    // detail and just show it (still fine), but this keeps the branch
+    // explicit and independent of safeMessage's guard list.
+    const raw = e instanceof Error ? e.message : "";
+    if (/not configured/i.test(raw)) {
       setNotConfigured(true);
     } else {
-      setError(message);
+      setError(safeMessage(e, "Something went wrong — try again in a moment."));
     }
     setPending(null);
   }

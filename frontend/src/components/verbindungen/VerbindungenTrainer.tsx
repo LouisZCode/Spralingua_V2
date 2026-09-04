@@ -9,6 +9,7 @@ import { FeedbackCard } from "../shared/feedback";
 import { playSound } from "../shared/sound";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 
 // A missed item returns once at the end of the round — same second-chance
 // contract as BauteilTrainer. `retry` marks the copy.
@@ -178,9 +179,7 @@ export default function VerbindungenTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {
@@ -207,9 +206,7 @@ export default function VerbindungenTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {

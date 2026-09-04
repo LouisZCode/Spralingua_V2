@@ -9,6 +9,7 @@ import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { WordRejectedError, type GlossInfo } from "../satzschmiede/api";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 
 type Phase = "intro" | "scene" | "result";
 
@@ -270,9 +271,7 @@ export default function SzenarioTrainer({
         setFailed(err.message);
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {
@@ -307,9 +306,7 @@ export default function SzenarioTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {

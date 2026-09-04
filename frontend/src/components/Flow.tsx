@@ -1817,6 +1817,15 @@ function RoundPicker({
       <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">
         How many exercises?
       </h1>
+      {/* UI-014 (d): first-run framing — Flow has no empty-state onboarding
+          of its own (unlike Satzschmiede, whose pool-building step covers
+          this before a first-timer ever reaches a round picker), so this
+          screen is the only place to say what a round actually deals. */}
+      <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
+        A mixed stream of quick grammar drills — endings, verb forms, cases,
+        word order and more. Each one is pulled from what you keep getting
+        wrong, and corrected the moment you miss it.
+      </p>
       <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
         Pick a round length — you can always stop early with Finish.
       </p>

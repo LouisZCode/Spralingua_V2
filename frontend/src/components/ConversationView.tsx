@@ -19,6 +19,7 @@ import { useRecorder } from "./shared/recorder";
 import { TANDEM_LESSONS, partnerByLesson } from "./shared/tandem";
 import { TEACHER_LESSON } from "./shared/teacher";
 import type { GlossInfo } from "./satzschmiede/api";
+import { loadError } from "./shared/copy";
 
 // Briefing field values are either a single prose string OR a list of
 // short items (renders as bullets). Authors pick per field per lesson.
@@ -288,7 +289,7 @@ export default function ConversationView({
       })
       .catch((e) => {
         if ((e as Error)?.name === "AbortError") return;
-        setStatus(`Failed to load: ${e}`);
+        setStatus(loadError("this lesson"));
       });
     return () => controller.abort();
   }, [params.lesson]);
@@ -718,8 +719,7 @@ export default function ConversationView({
               }
             }
           },
-          onError: (err: unknown) =>
-            setStatus(`Error: ${JSON.stringify(err)}`),
+          onError: () => setStatus("Connection trouble — try again in a moment."),
         },
       });
 
@@ -740,8 +740,8 @@ export default function ConversationView({
         (params.pattern ? `&pattern=${encodeURIComponent(params.pattern)}` : "") +
         `&token=${encodeURIComponent(token)}`;
       await client.connect({ wsUrl });
-    } catch (e) {
-      setStatus(`Connection failed: ${e}`);
+    } catch {
+      setStatus("Couldn't connect — try again in a moment.");
     }
   };
 
@@ -801,12 +801,12 @@ export default function ConversationView({
           return;
         }
         // Send failed — still the user's turn, don't leave the orb thinking.
-        setStatus(`Send failed: ${r.status}`);
+        setStatus("Couldn't send that — try again.");
         setSpeakerState("your_turn");
       }
-    } catch (e) {
+    } catch {
       // Send failed — still the user's turn, don't leave the orb thinking.
-      setStatus(`Send error: ${e}`);
+      setStatus("Couldn't send that — try again.");
       setSpeakerState("your_turn");
     } finally {
       sendingRef.current = false;

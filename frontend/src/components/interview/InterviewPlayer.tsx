@@ -5,6 +5,7 @@ import Round1Panel from "./Round1Panel";
 import Round2Panel from "./Round2Panel";
 import Transcript from "./Transcript";
 import type { AnswerResult, ComprehensionResult, InterviewItem } from "./api";
+import { safeMessage } from "../shared/copy";
 
 const inkShadow = {
   ["--shadow-color"]: "var(--color-line)",
@@ -111,9 +112,7 @@ export default function InterviewPlayer({
       })
       .catch((e) => {
         if (!cancelled) {
-          setAudioError(
-            e instanceof Error ? e.message : "Couldn't load the audio — try again."
-          );
+          setAudioError(safeMessage(e, "Couldn't load the audio — try again."));
         }
       })
       .finally(() => {

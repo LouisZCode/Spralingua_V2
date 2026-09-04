@@ -6,6 +6,7 @@ import { diffTokens, MarkedText } from "../shared/feedback";
 import { diffWords, segmentTranscript } from "../sprechen/slipDiff";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 import type {
   AnswerResult,
   Brief,
@@ -73,9 +74,7 @@ export default function Round2Panel({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {

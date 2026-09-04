@@ -7,6 +7,7 @@ import { FeedbackCard } from "../shared/feedback";
 import { playSound } from "../shared/sound";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { safeMessage } from "../shared/copy";
 
 // A missed item returns once at the end of the round — a second chance from
 // memory, after the correction has had time to fade. `retry` marks the copy
@@ -166,9 +167,7 @@ export default function BauteilTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {
@@ -195,9 +194,7 @@ export default function BauteilTrainer({
         refreshCoins();
       } else {
         setFailed(
-          err instanceof Error && err.message && !err.message.includes("failed (")
-            ? err.message
-            : "Couldn't check that — try again in a moment."
+          safeMessage(err, "Couldn't check that — try again in a moment.")
         );
       }
     } finally {
