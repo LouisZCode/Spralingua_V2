@@ -19,7 +19,10 @@ dependencies = [
     "opentelemetry-api>=1.42.0",
     "opentelemetry-exporter-otlp-proto-http>=1.42.0",
     "opentelemetry-sdk>=1.42.0",
-    "pipecat>=0.3.0",
+    # REL-004 (2026-09-04): the bare `pipecat` PyPI package (an unrelated sensor
+    # logger) used to be pinned here and squatted pipecat-ai's `pipecat/` namespace;
+    # a fresh install let it win `pipecat/__init__.py` and broke `import pipecat`.
+    # Only pipecat-ai belongs here.
     "pipecat-ai[deepgram,silero]>=0.0.98",
     "psycopg2-binary>=2.9",
     "pydub>=0.25.1",
