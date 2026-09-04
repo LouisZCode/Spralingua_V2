@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { slowTranscriptionNotice } from "../shared/copy";
+import { useSlowNotice } from "../shared/useSlowNotice";
 
 // CLARA-16: the live forge's new shape — a production task ("Make a wish
 // about your weekend using 'hätte'"), answered with ONE complete German
@@ -121,6 +123,12 @@ export default function ProduceCard({
   const [recording, setRecording] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [checking, setChecking] = useState(false);
+  // STT-004 P2: `checking` also covers submitTyped()/giveUp() below, which
+  // never upload audio — this narrower flag is true only while
+  // submitAudio()'s Deepgram round-trip is in flight, so the "transcription
+  // is slow" line never shows for a typed submit or a give-up wait.
+  const [awaitingAudio, setAwaitingAudio] = useState(false);
+  const slowTranscription = useSlowNotice(awaitingAudio);
   const [verdict, setVerdict] = useState<Verdict | null>(null);
   const [hintShown, setHintShown] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
@@ -217,6 +225,7 @@ export default function ProduceCard({
 
   async function submitAudio(audio: Blob) {
     setChecking(true);
+    setAwaitingAudio(true);
     setFailed(null);
     try {
       const res = await onAttemptAudio(audio);
@@ -225,6 +234,7 @@ export default function ProduceCard({
       handleError(err);
     } finally {
       setChecking(false);
+      setAwaitingAudio(false);
     }
   }
 
@@ -413,10 +423,16 @@ export default function ProduceCard({
               {recording ? `Stop · ${elapsed}s` : "Record"}
             </button>
           </div>
-          {recording && (
+          {recording ? (
             <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
               speak your sentence, then tap stop
             </p>
+          ) : (
+            slowTranscription && (
+              <p className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
+                {slowTranscriptionNotice()}
+              </p>
+            )
           )}
           {/* Quiet styling — never a rival to Check/Record, mirrors every
               other card's give-up affordance. */}

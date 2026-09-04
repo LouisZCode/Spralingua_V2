@@ -18,6 +18,8 @@ import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { playSound } from "../shared/sound";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
+import { useSlowNotice } from "../shared/useSlowNotice";
+import { slowTranscriptionNotice } from "../shared/copy";
 
 type Verdict = "correct" | "close" | "revealed";
 
@@ -264,6 +266,10 @@ export default function VocabTrainer({
 
   const [recording, setRecording] = useState(false);
   const [checking, setChecking] = useState(false); // clip uploaded, verdict pending
+  // STT-004 P2: `checking` here is audio-only (the one setChecking(true) in
+  // this file is inside check(audio) below) — no give-up/typed path to
+  // exclude, unlike Sprechen/Szenario/ProduceCard.
+  const slowTranscription = useSlowNotice(checking);
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [attemptError, setAttemptError] = useState<string | null>(null);
@@ -1390,7 +1396,7 @@ export default function VocabTrainer({
               touch devices (no hover) still fall back to the plain nbsp. */}
           <p className="mt-2 font-body text-[12px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
             {checking ? (
-              "Checking your sentence…"
+              slowTranscription ? slowTranscriptionNotice() : "Checking your sentence…"
             ) : flipped ? (
               scheduleLine
             ) : (

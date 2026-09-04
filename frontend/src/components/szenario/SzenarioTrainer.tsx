@@ -9,7 +9,8 @@ import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { WordRejectedError, type GlossInfo } from "../satzschmiede/api";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
-import { safeMessage } from "../shared/copy";
+import { safeMessage, slowTranscriptionNotice } from "../shared/copy";
+import { useSlowNotice } from "../shared/useSlowNotice";
 
 type Phase = "intro" | "scene" | "result";
 
@@ -130,6 +131,12 @@ export default function SzenarioTrainer({
   const [phase, setPhase] = useState<Phase>(flow ? "scene" : initialPhase);
   const [recording, setRecording] = useState(false);
   const [checking, setChecking] = useState(false);
+  // STT-004 P2: `checking` also covers giveUp() below, which never uploads
+  // audio — this narrower flag is true only while submit(audio)'s Deepgram
+  // round-trip is in flight, so the "transcription is slow" line never
+  // shows for a give-up wait.
+  const [awaitingAudio, setAwaitingAudio] = useState(false);
+  const slowTranscription = useSlowNotice(awaitingAudio);
   const [elapsed, setElapsed] = useState(0);
   const [verdict, setVerdict] = useState<StructureResult | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -257,6 +264,7 @@ export default function SzenarioTrainer({
 
   async function submit(audio: Blob) {
     setChecking(true);
+    setAwaitingAudio(true);
     try {
       const res = await onAttempt(scenario.scenarioId, scenario.question, audio);
       setVerdict(res);
@@ -276,6 +284,7 @@ export default function SzenarioTrainer({
       }
     } finally {
       setChecking(false);
+      setAwaitingAudio(false);
     }
   }
 
@@ -678,7 +687,7 @@ export default function SzenarioTrainer({
         <div className="mt-7 flex flex-col items-center gap-3">
           {checking ? (
             <p className="font-body text-[14px] font-semibold text-ink-muted">
-              Checking…
+              {slowTranscription ? slowTranscriptionNotice() : "Checking…"}
             </p>
           ) : (
             <>

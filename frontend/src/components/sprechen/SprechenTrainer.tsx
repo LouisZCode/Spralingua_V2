@@ -12,7 +12,8 @@ import { diffWords, segmentTranscript } from "./slipDiff";
 import { playSound } from "../shared/sound";
 import { InsufficientCoinsError } from "@/lib/coins";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
-import { safeMessage } from "../shared/copy";
+import { safeMessage, slowTranscriptionNotice } from "../shared/copy";
+import { useSlowNotice } from "../shared/useSlowNotice";
 
 type Phase = "drill" | "done";
 
@@ -92,6 +93,12 @@ export default function SprechenTrainer({
   const [index, setIndex] = useState(0);
   const [recording, setRecording] = useState(false);
   const [checking, setChecking] = useState(false);
+  // STT-004 P2: `checking` also covers giveUp() below, which never uploads
+  // audio — this narrower flag is true only while submit(audio)'s Deepgram
+  // round-trip is in flight, so the "transcription is slow" line never
+  // shows for a give-up wait.
+  const [awaitingAudio, setAwaitingAudio] = useState(false);
+  const slowTranscription = useSlowNotice(awaitingAudio);
   const [elapsed, setElapsed] = useState(0);
   const [verdict, setVerdict] = useState<SprechenVerdict | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -236,6 +243,7 @@ export default function SprechenTrainer({
 
   async function submit(audio: Blob) {
     setChecking(true);
+    setAwaitingAudio(true);
     try {
       const res = await onAttempt(task.id, audio);
       setVerdict(res);
@@ -256,6 +264,7 @@ export default function SprechenTrainer({
       }
     } finally {
       setChecking(false);
+      setAwaitingAudio(false);
     }
   }
 
@@ -428,7 +437,7 @@ export default function SprechenTrainer({
             )}
             {checking ? (
               <p className="font-body text-[14px] font-semibold text-ink-muted">
-                Checking…
+                {slowTranscription ? slowTranscriptionNotice() : "Checking…"}
               </p>
             ) : (
               <>

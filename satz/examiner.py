@@ -14,6 +14,7 @@ one-shot calls turn the clip into feedback:
    only, shown as a grammar note — it never fails the attempt).
 """
 
+import asyncio
 import re
 import time
 from typing import Optional
@@ -69,9 +70,41 @@ def _deepgram_url(language: str) -> str:
 
 # STT-004.1: measured baseline for this call is ~0.8-1.5s, but a bad window
 # on 2026-08 produced 5.4s/9.6s/16.2s/22.4s/30.9s calls (the last grazing the
-# `aiohttp.ClientTimeout(total=30)` below) with no visibility beyond digging
+# old `aiohttp.ClientTimeout(total=30)`) with no visibility beyond digging
 # through Langfuse after the fact. Anything past this is logged + tagged.
 _SLOW_TRANSCRIBE_THRESHOLD_S = 4.0
+
+# STT-004.2: per-attempt wall-clock deadline, mirroring the judges' own
+# figure (agents/openrouter_llm.py::structured_judge_llm's deadline_s=12.0).
+# The measured baseline above is 0.8-1.5s; 12s comfortably clears that while
+# cutting the tail well short of the old 30.9s outlier. aiohttp's `total=`
+# timeout (used below) already bounds the WHOLE request — connect, send,
+# and read — regardless of how the connection behaves in between, unlike
+# httpx's default per-read timeout (see DeadlineChatOpenAI's docstring in
+# agents/openrouter_llm.py for why that distinction mattered there); no
+# extra asyncio.wait_for wrapper is needed for the deadline itself.
+_DEEPGRAM_TIMEOUT_S = 12.0
+
+# One retry on timeout or a transient transport error — a fresh POST often
+# lands on a healthy Deepgram node. NOT retried: a 4xx auth/format error
+# (400/401/403/404/...), which a retry can never fix, so a bad API key or a
+# malformed request fails exactly as fast as it did before this change.
+_MAX_TRANSCRIBE_ATTEMPTS = 2
+
+
+def _is_retryable_stt_error(exc: BaseException) -> bool:
+    """STT-004 P2: True for a timeout or a transient transport error
+    (connection failure, 5xx, 429) — the shapes a fresh POST can plausibly
+    route around. False for everything else, notably a 4xx auth/format
+    error, which describes the request itself and would fail identically
+    on a retry."""
+    if isinstance(exc, asyncio.TimeoutError):
+        return True
+    if isinstance(exc, aiohttp.ClientResponseError):
+        return exc.status == 429 or exc.status >= 500
+    if isinstance(exc, aiohttp.ClientConnectionError):
+        return True
+    return False
 
 
 async def transcribe_attempt(
@@ -95,6 +128,19 @@ async def transcribe_attempt(
     call site. The one caller that passes something else is
     ``/tandem/say-audio``, which derives "en" server-side from the live
     session's lesson (Clara's English teacher room) — never from client input.
+
+    STT-004 P2: up to `_MAX_TRANSCRIBE_ATTEMPTS` POSTs of the SAME bytes —
+    a timeout or a transient transport error (`_is_retryable_stt_error`)
+    gets one retry, a fresh connection that often lands on a healthy node.
+    A 4xx auth/format error raises immediately, no retry. Coins are never
+    touched here — every caller already ran `admit_coins_or_402` (pay-then-
+    play) before this call, so a retry inside one HTTP request can't
+    re-charge; see CLAUDE.md's coin section. The Langfuse cost stamp below
+    only ever fires once, off the ONE response that actually succeeded, so
+    it can't double-count either — the one caveat is a timed-out first
+    attempt that Deepgram silently finished server-side anyway: that's a
+    real-world Deepgram-side cost this stamp has no way to see, same as any
+    client-side timeout against any provider.
     """
     url = _deepgram_url(language)
     terms = [t for t in ((kt or "").strip() for kt in keyterms or []) if t]
@@ -104,7 +150,7 @@ async def transcribe_attempt(
         "Authorization": f"Token {deepgram_api_key}",
         "Content-Type": mimetype or "audio/webm",
     }
-    timeout = aiohttp.ClientTimeout(total=30)
+    timeout = aiohttp.ClientTimeout(total=_DEEPGRAM_TIMEOUT_S)
     # OBS-006: the `stt` child of the route's satz-attempt trace — span
     # duration is the Deepgram round-trip, the half of the attempt's latency
     # the examiner LLM can't explain.
@@ -119,14 +165,57 @@ async def transcribe_attempt(
             span.set_attribute("keyterms", ", ".join(terms))
         span.set_attribute("audio.bytes", len(audio))
         call_started = time.monotonic()
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(url, headers=headers, data=audio) as resp:
-                resp.raise_for_status()
-                body = await resp.json()
+        body = None
+        last_exc: BaseException | None = None
+        attempt = 0
+        for attempt in range(1, _MAX_TRANSCRIBE_ATTEMPTS + 1):
+            attempt_started = time.monotonic()
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.post(url, headers=headers, data=audio) as resp:
+                        resp.raise_for_status()
+                        body = await resp.json()
+                span.set_attribute(
+                    f"stt.attempt_{attempt}_duration_s", time.monotonic() - attempt_started
+                )
+                last_exc = None
+                break
+            except Exception as exc:  # noqa: BLE001 — classified below, re-raised if fatal
+                last_exc = exc
+                span.set_attribute(
+                    f"stt.attempt_{attempt}_duration_s", time.monotonic() - attempt_started
+                )
+                if attempt < _MAX_TRANSCRIBE_ATTEMPTS and _is_retryable_stt_error(exc):
+                    logger.warning(
+                        f"Deepgram prerecorded call failed "
+                        f"({type(exc).__name__}: {exc}) — retrying "
+                        f"(attempt {attempt + 1}/{_MAX_TRANSCRIBE_ATTEMPTS})"
+                    )
+                    continue
+                break
+
         elapsed_s = time.monotonic() - call_started
         is_slow = elapsed_s > _SLOW_TRANSCRIBE_THRESHOLD_S
         span.set_attribute("stt.duration_s", elapsed_s)
         span.set_attribute("stt.slow", is_slow)
+        if attempt > 1:
+            # Only set on the retried path — a clean first-try attempt
+            # carries neither attribute, per STT-004 P2's spec.
+            span.set_attribute("stt.retried", True)
+            span.set_attribute("stt.attempts", attempt)
+
+        if last_exc is not None:
+            # Final failure (retry exhausted, or a non-retryable error on
+            # attempt 1) — propagate the SAME exception type Deepgram/aiohttp
+            # actually raised, so every caller's existing `except Exception`
+            # -> 502 "Couldn't process the audio" path is untouched.
+            if is_slow:
+                logger.warning(
+                    f"Deepgram prerecorded call was slow before failing: "
+                    f"{elapsed_s:.1f}s (threshold {_SLOW_TRANSCRIBE_THRESHOLD_S:.1f}s)"
+                )
+            raise last_exc
+
         if is_slow:
             logger.warning(
                 f"Deepgram prerecorded call was slow: {elapsed_s:.1f}s "
@@ -137,6 +226,8 @@ async def transcribe_attempt(
         # Exact per-attempt cost: Deepgram's prerecorded response carries the
         # clip's own length at `metadata.duration` (seconds). Missing key ->
         # skip the stamp silently, never crash the attempt over a cost metric.
+        # This only ever runs once, off the successful response — see the
+        # docstring's cost note above.
         duration = body.get("metadata", {}).get("duration")
         if duration is not None:
             audio_seconds = round(duration, 2)
