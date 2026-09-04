@@ -72,6 +72,62 @@ const PRACTICE_STATE_LABEL: Record<SpeakerState, string> = {
 const SILENT_AUDIO_DATA_URI =
   "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=";
 
+// MOBILE-001 P4: lifecycle guard. There is deliberately NO reconnection
+// logic (CLAUDE.md) — iOS suspends JS on screen lock / backgrounding, so a
+// long-backgrounded session can't be resumed, only ended cleanly. A short
+// hide (a desktop tab-switch) must be invisible to the learner — Lena keeps
+// talking — so this is the threshold before we treat a hide as the end of
+// the session. ~30s is about where iOS actually suspends a backgrounded
+// page, so a real lock-screen case crosses it almost immediately while a
+// glance at another tab never does. Exported so a test can reference the
+// exact value instead of retyping it.
+export const BACKGROUND_GRACE_MS = 30_000;
+
+// House style: short, no apology, no jargon — same tone as this file's other
+// status strings (e.g. "Couldn't connect — try again in a moment.").
+const BACKGROUND_END_MESSAGE =
+  "The session ended while the app was in the background.";
+
+// BUG-009 / MOBILE-001 P4: shared "has the socket gone quiet for too long"
+// threshold — three missed ~25s server heartbeats. Hoisted so the liveness
+// watchdog and the lifecycle guard agree on one definition of "dead" instead
+// of two independent magic numbers. NOT `PipecatClient.connected`/`.state`:
+// measured against this app's WebSocketTransport, `.connected` reflects
+// `_transport.state` staying at "connecting" for the whole session (this
+// transport's "ready" transition needs a bot-ready RTVI handshake this
+// backend doesn't send), so it reads false on a fully live session — reusing
+// the proven BUG-009 signal (time since any real traffic) instead.
+const WATCHDOG_DEAD_MS = 80_000;
+
+// MOBILE-001 P4: fire-and-forget disconnect (BUG-010: never await — a
+// half-open socket's disconnect() promise can stall) that also swallows one
+// specific known-benign rejection: @pipecat-ai/websocket-transport's
+// WavRecorder can throw "Session ended: please call .begin() first" from its
+// own internal audio-level polling racing this exact teardown — reproduces
+// on ANY disconnect() call in this app (confirmFinish's plain `void
+// client.disconnect()` hits it too), not something introduced by or fixable
+// from this guard. The two call sites below fire from a plain event
+// listener with nothing upstream to catch a rejection, unlike
+// confirmFinish/handleFinish's callers, so this local helper is what keeps
+// them from surfacing it as an unhandled rejection.
+const BENIGN_TEARDOWN_ERROR = "Session ended: please call .begin() first";
+function disconnectQuietly(client: PipecatClient | null): void {
+  if (!client) return;
+  void client.disconnect().catch((e: unknown) => {
+    const msg = e instanceof Error ? e.message : String(e);
+    if (msg.includes(BENIGN_TEARDOWN_ERROR)) return;
+    console.warn("[ConversationView] disconnect() rejected:", e);
+  });
+}
+
+// MOBILE-001 P4: how long the "ended while in the background" notice stays
+// on screen before the session actually winds down — without this beat the
+// finish path navigates away in the same tick the notice is set, so a
+// returning learner never reads it (the /learn surface unmounts the whole
+// view on finish, so there it would never even paint). Same idea as
+// AGENT_END_DELAY_MS below.
+const BACKGROUND_NOTICE_MS = 2500;
+
 export default function ConversationView({
   params,
   onFinish,
@@ -318,6 +374,25 @@ export default function ConversationView({
   // skipBriefing (Clara): guards the mount effect below so it fires
   // startCall exactly once, not on every re-render.
   const autoStartedRef = useRef(false);
+  // MOBILE-001 P4: timestamp of the most recent visibilitychange->hidden,
+  // null while visible/never hidden. Read (and cleared) by the matching
+  // ->visible transition below to measure how long the tab was backgrounded.
+  const hiddenAtRef = useRef<number | null>(null);
+  const backgroundEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // MOBILE-001 P4: set by the lifecycle-guard effect below; handleFinish
+  // calls this the instant a session winds down (any reason) so the
+  // visibilitychange/pagehide listeners can never fire again once the
+  // session is over — same "detach on every exit path" contract as the
+  // timers it clears alongside it. Redundant with the effect's own
+  // useEffect cleanup (phase change / unmount) but that cleanup alone isn't
+  // enough here: an agent-completed finish leaves `phase` at "live" (the
+  // summary modal renders ON TOP of LivePhase, not instead of it — see the
+  // main return below), so without this a listener would still be live
+  // after a perfectly normal session ended.
+  const lifecycleDetachRef = useRef<(() => void) | null>(null);
+  // MOBILE-001 P4: the one visible line this guard can show — see
+  // LivePhase's `notice` prop. Null the rest of the time.
+  const [liveNotice, setLiveNotice] = useState<string | null>(null);
 
   // Fetch briefing copy when the view mounts. Aborted on unmount so a fast
   // unmount can't setState on an unmounted component.
@@ -457,6 +532,16 @@ export default function ConversationView({
   const handleFinish = () => {
     if (finishedRef.current) return;
     finishedRef.current = true;
+    // MOBILE-001 P4: whichever path got us here (user, agent, the BUG-009
+    // watchdog, or this guard itself), the visibilitychange/pagehide
+    // listeners have nothing left to do — detach them so a stray event on a
+    // finished-but-still-mounted session (the summary modal renders on top
+    // of LivePhase, not instead of it) never fires them again.
+    if (lifecycleDetachRef.current) {
+      lifecycleDetachRef.current();
+      lifecycleDetachRef.current = null;
+    }
+    hiddenAtRef.current = null;
     // AGENT-00X: fire before either branch below — a still-open exercise
     // card must disappear the instant the session winds down, whether it
     // ends up showing the summary modal or going straight back to /practice.
@@ -471,6 +556,10 @@ export default function ConversationView({
     if (agentEndTimerRef.current) {
       clearTimeout(agentEndTimerRef.current);
       agentEndTimerRef.current = null;
+    }
+    if (backgroundEndTimerRef.current) {
+      clearTimeout(backgroundEndTimerRef.current);
+      backgroundEndTimerRef.current = null;
     }
     // AGENT-007 Proposal-3: session winding down — release the deal-pending
     // flag too, same reasoning as the two timers just above.
@@ -544,15 +633,98 @@ export default function ConversationView({
   useEffect(() => {
     if (phase !== "live") return;
     const LIVENESS_CHECK_MS = 15_000;
-    const LIVENESS_TIMEOUT_MS = 80_000; // 3 missed ~25s heartbeats
     const id = setInterval(() => {
       if (finishedRef.current) return;
-      if (Date.now() - lastActivityRef.current > LIVENESS_TIMEOUT_MS) {
+      if (Date.now() - lastActivityRef.current > WATCHDOG_DEAD_MS) {
         void clientRef.current?.disconnect(); // safe no-op if already dead
         handleFinish();
       }
     }, LIVENESS_CHECK_MS);
     return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
+  // MOBILE-001 P4: lifecycle guard. Live phase only — registered here,
+  // detached both by this effect's own cleanup (unmount / phase change) and
+  // explicitly by handleFinish (see lifecycleDetachRef's comment above for
+  // why the effect cleanup alone isn't sufficient). No reconnection logic
+  // exists (CLAUDE.md) — this is a "notice and end cleanly" guard, not a
+  // resume feature.
+  useEffect(() => {
+    if (phase !== "live") return;
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        // Do NOT disconnect or mute here — a desktop learner switching tabs
+        // for a few seconds must notice nothing (Lena may keep talking).
+        // Just remember when we went out of view.
+        hiddenAtRef.current = Date.now();
+        return;
+      }
+      // Visible again.
+      const hiddenAt = hiddenAtRef.current;
+      hiddenAtRef.current = null;
+      if (hiddenAt == null) return; // spurious event, or we were never hidden
+      if (finishedRef.current) return; // the watchdog/onDisconnected already
+      // ended this session while we were hidden — its message stays; ours
+      // never overwrites it.
+      const elapsed = Date.now() - hiddenAt;
+      // See WATCHDOG_DEAD_MS's own comment for why this reuses the BUG-009
+      // staleness signal instead of PipecatClient.connected/.state.
+      const socketGone = Date.now() - lastActivityRef.current > WATCHDOG_DEAD_MS;
+      if (elapsed <= BACKGROUND_GRACE_MS && !socketGone) return; // under the
+      // grace period and still alive — nothing to do beyond having cleared
+      // the timestamp above.
+      if (backgroundEndTimerRef.current) return; // already winding down
+      setStatus(BACKGROUND_END_MESSAGE);
+      setLiveNotice(BACKGROUND_END_MESSAGE);
+      // Same path a deliberate Finish click uses (confirmFinish): ended_by
+      // records "user" and the disconnect-side coin charge for the
+      // exchanges actually used still fires normally. The disconnect and
+      // the finish wait BACKGROUND_NOTICE_MS so the notice is actually read
+      // before the view goes away; handleFinish clears this timer if any
+      // other path (onDisconnected, the watchdog) gets there first.
+      endReasonRef.current = "user";
+      backgroundEndTimerRef.current = setTimeout(() => {
+        backgroundEndTimerRef.current = null;
+        const client = clientRef.current;
+        clientRef.current = null;
+        disconnectQuietly(client); // best-effort — see disconnectQuietly's
+        // own comment; BUG-010: never await here, a half-open socket's
+        // disconnect() promise can stall.
+        handleFinish();
+      }, BACKGROUND_NOTICE_MS);
+    };
+
+    const onPageHide = () => {
+      // Real unload/navigation — best-effort clean close so the server sees
+      // a normal disconnect instead of a TCP idle timeout. Guarded against
+      // the unmount cleanup effect's own disconnect() the same way
+      // confirmFinish guards it: null the ref first, and disconnect() on an
+      // already-disconnected client is a safe no-op either way.
+      const client = clientRef.current;
+      clientRef.current = null;
+      disconnectQuietly(client);
+    };
+
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("pagehide", onPageHide);
+
+    const detach = () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("pagehide", onPageHide);
+      if (backgroundEndTimerRef.current) {
+        clearTimeout(backgroundEndTimerRef.current);
+        backgroundEndTimerRef.current = null;
+      }
+    };
+    lifecycleDetachRef.current = detach;
+
+    return () => {
+      detach();
+      lifecycleDetachRef.current = null;
+      hiddenAtRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
@@ -981,6 +1153,7 @@ export default function ConversationView({
               messages={messages}
               speakerState={speakerState}
               transcriptRef={transcriptRef}
+              notice={liveNotice}
               onFinish={() => setShowFinishConfirm(true)}
               prominentFinish={TANDEM_LESSONS.has(params.lesson) || params.lesson === TEACHER_LESSON}
               germanWay={TANDEM_LESSONS.has(params.lesson)}
@@ -1315,6 +1488,7 @@ function LivePhase({
   messages,
   speakerState,
   transcriptRef,
+  notice,
   onFinish,
   prominentFinish,
   germanWay,
@@ -1337,6 +1511,9 @@ function LivePhase({
   messages: ChatMessage[];
   speakerState: SpeakerState;
   transcriptRef: React.RefObject<HTMLElement | null>;
+  // MOBILE-001 P4: the lifecycle guard's one visible line — null the rest of
+  // the time. Rendered right under the header, tokens only.
+  notice?: string | null;
   onFinish: () => void;
   // TAND-004: tandem sessions end by user choice — the exchange cap is a
   // rarely-hit backstop — so tandem gets an unmissable primary button here
@@ -1540,6 +1717,14 @@ function LivePhase({
           </button>
         )}
       </header>
+
+      {/* MOBILE-001 P4: lifecycle-guard notice — only ever non-null once the
+          session is winding down from a backgrounded/dead-socket end. */}
+      {notice && (
+        <p className="rise-in mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
+          {notice}
+        </p>
+      )}
 
       {/* Speaker orb hero — takes all remaining vertical space and centers */}
       <div
