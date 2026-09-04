@@ -23,6 +23,9 @@ export type CaseVerdict = {
   // something else (most often the other case of a two-way preposition) —
   // the highest-value feedback in the exercise. Null otherwise.
   meansInstead: string | null;
+  // GRAM-009: the taxonomy pattern this item drills — feeds FeedbackCard's
+  // collapsed "Warum?" disclosure (GET /grammar/pattern/{id}).
+  patternId: string;
 };
 
 async function request<T>(

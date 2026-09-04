@@ -53,6 +53,10 @@ async def grade(item: dict, transcript: str, *, give_up: bool = False) -> tuple[
                 "hitQuotes": [],
                 "slips": [],
                 "gaveUp": True,
+                # GRAM-009: lets the frontend fetch GET /grammar/pattern/{id}
+                # for the collapsed "Warum?" disclosure. camelCase to match
+                # this drill's own verdict convention (constraintMet, …).
+                "patternId": item["pattern_id"],
             },
             True,  # judge_skipped
         )
@@ -73,6 +77,8 @@ async def grade(item: dict, transcript: str, *, give_up: bool = False) -> tuple[
                 {"quote": s.quote, "corrected": s.corrected, "note": s.note}
                 for s in verdict.slips
             ],
+            # GRAM-009: same as the give-up branch above.
+            "patternId": item["pattern_id"],
         },
         False,  # judge_skipped
     )

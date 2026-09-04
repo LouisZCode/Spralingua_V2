@@ -507,6 +507,7 @@ export default function SatzbauTrainer({
                 attempt={builtText}
                 corrected={correctedText}
                 note={verdict.note}
+                patternId={verdict.patternId}
               />
             )}
             {/* The variant — a genuinely different-but-valid order the

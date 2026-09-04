@@ -411,6 +411,7 @@ export default function BauteilTrainer({
                 attempt={value.trim()}
                 corrected={verdict.expected}
                 note={verdict.note}
+                patternId={verdict.patternId}
               >
                 {/* The two axes, never conflated (GRAM-002 rule 6): did they
                     aim at the right case, and did the endings execute it. */}

@@ -427,6 +427,7 @@ export default function VerbindungenTrainer({
                   attempt={value.trim()}
                   corrected={verdict.expected}
                   note={verdict.note}
+                  patternId={verdict.patternId}
                 />
               )}
               {/* The canonical chunk — the actual thing to memorize, shown on

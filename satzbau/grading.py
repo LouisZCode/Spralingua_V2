@@ -97,6 +97,10 @@ async def grade(item: dict, order: list[str], *, give_up: bool = False) -> tuple
             "rule": item["rule"],
             "note": note,
             "variant": variant,
+            # GRAM-009: lets the frontend fetch GET /grammar/pattern/{id}
+            # for the collapsed "Warum?" disclosure under the verdict card.
+            # camelCase like every other practice payload in this repo.
+            "patternId": item["pattern_id"],
         },
         judge_skipped,
     )

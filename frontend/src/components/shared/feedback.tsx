@@ -1,6 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { HTTP_BASE } from "@/lib/api";
+import { useAuth } from "../auth/AuthContext";
 
 // ─── UI-008: one feedback skeleton for every drill ──────────────────────────
 // Word-level diff between attempt and correction so the error (red, in the
@@ -111,19 +114,148 @@ export function MarkedText({
   );
 }
 
+// ─── GRAM-009: the curated-explanation "Warum?" disclosure ────────────────
+// One collapsed line under any wrong-answer card (or a /development focus
+// card) that, on first open, fetches GET /grammar/pattern/{id} — the same
+// grammar/explanations.yaml bank Clara's kickoff draws on, minus the
+// native_note field that stays her own casual-aside mechanism. Collapsed by
+// default: opening it eagerly would telegraph the next item in a round.
+
+type PatternExplanation = { pair: string[]; point: string; test: string };
+
+// Module-scope cache: the same pattern often reappears within one round (a
+// Flow interleave, or a hot-pattern reserve), and the bank never changes at
+// runtime, so a second "Warum?" tap for a pattern already seen this session
+// renders instantly with no repeat network call. `null` means "asked, and
+// the backend 404d" — remembered too, so the disclosure stays hidden on a
+// second render for the same id without re-asking.
+const explanationCache = new Map<string, PatternExplanation | null>();
+
+// Exported so the /development focus cards (which show a pattern id
+// outside any FeedbackCard) can reuse the exact same disclosure rather than
+// forking a second implementation.
+export function PatternWhy({ patternId }: { patternId?: string | null }) {
+  const { token } = useAuth();
+  const [state, setState] = useState<"idle" | "loading" | "done" | "notfound" | "error">(
+    () => {
+      if (!patternId) return "idle";
+      const cached = explanationCache.get(patternId);
+      if (cached === undefined) return "idle";
+      return cached === null ? "notfound" : "done";
+    },
+  );
+  const [entry, setEntry] = useState<PatternExplanation | null>(
+    patternId ? explanationCache.get(patternId) ?? null : null,
+  );
+  const [open, setOpen] = useState(false);
+
+  // A new item is a new pattern — collapse, and adopt whatever the cache
+  // already knows about it (idle/notfound/done), never carrying the
+  // previous item's open panel over.
+  useEffect(() => {
+    setOpen(false);
+    if (!patternId) {
+      setState("idle");
+      setEntry(null);
+      return;
+    }
+    const cached = explanationCache.get(patternId);
+    if (cached === undefined) {
+      setState("idle");
+      setEntry(null);
+    } else {
+      setState(cached === null ? "notfound" : "done");
+      setEntry(cached);
+    }
+  }, [patternId]);
+
+  if (!patternId || !token || state === "notfound") return null;
+
+  const ask = async () => {
+    if (state === "done") {
+      setOpen((v) => !v);
+      return;
+    }
+    setState("loading");
+    try {
+      const res = await fetch(`${HTTP_BASE}/grammar/pattern/${encodeURIComponent(patternId)}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 404) {
+        explanationCache.set(patternId, null);
+        setState("notfound");
+        return;
+      }
+      if (!res.ok) throw new Error(`pattern lookup failed (${res.status})`);
+      const data = (await res.json()) as PatternExplanation;
+      explanationCache.set(patternId, data);
+      setEntry(data);
+      setState("done");
+      setOpen(true);
+    } catch {
+      // Explanation is optional context — fail soft with a retryable
+      // button, never an error screen over the verdict itself.
+      setState("error");
+    }
+  };
+
+  return (
+    <div className="mt-2 flex flex-col items-center">
+      <button
+        type="button"
+        onClick={ask}
+        disabled={state === "loading"}
+        className="font-body text-[11px] font-semibold text-ink-muted underline-offset-2 hover:underline disabled:pointer-events-none disabled:opacity-40"
+      >
+        {state === "loading"
+          ? "Wird geladen…"
+          : state === "error"
+            ? "Konnte nicht laden — nochmal?"
+            : open
+              ? "Warum? ▴"
+              : "Warum? ▾"}
+      </button>
+      {state === "done" && open && entry && (
+        <div className="mt-2 max-w-[420px] rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3 text-left">
+          <div className="flex flex-col gap-1">
+            {entry.pair.map((sentence, i) => (
+              <p key={i} className="font-body text-[14px] leading-snug text-ink">
+                {sentence}
+              </p>
+            ))}
+          </div>
+          <p className="mt-2 font-body text-[13px] leading-snug text-ink-soft">
+            {entry.point}
+          </p>
+          <p className="mt-2 font-body text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+            Check: {entry.test}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // The shared wrong-answer block: attempt (red-marked) → correction
-// (green-marked) → per-drill extras (children) → explanation note.
+// (green-marked) → per-drill extras (children) → explanation note → the
+// collapsed "Warum?" pattern disclosure (GRAM-009, optional).
 export function FeedbackCard({
   attempt,
   corrected,
   note,
   accent = "red",
+  patternId,
   children,
 }: {
   attempt: string;
   corrected?: string | null;
   note?: string | null;
   accent?: "red" | "gold";
+  // GRAM-009: the taxonomy pattern this miss belongs to, when the drill's
+  // verdict carries one — renders a collapsed "Warum?" disclosure under the
+  // card. Omitted (the default), nothing changes from before this prop
+  // existed.
+  patternId?: string | null;
   children?: ReactNode;
 }) {
   const d = corrected ? diffTokens(attempt, corrected) : null;
@@ -155,6 +287,7 @@ export function FeedbackCard({
           {note}
         </p>
       )}
+      <PatternWhy patternId={patternId} />
     </div>
   );
 }

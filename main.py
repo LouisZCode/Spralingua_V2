@@ -308,6 +308,17 @@ app.include_router(payments_router)
 from coins.routes import router as coins_router  # noqa: E402 — after payments, avoids circular import
 
 app.include_router(coins_router)
+# Grammar-pattern explanation bank (GRAM-009): GET /grammar/pattern/{id} —
+# the same curated pair/point/test Clara's kickoff draws from
+# (grammar/explanations.yaml), surfaced to every typed drill's wrong-answer
+# card and the /development focus cards. Free (no coin gate), auth-only.
+# Imported directly from the submodule, not re-exported by grammar/__init__.py
+# — see that file's GRAM-009 comment for why (auth.routes imports FROM
+# grammar, so grammar/__init__.py eagerly importing grammar.routes, which
+# needs auth.deps, would cycle).
+from grammar.routes import router as grammar_router  # noqa: E402 — after auth, avoids circular import
+
+app.include_router(grammar_router)
 
 
 @app.get("/health")

@@ -27,6 +27,10 @@ export type ZeitVerdict = {
   reading: string | null;
   // Only set on correct ambiguous items: the OTHER valid form + its meaning.
   alt: { form: string; reading: string } | null;
+  // GRAM-009: the taxonomy pattern this item drills — feeds FeedbackCard's
+  // collapsed "Warum?" disclosure (GET /grammar/pattern/{id}). camelCase
+  // like every other practice payload in this repo.
+  patternId: string;
 };
 
 async function request<T>(

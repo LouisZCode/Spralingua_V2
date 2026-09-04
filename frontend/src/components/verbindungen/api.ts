@@ -19,6 +19,10 @@ export type ChunkVerdict = {
   // One ≤14-word English line naming exactly which element broke (pronoun /
   // preposition / case / compound); null when correct.
   note: string | null;
+  // GRAM-009: the taxonomy pattern this item drills — feeds FeedbackCard's
+  // collapsed "Warum?" disclosure (GET /grammar/pattern/{id}). camelCase
+  // like every other practice payload in this repo.
+  patternId: string;
 };
 
 async function request<T>(

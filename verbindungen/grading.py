@@ -91,6 +91,10 @@ async def grade(item: dict, answer: str, *, give_up: bool = False) -> tuple[dict
             "expected": item["answer"],
             "chunk": item["chunk"],
             "note": note,
+            # GRAM-009: lets the frontend fetch GET /grammar/pattern/{id}
+            # for the collapsed "Warum?" disclosure under the verdict card.
+            # camelCase like every other practice payload in this repo.
+            "patternId": item["pattern_id"],
         },
         judge_skipped,
     )

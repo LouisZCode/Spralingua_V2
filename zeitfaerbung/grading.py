@@ -168,5 +168,11 @@ async def grade(item: dict, answer: str, *, give_up: bool = False) -> tuple[dict
         "note": note,
         "reading": reading,
         "alt": alt,
+        # GRAM-009: lets the frontend fetch GET /grammar/pattern/{id} for
+        # the collapsed "Warum?" disclosure. Safe to ship even on
+        # "unrecognized" — it names the broad taxonomy pattern, not the
+        # specific accepted form, so it doesn't answer the item. camelCase
+        # like every other practice payload in this repo.
+        "patternId": item["pattern_id"],
     }
     return verdict, typed_for_ledger

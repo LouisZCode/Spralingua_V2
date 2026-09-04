@@ -481,6 +481,7 @@ export default function ZeitfaerbungTrainer({
               corrected={verdict.expected}
               note={verdict.note}
               accent={verdict.kind === "form" ? "gold" : "red"}
+              patternId={verdict.patternId}
             />
             {/* CLARA-14: Clara's room hides this — the card dismisses when
                 her spoken reaction lands (or a 15s backstop), not on a

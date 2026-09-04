@@ -104,6 +104,10 @@ async def grade(item: dict, answer: str, *, give_up: bool = False) -> tuple[dict
             "caseOk": case_ok,
             "carrierOk": carrier_ok,
             "note": note,
+            # GRAM-009: lets the frontend fetch GET /grammar/pattern/{id}
+            # for the collapsed "Warum?" disclosure under the verdict card.
+            # camelCase to match this drill's own verdict convention.
+            "patternId": item["pattern_id"],
         },
         judge_skipped,
     )

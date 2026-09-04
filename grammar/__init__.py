@@ -22,6 +22,13 @@ from .levels import (
 )
 from .loader import load_taxonomy, taxonomy_brief
 
+# GRAM-009: `grammar.routes` is deliberately NOT re-exported here (unlike
+# every other drill package's `from .routes import router`) — `auth.routes`
+# itself does `from grammar import BUCKETS`, so a `grammar/__init__.py` that
+# eagerly imports `grammar.routes` (which needs `auth.deps`) would set up a
+# grammar<->auth import cycle at package-init time. Same reasoning as
+# `coins/__init__.py`'s docstring: import the submodule directly in
+# `main.py` (`from grammar.routes import router as grammar_router`) instead.
 __all__ = [
     "BUCKETS",
     "DEFAULT_BUCKET",

@@ -29,6 +29,10 @@ export type ClauseVerdict = {
   // short English line on how the two read differently / which a German
   // would more likely say. Null otherwise.
   variant: string | null;
+  // GRAM-009: the taxonomy pattern this item drills — feeds FeedbackCard's
+  // collapsed "Warum?" disclosure (GET /grammar/pattern/{id}). camelCase
+  // like every other practice payload in this repo.
+  patternId: string;
 };
 
 async function request<T>(

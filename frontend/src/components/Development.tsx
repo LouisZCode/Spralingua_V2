@@ -15,7 +15,7 @@ import {
   type RetiredPattern,
   type SeriesPoint,
 } from "./development/api";
-import { diffTokens, MarkedText } from "./shared/feedback";
+import { diffTokens, MarkedText, PatternWhy } from "./shared/feedback";
 import { loadError } from "./shared/copy";
 import AppHeader from "@/components/shared/AppHeader";
 
@@ -300,6 +300,11 @@ function FocusCard({ focus }: { focus: FocusPattern[] }) {
                   {f.description}
                 </p>
               )}
+              {/* GRAM-009: same collapsed "Warum?" disclosure as the drill
+                  wrong-answer cards, reused rather than forked — the coach
+                  is naming this pattern as this week's focus, which is
+                  exactly where "why does this matter" belongs. */}
+              <PatternWhy patternId={f.patternId} />
             </li>
           ))}
         </ul>

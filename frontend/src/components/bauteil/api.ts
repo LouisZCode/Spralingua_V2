@@ -25,6 +25,9 @@ export type BauteilVerdict = {
   // One ≤14-word English line naming which axis broke and why; null when
   // correct (or when the deterministic exact-match check green-lit it).
   note: string | null;
+  // GRAM-009: the taxonomy pattern this item drills — feeds FeedbackCard's
+  // collapsed "Warum?" disclosure (GET /grammar/pattern/{id}).
+  patternId: string;
 };
 
 async function request<T>(

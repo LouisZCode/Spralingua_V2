@@ -427,6 +427,7 @@ export default function FaelleTrainer({
                   attempt={value.trim()}
                   corrected={verdict.expected}
                   note={verdict.note}
+                  patternId={verdict.patternId}
                 />
               )}
               {/* The highest-value line in the whole exercise: the typed
