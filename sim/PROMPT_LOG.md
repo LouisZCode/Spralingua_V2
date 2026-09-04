@@ -650,3 +650,108 @@ Full run reports:
 evals/teacher/runs/2026-09-04-agent006-{v88-fullharness,v89-fullharness,v89-fullharness-b,v89-4,v89-4b,v89-4c,v89-5,v89-5b,v89-5c}.md
 (gitignored, local only). Prompt snapshots:
 sim/prompt_versions/teacher.v8.9-agent006-{4,5}.yaml (4 = shipped).
+
+## 2026-09-05 — TAND-013 opener verification (no prompt change)
+
+Pure measurement, tandem prompt v5.3 (`63b9124`) unchanged — verifying the
+2026-08-15 trace-review finding (Lena opened 9/10 replies with "Ach, …" in
+one real session) is actually fixed by v5.3's anti-repeat / shape-not-script
+rules (`agents/prompts/tandem.yaml` ~144-158), per that entry's own
+"verify it in the next real chat" follow-up. Harness: own backend on
+`:8793` (`SPRALINGUA_TEST_GUARD=1`), `:8765`/`:3000` untouched throughout
+(confirmed same PID before/after). Fixtures: `test-t013-nina` (`--profile
+plateaued`) for session 1 (Lena, `tandem`); a same-shaped second fixture
+`test-t013-paul` for session 2 (Paul, `tandem_paul`) — the plateaued
+fixture's starting balance (175 coins: 100 signup grant + 75 daily
+allowance) covers exactly one 10-exchange voice session at 150 coins, not
+two back-to-back, and no in-scope tool could top up `purchased_coins`
+without tripping the environment's write-classifier (even a read-only
+balance check was blocked) — using a second identically-seeded fixture
+sidesteps that without editing any file, and doesn't affect what's being
+measured since Paul's notes are already keyed independently by `lesson_id`
+(`load_tandem_notes`), same as if the same user id had been reused. Both
+sessions played the Nina persona brief verbatim (topic "Arbeit", blocking
+fact "Leider habe ich gerade keinen Job" landed turn 2, ≥3 direct
+questions with answers), `--exchanges 10`, ended at `SESSION_ENDING
+(max_exchanges, exchange 10/10)` both times.
+
+**Session 1 — Lena (`tandem`):**
+
+| # | first word | note |
+|---|---|---|
+| 1 | Ich | — |
+| 2 | Das | — |
+| 3 | Ja | corrected "vor drei Monate" → "vor drei Monaten" |
+| 4 | Ich | — |
+| 5 | Ich | — |
+| 6 | Ich | — |
+| 7 | Ja | — |
+| 8 | Ich | — |
+| 9 | Ich | goodbye-flavored ("wir sprechen bald wieder") but did not arm SESSION_ENDING |
+| 10 | Das | cap hit; spoken goodbye ("Bis bald, mach's gut!") |
+
+0/10 "Ach" (0%). Longest identical-opener run: **3** ("Ich" at #4-#6).
+Distinct openers: 3 (Ich/Das/Ja).
+
+**Session 2 — Paul (`tandem_paul`):**
+
+| # | first word | note |
+|---|---|---|
+| 1 | Bei | — |
+| 2 | Ich | — |
+| 3 | Wir | — |
+| 4 | Ich | — |
+| 5 | Stand | — |
+| 6 | Stand | — |
+| 7 | Ja | — |
+| 8 | Bei | "das klingt sportlich" — 3rd near-verbatim use of "sportlich" across #3/#4/#8 (not scored, noted) |
+| 9 | Stand | — |
+| 10 | Freut | cap hit; spoken goodbye ("Tschüss, bis bald.") |
+
+0/10 "Ach" (0%). Longest identical-opener run: 2 ("Stand" at #5-#6).
+Distinct openers: 6 (Bei/Ich/Wir/Stand/Ja/Freut).
+
+**Side observations (both sessions):** no re-ask of anything already
+answered at length (the original Nina failure mode) in either transcript;
+zero parentheses/brackets in any spoken PARTNER line (`grep -c "("` = 0 on
+both transcripts); both goodbyes arrived as a real spoken sentence exactly
+at the exchange cap, not a stage-direction leak — though Lena's #9 also
+read as a soft goodbye one exchange early without tripping detection,
+which is a near-miss worth knowing about even though it isn't this
+entry's subject.
+
+**Verdict: FAIL.** The literal "Ach" tic is gone (0% in both sessions,
+well under the 30% bar), so v5.3 did fix the specific symptom TAND-013
+named. But the PASS rule also requires no first-word run ≥3 in either
+session, and Lena's session hits exactly that with three straight "Ich"
+opens (#4-#6) — the anti-repeat rule suppressed the one word it names as
+an example ("Ach") without stopping opener-repetition as a class. Paul's
+session passes both conditions cleanly. This supports the lead's
+Proposal-2 (a code backstop counting consecutive identical first words in
+`ClientWrapper.astream`) rather than trusting the prompt-only fix as
+sufficient — the prompt rule caught the letter of the 2026-08-15 finding,
+not the underlying pattern.
+
+Transcripts and backend log kept locally (not committed): scratchpad
+`tand013/{session1_lena_transcript.txt,session2_paul_transcript.txt,t013-backend.log}`.
+
+**Lead's reading and decision (same day, after an independent re-score
+of both transcripts that matched every number above):** the "Ach," tic is
+gone and the two v5.3 fixes hold, so TAND-013 stays Solved. The three
+straight "Ich …" opens are not the failure the entry described: v5.3's
+default reply shape asks for "first ONE sentence of your own about the
+exact detail they just gave", and the natural German subject of a
+self-disclosure clause is "Ich" — three consecutive learner turns inviting
+one (course value, job satisfaction, an interview) plausibly get three
+"Ich"-led sentences from a careful human too. "Ach" was filler,
+interchangeable and meaningless; "Ich" is load-bearing grammar. So
+Proposal-2's consecutive-first-word nudge is deliberately NOT built: a
+counter that trips on the commonest German sentence opener would push the
+model away from the very shape the prompt asks for. What the run did find
+is Paul's, and it is a prompt matter for the next Paul round, not a code
+one: "Stand jetzt" four times in ten replies (three as the opener), "das
+klingt/ist sportlich" three times, and the same "[X] würdest du gern …
+[verb]" question shell at #3 and #8 — the TAND-010 "Elbe" class (an
+example phrase copied as content), recorded on PRODUCT-004. Lena's #9
+soft goodbye one exchange early, without arming detection, is noted
+there as well.
