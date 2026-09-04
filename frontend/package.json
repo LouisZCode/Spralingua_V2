@@ -12,6 +12,7 @@
     "@pipecat-ai/client-js": "^1.6.0",
     "@pipecat-ai/websocket-transport": "^1.6.0",
     "@react-oauth/google": "^0.13.5",
+    "@sentry/nextjs": "10.73.0",
     "next": "16.1.6",
     "react": "19.2.3",
     "react-dom": "19.2.3"
