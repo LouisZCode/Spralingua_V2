@@ -142,7 +142,6 @@ async def get_letter(
     # lands inside the learner's practice sitting instead of session-less.
     session_id: str | None = None,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """Mint one incoming letter: pick a seed, write it around the learner's
     own deck words, hand back the writing brief with it."""
@@ -153,57 +152,76 @@ async def get_letter(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
-    # PAY-002: one charge per letter cycle, at creation (not at the attempts).
-    # The two attempts + germanize call that follow ride on this single 15-coin
-    # ticket; the POST /attempts site is deliberately free.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=LETTER, kind="spend_letter")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
-    seeds = list(load_seeds().values())
+    # REL-005 (REL-004 Proposal-2): every DB read plus the coin gate runs
+    # inside its OWN short-lived session, closed (connection released back
+    # to the pool) BEFORE write_letter's 12-24s LLM call starts below — a
+    # request must never hold a pooled connection across a slow provider
+    # call. No ``Depends(get_db)`` on this route for that reason: an
+    # explicit ``async with get_sessionmaker()() as db:`` block scopes the
+    # session tightly to the reads that need it, the same ad hoc pattern
+    # this file's own ``_background_harvest`` and ``szenario/routes.py``'s
+    # coin-gate session already use. Nothing is written after the letter is
+    # generated, so there's no matching post-LLM session — this route reads,
+    # gates, generates, and returns.
+    async with get_sessionmaker()() as db:
+        # PAY-002: one charge per letter cycle, at creation (not at the
+        # attempts). The two attempts + germanize call that follow ride on
+        # this single 15-coin ticket; the POST /attempts site is
+        # deliberately free.
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=LETTER, kind="spend_letter")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
 
-    # LEVEL-001: a learner who declared a level draws only from that level's
-    # seeds; no level (NULL / "not sure") keeps the whole pool. Never fatal —
-    # a level read that fails serves the unfiltered pool and logs, the same
-    # contract drills/leveling.py gives the grammar drills.
-    try:
-        level = await load_user_level(db, user_id=user_id)
-    except Exception:
-        logger.exception("Briefkasten level read failed — serving every level")
-        level = None
-    seeds = seeds_for_level(seeds, level)
+        seeds = list(load_seeds().values())
 
-    if register in ("informal", "formal"):
-        # The register is a client hint layered on top of the level, never
-        # instead of it: if the level's pool has no seed in that register
-        # (A1 has no formal seed today) the register drops, the level stays.
-        by_register = [s for s in seeds if s["register"] == register]
-        seeds = by_register or seeds
-    seed, cycle_reset = _pick_seed(seeds, seen.split(",") if seen else [])
-    logger.info(
-        "Briefkasten letter: level={} pool={} seed={}", level, len(seeds), seed["id"]
-    )
+        # LEVEL-001: a learner who declared a level draws only from that
+        # level's seeds; no level (NULL / "not sure") keeps the whole pool.
+        # Never fatal — a level read that fails serves the unfiltered pool
+        # and logs, the same contract drills/leveling.py gives the grammar
+        # drills.
+        try:
+            level = await load_user_level(db, user_id=user_id)
+        except Exception:
+            logger.exception("Briefkasten level read failed — serving every level")
+            level = None
+        seeds = seeds_for_level(seeds, level)
 
-    try:
-        vocab = await load_vocab_words(db, user_id=user_id, limit=VOCAB_LIMIT)
-    except Exception:
-        # A deck outage must never cost the learner their letter — the writer
-        # handles an empty list as a first-session no-op.
-        logger.exception("Briefkasten vocab read failed — writing without deck words")
-        vocab = []
+        if register in ("informal", "formal"):
+            # The register is a client hint layered on top of the level,
+            # never instead of it: if the level's pool has no seed in that
+            # register (A1 has no formal seed today) the register drops,
+            # the level stays.
+            by_register = [s for s in seeds if s["register"] == register]
+            seeds = by_register or seeds
+        seed, cycle_reset = _pick_seed(seeds, seen.split(",") if seen else [])
+        logger.info(
+            "Briefkasten letter: level={} pool={} seed={}", level, len(seeds), seed["id"]
+        )
 
-    # The learner's own first name, so the greeting reads like a real letter
-    # rather than a form letter. Null for the demo user and for Google
-    # profiles without a name — the writer greets without one in that case.
-    try:
-        user = await db.get(User, user_id)
-        reader_name = (user.name or "").strip().split(" ")[0] or None if user else None
-    except Exception:
-        logger.exception("Briefkasten name read failed — greeting without a name")
-        reader_name = None
+        try:
+            vocab = await load_vocab_words(db, user_id=user_id, limit=VOCAB_LIMIT)
+        except Exception:
+            # A deck outage must never cost the learner their letter — the
+            # writer handles an empty list as a first-session no-op.
+            logger.exception("Briefkasten vocab read failed — writing without deck words")
+            vocab = []
+
+        # The learner's own first name, so the greeting reads like a real
+        # letter rather than a form letter. Null for the demo user and for
+        # Google profiles without a name — the writer greets without one in
+        # that case.
+        try:
+            user = await db.get(User, user_id)
+            reader_name = (user.name or "").strip().split(" ")[0] or None if user else None
+        except Exception:
+            logger.exception("Briefkasten name read failed — greeting without a name")
+            reader_name = None
+    # `db` is closed here — the pooled connection is released before the
+    # LLM call below, which is the whole point of this block (REL-005).
 
     with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("briefkasten-letter") as span:
         span.set_attribute("user.id", user_id)
