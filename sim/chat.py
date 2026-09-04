@@ -42,7 +42,16 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 RUN_DIR = Path(__file__).resolve().parent / ".run"
-STATE = RUN_DIR / "state.json"
+# AGENT-006 (2026-09-04): the state file's default path is shared by every
+# `sim/chat.py` invocation on the machine, so two agents driving sims at
+# the same time (or in overlapping windows) clobber each other's session —
+# a `start` from one SIGTERMs whatever holder PID the other left in this
+# same file. `SIM_STATE` lets a caller point at a private path instead
+# (matching `SIM_BASE`'s existing override pattern below) without needing
+# a hand-rolled clone of this whole script, which is what agent006-test's
+# `sim_isolated.py` had to become before this existed. Unset behaves
+# exactly as before — same shared path, no change for a single caller.
+STATE = Path(os.environ["SIM_STATE"]) if os.environ.get("SIM_STATE") else RUN_DIR / "state.json"
 BASE = os.environ.get("SIM_BASE", "http://127.0.0.1:8765")
 WS_BASE = BASE.replace("http", "ws", 1)
 
@@ -194,27 +203,50 @@ def cmd_say(args: argparse.Namespace) -> None:
         except urllib.error.URLError as e:
             sys.exit(f"/say failed: {e}")
 
-    def reply_from(chunk: str) -> str | None:
-        """Full reply once the bot finished speaking it; None while pending."""
+    def reply_from(chunk: str) -> tuple[str, int] | None:
+        """(reply, absolute end-offset of the matched "Bot stopped speaking")
+        once the bot finished speaking it; None while pending.
+
+        AGENT-006 fix (2026-09-04): `invokes[-1]` already anchors on the
+        LAST `Invoking chain with` in this chunk, so `tail` starts right
+        after it — but the caller used to re-search `_BOT_DONE` against the
+        WHOLE chunk (`chunk.index(_BOT_DONE)`), which finds the FIRST
+        occurrence anywhere in the chunk. On a chunk that spans more than
+        one invoke (a slow `say` call whose poll loop catches up across
+        several turns at once, or leftover unread log tail from a prior
+        turn), that first occurrence can belong to an EARLIER invoke, not
+        the one this call just matched — `state["offset"]` then advances to
+        the wrong position, corrupting every subsequent turn's read. The
+        offset returned here is computed relative to `tail` (post-invoke),
+        same as the reply text itself, so it always lands after the
+        CORRECT "Bot stopped speaking".
+        """
         invokes = list(_INVOKE_RE.finditer(chunk))
         if not invokes:
             return None
-        tail = chunk[invokes[-1].end():]
+        tail_start = invokes[-1].end()
+        tail = chunk[tail_start:]
         if _BOT_DONE not in tail:
             return None
-        spoken = tail[: tail.index(_BOT_DONE)]
+        done_in_tail = tail.index(_BOT_DONE)
+        spoken = tail[:done_in_tail]
         parts = [m.group(1) for m in _TTS_RE.finditer(spoken)]
-        return " ".join(parts).strip() if parts else None
+        reply_text = " ".join(parts).strip() if parts else None
+        if reply_text is None:
+            return None
+        return reply_text, tail_start + done_in_tail + len(_BOT_DONE)
 
     deadline = time.time() + 120
     while time.time() < deadline:
         chunk = _read_new(state)
-        reply = reply_from(chunk)
+        found = reply_from(chunk)
+        reply = found[0] if found else None
         holder_up = _alive(state["pid"])
         if reply is None and not holder_up:
             time.sleep(2.0)  # teardown may still be flushing log lines
             chunk = _read_new(state)
-            reply = reply_from(chunk)
+            found = reply_from(chunk)
+            reply = found[0] if found else None
             if reply is None:
                 # Last resort: TTS chunks were generated but "Bot stopped
                 # speaking" never logged before the pipeline closed.
@@ -227,8 +259,8 @@ def cmd_say(args: argparse.Namespace) -> None:
                 print(reply)
             print("SESSION_ENDED (connection closed)")
             return
-        if reply is not None:
-            done_at = chunk.index(_BOT_DONE) + len(_BOT_DONE)
+        if found is not None:
+            _, done_at = found
             state["offset"] += len(chunk[:done_at].encode())
             state["conversation"] += [("STUDENT", args.text), ("PARTNER", reply)]
             _save_state(state)
