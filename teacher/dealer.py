@@ -28,16 +28,29 @@ come up empty for one format — it drops that format from the roll instead.
 ============================================================================
 CLARA'S ROOM STAYS ABSOLUTELY WRITE-FREE. This module reads three things —
 the taxonomy (in-process cache), the learner's level + ledger row (plain
-SELECTs via the ``db`` session the route now opens with ``Depends(get_db)``),
-and the shared in-process drill throttle — and writes NOTHING: no
-``db.commit()`` anywhere below, no ``record_grammar_error``, no
+SELECTs via a short-lived session this module opens and closes itself — see
+REL-005 below), and the shared in-process drill throttle — and writes
+NOTHING: no ``db.commit()`` anywhere below, no ``record_grammar_error``, no
 ``credit_pattern_success``, no coins. The two module-level dicts below
 (``_LAST_FORMAT`` and ``teacher/forge.py``'s own item store) are process-
 local caches, not persistence — see the exception note on ``_LAST_FORMAT``.
-Adding the ``db`` session to ``GET /teacher/exercise`` for this round changes
-nothing about that invariant: it is read-only by construction, the same way
+:func:`deal` is read-only by construction, the same way
 ``GET /teacher/starters`` and ``GET /teacher/balance`` already open a session
 to read without ever writing through it.
+
+REL-005 (2026-09-04): ``GET /teacher/exercise`` no longer holds a
+``Depends(get_db)`` session across this module's own work. When the format
+roll lands on "produce", :func:`deal` runs a 12s/leg draft+verify LLM forge
+(``teacher/forge.py::forge_item_for_pattern``) — a pooled DB connection must
+never sit checked out across a call that slow. So :func:`deal` owns its
+session internally: every DB read (the learner's level, the level-narrowed
+pool candidates, the ledger row) happens inside one short-lived
+``async with get_sessionmaker()() as db:`` block up front, which closes
+BEFORE the format is even rolled — the forge call below it (when "produce"
+wins) touches no DB session at all. There is no post-forge write phase: this
+module writes nothing, ever (see above), so there is no second session to
+open afterward, unlike the read-then-write shape ``briefkasten/routes.py::
+get_letter`` uses.
 ============================================================================
 """
 
@@ -45,8 +58,8 @@ import random
 
 from fastapi import HTTPException
 from loguru import logger
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.connection import get_sessionmaker
 from database.orm import UserError
 from database.repository import load_user_level
 from drills.leveling import apply_level
@@ -155,7 +168,7 @@ def _build_redo_payload(entry: dict, examples: list[dict], level: str | None, pa
     return _forged_payload("redo", entry, pattern, item)
 
 
-async def deal(db: AsyncSession, *, user_id: str, pattern: str) -> dict | None:
+async def deal(*, user_id: str, pattern: str) -> dict | None:
     """Deal one exercise for ``pattern`` to ``user_id`` — the full
     ``GET /teacher/exercise`` response payload, or ``None`` when ``pattern``
     isn't a real taxonomy id (the caller 404s — a hallucinated/stale id from
@@ -169,39 +182,48 @@ async def deal(db: AsyncSession, *, user_id: str, pattern: str) -> dict | None:
     fails, and raising an HTTPException only when NOTHING is left to serve
     (429 for an exhausted throttle with no pool/redo fallback, 502 for a
     produce failure with no pool/redo fallback).
+
+    REL-005: owns its own DB session (no ``db`` parameter) — see the module
+    docstring. Every read happens inside one short-lived session that closes
+    before the format is rolled, so the "produce" branch's LLM forge below
+    never runs with a pooled connection checked out.
     """
     taxonomy = load_taxonomy()
     entry = taxonomy.get(pattern)
     if entry is None:
         return None
 
-    # Fetched once and handed to both generators below — apply_level (pool
-    # narrowing) reads its own copy internally, which is a second DB hit for
-    # the same value; the spec calls that fine rather than threading `level`
-    # through apply_level's signature, so it's left as-is.
-    level = await load_user_level(db, user_id=user_id)
+    async with get_sessionmaker()() as db:
+        # Fetched once and handed to both generators below — apply_level
+        # (pool narrowing) reads its own copy internally, which is a second
+        # DB hit for the same value; the spec calls that fine rather than
+        # threading `level` through apply_level's signature, so it's left
+        # as-is.
+        level = await load_user_level(db, user_id=user_id)
 
-    # ---- pool: catalog candidates across all six adapters, level-narrowed
-    pool_items = pool_candidates(pattern)
-    pool_valid = bool(pool_items)
-    pool_serve_from = pool_items
-    if pool_valid:
-        narrowed = await apply_level(
-            db,
-            user_id=user_id,
-            items=pool_items,
-            drill="teacher",
-            pattern_of=lambda t: t[1]["pattern_id"],
-        )
-        # A deal must never 404 (or silently narrow to nothing) because of
-        # leveling — if narrowing empties the per-pattern set, fall back to
-        # the unfiltered candidates rather than dropping pool entirely.
-        pool_serve_from = narrowed if narrowed else pool_items
+        # ---- pool: catalog candidates across all six adapters, level-narrowed
+        pool_items = pool_candidates(pattern)
+        pool_valid = bool(pool_items)
+        pool_serve_from = pool_items
+        if pool_valid:
+            narrowed = await apply_level(
+                db,
+                user_id=user_id,
+                items=pool_items,
+                drill="teacher",
+                pattern_of=lambda t: t[1]["pattern_id"],
+            )
+            # A deal must never 404 (or silently narrow to nothing) because of
+            # leveling — if narrowing empties the per-pattern set, fall back to
+            # the unfiltered candidates rather than dropping pool entirely.
+            pool_serve_from = narrowed if narrowed else pool_items
 
-    # ---- redo: the learner's own qualifying ledger examples, read-only
-    error_row = await db.get(UserError, (user_id, pattern))
-    qualifying_examples = _qualifying_examples(error_row)
-    redo_valid = bool(qualifying_examples)
+        # ---- redo: the learner's own qualifying ledger examples, read-only
+        error_row = await db.get(UserError, (user_id, pattern))
+        qualifying_examples = _qualifying_examples(error_row)
+        redo_valid = bool(qualifying_examples)
+    # `db` is closed here — released before the (possible) produce forge
+    # call below, which is the whole point of this block (REL-005).
 
     # ---- produce: always taxonomy-valid, gated behind the shared drill
     # throttle (two LLM calls to generate). Called once per deal regardless

@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
-from database.connection import get_db
+from database.connection import get_db, get_sessionmaker
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
@@ -209,7 +209,6 @@ class AttemptIn(BaseModel):
 async def submit_attempt(
     body: AttemptIn,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """Judge one typed case gap-fill, feed the ledger, return the verdict +
     the rule to learn (only now — it would answer the item)."""
@@ -218,20 +217,33 @@ async def submit_attempt(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
-    item = load_items().get(body.item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Unknown item.")
-    # PAY-002: AFTER the 404 but BEFORE the judge/deterministic grading.
-    # LEDGER-002: a give-up never reaches the judge — nothing to grade, no
-    # provider budget spent — so it isn't charged either. Only a real,
-    # judged attempt spends a coin.
-    if not body.give_up:
-        try:
-            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-        except HTTPException as _e:
-            if _e.status_code == 402:
-                raise
-            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+
+    # REL-005 (LOAD-001): the item lookup and the coin gate run inside their
+    # OWN short-lived session, closed (connection released back to the pool)
+    # BEFORE grading.grade's up-to-12s-per-leg judge call starts below — a
+    # request must never hold a pooled connection across a slow provider
+    # call. No `Depends(get_db)` on this route for that reason: an explicit
+    # `async with get_sessionmaker()() as db:` block scopes the session
+    # tightly to the reads/gate that need it, the same pattern
+    # briefkasten/routes.py::get_letter already uses.
+    async with get_sessionmaker()() as db:
+        item = load_items().get(body.item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Unknown item.")
+        # PAY-002: AFTER the 404 but BEFORE the judge/deterministic grading.
+        # LEDGER-002: a give-up never reaches the judge — nothing to grade, no
+        # provider budget spent — so it isn't charged either. Only a real,
+        # judged attempt spends a coin.
+        if not body.give_up:
+            try:
+                await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+            except HTTPException as _e:
+                if _e.status_code == 402:
+                    raise
+                raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    # `db` is closed here — the pooled connection is released before the
+    # judge call below, which is the whole point of this block (REL-005).
+
     answer = grading.normalize_answer(body.answer)
     # give_up skips validation entirely — there's nothing to type, the
     # learner is conceding the item.
@@ -277,54 +289,61 @@ async def submit_attempt(
         # string-parsing the free-text trace.output above.
         attempt_span.set_attribute("verdict.correct", bool(correct))
 
-        # Feed the ledger (design rule 4) — non-fatal, same self-correcting
-        # contract as the sibling drills: a drill-retired pattern that still
-        # breaks in speech gets reopened by the spoken harvesters.
-        try:
-            if correct:
-                await credit_pattern_success(
-                    db,
-                    user_id=user_id,
-                    pattern_id=item["pattern_id"],
-                    session_id=body.session_id,
-                    source="faelle",
-                )
-            elif not body.give_up:
-                # LEDGER-002: a give-up carries no evidence of what the
-                # learner would actually have written — writing "the learner
-                # broke this pattern" off a concession is a false row, and a
-                # wrong ledger row is worse than a wrong verdict (CLAUDE.md).
-                # record_drill_attempt below still logs the concession for
-                # DATA-004's cross-drill view.
-                await record_grammar_error(
-                    db,
-                    user_id=user_id,
-                    pattern_id=item["pattern_id"],
-                    sentence=item["frame"].replace("___", answer),
-                    corrected=item["frame"].replace("___", item["answer"]),
-                    note=note,
-                    source="faelle",
-                    session_id=body.session_id,
-                )
-        except Exception:
-            logger.exception("Fälle ledger write failed (pattern {})", item["pattern_id"])
+        # REL-005 (LOAD-001): a second, fresh short-lived session for the
+        # ledger writes — opened only now, AFTER the judge call above has
+        # already returned, so nothing here holds a pooled connection across
+        # that up-to-12s-per-leg call either. Both writers below commit for
+        # themselves (database/repository.py), so this block's own close is
+        # just connection cleanup, not a missed commit.
+        async with get_sessionmaker()() as db:
+            # Feed the ledger (design rule 4) — non-fatal, same self-correcting
+            # contract as the sibling drills: a drill-retired pattern that still
+            # breaks in speech gets reopened by the spoken harvesters.
+            try:
+                if correct:
+                    await credit_pattern_success(
+                        db,
+                        user_id=user_id,
+                        pattern_id=item["pattern_id"],
+                        session_id=body.session_id,
+                        source="faelle",
+                    )
+                elif not body.give_up:
+                    # LEDGER-002: a give-up carries no evidence of what the
+                    # learner would actually have written — writing "the learner
+                    # broke this pattern" off a concession is a false row, and a
+                    # wrong ledger row is worse than a wrong verdict (CLAUDE.md).
+                    # record_drill_attempt below still logs the concession for
+                    # DATA-004's cross-drill view.
+                    await record_grammar_error(
+                        db,
+                        user_id=user_id,
+                        pattern_id=item["pattern_id"],
+                        sentence=item["frame"].replace("___", answer),
+                        corrected=item["frame"].replace("___", item["answer"]),
+                        note=note,
+                        source="faelle",
+                        session_id=body.session_id,
+                    )
+            except Exception:
+                logger.exception("Fälle ledger write failed (pattern {})", item["pattern_id"])
 
-        # Append to the cross-drill attempt log (DATA-004) — its own commit,
-        # non-fatal like the ledger write above, same shape as verbindungen.
-        try:
-            await record_drill_attempt(
-                db,
-                user_id=user_id,
-                exercise="faelle",
-                # ":giveup" suffix marks a concession in DATA-004 without a
-                # new column — same convention the sibling drills use.
-                item_ref=item["id"] + (":giveup" if body.give_up else ""),
-                pattern_id=item["pattern_id"],
-                correct=correct,
-                modality="written",
-                session_id=body.session_id,
-            )
-        except Exception:
-            logger.exception("Drill-attempt log write failed (item {})", item["id"])
+            # Append to the cross-drill attempt log (DATA-004) — its own commit,
+            # non-fatal like the ledger write above, same shape as verbindungen.
+            try:
+                await record_drill_attempt(
+                    db,
+                    user_id=user_id,
+                    exercise="faelle",
+                    # ":giveup" suffix marks a concession in DATA-004 without a
+                    # new column — same convention the sibling drills use.
+                    item_ref=item["id"] + (":giveup" if body.give_up else ""),
+                    pattern_id=item["pattern_id"],
+                    correct=correct,
+                    modality="written",
+                    session_id=body.session_id,
+                )
+            except Exception:
+                logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
         return verdict

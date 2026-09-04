@@ -12,8 +12,8 @@ adds the speaking drill), plus the cold-start topic-screen endpoint:
   taxonomy entry, pitched at the learner's level) or redo (built with no LLM
   from the learner's own ``user_errors`` example) — and serves it, for ALL
   users, not just developers. All the dispatch logic lives in
-  ``teacher/dealer.py::deal``; this route only opens the read-only ``db``
-  session, delegates, and shapes the trace.
+  ``teacher/dealer.py::deal``, which also owns its own short-lived read-only
+  session (REL-005); this route only delegates and shapes the trace.
 - ``POST /teacher/exercise/attempts`` — grade one typed/typed-order/produced
   answer using that drill's own deterministic check + judge, returning that
   drill's NATIVE verdict shape (see teacher/registry.py). For the sprechen
@@ -52,7 +52,6 @@ from typing import Any
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import (
     get_trace_session,
@@ -61,7 +60,6 @@ from agents.observability import (
     tracer,
 )
 from auth.deps import get_current_user_id
-from database.connection import get_db
 from satz.examiner import transcribe_attempt
 from security import drill_try_admit
 from sprechen import grading as sprechen_grading
@@ -132,7 +130,6 @@ async def teacher_balance(user_id: str = Depends(get_current_user_id)):
 async def get_exercise(
     pattern: str,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """CLARA-17: the server rolls one of three formats — pool (a catalog
     item, served in that drill's NATIVE round-item shape, exactly what
@@ -140,22 +137,25 @@ async def get_exercise(
     (a fresh production task live-generated from the pattern's taxonomy
     entry) or redo (built with no LLM from the learner's own past mistake)
     — and serves it, for ALL users, not just developers. All the dispatch
-    mechanics live in ``teacher/dealer.py::deal``; this route only opens the
-    session, delegates, and shapes the trace. 404 when ``pattern`` isn't a
-    real taxonomy id at all — Clara's own prompt is told to only ever name
-    an id that's actually printed on her page, whether from her rendered
-    focus sections or the full exercise catalog (CLARA-16), but a stale or
-    hallucinated id must still fail closed here, not 500.
+    mechanics live in ``teacher/dealer.py::deal``; this route only delegates
+    and shapes the trace. 404 when ``pattern`` isn't a real taxonomy id at
+    all — Clara's own prompt is told to only ever name an id that's actually
+    printed on her page, whether from her rendered focus sections or the
+    full exercise catalog (CLARA-16), but a stale or hallucinated id must
+    still fail closed here, not 500.
 
     ============================================================================
-    THE ``db`` SESSION HERE IS READ-ONLY BY DESIGN. ``teacher/dealer.py::deal``
+    THIS ROUTE HOLDS NO DB SESSION OF ITS OWN. ``teacher/dealer.py::deal``
     only ever SELECTs (the learner's level, their ``user_errors`` row for this
-    pattern) — no ``db.commit()`` anywhere on this path. Clara's room stays
-    ABSOLUTELY WRITE-FREE (see the ABSOLUTE INVARIANT blocks below): no
-    `record_grammar_error`, no `credit_pattern_success`, no `record_drill_attempt`,
-    no coins. Adding a DB session to this route for CLARA-17's level-narrowing
-    and redo-building changes nothing about that — it's the same read-only
-    pattern ``GET /teacher/starters`` and ``GET /teacher/balance`` already use.
+    pattern) — no ``db.commit()`` anywhere on this path — and, since REL-005
+    (2026-09-04), owns its own short-lived session internally, closed BEFORE
+    the "produce" format's 12s/leg draft+verify LLM forge ever runs: a pooled
+    connection must never sit checked out across a call that slow (there is
+    no ``Depends(get_db)`` here for exactly that reason — see
+    ``briefkasten/routes.py::get_letter`` for the reference pattern). Clara's
+    room stays ABSOLUTELY WRITE-FREE (see the ABSOLUTE INVARIANT blocks
+    below) regardless: no `record_grammar_error`, no `credit_pattern_success`,
+    no `record_drill_attempt`, no coins.
     ============================================================================
     """
     # Joins Clara's live conversation Session in Langfuse (server-side lookup;
@@ -177,7 +177,7 @@ async def get_exercise(
             span.set_attribute("langfuse.session.id", session_id)
         span.set_attribute("langfuse.observation.input", pattern)
         span.set_attribute("langfuse.observation.metadata.pattern", pattern)
-        payload = await deal_exercise(db, user_id=user_id, pattern=pattern)
+        payload = await deal_exercise(user_id=user_id, pattern=pattern)
         if payload is None:
             mark_span_error(span, "no exercise for this pattern (stale/hallucinated id?)")
             raise HTTPException(status_code=404, detail="no exercise for this pattern")

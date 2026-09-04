@@ -332,7 +332,6 @@ async def post_comprehension(
     # as round 2 below) — purely for observability; nothing here requires it.
     session_id: Optional[str] = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """Round 1 ("listen & retell"): the learner hears one chunk WITHOUT
     ever seeing the transcript and retells in German what was said (and,
@@ -345,22 +344,34 @@ async def post_comprehension(
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
 
-    chunk, _item = await _get_owned_chunk(db, chunk_id, user_id)
+    # REL-005: the ownership + brief reads run inside their OWN short-lived
+    # session, closed (connection released back to the pool) BEFORE the
+    # Deepgram call below — a request must never hold a pooled connection
+    # across a slow provider call. No ``Depends(get_db)`` on this route for
+    # that reason; same pattern ``briefkasten/routes.py::get_letter`` uses.
+    # This route writes nothing to the DB (no ``_background_harvest`` for
+    # round 1 — see the module docstring), so there is no matching post-call
+    # session either.
+    async with get_sessionmaker()() as db:
+        chunk, _item = await _get_owned_chunk(db, chunk_id, user_id)
 
-    brief = chunk.brief
-    if not brief:
-        raise HTTPException(status_code=422, detail="chunk has no brief; round 1 is not available")
-    summary = (brief.get("summary") or "").strip()
-    if not summary:
-        raise HTTPException(status_code=422, detail="brief has no summary; round 1 is not available")
+        brief = chunk.brief
+        if not brief:
+            raise HTTPException(status_code=422, detail="chunk has no brief; round 1 is not available")
+        summary = (brief.get("summary") or "").strip()
+        if not summary:
+            raise HTTPException(status_code=422, detail="brief has no summary; round 1 is not available")
 
-    shape = brief.get("shape") or ""
-    # Only an EXTRACTED question was actually spoken in this chunk's own
-    # audio -- a "generated" one is a brief-writer's invented round-2
-    # follow-up the learner never heard in round 1, so the retell must
-    # never be graded on catching it.
-    brief_question = brief.get("question") or {}
-    question_text = brief_question.get("text") or "" if brief_question.get("source") == "extracted" else ""
+        shape = brief.get("shape") or ""
+        # Only an EXTRACTED question was actually spoken in this chunk's own
+        # audio -- a "generated" one is a brief-writer's invented round-2
+        # follow-up the learner never heard in round 1, so the retell must
+        # never be graded on catching it.
+        brief_question = brief.get("question") or {}
+        question_text = brief_question.get("text") or "" if brief_question.get("source") == "extracted" else ""
+        chunk_transcript = chunk.transcript or ""
+    # `db` is closed here — the pooled connection is released before the
+    # Deepgram/judge calls below (REL-005).
 
     audio_bytes = await audio.read()
     if not audio_bytes:
@@ -369,7 +380,7 @@ async def post_comprehension(
         raise HTTPException(status_code=413, detail="That recording is too long — try a shorter retell.")
 
     try:
-        keywords = keyword_boosts(chunk.transcript or "", brief_question.get("text") or "")
+        keywords = keyword_boosts(chunk_transcript, brief_question.get("text") or "")
     except Exception as exc:  # noqa: BLE001 -- keyword-boost construction must never break round 1
         logger.warning(f"keyword boost construction failed for chunk {chunk_id}: {exc}")
         keywords = []
@@ -424,7 +435,6 @@ async def post_answer(
     # observability; nothing here requires it.
     session_id: Optional[str] = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """Round 2 ("read & answer"): transcribe one spoken answer to a chunk,
     judge grammar + idiom (+ goal coverage when the chunk's brief has
@@ -438,34 +448,45 @@ async def post_answer(
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
 
-    chunk, _item = await _get_owned_chunk(db, chunk_id, user_id)
+    # REL-005: the ownership read AND the coin charge run inside their OWN
+    # short-lived session, closed (connection released back to the pool)
+    # BEFORE transcribe_answer's Deepgram call and _run_judges' concurrent
+    # LLM calls below — a request must never hold a pooled connection across
+    # a slow provider call. No ``Depends(get_db)`` on this route for that
+    # reason; same pattern ``briefkasten/routes.py::get_letter`` uses.
+    # ``_background_harvest`` (fire-and-forget, below) already opens its own
+    # session, so there is no matching post-call session here.
+    async with get_sessionmaker()() as db:
+        chunk, _item = await _get_owned_chunk(db, chunk_id, user_id)
 
-    # PAY-002: round 1 (comprehension) is free — reading/listening + one judge
-    # at ~0.4¢ is deliberately left unmetered (same as vocab card free path in
-    # the spec); only the judged *answer* chunk (round 2, this handler) is
-    # priced at 20 coins. Rate-limit first (free), then coins, before any
-    # STT/judge work.
-    # NOTE: the check is AFTER _get_owned_chunk (which 404/403s on an
-    # unowned chunk) — we don't charge for a nonexistent resource.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=INTERVIEW_ANSWER, kind="spend_interview")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+        # PAY-002: round 1 (comprehension) is free — reading/listening + one judge
+        # at ~0.4¢ is deliberately left unmetered (same as vocab card free path in
+        # the spec); only the judged *answer* chunk (round 2, this handler) is
+        # priced at 20 coins. Rate-limit first (free), then coins, before any
+        # STT/judge work.
+        # NOTE: the check is AFTER _get_owned_chunk (which 404/403s on an
+        # unowned chunk) — we don't charge for a nonexistent resource.
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=INTERVIEW_ANSWER, kind="spend_interview")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+
+        question = chunk.transcript or ""
+        brief = chunk.brief
+        if not brief:
+            logger.warning(f"legacy round-2 fallback (no brief): chunk {chunk_id}")
+        goals = (brief or {}).get("goals") or []
+        goal_question = ((brief or {}).get("question") or {}).get("text") or question
+    # `db` is closed here — the pooled connection is released before the
+    # Deepgram/judge calls below (REL-005).
 
     audio_bytes = await audio.read()
     if not audio_bytes:
         raise HTTPException(status_code=400, detail="empty audio upload")
     if len(audio_bytes) > _MAX_AUDIO_BYTES:
         raise HTTPException(status_code=413, detail="That recording is too long — one answer is enough.")
-
-    question = chunk.transcript or ""
-    brief = chunk.brief
-    if not brief:
-        logger.warning(f"legacy round-2 fallback (no brief): chunk {chunk_id}")
-    goals = (brief or {}).get("goals") or []
-    goal_question = ((brief or {}).get("question") or {}).get("text") or question
 
     # The root span opens BEFORE transcription (since 2026-08-20), so the
     # Deepgram call's `stt` generation nests under this trace beside the
