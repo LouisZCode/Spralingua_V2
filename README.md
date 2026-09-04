@@ -119,3 +119,5 @@ This is a map, not the full picture — see `CLAUDE.md` for the conventions and 
 
 - No Python test suite. Smoke-test changes by running the two dev commands above and walking through a session end-to-end; the tandem partner has a dedicated simulated-student harness (`sim/chat.py`) — see `CLAUDE.md`.
 - Auth is real (Google sign-in + a session JWT); there's no anonymous access except the rate-limited front-page demo socket (`/ws/demo/{user_id}`).
+- A thin CI gate (`.github/workflows/ci.yml`) runs on every push to `main` and every PR: ruff, an import + router-mount smoke test, and the frontend lint + build.
+- `scripts/test_user.py create test-<id> --profile beginner|plateaued|retired|streaker|polluted` seeds a fixture account with a realistically shaped ledger for testing, instead of a hand-typed or copied one.
