@@ -268,6 +268,68 @@ class ExerciseMarkerFilter:
         return flushed
 
 
+class SentinelStripper:
+    """AGENT-007: streaming character-level filter that drops any occurrence
+    of ``EXERCISE_RESULT_PREFIX`` (``⟦ÜBUNGSERGEBNIS⟧``) from a teacher-lesson
+    token stream, however the tokenizer happens to split it — same
+    prefix-holdback technique as ``ExerciseMarkerFilter`` above, simplified
+    for a single literal.
+
+    Unlike ``ExerciseMarkerFilter``, a confirmed match does NOT swallow the
+    rest of the stream: only the sentinel substring itself is dropped, and
+    text before/after it keeps flowing normally, since a fabricated verdict
+    the model produces on its own can have real conversational text on
+    either side of the hallucinated sentinel (the AGENT-007 tester saw the
+    raw sentinel spoken mid-reply, not as the whole reply). Multiple
+    occurrences in one reply are all stripped; ``hit`` records whether at
+    least one was found, for the warning log + Langfuse span attribute in
+    ``ClientWrapper.astream``.
+
+    The REAL ``EXERCISE_RESULT_PREFIX`` turn — the frontend's own synthetic
+    report POSTed via ``/say`` — arrives as INPUT text (``astream``'s
+    ``text``/``is_exercise_result``), never through this filter, which only
+    ever sees the model's OUTPUT stream. So this can only ever fire on a
+    turn Clara fabricated herself.
+    """
+
+    _TARGET = EXERCISE_RESULT_PREFIX
+
+    def __init__(self) -> None:
+        self._held = ""
+        self.hit = False
+
+    def feed(self, token: str) -> str:
+        """Consume one streamed token; return the text now safe to release."""
+        return "".join(self._feed_char(ch) for ch in token)
+
+    def _feed_char(self, ch: str) -> str:
+        candidate = self._held + ch
+        if self._TARGET.startswith(candidate):
+            self._held = candidate
+            if candidate == self._TARGET:
+                self._held = ""
+                self.hit = True
+            return ""
+        # Mismatch: `self._held` was never going to become the sentinel —
+        # release it, then check whether `ch` alone starts a fresh candidate
+        # (mirrors ExerciseMarkerFilter's own mismatch-recovery logic).
+        flushed, self._held = self._held, ""
+        if self._TARGET.startswith(ch):
+            self._held = ch
+            return flushed
+        return flushed + ch
+
+    def finalize(self) -> str:
+        """Call once the token stream ends. Returns text that was held but
+        never resolved into a confirmed sentinel — a partial match (e.g. a
+        cut-off "⟦ÜBUNGSERG") that ran out of stream instead of diverging
+        mid-way. Always ordinary text (a stream can't "confirm" a match
+        without releasing it in ``_feed_char`` first), so it's always safe
+        to flush as-is."""
+        flushed, self._held = self._held, ""
+        return flushed
+
+
 class ClientWrapper:
     model = CONVERSATIONAL_MODEL
 
@@ -327,6 +389,15 @@ class ClientWrapper:
         # of whether a note actually exists ("first result" is about turn
         # order, not content), so a later result turn is never re-augmented.
         self._first_result_seen: bool = False
+        # AGENT-007: True whenever a `deal` exercise marker has been
+        # confirmed and pushed to the client and no ⟦ÜBUNGSERGEBNIS⟧ turn has
+        # reported how it went yet — set True in the `deal` branch of
+        # `astream`'s finally block (where the marker is confirmed), cleared
+        # by `_augment_open_exercise` below the moment a real result turn
+        # arrives. Teacher-only in practice (nothing else ever deals an
+        # exercise), but left unconditional here like every other bool on
+        # this class.
+        self._exercise_open: bool = False
         self.agent = agent_assembly(
             user_id,
             # gpt-oss-120b's hidden reasoning tokens run ~700-1100 per reply
@@ -524,6 +595,62 @@ class ClientWrapper:
             "conversation — ask no new question of your own.)"
         )
 
+    def _augment_open_exercise(self, text: str) -> str:
+        """AGENT-007: the actual fix for the fabricated-verdict bug — Clara
+        can answer a plain acknowledgment ("Okay, I am ready for it.") after
+        dealing an exercise as if a graded attempt had already come back: an
+        invented sentence, an invented answer, a verdict, sometimes even the
+        raw ``EXERCISE_RESULT_PREFIX`` sentinel spoken aloud (see
+        ``SentinelStripper`` in ``astream`` for the belt-and-suspenders that
+        catches that last case even if this miss). This method is the
+        primary defense: while an exercise has been dealt
+        (``self._exercise_open``, set True the moment ``ExerciseMarkerFilter``
+        confirms a ``deal`` marker — see the `deal` branch in ``astream``'s
+        finally block) and no ``EXERCISE_RESULT_PREFIX`` turn has arrived to
+        report how it went, EVERY plain learner turn gets a same-turn stage
+        direction telling the model the exercise is still open and nothing
+        has been graded yet — not just the first one, since the learner may
+        chat twice before the app's real result lands.
+
+        Same turn-injection reasoning as ``_augment_first_result``/
+        ``_augment_tandem_last_turn`` above: gpt-oss-120b reliably drops
+        instructions describing a FUTURE turn's behavior, so this has to
+        ride on the applicable turn's own input, not system-prompt memory —
+        a `teacher.yaml` trap pair was deliberately NOT chosen for this fix
+        (AGENT-007's Proposal-2, prompt bulk trade-off).
+
+        Clears ``self._exercise_open`` the instant a genuine
+        ``EXERCISE_RESULT_PREFIX`` turn arrives — from then on a plain turn
+        is just a plain turn again, until the next `deal` marker re-opens
+        it. No augmentation is added on a result turn itself; that one is
+        ``_augment_first_result``'s own turn to augment, not this method's —
+        this only does the clearing bookkeeping for it. No-op outside
+        teacher lessons, on the kickoff sentinel (defensive only — an
+        exercise can't have been dealt yet on exchange 1), or whenever
+        ``_exercise_open`` is already False.
+        """
+        if not self._is_teacher_lesson:
+            return text
+        if text.startswith(EXERCISE_RESULT_PREFIX):
+            self._exercise_open = False
+            return text
+        if self._kickoff is not None and text == self._kickoff:
+            return text
+        if not self._exercise_open:
+            return text
+        logger.info(
+            f"[AGENT-007] Exercise still open — appending a stage direction "
+            f"to session {self.session_id}'s plain turn (exchange "
+            f"{self._exchange_count + 1})"
+        )
+        return text + (
+            "\n\n(Stage direction — the exercise you just dealt is still "
+            "open; no answer has come back yet, nothing has been graded. "
+            "Respond naturally to what they just said — do not describe, "
+            "grade, or invent an attempt or a result. If it fits, you may "
+            "gently remind them you're waiting for their answer.)"
+        )
+
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
 
@@ -560,7 +687,20 @@ class ClientWrapper:
         why. TAND-014c: ``_augment_tandem_last_turn`` chains onto the same
         ``llm_text``, on tandem sessions only, and (like
         ``_augment_first_result``) must run BEFORE the ``_exchange_count``
-        increment below — its own docstring works out why.
+        increment below — its own docstring works out why. AGENT-007:
+        ``_augment_open_exercise`` chains onto ``llm_text`` last, teacher
+        lessons only — same before-the-increment requirement, same reasoning.
+
+        AGENT-007, teacher lessons only, detected in-stream (post-yield code
+        is unreliable here, same reason the end-of-call trigger below is
+        detected in-stream rather than after): a ``SentinelStripper`` runs
+        alongside ``ExerciseMarkerFilter`` on every streamed token so a
+        fabricated ``EXERCISE_RESULT_PREFIX`` sentinel — Clara hallucinating
+        her own graded-result turn off a plain acknowledgment — is never
+        spoken, stored, or shown, even though ``_augment_open_exercise``
+        above is the primary defense against the fabrication itself. See the
+        `finally` block below for the warning log + Langfuse span attribute
+        this leaves behind when it fires.
 
         PERF-005: the token loop below is wrapped in an up-to-2-attempt loop
         bounding only the wait for the FIRST token of each attempt
@@ -584,6 +724,7 @@ class ClientWrapper:
         text = input_dict.get("input", "")
         llm_text = self._augment_first_result(text)
         llm_text = self._augment_tandem_last_turn(llm_text)
+        llm_text = self._augment_open_exercise(llm_text)
         messages = {"messages": [{"role": "user", "content": llm_text}]}
 
         self._exchange_count += 1
@@ -595,6 +736,10 @@ class ClientWrapper:
         final_usage = None
         final_response_metadata = None
         marker_filter = ExerciseMarkerFilter() if self._is_teacher_lesson else None
+        # AGENT-007: teacher lessons only — strips a fabricated
+        # EXERCISE_RESULT_PREFIX sentinel from Clara's own output stream.
+        # See SentinelStripper's docstring and the astream docstring above.
+        sentinel_stripper = SentinelStripper() if self._is_teacher_lesson else None
 
         # Prefer the per-connection context PipelineLatencyObserver hands us
         # on turn open (self._turn_context) over pipecat's process-wide
@@ -712,6 +857,15 @@ class ClientWrapper:
                                 # never flushes at all).
                                 if marker_filter is not None:
                                     content = marker_filter.feed(content)
+                                # AGENT-007: strip a fabricated
+                                # EXERCISE_RESULT_PREFIX sentinel before it
+                                # can ever reach TTS/transcript/pending bot
+                                # text — see SentinelStripper's docstring.
+                                # Runs on whatever marker_filter released
+                                # this iteration (possibly "" — nothing to
+                                # check yet).
+                                if sentinel_stripper is not None and content:
+                                    content = sentinel_stripper.feed(content)
                                 if content:
                                     full_response.append(content)
                                     yield content
@@ -761,6 +915,15 @@ class ClientWrapper:
                         # withheld above, and its id (if any) is handled below.
                         if marker_filter is not None:
                             tail = marker_filter.finalize()
+                            if tail:
+                                full_response.append(tail)
+                                yield tail
+                        # AGENT-007: same flush for a partial-but-unconfirmed
+                        # sentinel match (e.g. a stray "⟦ÜBUNGSERG" that ran
+                        # out of stream) — always ordinary text, safe to
+                        # release as-is (see SentinelStripper.finalize).
+                        if sentinel_stripper is not None:
+                            tail = sentinel_stripper.finalize()
                             if tail:
                                 full_response.append(tail)
                                 yield tail
@@ -843,6 +1006,21 @@ class ClientWrapper:
                     # behind once the marker was cut away, per the "strip the
                     # marker and trailing whitespace" contract.
                     output_text = output_text.rstrip()
+                # AGENT-007: a fabricated EXERCISE_RESULT_PREFIX sentinel was
+                # detected and stripped mid-stream (SentinelStripper above) —
+                # the raw text is already safely gone from what was yielded,
+                # but this should never happen given a real learner turn (the
+                # genuine sentinel only ever arrives IN via the frontend's own
+                # /say POST, never out of Clara's mouth), so it's worth a
+                # warning + a span attribute to catch on Langfuse.
+                if sentinel_stripper is not None and sentinel_stripper.hit:
+                    logger.warning(
+                        f"[AGENT-007] Stripped a fabricated "
+                        f"{EXERCISE_RESULT_PREFIX!r} sentinel from Clara's "
+                        f"own reply — session {self.session_id}, exchange "
+                        f"{self._exchange_count}/{self._max_exchanges}"
+                    )
+                    llm_span.set_attribute("teacher.fabricated_result", True)
                 llm_span.set_attribute("langfuse.observation.output", output_text)
                 # v4 root-observation output — same contract as the input
                 # stamp above. The turn span is still recording here: it ends
@@ -959,6 +1137,12 @@ class ClientWrapper:
                         }
                         pattern_id = _snap_pattern_id(payload, known_ids)
                         if _EXERCISE_MARKER_ID_RE.match(pattern_id):
+                            # AGENT-007: this deal is confirmed and about to
+                            # be pushed to the client — open the flag
+                            # `_augment_open_exercise` reads on every
+                            # subsequent plain turn until the real result
+                            # turn arrives (or the NEXT deal re-opens it).
+                            self._exercise_open = True
                             logger.info(f"[EXERCISE] Dealt pattern {pattern_id!r} to the client")
                             if self.rtvi_processor is not None and hasattr(
                                 self.rtvi_processor, "send_server_message"

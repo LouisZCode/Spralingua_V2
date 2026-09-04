@@ -205,6 +205,48 @@ export default function ConversationView({
   // from the `exerciseSlot` prop's presence (never a lesson-type guess), so
   // it's always false for VoiceChat/TandemChat.
   const exerciseActive = exerciseSlot != null;
+  // AGENT-007 Proposal-3: true the instant Clara's exercise-deal/forge
+  // marker is detected server-side — armed by armDealPending, called from
+  // onServerMessage's exercise_request/exercise_forge branches further
+  // below — well before TeacherChat's own exerciseSlot card actually mounts
+  // (its ~1s reveal pause plus the item fetch). AGENT-007's Situation: an
+  // eager learner could record/type in exactly that window, since
+  // Record/Type used to hide only once exerciseSlot went non-null.
+  // `controlsHidden` below ORs this flag into every place `exerciseActive`
+  // used to gate that race alone. Cleared once the real slot mounts (the
+  // effect right after this block) or by DEAL_PENDING_TIMEOUT_MS if the deal
+  // fetch never produces anything to show (404 / network failure) — that
+  // backstop is a UX nicety only; the backend's own open-exercise stage
+  // direction (agents/pipecat_wrapper.py) is what actually keeps a plain
+  // turn from being mistaken for a graded result, regardless of this flag's
+  // state.
+  const [dealPending, setDealPending] = useState(false);
+  const dealPendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const DEAL_PENDING_TIMEOUT_MS = 8000;
+  const clearDealPendingTimer = () => {
+    if (dealPendingTimerRef.current) {
+      clearTimeout(dealPendingTimerRef.current);
+      dealPendingTimerRef.current = null;
+    }
+  };
+  const armDealPending = () => {
+    clearDealPendingTimer();
+    setDealPending(true);
+    dealPendingTimerRef.current = setTimeout(() => {
+      dealPendingTimerRef.current = null;
+      setDealPending(false);
+    }, DEAL_PENDING_TIMEOUT_MS);
+  };
+  const controlsHidden = exerciseActive || dealPending;
+  // Releases dealPending (and its backstop timer) the moment the real
+  // exerciseSlot card mounts — exerciseActive alone covers hiding controls
+  // from here on, so the flag has nothing left to do for this exercise.
+  useEffect(() => {
+    if (exerciseActive) {
+      clearDealPendingTimer();
+      setDealPending(false);
+    }
+  }, [exerciseActive]);
   const clientRef = useRef<PipecatClient | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const transcriptRef = useRef<HTMLElement | null>(null);
@@ -315,7 +357,7 @@ export default function ConversationView({
         (target.tagName === "INPUT" ||
           target.tagName === "TEXTAREA" ||
           target.isContentEditable);
-      if (e.key === "/" && !isTyping && !showFinishConfirm && !exerciseActive) {
+      if (e.key === "/" && !isTyping && !showFinishConfirm && !controlsHidden) {
         e.preventDefault();
         setTypeOpen(true);
       } else if (e.key === "Escape" && typeOpen) {
@@ -329,7 +371,7 @@ export default function ConversationView({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [phase, typeOpen, showFinishConfirm, exerciseActive]);
+  }, [phase, typeOpen, showFinishConfirm, controlsHidden]);
 
   // When the overlay opens, focus its input.
   useEffect(() => {
@@ -339,12 +381,14 @@ export default function ConversationView({
   // AGENT-00X: single focus — an exercise reveal wins over an already-open
   // type overlay (the edge case where the learner opened it during the ~1s
   // reveal pause between her reply landing and the card actually appearing).
+  // AGENT-007 Proposal-3: also closes it the instant the deal/forge marker
+  // is merely detected (controlsHidden), not just once the card is up.
   useEffect(() => {
-    if (exerciseActive && typeOpen) {
+    if (controlsHidden && typeOpen) {
       setTypeOpen(false);
       setDraft("");
     }
-  }, [exerciseActive, typeOpen]);
+  }, [controlsHidden, typeOpen]);
 
   // Unmount-only cleanup: browser/mobile back (or any route change) away from
   // a live session skips confirmFinish/onDisconnected entirely, so without
@@ -362,6 +406,8 @@ export default function ConversationView({
       if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
       // CLARA-18: no orphaned agent-end timer past unmount.
       if (agentEndTimerRef.current) clearTimeout(agentEndTimerRef.current);
+      // AGENT-007 Proposal-3: no orphaned deal-pending backstop past unmount.
+      if (dealPendingTimerRef.current) clearTimeout(dealPendingTimerRef.current);
       void clientRef.current?.disconnect();
       // Stops the bot's incoming audio track (the mic goes down with
       // disconnect() above). Only ever one stream — each onTrackStarted
@@ -426,6 +472,10 @@ export default function ConversationView({
       clearTimeout(agentEndTimerRef.current);
       agentEndTimerRef.current = null;
     }
+    // AGENT-007 Proposal-3: session winding down — release the deal-pending
+    // flag too, same reasoning as the two timers just above.
+    clearDealPendingTimer();
+    setDealPending(false);
     if (audioRef.current?.srcObject) {
       (audioRef.current.srcObject as MediaStream)
         .getTracks()
@@ -681,6 +731,9 @@ export default function ConversationView({
                 // CLARA-15: a fresh request always wins over a still-held forge.
                 pendingExerciseForgeTopicRef.current = null;
                 pendingExercisePatternRef.current = patternId;
+                // AGENT-007 Proposal-3: hide Record/Type from THIS instant —
+                // don't wait for TeacherChat's own reveal pause/fetch.
+                armDealPending();
               }
             } else if (
               data &&
@@ -695,6 +748,8 @@ export default function ConversationView({
               if (typeof topic === "string" && topic) {
                 pendingExercisePatternRef.current = null;
                 pendingExerciseForgeTopicRef.current = topic;
+                // AGENT-007 Proposal-3: same early hide as exercise_request.
+                armDealPending();
               }
             } else if (
               data &&
@@ -877,9 +932,9 @@ export default function ConversationView({
   // reveal (during the ~2s pause) can still be in flight; cancel it rather
   // than leave an orphaned take with no visible control to stop it.
   useEffect(() => {
-    if (exerciseActive && recorder.recording) recorder.cancel();
+    if (controlsHidden && recorder.recording) recorder.cancel();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [exerciseActive]);
+  }, [controlsHidden]);
 
   return (
     <main className="relative min-h-screen overflow-hidden bg-paper text-ink">
@@ -942,6 +997,7 @@ export default function ConversationView({
               onCancelRecording={recorder.cancel}
               exerciseSlot={exerciseSlot}
               teacherLayout={teacherLayout}
+              controlsHidden={controlsHidden}
             />
           ))}
 
@@ -1275,6 +1331,7 @@ function LivePhase({
   onOpenType,
   exerciseSlot,
   teacherLayout,
+  controlsHidden,
 }: {
   title: string;
   messages: ChatMessage[];
@@ -1320,6 +1377,12 @@ function LivePhase({
   // the orb/state-label instead of near the transcript. Absent/false is
   // byte-identical to today.
   teacherLayout?: boolean;
+  // AGENT-007 Proposal-3: forwarded verbatim from ConversationView — ORs the
+  // early marker-detected flag into the same gate exerciseSlot's own
+  // presence used to drive alone (see that component's `controlsHidden` for
+  // the full contract). Absent for VoiceChat/TandemChat, same as
+  // exerciseSlot itself.
+  controlsHidden?: boolean;
 }) {
   const orbClass = `orb orb-${speakerState.replace("_", "-")}`;
   // No barge-in by design: while Lena is composing or speaking, recording a
@@ -1333,6 +1396,14 @@ function LivePhase({
   // ignored (see ConversationView's keydown effect). Gated purely on
   // `exerciseSlot` being present, same as every other focus-mode check.
   const exerciseActive = exerciseSlot != null;
+  // AGENT-007 Proposal-3: the Record/Type-hiding gate specifically — widens
+  // exerciseActive with ConversationView's own early marker-detected flag
+  // (see that component's `controlsHidden`). Falls back to exerciseActive
+  // alone if a future caller never passes it; ConversationView always does.
+  // The exercise-card render below (bottom of this component) still gates
+  // on exerciseActive alone — nothing to render until exerciseSlot is
+  // actually non-null.
+  const controlsGateActive = controlsHidden ?? exerciseActive;
   // CLARA-18: the record controls + "Type instead" button, extracted as one
   // cluster. It renders in the classic spot between the orb hero and the
   // transcript for EVERY surface — only the wrapper spacing classes differ
@@ -1346,7 +1417,7 @@ function LivePhase({
           record controls. Hidden entirely in Natural mode, and hidden (not
           just disabled) while an exercise card is up — AGENT-00X single
           focus. */}
-      {practiceMode && !exerciseActive && (
+      {practiceMode && !controlsGateActive && (
         <div
           className={`rise-in flex flex-col items-center ${
             teacherLayout ? "gap-[5px] mt-[5px]" : "gap-2 pb-2"
@@ -1403,7 +1474,7 @@ function LivePhase({
 
       {/* AGENT-001: visible text-input entry — same overlay "/" opens.
           AGENT-00X: hidden while an exercise card is up — single focus. */}
-      {onOpenType && !exerciseActive && (
+      {onOpenType && !controlsGateActive && (
         <div
           className={`rise-in flex justify-center ${
             teacherLayout ? "mt-[5px]" : "pb-2"
