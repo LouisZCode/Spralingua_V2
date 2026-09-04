@@ -2851,6 +2851,8 @@ dependencies = [
 dev = [
     { name = "gradio" },
     { name = "pyaudio" },
+]
+lint = [
     { name = "ruff" },
 ]
 
@@ -2888,8 +2890,8 @@ requires-dist = [
 dev = [
     { name = "gradio", specifier = ">=6.2.0" },
     { name = "pyaudio", specifier = ">=0.2.14" },
-    { name = "ruff", specifier = "==0.16.6" },
 ]
+lint = [{ name = "ruff", specifier = "==0.16.6" }]
 
 [[package]]
 name = "sqlalchemy"

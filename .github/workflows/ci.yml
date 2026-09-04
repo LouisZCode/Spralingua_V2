@@ -35,10 +35,10 @@ jobs:
       # group, not just the default — currently just "dev" (gradio, pyaudio,
       # ruff), same set the Dockerfile excludes via --no-dev for prod images.
       - name: uv sync
-        run: uv sync --frozen --all-groups
+        run: uv sync --frozen --no-dev --group lint
 
       - name: ruff check
-        run: uv run ruff check .
+        run: uv run --no-sync ruff check .
 
       # Dummy, non-secret values — see scripts/ci_smoke.py's module docstring
       # for exactly which import-time code path needs each one. In
@@ -52,7 +52,7 @@ jobs:
           OPENROUTER_API_KEY: ci-smoke-dummy-key
           APP_ENV: dev
           JWT_SECRET: ci-smoke-dummy-jwt-secret
-        run: uv run python scripts/ci_smoke.py
+        run: uv run --no-sync python scripts/ci_smoke.py
 
       # speedtest/strict_lint.py (the Cerebras strict-json-schema judge-schema
       # linter — CLAUDE.md's "Cerebras strict json_schema limits" note) is

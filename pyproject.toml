@@ -41,6 +41,12 @@ dependencies = [
 dev = [
     "gradio>=6.2.0",
     "pyaudio>=0.2.14",
+]
+# CI-001: ruff lives in its own group so CI can install it WITHOUT the dev
+# group — pyaudio builds from source on Linux and needs portaudio headers the
+# GitHub runner lacks (the first CI run failed exactly there). Locally:
+# `uv run --group lint ruff check .`
+lint = [
     "ruff==0.16.6",
 ]
 
