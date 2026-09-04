@@ -44,6 +44,11 @@ def _build_model(reasoning_effort: str | None = None) -> ChatOpenAI:
         api_key=openrouter_api_key,
         stream_usage=True,                   # final usage chunk on streamed OpenAI calls (token counts → Langfuse)
         timeout=30,
+        # PERF-005: the SDK's own default (2) silent retries would otherwise
+        # stack underneath ClientWrapper.astream's new explicit one-retry
+        # bound on the first token — each hidden retry re-runs the full
+        # 30s read-gap timeout, compounding instead of being replaced by it.
+        max_retries=0,
         extra_body=extra_body,
     )
 

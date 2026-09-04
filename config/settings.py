@@ -84,6 +84,17 @@ demo_session_timeout_s = int(os.getenv("DEMO_SESSION_TIMEOUT_S", "180"))
 # a paused "I'll be right back" stretch.
 learned_session_timeout_s = int(os.getenv("LEARNED_SESSION_TIMEOUT_S", "7200"))
 
+# Bound (seconds) on the wait for the FIRST streamed token from the live
+# conversation LLM (PERF-005) — the one call a learner sits and listens to in
+# real time, previously unbounded (OpenRouter's pinned-request "park" failure
+# mode judges already guard against via agents/openrouter_llm.py, up to ~62s
+# observed in prod/dev traces). Healthy p90 TTFT is ~1.48s (Langfuse,
+# 2026-09-02 audit), so 8s costs nothing on a normal turn. Read by
+# agents/pipecat_wrapper.py::ClientWrapper.astream, which retries once on
+# expiry before falling back to a fixed spoken line — see the comment at that
+# retry site.
+conversation_first_token_s = float(os.getenv("CONVERSATION_FIRST_TOKEN_S", "8.0"))
+
 # Concurrency + rate caps for the public demo.
 demo_max_concurrent        = int(os.getenv("DEMO_MAX_CONCURRENT", "25"))        # global live demo pipelines
 demo_per_ip_concurrent     = int(os.getenv("DEMO_PER_IP_CONCURRENT", "2"))

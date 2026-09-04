@@ -45,13 +45,14 @@ class _BotOutputMessageWithDuration(RTVIBotOutputMessage):
 
     data: _BotOutputDataWithDuration
 
+from config.settings import conversation_first_token_s
 from grammar.loader import load_explanations
 
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
 from .fake_profiles import load_profile
 from .load_prompts import load_prompts
-from .observability import get_current_turn_span, tracer
+from .observability import get_current_turn_span, mark_span_error, tracer
 
 # `max_exchanges` is now per-lesson, read from the YAML in `ClientWrapper.__init__`.
 # End-of-call fires when either the count cap (max_exchanges) is reached OR a
@@ -84,6 +85,18 @@ _GOODBYE_RE = re.compile(r"\b(?:" + "|".join(re.escape(p) for p in GOODBYE_PHRAS
 
 def _contains_goodbye(text: str) -> bool:
     return bool(_GOODBYE_RE.search(text.lower()))
+
+
+# PERF-005: spoken fallback when the LLM produces no first token twice in a
+# row (see the retry loop in ClientWrapper.astream). Picked so neither line
+# contains any GOODBYE_PHRASES entry — a fallback that accidentally tripped
+# goodbye detection would silently end the session on the exact turn where
+# the learner most needs it to keep going. German for tandem/conversation/
+# respond (the German runtime); English for teacher (Clara speaks English).
+_FALLBACK_REPLY_DE = (
+    "Entschuldige, ich habe dich gerade nicht verstanden — sag das bitte noch einmal."
+)
+_FALLBACK_REPLY_EN = "Sorry, I didn't quite catch that — could you say it again?"
 
 
 # AGENT-00X: Clara's interactive-exercise loop. `teacher.yaml`'s "Practice
@@ -548,6 +561,25 @@ class ClientWrapper:
         ``llm_text``, on tandem sessions only, and (like
         ``_augment_first_result``) must run BEFORE the ``_exchange_count``
         increment below — its own docstring works out why.
+
+        PERF-005: the token loop below is wrapped in an up-to-2-attempt loop
+        bounding only the wait for the FIRST token of each attempt
+        (``_first_token_bounded``, ``CONVERSATION_FIRST_TOKEN_S`` seconds,
+        default 8 — p90 healthy TTFT is ~1.48s). Attempt 2, if reached, is a
+        LangGraph RESUME (``self.agent.astream(None, config=run_config, ...)``),
+        not a re-invoke with the same ``messages`` — empirically verified
+        with a throwaway create_agent()+InMemorySaver() harness (fake
+        streaming model, forced first-token timeout via the same
+        wait_for/aclose() pattern used here): re-invoking with the same
+        input produced TWO copies of the human message in
+        ``agent.get_state(config).values["messages"]`` after the retry
+        (LangGraph's ``add_messages`` reducer appends a dict-built message as
+        new because it gets a fresh id each call), while resuming with
+        ``None`` produced exactly ONE — LangGraph checkpoints the input
+        merge as its own step, before the model node runs, so a cancelled
+        node has nothing of its own to re-merge on resume. See the retry
+        loop below for what happens on a second failure (fallback line,
+        span marked ERROR, session stays alive — no `_end_pipeline`).
         """
         text = input_dict.get("input", "")
         llm_text = self._augment_first_result(text)
@@ -573,6 +605,33 @@ class ClientWrapper:
         # behavior for any caller that never wires a per-connection context.
         turn_ctx = self._turn_context or get_current_turn_context()
         span_start_ns = time.time_ns()
+
+        async def _first_token_bounded(source_agen):
+            """PERF-005: bound only the FIRST item pulled from ``source_agen``
+            to ``conversation_first_token_s`` — every item after streams
+            unbounded (a healthy reply can keep streaming for several
+            seconds once it starts; only the stall BEFORE anything arrives
+            is the failure mode being bounded here).
+
+            On a first-token timeout, closes ``source_agen`` before
+            re-raising so the underlying LangGraph/httpx stream doesn't keep
+            running unobserved, and so the caller never touches this
+            generator again (a second read from an already-timed-out
+            generator is exactly how a stray late token could leak into the
+            output — closing it here makes that structurally impossible).
+            """
+            try:
+                first_item = await asyncio.wait_for(
+                    source_agen.__anext__(), timeout=conversation_first_token_s
+                )
+            except StopAsyncIteration:
+                return
+            except asyncio.TimeoutError:
+                await source_agen.aclose()
+                raise
+            yield first_item
+            async for item in source_agen:
+                yield item
 
         with tracer.start_as_current_span(
             "llm",
@@ -610,82 +669,171 @@ class ClientWrapper:
             llm_span.set_attribute("exchange", self._exchange_count)
 
             try:
-                async for token, _ in self.agent.astream(
-                    messages,
-                    config=run_config,
-                    context=self.context,
-                    stream_mode="messages",
-                ):
-                    if hasattr(token, "content") and token.content:
-                        if ttft_ns is None:
-                            ttft_ns = time.time_ns()
-                        # Strip markdown asterisks here, once, at the single point
-                        # text leaves the LLM stream — every downstream consumer
-                        # (TTS via yield, goodbye detection via full_response,
-                        # the chat bubble stash, the transcript) reads clean text.
-                        # The LLM occasionally emits `**word**`; asterisks have no
-                        # legitimate use in spoken output (TAND-002).
-                        content = token.content.replace("*", "")
-                        # AGENT-00X: teacher lessons only. Text held back as a
-                        # candidate/confirmed exercise marker comes back as ""
-                        # here — nothing below runs for it this iteration (it
-                        # either flushes later as ordinary text via a later
-                        # feed()/finalize() call, or is a confirmed marker and
-                        # never flushes at all).
+                for attempt_num in (1, 2):
+                    agen = (
+                        self.agent.astream(
+                            messages,
+                            config=run_config,
+                            context=self.context,
+                            stream_mode="messages",
+                        )
+                        if attempt_num == 1
+                        # PERF-005 retry: resume from the LangGraph checkpoint
+                        # instead of re-invoking with `messages` again — see
+                        # the astream docstring above for the empirical
+                        # finding (resume leaves exactly one copy of the
+                        # human message in thread state; re-invoking
+                        # duplicates it).
+                        else self.agent.astream(
+                            None,
+                            config=run_config,
+                            context=self.context,
+                            stream_mode="messages",
+                        )
+                    )
+                    attempt_start_ns = time.time_ns()
+                    try:
+                        async for token, _ in _first_token_bounded(agen):
+                            if hasattr(token, "content") and token.content:
+                                if ttft_ns is None:
+                                    ttft_ns = time.time_ns()
+                                # Strip markdown asterisks here, once, at the single point
+                                # text leaves the LLM stream — every downstream consumer
+                                # (TTS via yield, goodbye detection via full_response,
+                                # the chat bubble stash, the transcript) reads clean text.
+                                # The LLM occasionally emits `**word**`; asterisks have no
+                                # legitimate use in spoken output (TAND-002).
+                                content = token.content.replace("*", "")
+                                # AGENT-00X: teacher lessons only. Text held back as a
+                                # candidate/confirmed exercise marker comes back as ""
+                                # here — nothing below runs for it this iteration (it
+                                # either flushes later as ordinary text via a later
+                                # feed()/finalize() call, or is a confirmed marker and
+                                # never flushes at all).
+                                if marker_filter is not None:
+                                    content = marker_filter.feed(content)
+                                if content:
+                                    full_response.append(content)
+                                    yield content
+
+                                    # End trigger: count cap reached, OR a goodbye phrase
+                                    # appears once armed (final exchange — see
+                                    # _goodbye_after). Detected in-stream (post-yield code
+                                    # is unreliable) but only MARKED as pending here — the
+                                    # actual stop_when_done() call happens in
+                                    # flush_bot_output() after BotStoppedSpeakingFrame so
+                                    # the final TTS span gets to record under the turn
+                                    # before EndFrame races through and closes the turn
+                                    # span. See LEARNINGS.md for the race condition that
+                                    # motivates this.
+                                    if (not self._end_pending
+                                            and (self._exchange_count >= self._max_exchanges
+                                                 or (self._exchange_count >= self._goodbye_after
+                                                     and _contains_goodbye("".join(full_response))))):
+                                        reason = (
+                                            "max_exchanges" if self._exchange_count >= self._max_exchanges
+                                            else "goodbye"
+                                        )
+                                        logger.info(
+                                            f"[END] Pending pipeline close ({reason}, "
+                                            f"exchange {self._exchange_count}/{self._max_exchanges}) "
+                                            f"— will fire after bot finishes speaking"
+                                        )
+                                        self._end_pending = True
+
+                            if getattr(token, "usage_metadata", None):
+                                final_usage = token.usage_metadata
+                            # OBS-008: on the streamed path only the FINAL chunk carries
+                            # a populated response_metadata (finish_reason/model_name/
+                            # model_provider — see LEARNINGS.md); every prior chunk's is
+                            # empty, so "last non-empty wins" naturally lands on it.
+                            # OpenRouter's actually-served provider is not reachable
+                            # here either (same limitation as the one-shot judge path —
+                            # see agents/observability.py::unwrap_structured_output) and
+                            # adding an extra HTTP call to fetch it is out of scope.
+                            if getattr(token, "response_metadata", None):
+                                final_response_metadata = token.response_metadata
+
+                        # AGENT-00X: stream ended — flush any leftover held text that
+                        # never resolved into a confirmed marker (e.g. a stray "[["
+                        # that ran out of stream). A CONFIRMED marker's text is never
+                        # flushed here (finalize() drops it) — it was already fully
+                        # withheld above, and its id (if any) is handled below.
                         if marker_filter is not None:
-                            content = marker_filter.feed(content)
-                        if content:
-                            full_response.append(content)
-                            yield content
-
-                            # End trigger: count cap reached, OR a goodbye phrase
-                            # appears once armed (final exchange — see
-                            # _goodbye_after). Detected in-stream (post-yield code
-                            # is unreliable) but only MARKED as pending here — the
-                            # actual stop_when_done() call happens in
-                            # flush_bot_output() after BotStoppedSpeakingFrame so
-                            # the final TTS span gets to record under the turn
-                            # before EndFrame races through and closes the turn
-                            # span. See LEARNINGS.md for the race condition that
-                            # motivates this.
-                            if (not self._end_pending
-                                    and (self._exchange_count >= self._max_exchanges
-                                         or (self._exchange_count >= self._goodbye_after
-                                             and _contains_goodbye("".join(full_response))))):
-                                reason = (
-                                    "max_exchanges" if self._exchange_count >= self._max_exchanges
-                                    else "goodbye"
-                                )
-                                logger.info(
-                                    f"[END] Pending pipeline close ({reason}, "
-                                    f"exchange {self._exchange_count}/{self._max_exchanges}) "
-                                    f"— will fire after bot finishes speaking"
-                                )
-                                self._end_pending = True
-
-                    if getattr(token, "usage_metadata", None):
-                        final_usage = token.usage_metadata
-                    # OBS-008: on the streamed path only the FINAL chunk carries
-                    # a populated response_metadata (finish_reason/model_name/
-                    # model_provider — see LEARNINGS.md); every prior chunk's is
-                    # empty, so "last non-empty wins" naturally lands on it.
-                    # OpenRouter's actually-served provider is not reachable
-                    # here either (same limitation as the one-shot judge path —
-                    # see agents/observability.py::unwrap_structured_output) and
-                    # adding an extra HTTP call to fetch it is out of scope.
-                    if getattr(token, "response_metadata", None):
-                        final_response_metadata = token.response_metadata
-
-                # AGENT-00X: stream ended — flush any leftover held text that
-                # never resolved into a confirmed marker (e.g. a stray "[["
-                # that ran out of stream). A CONFIRMED marker's text is never
-                # flushed here (finalize() drops it) — it was already fully
-                # withheld above, and its id (if any) is handled below.
-                if marker_filter is not None:
-                    tail = marker_filter.finalize()
-                    if tail:
-                        full_response.append(tail)
-                        yield tail
+                            tail = marker_filter.finalize()
+                            if tail:
+                                full_response.append(tail)
+                                yield tail
+                        break
+                    except Exception as e:
+                        # Narrow on purpose: asyncio.CancelledError and
+                        # GeneratorExit are BaseException, not Exception, so
+                        # a real disconnect/cancel during this await is never
+                        # caught here — it propagates normally. Only actual
+                        # LLM-call failures (timeout or otherwise) land in
+                        # this branch.
+                        elapsed_s = (time.time_ns() - attempt_start_ns) / 1_000_000_000
+                        is_timeout = isinstance(e, asyncio.TimeoutError)
+                        # Named `failure_reason`, not `reason` — that name is
+                        # already used (different meaning: max_exchanges vs
+                        # goodbye) inside the per-token body above, and this
+                        # `except` shares the same function scope with it.
+                        failure_reason = (
+                            "first-token timeout" if is_timeout
+                            else f"{type(e).__name__}: {e}"
+                        )
+                        if full_response:
+                            # Content from THIS attempt already streamed (and
+                            # was already spoken via TTS) before the failure
+                            # hit — retrying would append an unrelated second
+                            # reply on top of live audio, and the fallback
+                            # line would sound bizarre stitched onto real
+                            # partial speech. Stop here: whatever was
+                            # captured stands as the (degraded) turn output,
+                            # same as any other early-terminated stream, but
+                            # the span is marked ERROR so it shows up in
+                            # Langfuse instead of silently looking healthy.
+                            logger.error(
+                                f"[PERF-005] LLM stream failed mid-reply after "
+                                f"{elapsed_s:.1f}s ({failure_reason}), exchange "
+                                f"{self._exchange_count}/{self._max_exchanges} — "
+                                f"keeping the partial reply already streamed, "
+                                f"not retrying"
+                            )
+                            mark_span_error(llm_span, f"mid-stream failure: {failure_reason}")
+                            break
+                        if attempt_num == 1:
+                            logger.warning(
+                                f"[PERF-005] LLM produced no first token after "
+                                f"{elapsed_s:.1f}s ({failure_reason}) — retrying once, "
+                                f"exchange {self._exchange_count}/{self._max_exchanges}"
+                            )
+                            continue
+                        # Attempt 2 (the retry) also produced nothing. The
+                        # learner must perceive SOMETHING rather than dead
+                        # air again — speak a fixed fallback line (goes
+                        # through the normal TTS/bot-output push below, same
+                        # as any real reply) instead of a third attempt, mark
+                        # the span as an error, and keep the session alive —
+                        # no _end_pipeline here even if this exchange happens
+                        # to be the one that reaches the cap.
+                        fallback_reason = (
+                            f"first-token timeout twice ({elapsed_s:.1f}s on retry)"
+                            if is_timeout else f"retry failed: {failure_reason}"
+                        )
+                        logger.error(
+                            f"[PERF-005] retry also failed ({fallback_reason}) — "
+                            f"speaking the fallback line, exchange "
+                            f"{self._exchange_count}/{self._max_exchanges}"
+                        )
+                        mark_span_error(llm_span, fallback_reason)
+                        fallback_text = (
+                            _FALLBACK_REPLY_EN if self._is_teacher_lesson
+                            else _FALLBACK_REPLY_DE
+                        )
+                        full_response.append(fallback_text)
+                        yield fallback_text
+                        break
             finally:
                 output_text = "".join(full_response)
                 if marker_filter is not None and marker_filter.marker_id is not None:
