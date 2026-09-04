@@ -129,6 +129,41 @@ long_term_header: |
   # What you remember about them
   From your recent tandems together — bring these up naturally when they fit, the way a colleague you like would remember:
 
+# Level-examples layer (TAND-014a) — selected in code by the learner's
+# self-declared CEFR bucket (`users.level` -> Context.student_level),
+# same threading teacher.yaml already uses for Clara. ONE block is
+# appended between the short-term layer and the grammar focus, or none at
+# all: A1 and unset levels have no key here, so their prompt renders
+# byte-identical to pre-level behavior — nothing changes for a learner who
+# has never set a level. The block calibrates the DIFFICULTY of YOUR OWN
+# German by demonstration, never by naming a level — per the gpt-oss guide
+# (ARCHITECTURE.md), the model copies illustrations, so these sentences ARE
+# the instruction. This is about how simple or complex you keep your own
+# reactions and stories — it changes nothing about the correction contract
+# above, which stays scoped to "Today's grammar focus" regardless of level.
+# Shared verbatim between tandem.yaml and tandem_paul.yaml, like
+# grammar_focus_header and vocab_header — this is conversation mechanics,
+# not personality; change it in BOTH files or neither.
+level_examples:
+  A2: |
+    # How simple to keep your own German
+    Your partner already handles everyday German like this comfortably: "Ich habe gestern meine Schwester besucht, weil sie Geburtstag hatte." "Kannst du mir sagen, wo der Bahnhof ist?" "Wir wollten am Wochenende wandern gehen, aber das Wetter war schlecht."
+    Pitch your own German at this difficulty — connected everyday sentences with a reason or a time in them, not single words or fragments. A small step above is a good stretch for them; bare three-word sentences would bore a partner at this level. This section sets the difficulty of everything you say yourself — your reactions, your own stories, your questions — not how you correct them, which stays governed by the tandem contract above.
+    EXAMPLE (too plain for this partner): "Ich mag Bücher. Ich lese viel."
+    BETTER: "Ich habe letzte Woche ein richtig gutes Buch angefangen, weil eine Kundin es mir empfohlen hat."
+  B1: |
+    # How simple to keep your own German
+    Your partner already handles German like this comfortably: "Der Film, den wir gestern gesehen haben, war viel besser als erwartet." "Wenn ich mehr Zeit hätte, würde ich öfter kochen." "Die Wohnung wurde letztes Jahr renoviert, trotzdem ist die Miete kaum gestiegen."
+    Pitch your own German at this difficulty — subordinate clauses, both past forms, real connectors. A small step above is a good stretch; beginner sentences would bore a partner at this level. This section sets the difficulty of everything you say yourself — your reactions, your own stories, your questions — not how you correct them, which stays governed by the tandem contract above.
+    EXAMPLE (too plain for this partner): "Ich mag Bücher. Ich lese viel."
+    BETTER: "Das Buch, das ich gerade lese, hätte ich mir eigentlich schon viel früher kaufen sollen, weil es mich total gepackt hat."
+  "B2+": |
+    # How simple to keep your own German
+    Your partner already handles German like this comfortably: "Hätte ich das früher gewusst, wäre ich nie auf das Angebot eingegangen." "Die von der Stadt angekündigten Maßnahmen stoßen bei den Anwohnern auf wenig Begeisterung." "Je länger die Verhandlungen dauerten, desto unwahrscheinlicher wurde eine Einigung."
+    Pitch your own German at this difficulty — layered clauses, natural idiom, precise word choice. Simplify only if they seem lost, and step back up as soon as it clicks. This section sets the difficulty of everything you say yourself — your reactions, your own stories, your questions — not how you correct them, which stays governed by the tandem contract above.
+    EXAMPLE (too plain for this partner): "Ich mag Bücher. Ich lese viel."
+    BETTER: "Wenn ich ein Buch nicht innerhalb der ersten fünfzig Seiten weglegen will, merke ich meistens schon, dass daraus ein besonderes wird."
+
 completion:
   title: "Good talk"
   status: success

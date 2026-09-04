@@ -82,9 +82,11 @@ class Context:
     # first token. None when unset; the teacher middleware branch renders it
     # into the "Today" section only when set. Unused by every other type.
     student_name: str | None = None
-    # LEVEL round: teacher-only for now — the learner's self-declared CEFR
-    # bucket from `users.level` ("A1"|"A2"|"B1"|"B2+"); None when never
-    # chosen — renders nothing.
+    # LEVEL round: the learner's self-declared CEFR bucket from `users.level`
+    # ("A1"|"A2"|"B1"|"B2+"); None when never chosen — renders nothing.
+    # Originally teacher-only; TAND-014a extended it to tandem too (both
+    # branches of `conversational_prompt.py` look up their own
+    # `level_examples` block by this same value).
     student_level: str | None = None
     # CLARA-15 P3: teacher-only. True iff this session's user has
     # `role == "developer"` (loaded once at connect from the already-fetched

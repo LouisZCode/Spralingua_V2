@@ -391,6 +391,7 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
       from the lesson YAML, injecting today + student name/level + the
       StudentProfile (`Context.profile`).
     - `tandem` (tandem, tandem_paul): persona + short_term (today + topic) +
+      an optional level-calibration layer (TAND-014a, omitted for A1/unset) +
       the three DB-backed layers stashed on Context at connect, each omitted
       when empty.
     - `teacher` (teacher — Clara): persona + short_term (today + the picked
@@ -448,6 +449,14 @@ def layered_prompt_middleware(request: ModelRequest) -> str:
                 f"\"Bis bald\" / \"Mach's gut\" and close warmly — you two will talk again soon."
             )
         parts = [base, short]
+        # TAND-014a: level-calibration layer, same lookup + omit-when-absent
+        # contract as the teacher branch's own `level_examples` below — A1
+        # and unset carry no key in the YAML, so this renders nothing and
+        # the prompt stays byte-identical to pre-level behavior for anyone
+        # who hasn't set a level.
+        level_block = (lesson.get("level_examples") or {}).get(ctx.student_level or "")
+        if level_block:
+            parts.append(level_block.strip())
         if ctx.grammar_focus:
             parts.append(
                 lesson["grammar_focus_header"] + _format_grammar_focus(ctx.grammar_focus)

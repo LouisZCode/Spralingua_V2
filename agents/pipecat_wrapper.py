@@ -298,6 +298,10 @@ class ClientWrapper:
         # only one teacher lesson today, but the marker contract belongs to
         # the `type: teacher` middleware branch, not to one specific id.
         self._is_teacher_lesson = lesson.get("type") == "teacher"
+        # TAND-014c: gates `_augment_tandem_last_turn` below — same
+        # data-driven reasoning as `_is_teacher_lesson` just above, so
+        # `conversation`/`respond` lessons are never touched by it.
+        self._is_tandem_lesson = lesson.get("type") == "tandem"
         # CLARA-20: teacher-only, mirrors self.context.picked_pattern below
         # (same reason self.forge_enabled is mirrored next to
         # self.context.forge_enabled) — kept directly on the wrapper for
@@ -334,7 +338,7 @@ class ClientWrapper:
             vocab_words=vocab_words or [],
             # AGENT-001 v8: teacher-only greet-by-name (see Context.student_name).
             student_name=student_name,
-            # LEVEL round: teacher-only self-declared CEFR bucket (see Context.student_level).
+            # LEVEL round: self-declared CEFR bucket, tandem and teacher both (see Context.student_level).
             student_level=student_level,
             # CLARA-15 P3: mirrors self.forge_enabled above — read by the
             # teacher branch of conversational_prompt.py's prompt assembly.
@@ -377,11 +381,18 @@ class ClientWrapper:
         # call on turn 1, and scales per lesson: a1_l1 (max 1) armed from the
         # start, b1_l1 (max 5) from exchange 4. Lessons where the partner may
         # genuinely end the chat mid-session set an early explicit value:
-        # tandem uses goodbye_after: 3 (mutual goodbyes, or Lena walking away
-        # from an abusive partner) — without it, TAND-004's cap raise to 30
-        # silently moved the default arming to exchange 29 and disabled
-        # goodbye-driven endings at realistic session lengths.
+        # teacher uses goodbye_after: 5. Tandem carries none today — both
+        # YAMLs are back at max_exchanges: 14 with no goodbye_after after the
+        # v1 regression, where TAND-004's cap raise to 30 had once silently
+        # moved the default arming to exchange 29 and disabled goodbye-driven
+        # endings at realistic session lengths; any future cap raise re-arms
+        # that same trap.
         self._goodbye_after = lesson.get("goodbye_after") or max(1, self._max_exchanges - 1)
+
+        # TAND-014c: True once `_augment_tandem_last_turn` has fired —
+        # guarantees the stage direction is injected at most once per
+        # session, mirroring `_first_result_seen`'s one-shot contract above.
+        self._last_turn_augmented: bool = False
 
         # AGENT-001: optional per-lesson opening line. When present,
         # `pipeline/factory.py` injects this text as a synthetic first user
@@ -455,6 +466,51 @@ class ClientWrapper:
             f"on: {native_note})"
         )
 
+    def _augment_tandem_last_turn(self, text: str) -> str:
+        """TAND-014c: inject a "this is the last exchange" stage direction
+        on the turn whose reply will be the session's FINAL exchange — the
+        text sent to the LLM only. Mirrors ``_augment_first_result`` above:
+        the stored transcript and the BUG-002 audio↔text pairing (both built
+        from ``astream``'s original, unaugmented ``text``) never see this.
+
+        Why turn injection, not prompt memory: same gpt-oss-120b limitation
+        documented on ``_augment_first_result`` and on
+        ``agents/prompts/teacher.yaml``'s explanation_template comment — it
+        reliably drops instructions describing a FUTURE turn's behavior. The
+        tandem system prompt already injects a "wrap up around exchange N"
+        line (`agents/conversational_prompt.py`'s tandem branch) and the
+        model does not reliably comply (TAND-014c) — that line describes a
+        future turn. An instruction delivered IN the applicable turn's own
+        input is what actually works, same channel as the kickoff sentinel
+        and ``_augment_first_result``.
+
+        Off-by-one: this runs BEFORE the ``self._exchange_count += 1`` at
+        the top of ``astream``, so ``self._exchange_count`` here still holds
+        the number of exchanges ALREADY COMPLETED — the turn about to run
+        will produce exchange number ``self._exchange_count + 1``. We want
+        that upcoming exchange to be the last one, i.e. equal to
+        ``self._max_exchanges`` (5/10/15 via ``max_exchanges_override``, or
+        the YAML's 14 otherwise) — so the trigger is
+        ``self._exchange_count == self._max_exchanges - 1``.
+
+        Fires at most once per session (``self._last_turn_augmented``), and
+        only for `type: tandem` lessons — a no-op for `teacher`,
+        `conversation`, and `respond`, and for the kickoff sentinel (tandem
+        lessons never set a `kickoff:` key, so ``self._exchange_count`` only
+        ever advances on real learner turns here).
+        """
+        if not self._is_tandem_lesson or self._last_turn_augmented:
+            return text
+        if self._exchange_count != self._max_exchanges - 1:
+            return text
+        self._last_turn_augmented = True
+        return text + (
+            "\n\n(Stage direction — this is the last exchange of today's "
+            "tandem session. Briefly answer or react to what your partner "
+            "just said, then say a warm goodbye in German and close the "
+            "conversation — ask no new question of your own.)"
+        )
+
     async def astream(self, input_dict, config=None):
         """Translates Pipecat format to agent format and streams tokens.
 
@@ -488,10 +544,14 @@ class ClientWrapper:
         transcript/VAD-pairing bookkeeping below; ``llm_text`` — ``text``
         plus ``_augment_first_result``'s stage direction, when it applies —
         is what actually reaches the model. See that method's docstring for
-        why.
+        why. TAND-014c: ``_augment_tandem_last_turn`` chains onto the same
+        ``llm_text``, on tandem sessions only, and (like
+        ``_augment_first_result``) must run BEFORE the ``_exchange_count``
+        increment below — its own docstring works out why.
         """
         text = input_dict.get("input", "")
         llm_text = self._augment_first_result(text)
+        llm_text = self._augment_tandem_last_turn(llm_text)
         messages = {"messages": [{"role": "user", "content": llm_text}]}
 
         self._exchange_count += 1

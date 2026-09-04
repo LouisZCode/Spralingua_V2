@@ -524,9 +524,10 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         session_notes: list = []
         vocab_words: list = []
         student_name: str | None = None
-        # LEVEL round: teacher-only self-declared CEFR bucket, threaded like
-        # student_name — loaded once below, unconditionally, and reused by
-        # the cold-start starters_for_level(...) call so there is only one
+        # LEVEL round: self-declared CEFR bucket, threaded like student_name.
+        # Loaded once below for BOTH tandem and teacher (TAND-014a hoisted
+        # this out of the teacher-only branch), and reused by teacher's
+        # cold-start starters_for_level(...) call so there is still only one
         # DB read either way.
         student_level: str | None = None
         # CLARA-16: teacher-only full exercise catalog (Context.exercise_catalog)
@@ -544,6 +545,17 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
             try:
                 async with get_sessionmaker()() as db:
                     grammar_focus = await load_grammar_focus(db, user_id=db_user_id)
+
+                    # LEVEL round (TAND-014a): loaded here, unconditionally,
+                    # for BOTH tandem and teacher — available for either
+                    # type's own level_examples prompt layer
+                    # (Context.student_level) even when the ledger isn't
+                    # empty. Was teacher-only (inside the `elif` below);
+                    # hoisted so tandem gets it too, without a second DB
+                    # read. Teacher's cold-start starters_for_level(...) call
+                    # further below still reuses this same value.
+                    student_level = await load_user_level(db, user_id=db_user_id)
+
                     if snapshot_type == "tandem":
                         # TAND-008: memory is per partner — Paul's notes never
                         # reach Lena's prompt and vice versa.
@@ -567,13 +579,6 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         if raw_name:
                             stripped_name = raw_name.strip()
                             student_name = stripped_name.split()[0] if stripped_name else None
-
-                        # LEVEL round: loaded here, unconditionally, so it's
-                        # available for the prompt's level_examples layer
-                        # (Context.student_level) even when the ledger isn't
-                        # empty. The cold-start starters_for_level(...) call
-                        # below reuses this same value — no second DB read.
-                        student_level = await load_user_level(db, user_id=db_user_id)
 
                         # Cold-start slice: an empty ledger means an empty
                         # focus section, which leaves Clara with no legal
