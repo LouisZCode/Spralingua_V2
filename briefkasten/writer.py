@@ -12,6 +12,9 @@ hand-built ChatOpenAI.
 """
 
 import re
+from typing import Optional
+
+from loguru import logger
 
 from agents.openrouter_llm import structured_judge_llm
 from pydantic import BaseModel, Field
@@ -44,6 +47,104 @@ class LetterDraft(BaseModel):
             "line breaks, no markdown, no commentary"
         )
     )
+
+
+# BRIEF-007: a grammar-only fact-check on the drafted letter, run after
+# write_letter's own draft call. The learner treats this letter as a
+# correct model of German and has no mechanism to ever learn it was wrong
+# — unlike their own reply, which the judge pass later corrects. Scoped
+# narrowly to grammar/naturalness only: register (du/Sie) is a separate,
+# already-solved problem (``briefkasten/judge.py``'s ``_register_scan``,
+# BRIEF-004), and it runs over the LEARNER's reply, never the writer's own
+# draft — this is a new, narrower check on a different piece of text.
+class LetterVerdict(BaseModel):
+    """Grammar-and-naturalness verdict on an already-drafted letter. Never a
+    register, tone, or content judgement — only whether the German itself
+    is something a native would actually write."""
+
+    problem_sentence: Optional[str] = Field(
+        default=None,
+        description=(
+            "FIRST, before any verdict: quote the exact sentence from the "
+            "letter that reads as ungrammatical or unnatural German, "
+            "verbatim. Null only when nothing is wrong. Writing this out "
+            "first is what makes the next answer honest"
+        ),
+    )
+    grammar_ok: bool = Field(
+        description=(
+            "True only when every sentence is grammatically correct, "
+            "natural German. False for a genuine grammar error: an "
+            "invalid double-infinitive with no modal verb (e.g. 'ich gehe "
+            "verreisen' — verreisen is already a complete verb, not a "
+            "second infinitive stacked onto gehen), a wrong Perfekt "
+            "auxiliary, a wrong case after a verb or preposition, wrong "
+            "verb position, or a sentence a native speaker simply would "
+            "not produce. NOT about register, tone, or a plain-but-"
+            "correct style choice — plain German is not an error"
+        )
+    )
+    problem: Optional[str] = Field(
+        default=None,
+        description=(
+            "REQUIRED when grammar_ok is false: ONE short, specific "
+            "English line naming exactly what is wrong and the fix, e.g. "
+            "\"'ich gehe verreisen' is an invalid double-infinitive — "
+            "verreisen is already the full verb: 'ich verreise'\". Fed "
+            "back to the letter writer so a retry fixes exactly this. "
+            "Null when grammar_ok is true"
+        ),
+    )
+
+
+VERIFY_PROMPT = """# Role
+You proofread ONE German letter before it reaches a learner. The learner will treat this letter as a correct model of German and write a reply to it — they have no way to know if anything in it is wrong. You check ONLY whether the German itself is grammatically correct and natural. Register (du vs. Sie), tone, and content are someone else's job, already handled elsewhere — ignore all of that here.
+
+# The letter
+Betreff: {betreff}
+
+{body}
+
+# STEP 1 — isolate what you are checking
+Read every sentence for ONE thing only: is this how a native German speaker would actually construct it? Case endings, verb position, Perfekt auxiliaries (sein vs. haben), separable-prefix verbs, and constructions that don't exist in German — like stacking two full verbs together with no modal. "gehen" + a bare infinitive is NOT a valid double-infinitive construction; a modal verb (wollen, müssen, können, …) is required for that pattern — "ich will verreisen" is fine, "ich gehe verreisen" is not, because "verreisen" is already a complete verb and needs no second one.
+
+# What breaks a letter — check every one
+(a) Invalid verb stacking — two full verbs with no modal/auxiliary linking them, e.g. "ich gehe am Freitag verreisen"; "verreisen" already means "to go away/travel", so the correct form is simply "ich verreise am Freitag", never "gehe … verreisen".
+(b) Wrong Perfekt auxiliary — motion/change-of-state verbs (fliegen, gehen, kommen, aufstehen, werden, sterben, and their prefixed forms) take SEIN, not haben.
+(c) Wrong case after a verb or preposition.
+(d) Verb position — verb-second in a main clause, verb-last after weil/dass/wenn/obwohl, verb-first in a yes/no question.
+(e) A sentence that is simply not something a native speaker would say — reads as translated, garbled, or grammatically broken in a way not covered above.
+
+# What is NOT your job — never flag these
+- Register (du vs. Sie), greeting/closing style, tone, warmth.
+- A plain, simple sentence that is correct German — plainness is not an error.
+- Anything about content: whether a question makes sense, or who is asking what.
+
+# Worked examples
+1. "Ich gehe am Freitag für drei Wochen verreisen." → grammar_ok: false. This stacks "gehen" and "verreisen" with no modal verb — invalid. Correct: "Ich verreise am Freitag für drei Wochen."
+2. "Ich bin letzte Woche nach Berlin gefahren." → grammar_ok: true. "fahren" (motion) correctly takes "sein" in the Perfekt — this is right, do not flag it.
+3. "Ich habe letzte Woche nach Berlin gefahren." → grammar_ok: false. Same sentence with the wrong auxiliary — "fahren" needs "sein", not "haben".
+4. "Weil ich krank war, ich konnte nicht kommen." → grammar_ok: false. After "weil" the verb must go last in its own clause, and the second clause needs inversion: "Weil ich krank war, konnte ich nicht kommen."
+5. CONTROL — "Hallo Anna, ich hoffe, es geht dir gut. Ich habe eine Frage: Kannst du mir bei etwas helfen? Liebe Grüße, Lukas" → grammar_ok: true. Every sentence here is simple, plain, and completely correct — plain German is the normal, expected outcome for a letter at this level, not a reason to invent a problem.
+
+# Verdict
+- `problem_sentence` — write this FIRST: quote the exact sentence that is wrong, verbatim from the letter. Null only when nothing is wrong.
+- `grammar_ok` — true only when EVERY sentence in the letter is grammatically correct, natural German.
+- `problem` — REQUIRED when grammar_ok is false: one short, specific English line naming the error and the fix. Null when grammar_ok is true.
+"""
+
+# BRIEF-007: appended (never blended into PROMPT itself) on a retry after a
+# rejected verify — without this, a "retry" is just resampling the same
+# call and can reliably reproduce the same error. Kept as its own block so
+# the base prompt stays byte-identical when no feedback applies, same
+# pattern as satz/enricher.py::FEEDBACK_BLOCK (SATZ-021).
+FEEDBACK_BLOCK = """
+
+# Your previous draft had a grammar problem
+A proofread of your last draft found this specific issue:
+"{feedback}"
+Rewrite the letter fixing EXACTLY that problem. Keep everything else — the situation, the questions, the register, the vocabulary — the same if it was already correct; do not introduce a new error while fixing this one.
+"""
 
 
 PROMPT = """# Role
@@ -187,41 +288,11 @@ def _render_vocab(vocab_words: list[dict]) -> str:
     return _VOCAB_SOME.replace("{words}", lines)
 
 
-async def write_letter(
-    seed: dict,
-    vocab_words: list[dict],
-    reader_name: str | None = None,
-    user_id: str | None = None,
-) -> LetterDraft:
-    """Write the incoming letter for one seed.
-
-    ``reader_name`` is the learner's own first name (from their Google
-    profile) so the greeting reads like a real letter. ``None`` — the demo
-    user, or a profile without a name — falls back to a greeting that doesn't
-    need one.
-    """
-    min_words, max_words = word_target(seed["level"])
-    prompt = (
-        PROMPT.replace("{sender_name}", seed["sender"]["name"])
-        .replace("{sender_relation}", seed["sender"]["relation"])
-        .replace("{situation}", seed["situation"].strip())
-        .replace("{register}", seed["register"])
-        .replace("{level}", seed["level"].upper())
-        .replace("{min_words}", str(min_words))
-        .replace("{max_words}", str(max_words))
-        .replace("{points}", "\n".join(_point_rule(p) for p in seed["points"]))
-        # Formal letters never get the deck layer: Behörden German has no room
-        # for a learner's everyday vocab, and every forced fit the test rounds
-        # produced ('Haben die genannten Zeiten für Sie "gelten"?') was in a
-        # formal letter or a strained informal one. Enforced here, not by
-        # prompt compliance.
-        .replace(
-            "{vocab}",
-            _render_vocab([] if seed["register"] == "formal" else vocab_words),
-        )
-        .replace("{reader}", _reader_line(seed["register"], reader_name))
-        .replace("{greeting_name}", _greeting_name(reader_name))
-    )
+async def _draft_once(prompt: str, *, user_id: str | None = None) -> LetterDraft:
+    """One draft LLM call. Factored out of ``write_letter`` (BRIEF-007) so a
+    retry after a rejected verify can reuse the exact same call shape with a
+    feedback-appended prompt, instead of write_letter growing a loop of its
+    own two different LLM calls inline."""
     # 20s, not the 12s default: this generates a whole letter, where every
     # other judge in the repo rules on one sentence. A too-tight deadline here
     # doesn't fail — it silently burns the Cerebras leg and pays for the
@@ -243,3 +314,98 @@ async def write_letter(
     # renders its own label.
     result.betreff = re.sub(r"^\s*Betreff:\s*", "", result.betreff)
     return result
+
+
+async def _verify_draft(draft: LetterDraft, *, user_id: str | None = None) -> LetterVerdict:
+    """BRIEF-007: one grammar-and-naturalness fact-check over an already-
+    drafted letter, independent of (and after) the call that wrote it —
+    same shape as ``satz/verifier.py``'s fact-check gate on forged cards.
+
+    ``temperature=0`` (the judge factory's own default): this is a verdict,
+    not content, unlike ``_draft_once`` above.
+    """
+    llm = structured_judge_llm(LetterVerdict, temperature=0)
+    prompt = VERIFY_PROMPT.replace("{betreff}", draft.betreff).replace("{body}", draft.body)
+    with generation_span(
+        "briefkasten-writer-verify",
+        model=WRITER_MODEL,
+        input_text=prompt,
+        user_id=user_id,
+    ) as span:
+        result, usage, response_metadata = unwrap_structured_output(await llm.ainvoke(prompt))
+        record_generation_output(span, result.model_dump_json(), usage, response_metadata)
+    return result
+
+
+async def write_letter(
+    seed: dict,
+    vocab_words: list[dict],
+    reader_name: str | None = None,
+    user_id: str | None = None,
+) -> LetterDraft:
+    """Write the incoming letter for one seed.
+
+    ``reader_name`` is the learner's own first name (from their Google
+    profile) so the greeting reads like a real letter. ``None`` — the demo
+    user, or a profile without a name — falls back to a greeting that doesn't
+    need one.
+
+    BRIEF-007: the draft is fact-checked by ``_verify_draft`` before it
+    ships — the learner treats this letter as a correct model of German and
+    has no mechanism to ever learn it was wrong, unlike their own reply,
+    which the judge pass later corrects. A rejected verdict triggers ONE
+    retry with the specific problem fed back into the prompt (mirrors
+    ``satz/enricher.py``'s ``FEEDBACK_BLOCK`` pattern from SATZ-021) rather
+    than resampling blind. Both a verify-leg outage and a retry-draft
+    failure are non-fatal: this must degrade to "ship the draft unverified"
+    rather than fail the whole letter request, the same isolation
+    discipline ``briefkasten/routes.py``'s germanize call already uses for
+    the learner-facing pass.
+    """
+    min_words, max_words = word_target(seed["level"])
+    base_prompt = (
+        PROMPT.replace("{sender_name}", seed["sender"]["name"])
+        .replace("{sender_relation}", seed["sender"]["relation"])
+        .replace("{situation}", seed["situation"].strip())
+        .replace("{register}", seed["register"])
+        .replace("{level}", seed["level"].upper())
+        .replace("{min_words}", str(min_words))
+        .replace("{max_words}", str(max_words))
+        .replace("{points}", "\n".join(_point_rule(p) for p in seed["points"]))
+        # Formal letters never get the deck layer: Behörden German has no room
+        # for a learner's everyday vocab, and every forced fit the test rounds
+        # produced ('Haben die genannten Zeiten für Sie "gelten"?') was in a
+        # formal letter or a strained informal one. Enforced here, not by
+        # prompt compliance.
+        .replace(
+            "{vocab}",
+            _render_vocab([] if seed["register"] == "formal" else vocab_words),
+        )
+        .replace("{reader}", _reader_line(seed["register"], reader_name))
+        .replace("{greeting_name}", _greeting_name(reader_name))
+    )
+    draft = await _draft_once(base_prompt, user_id=user_id)
+
+    try:
+        verdict = await _verify_draft(draft, user_id=user_id)
+    except Exception:  # noqa: BLE001 — a verify-leg outage must never break letter generation
+        logger.warning("Briefkasten writer verify call failed — shipping draft unverified")
+        return draft
+
+    if verdict.grammar_ok:
+        return draft
+
+    logger.warning(
+        "Briefkasten writer verify flagged seed {}: {}", seed["id"], verdict.problem
+    )
+    retry_prompt = base_prompt + FEEDBACK_BLOCK.replace(
+        "{feedback}", verdict.problem or "a grammar error was found but not described"
+    )
+    try:
+        return await _draft_once(retry_prompt, user_id=user_id)
+    except Exception:  # noqa: BLE001 — a retry failure ships the original flagged draft, never 502s
+        logger.warning(
+            "Briefkasten writer retry draft failed for seed {} — shipping original (flagged) draft",
+            seed["id"],
+        )
+        return draft
