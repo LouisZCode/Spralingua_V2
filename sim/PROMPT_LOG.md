@@ -414,3 +414,239 @@ intact and now carrying corrected forms on word-order slips. Known
 non-blocking observations: no farewell line when the hard cap lands
 mid-flow (pre-existing, also in v4); persona-drift re-anchor (Li et al.
 2024) noted as a possible future code-side mechanism.
+
+## teacher v8.9 (2026-09-04) — AGENT-006: volunteered sentences get graded, not rubber-stamped
+
+The other half of the test-audit-c gap AGENT-005 (v8.8) didn't reach: when
+a learner volunteers a German sentence of their own — ordinary speech, not
+an app ⟦ÜBUNGSERGEBNIS⟧ report — nothing told Clara to actually check it
+before reacting. The existing line ("react to what is RIGHT first, then fix
+at most one thing") sat low in the prompt with no grading step behind it.
+AGENT-005 v2 tried strengthening it into an every-turn "judge before
+anything else" constraint and was rejected: two live sims (scratchpad
+agent005/runC.md, runD.md) showed it swing to the opposite failure —
+wrong sentences praised ("Exactly — hänge, you heard it. Ich hänge das
+Bild an der Wand.") and a genuinely correct uncontracted "Ich bin in dem
+Park gewesen" false-corrected to "im Park gewesen", because the rule said
+react, never check.
+
+This round built the eval axis first (evals/teacher/dataset.jsonl,
+`judge.py`'s new `volunteered-sentence` axis, 8 items: vs01-vs08 — wrong
+before/during a pending exercise, correct uncontracted "in dem"/"an dem",
+a turn mixing a correct sentence with a wrong follow-up, a spoken-style
+item with a plausible STT-trimmed ending, and a correct dative-only
+preposition that must not be miscorrected via two-way logic), then
+iterated the prompt against it instead of against sims alone — the
+gap Proposal-2 (sim-only) flagged: "two sims cannot tell 'reacts more'
+from 'grades correctly'".
+
+Baseline (v8.8, unmodified): 42-item baseline 34/42 = 81%; new axis 2/8 =
+25% — reproducing exactly AGENT-005 v2's two failure poles plus three more
+(a mixed-sentence turn graded as one blob, a correct dative-only "mit"
+mis-"corrected" via two-way-preposition logic despite rule 4 already
+listing it as dative-only, and an STT-trimmed ending flagged as an error).
+
+v8.9-agent006-1: folded a same-turn grading step into rule 4 (the existing
+"check a claim before confirming it" rule — a volunteered sentence is
+graded the same way, not a new rule fighting rule 2's dealing instinct):
+"check its case against the rule first — im = in dem, am = an dem, both
+correct... then confirm briefly if it holds, or name and fix exactly the
+one wrong thing if it doesn't." Two trap pairs, quoting the rejected v2
+sim's actual failing lines verbatim. Removed the old "react to what is
+RIGHT first" sentence (superseded, and its praise-first framing was the
+risky phrasing itself). Axis: 2/8 -> 5/8. Baseline: 34/42 -> 36/42 (both
+within the run-to-run noise band, no drop). Remaining fails: the
+mixed-sentence turn, the STT-trim item, and a motion/accusative miss where
+she identified the error but ELICITED instead of fixing it directly —
+rule 3's pointing-question habit leaking into ordinary speech.
+
+v8.9-agent006-2: reconciled the elicit leak explicitly ("directly, never a
+pointing question here; that one question is rule 3's alone, for an app
+verdict" + a trap pair anchored on the actual failing line, "Not quite —
+you kept dem — which case does that article show?"), added STT-trim
+tolerance to the grading step, and a multi-sentence clause ("more than one
+sentence in the same turn is graded separately"). Axis: 5/8 -> 6/8 (elicit
+leak fixed). Baseline: 36/42 (stable). Remaining: the mixed-sentence item
+now over-corrected in the OTHER direction (both sentences waved through as
+correct — she wasn't checking the verb per sentence, just pattern-matching
+"in dem" as safe), and the STT-trim item still flagged the trimmed
+ending.
+
+v8.9-agent006-3 (SHIPPED): two more trap pairs, both quoting this round's
+own failing lines verbatim per LEARNINGS.md's "trap written from real
+failing output lands immediately" — one telling her to check the VERB per
+sentence, not just the preposition phrase, for the mixed-sentence case; one
+modeling a clean confirm-only reply for the STT-trim case. Axis: 6/8 ->
+7/8, held at 7/8 (88%) across 3 repeat full 50-item runs — the specific
+failing item varies (vs02 once, vs06 twice out of 3), which is the
+temp>0 flip-rate LEARNINGS.md already documents, not a new instability.
+Baseline held/improved across the same 3 runs: 37/42 (88%), 39/42 (93%),
+38/42 (90%) — all above the original 34/42 (81%) measurement, comfortably
+inside noise, no regression.
+
+Ship criterion (stated up front): axis >= 7/8 sustained across >= 2 of 3
+repeat runs (a single run at production temperature is not a measurement —
+LEARNINGS.md 2026-09-01), AND the 42-item baseline does not drop below its
+first-measured 81%. Both held; shipped as v8.9.
+
+OPEN: the STT-trimmed-ending item (vs06) is the one persistent flake — 1/3
+across the three v3 runs, below what a trap pair alone reliably pins. Per
+LEARNINGS.md's "what didn't work" #1 (the `**den**`-read-as-"star-star-den"
+precedent): two shape-pinned prompt fixes (the grading-step clause + a
+dedicated trap pair) didn't fully hold, which is the model's own signature
+of a sampling habit rather than a rule-comprehension gap. Not chased
+further inside this round's 3-version budget — worth a code-side mitigation
+(e.g. a light STT-artifact normalization before the turn reaches Clara) if
+it recurs live, rather than a fourth prompt round.
+
+Persona-block cost: 13,627 -> 15,663 chars (+2,036, or +14.9%), against
+242 chars trimmed from three redundant lines (old "react to what is RIGHT
+first" sentence, "Never stack explanations inside parentheses", "as Clara
+throughout") — not net-zero like v8.8's round, an honest cost for a new
+same-turn rule plus five trap-pair anchors (two poles fixed in round 1,
+elicit-leak in round 2, mixed-sentence + STT-trim in round 3). Still well
+inside the ~26k total-prompt budget. Full run reports:
+evals/teacher/runs/2026-09-04-agent006-{v88-baseline,v89-1,v89-2,v89-3,v89-3b,v89-3c}.md
+(gitignored, local only). Prompt snapshots:
+sim/prompt_versions/teacher.v8.9-agent006-{1,2,3}.yaml.
+
+### AMENDMENT (2026-09-04, same day) — an independent live-sim tester FAILED the above, harness fix, round 2
+
+The v8.9 shipped above (round 1-3, axis 7/8 stable) was NOT actually safe
+to ship: an independent tester ran live sims and found that in 3 of 4
+live trials, a wrong volunteered sentence got rule 3's ELICIT (a pointing
+question) instead of rule 4's direct fix — e.g. "Ich gehe in dem Park." ->
+"Not quite — you kept in dem here. What case does the preposition need
+when you are moving into the park?", a near-verbatim reproduction of the
+prompt's own labelled WRONG trap. Both AGENT-005 poles (wrong-praised,
+right-false-corrected) held live; this was a third, undetected failure
+mode. Transcripts: scratchpad agent006-test/ (this agent's own scratch).
+
+**Why the eval missed it — two harness gaps, both real, both fixed:**
+
+1. `evals/teacher/prompt_build.py` hand-reimplemented
+   `conversational_prompt.py`'s teacher branch and silently omitted two
+   blocks production ALWAYS renders: the CLARA-15 fallback addendum and
+   the CLARA-16 exercise-catalog block — the latter alone prints dozens
+   more "Typical slip: wrong -> correct" pairs pulled from the taxonomy for
+   every OTHER pattern in the pool, not just the 3 focus ones. The eval was
+   grading a materially shorter, less representative prompt than gpt-oss-
+   120b actually sees.
+2. All 8 vs01-vs08 items defaulted `focus_present: false` — a prompt shape
+   a real connect almost never reaches, since `pipeline/factory.py` falls
+   back to seeded starters rather than ever leaving `grammar_focus` truly
+   empty.
+
+**Fix 1 (harness):** `prompt_build.py` now calls
+`agents.conversational_prompt.layered_prompt_middleware` DIRECTLY instead
+of re-implementing it — feeding its compiled `AgentMiddleware`'s
+`wrap_model_call` hook an identity handler hands back the fully-overridden
+`ModelRequest` (system prompt included) instead of driving a real model
+call, so any future drift in the production assembly is caught by
+construction, not by a second copy falling out of sync. `exercise_catalog`
+is now built with the SAME `teacher.registry.coverage()` +
+`grammar.loader.load_taxonomy()` calls `pipeline/factory.py` makes.
+
+**Fix 2 (dataset):** added `focus_present: true` twins of all 8 vs items
+(`vs01-fp` … `vs08-fp`) — 16 volunteered-sentence items total, dataset now
+58 items (was 50). Full assembled prompt for a focus-present item: ~26-28k
+chars depending on version (was never measured before — the old harness's
+persona-only view made "~26k total budget" impossible to check against
+reality).
+
+**Corrected-harness re-baseline (same v8.8 / same "v8.9" as above, just
+through the fixed harness):**
+
+| version | 42-item baseline | 16-item axis |
+|---|---|---|
+| v8.8 | 31/42 = 73.8% (2 identical runs) | 8/16 = 50.0% |
+| "v8.9" (rounds 1-3 above) | 31/42 = 73.8% (2 identical runs) | 11-12/16 = 68.8-75.0% |
+
+The baseline dropping from the old harness's 81-93% to a stable 31/42 is a
+HARNESS effect (confirmed: v8.8 scores identically, 31/42, both times) —
+the fuller, more realistic prompt is simply harder on unrelated axes for
+every version equally, not a regression from any rule-4 edit. The true
+floor to hold against is this 31/42, not the old harness's 34/42, though
+this round's shipped version clears both anyway (see below).
+
+**Round 1 (SHIPPED as v8.9's final content):** rule 1's exception now
+names the ⟦ÜBUNGSERGEBNIS⟧ sentinel explicitly ("after a wrong
+⟦ÜBUNGSERGEBNIS⟧ verdict specifically — never any other kind of 'wrong'");
+rule 4 restructured to lead with "never a pointing question here" BEFORE
+the case-check (primacy — the direct-fix instruction was previously
+buried after the check, competing for attention against rule 3's much
+more heavily-modeled elicit shape); 3 more trap pairs, all quoting this
+round's own live/eval failures verbatim (a location-dative elicit on
+"Ich bin gestern in den Supermarkt gewesen", the same elicit leak inside
+a mixed-sentence turn, and the STT-trim item's WRONG line upgraded to its
+newer, elicit-shaped failure). Eval: 42-item baseline 33-36/42 (3 runs),
+16-item axis 14/16 = 87.5% stable across all 3 runs (evals/teacher/runs/
+2026-09-04-agent006-v89-4{,b,c}.md). Persona 13,627 -> 16,601 chars
+(+2,974 net); full assembled prompt ~26.8k.
+
+Live battery (own :8772 backend, `test-agent006` fixture, `role=developer`,
+`--copy-from 0001 --copy-cards`, `sim_isolated.py` copied into this
+agent's own scratch dir with `SCRATCH`/`BASE` repointed to avoid the
+tester's now-stale :8774 state file): 5 sentences per run — "Ich gehe in
+dem Park." (wrong), "Ich lege das Buch auf dem Tisch." (wrong), "Ich bin
+letztes Jahr in dem Park gewesen." (right), "Ich habe das Bild an die Wand
+gehängt." (right), "Ich hänge das Bild an der Wand." (wrong, the original
+test-audit-c sentence) — three separate live sessions, backend restarted
+fresh each time:
+
+- Run 1: 3/5 (misses: the gewesen sentence false-corrected as "movement",
+  and the final Wand sentence got dropped entirely for "Here's a real one
+  on two-way prepositions" — a return of the ORIGINAL pre-AGENT-005 bug,
+  after four consecutive unanswered "want a real exercise?" invitations).
+- Run 2: 5/5 clean.
+- Run 3: 5/5 clean.
+
+Neither run-1 miss recurred in runs 2 or 3 — both read as isolated
+temp>0 noise, not a systematic defect, consistent with LEARNINGS.md's
+established single-sample-is-noise finding extended to live sessions.
+
+**Round 2 (tried, NOT shipped — `sim/prompt_versions/teacher.v8.9-agent006-5.yaml`):**
+targeted run 1's two specific misses directly: a 4th same-turn clause in
+rule 4 ("this runs EVERY time, no exceptions... dealing is a separate,
+later decision that never substitutes for reacting") plus an explicit
+"a verb of BEING somewhere is a state, not motion" anchor distinguishing
+`gewesen`/`ist geblieben` from `ist gegangen`/`ist gefahren`, plus 2 more
+trap pairs quoting run 1's exact failing lines. Eval: axis 13-15/16 across
+3 runs (avg 87.5%, noisier than round 1's flat 14/16/14/16/14/16), baseline
+34-38/42 (slightly better than round 1's). Persona 18,004 chars; full
+assembled prompt ~28.2k — the largest yet.
+
+Its OWN live battery (fresh backend restart, same 5 sentences): **2/5** —
+worse than round 1. It DID fix both of round 1's specific misses (the
+gewesen sentence confirmed correctly, no drop-to-deal on the Wand
+sentence) but the elicit leak came back on 3 of the 5 sentences, including
+one where she also hallucinated an unrelated example sentence
+("Ich gehe in das Haus.") before the elicit. Reading the two rounds
+together: round 2 fixed what it targeted but made the thing round 1 had
+already fixed WORSE, on a prompt ~1,400 chars longer. The likely
+mechanism — not proven, but consistent with everything else in this round
+— is that rule 4's instruction, sitting early in a now much longer
+persona block with proportionally more content after it (the catalog
+alone can run into the tens of thousands of characters), loses salience
+by the time generation reaches the actual reply; adding more anchor text
+made the prompt longer without moving rule 4 closer to the point of use,
+so the net effect on THIS specific defect was negative. Not something
+LEARNINGS.md names yet — logged here as a candidate addition ("prompt
+growth can un-fix an already-fixed defect once total length crosses some
+threshold — verify a load-bearing fix survives on the FULL assembled
+prompt, not just in isolation, before trusting it").
+
+**Decision:** shipped round 1's content as v8.9 (persona 16,601 chars,
+full prompt ~26.8k). Round 2's numbers were marginally better on the eval
+axis and noticeably better on the corrected-harness baseline, but its live
+battery was worse on the exact defect this whole task exists to fix, and
+the task's ship criterion is the live battery, not the eval alone — round
+2 was rejected on that basis despite the (misleading, in hindsight) eval
+axis numbers looking fine. Round 2's file is kept at
+`sim/prompt_versions/teacher.v8.9-agent006-5.yaml` for the record, not
+loaded live.
+
+Full run reports:
+evals/teacher/runs/2026-09-04-agent006-{v88-fullharness,v89-fullharness,v89-fullharness-b,v89-4,v89-4b,v89-4c,v89-5,v89-5b,v89-5c}.md
+(gitignored, local only). Prompt snapshots:
+sim/prompt_versions/teacher.v8.9-agent006-{4,5}.yaml (4 = shipped).
