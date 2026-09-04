@@ -34,10 +34,64 @@ dependencies = [
 ]
 
 # Dev/local-only: gradio (voice_tests UI) + pyaudio (local mic, services/transport
-# transport_vad). The backend Dockerfile runs `uv sync --no-dev`, so these stay
-# out of the production image while local `uv sync` still installs them.
+# transport_vad) + ruff (CI-001 lint gate, .github/workflows/ci.yml). The backend
+# Dockerfile runs `uv sync --no-dev`, so these stay out of the production image
+# while local `uv sync` and CI's `uv sync --frozen` still install them.
 [dependency-groups]
 dev = [
     "gradio>=6.2.0",
     "pyaudio>=0.2.14",
+    "ruff==0.16.6",
 ]
+
+# CI-001 (todo_list.md): thin CI gate — `uv run ruff check .` in
+# .github/workflows/ci.yml. Rule set kept to E (pycodestyle errors) + F
+# (pyflakes) only: `I` (isort) was measured against HEAD and found 96
+# import-order violations across 89 files, which would require a mass
+# reformat this pass is explicitly not doing — see the per-file-ignores
+# comment below for the exact numbers.
+[tool.ruff]
+# requires-python is 3.12 (see [project] above).
+target-version = "py312"
+# The repo is not black-formatted and has no line-length convention today
+# (median line 42 chars, p95 83, p99 172 — measured 2026-09-04). 120 is a
+# reasonable stated intent for future tooling (e.g. `ruff format`), but E501
+# is ignored below rather than enforced against the existing tree.
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F"]
+ignore = [
+    # Not worth enforcing against the existing tree: judge/prompt files
+    # (e.g. verbindungen/judge.py, teacher/forge.py, agents/debrief.py) embed
+    # long natural-language instructions and worked examples by design, and
+    # E501 alone accounts for 507 of the 543 total E+F violations found at
+    # line-length=120 across 49 files. Ignoring it repo-wide (rather than
+    # per-file) avoids a stale allowlist as new judge/prompt modules are added.
+    "E501",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Re-export packages: every __init__.py in this repo (agents, config,
+# pipeline, services) imports names purely to re-export them under a
+# shorter path; F401 flags all of them as "unused". Matches ruff's own
+# documented convention for this pattern.
+"__init__.py" = ["F401"]
+# agents/ is owned by another concurrent workstream (CI-001 scope note) — its
+# module-level dataclasses are declared before a later block of imports
+# (E402 x7). Config-ignored rather than reordered.
+"agents/pipecat_wrapper.py" = ["E402"]
+# `sqlalchemy.text` imported but unused — genuine, but coins/engine.py is
+# outside this change's file scope; config-ignored rather than edited.
+"coins/engine.py" = ["F401"]
+# `agents.CONVERSATIONAL_MODEL` imported but unused — this is the exact
+# pre-existing warning CI-001 calls out by name. pipeline/factory.py is
+# outside this change's file scope, so it's config-ignored here rather than
+# edited; removing the unused name from that import line is a one-line
+# follow-up for whoever next touches that file.
+"pipeline/factory.py" = ["F401"]
+# `coin_ledger_result` assigned but never used (looks like a missing print
+# line, not a debug leftover) — outside this change's file scope.
+"scripts/test_user.py" = ["F841"]
+# `aiohttp` / `asyncio` imported but unused — outside this change's file scope.
+"services/tts.py" = ["F401"]

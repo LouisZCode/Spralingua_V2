@@ -1,0 +1,95 @@
+# CI-001 (todo_list.md, Proposal-1 "the thin gate"): the only check a push
+# to main had to survive before this was the Docker build + alembic
+# pre-deploy. Two independent jobs below — backend (ruff + an import/
+# router-mount smoke) and frontend (eslint + a production build) — run on
+# every push to main and every PR. Neither job needs Postgres, a real
+# provider key, or a Sentry DSN (see scripts/ci_smoke.py's docstring).
+# This file alone does not block a bad push from reaching prod: making these
+# checks REQUIRED (branch protection on main) and telling Railway to wait
+# for them before deploying are both dashboard steps the developer still
+# owns — see the CI-001 report for the exact clicks.
+
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    name: backend (ruff + import smoke)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      # --frozen: install exactly what uv.lock pins, never re-resolve. If
+      # pyproject.toml and uv.lock disagree (e.g. right after CI-001 added a
+      # `ruff` dev dependency as a text-only pyproject.toml edit — see that
+      # file's [dependency-groups] comment) this step fails loudly instead of
+      # silently re-locking in CI. --all-groups: install every dependency
+      # group, not just the default — currently just "dev" (gradio, pyaudio,
+      # ruff), same set the Dockerfile excludes via --no-dev for prod images.
+      - name: uv sync
+        run: uv sync --frozen --all-groups
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      # Dummy, non-secret values — see scripts/ci_smoke.py's module docstring
+      # for exactly which import-time code path needs each one. In
+      # particular: OPENROUTER_API_KEY is required because
+      # agents/conversation_agent.py builds a module-level ChatOpenAI client
+      # at import time and the openai SDK raises immediately on an empty
+      # api_key — nothing in config/settings.py itself requires any env var
+      # to import. No Postgres, no real provider key, no Sentry DSN.
+      - name: Import smoke (app imports, all routers mount)
+        env:
+          OPENROUTER_API_KEY: ci-smoke-dummy-key
+          APP_ENV: dev
+          JWT_SECRET: ci-smoke-dummy-jwt-secret
+        run: uv run python scripts/ci_smoke.py
+
+      # speedtest/strict_lint.py (the Cerebras strict-json-schema judge-schema
+      # linter — CLAUDE.md's "Cerebras strict json_schema limits" note) is
+      # gitignored and therefore never present in a CI checkout, so there is
+      # deliberately no step for it here. Run it locally after touching any
+      # judge schema instead.
+
+  frontend:
+    name: frontend (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `engines` field in package.json and no .nvmrc — 22 is the
+      # documented fallback (CI-001).
+      - name: Install Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: npm ci
+        run: npm ci
+
+      - name: lint
+        run: npm run lint
+
+      # Confirmed locally (CI-001): the build needs no secrets — Sentry only
+      # initializes at runtime when NEXT_PUBLIC_SENTRY_DSN is set (both
+      # sentry.server.config.ts and instrumentation-client.ts gate on it),
+      # and there's no source-map-upload plugin wired into next.config.ts.
+      - name: build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8765
+        run: npm run build
