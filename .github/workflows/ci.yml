@@ -24,14 +24,13 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        uses: astral-sh/setup-uv@v10.0.1  # no `v10` major alias exists; pin the release
         with:
           enable-cache: true
 
       # --frozen: install exactly what uv.lock pins, never re-resolve. If
-      # pyproject.toml and uv.lock disagree (e.g. right after CI-001 added a
-      # `ruff` dev dependency as a text-only pyproject.toml edit — see that
-      # file's [dependency-groups] comment) this step fails loudly instead of
+      # pyproject.toml and uv.lock disagree (a dependency edited without
+      # `uv lock`) this step fails loudly instead of
       # silently re-locking in CI. --all-groups: install every dependency
       # group, not just the default — currently just "dev" (gradio, pyaudio,
       # ruff), same set the Dockerfile excludes via --no-dev for prod images.
