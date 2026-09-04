@@ -5,6 +5,15 @@ import { useAuth } from "./auth/AuthContext";
 import StartCta from "./auth/StartCta";
 import { createCheckout, fetchBillingPortal } from "@/lib/api";
 import AppHeader from "@/components/shared/AppHeader";
+import {
+  SATZ_ATTEMPT_COST,
+  LETTER_COST,
+  VOICE_EXCHANGE_COST,
+  DAILY_ALLOWANCE,
+  SIGNUP_GRANT,
+  TOPUP_COINS,
+  CLARA_DAILY_TALKS,
+} from "@/lib/coins";
 
 // PAY-001 (Phase 3): the pricing page. Linked from the landing page nav,
 // the landing footer and the practice menu — it's a real, reachable route.
@@ -27,13 +36,19 @@ type Plan = {
   bullets: string[];
 };
 
+// PAY-007: every count below comes from the coins.ts mirror of
+// coins/prices.py / teacher/routes.py — never retype a price or a daily
+// count here.
 const PLANS: Plan[] = [
   {
     id: "free",
     kicker: "Free",
     price: "Free",
     priceNote: "",
-    bullets: ["75 coins a day — plus 100 to start", "No card needed"],
+    bullets: [
+      `${DAILY_ALLOWANCE.free} coins a day`,
+      `Plus ${SIGNUP_GRANT} coins once, to start — no card needed`,
+    ],
   },
   {
     id: "basic",
@@ -41,10 +56,11 @@ const PLANS: Plan[] = [
     price: "€15",
     priceNote: "/ month",
     bullets: [
-      "200 coins every day",
+      `${DAILY_ALLOWANCE.basic} coins every day`,
       "20 new words a day",
       "A tandem conversation every day",
       "A letter with corrections",
+      `Clara the teacher — ${CLARA_DAILY_TALKS.basic} lesson a day`,
       "Or spend your coins your way",
     ],
   },
@@ -54,10 +70,10 @@ const PLANS: Plan[] = [
     price: "€25",
     priceNote: "/ month",
     bullets: [
-      "500 coins every day",
+      `${DAILY_ALLOWANCE.premium} coins every day`,
       "30+ new words a day",
       "Long tandem conversations, every day",
-      "Clara the teacher — 3 talks a day (Basic gets 1)",
+      `Clara the teacher — ${CLARA_DAILY_TALKS.premium} lessons a day`,
       "Early access to new features",
     ],
   },
@@ -139,6 +155,15 @@ export default function Pricing() {
           <h1 className="mt-3 font-display text-[clamp(30px,5vw,50px)] font-black leading-[1.02] tracking-tight text-ink">
             Coins for however you like to practice.
           </h1>
+          {/* PAY-007: what a coin actually buys — the page named "coins"
+              nine times without ever defining one. Every number here is
+              the lib/coins.ts mirror of coins/prices.py, never retyped. */}
+          <p className="mx-auto mt-4 max-w-xl font-body text-[15px] leading-relaxed text-ink-soft">
+            A coin is what one piece of practice costs — {SATZ_ATTEMPT_COST}{" "}
+            for a word, {LETTER_COST} for a letter, {VOICE_EXCHANGE_COST} for
+            a tandem exchange — and every plan tops your coins back up every
+            morning at 5&nbsp;am, in your own timezone.
+          </p>
           <div className="mt-6 inline-flex flex-col items-start gap-2.5 text-left">
             {[
               "Practice new vocabulary every day",
@@ -192,6 +217,8 @@ export default function Pricing() {
             />
           ))}
         </div>
+
+        <PlanComparisonTable />
 
         <TopupBanner
           signedIn={signedIn}
@@ -377,6 +404,69 @@ function PricingCta({
   );
 }
 
+// PAY-007: side-by-side comparison so a visitor doesn't have to cross-read
+// three bullet lists to find the two numbers that actually differ between
+// plans (the daily coin bucket and Clara's daily lesson count). Static —
+// every value comes from the coins.ts mirror, so this renders correctly
+// signed out and never touches the balance route.
+function PlanComparisonTable() {
+  return (
+    <div
+      className="rise-in mx-auto mt-10 max-w-2xl overflow-x-auto"
+      style={{ animationDelay: "100ms" }}
+    >
+      <table className="w-full min-w-[420px] table-fixed border-collapse overflow-hidden rounded-[20px] border-[3px] border-line bg-card">
+        <thead>
+          <tr className="border-b-[3px] border-line bg-paper-warm">
+            <th className="px-4 py-3 text-left font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink-muted">
+              &nbsp;
+            </th>
+            <th className="px-4 py-3 text-left font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink-muted">
+              Free
+            </th>
+            <th className="px-4 py-3 text-left font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink-muted">
+              Basic
+            </th>
+            <th className="px-4 py-3 text-left font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink-muted">
+              Premium
+            </th>
+          </tr>
+        </thead>
+        <tbody className="font-body text-[13px] text-ink">
+          <tr className="border-b-[2px] border-line">
+            <td className="px-4 py-3 font-semibold text-ink-soft">
+              Coins every day
+            </td>
+            <td className="px-4 py-3">
+              {DAILY_ALLOWANCE.free}
+              <span className="mt-0.5 block font-body text-[11px] font-normal text-ink-muted">
+                + {SIGNUP_GRANT} once, to start
+              </span>
+            </td>
+            <td className="px-4 py-3">{DAILY_ALLOWANCE.basic}</td>
+            <td className="px-4 py-3">{DAILY_ALLOWANCE.premium}</td>
+          </tr>
+          <tr>
+            <td className="px-4 py-3 font-semibold text-ink-soft">
+              Clara lessons a day
+            </td>
+            <td className="px-4 py-3">{CLARA_DAILY_TALKS.free}</td>
+            <td className="px-4 py-3">{CLARA_DAILY_TALKS.basic}</td>
+            <td className="px-4 py-3">{CLARA_DAILY_TALKS.premium}</td>
+          </tr>
+        </tbody>
+      </table>
+      <p className="mt-3 font-body text-[12px] text-ink-muted">
+        Every practice costs the same coins on every plan —{" "}
+        {SATZ_ATTEMPT_COST} for a word, {LETTER_COST} for a letter,{" "}
+        {VOICE_EXCHANGE_COST} for a tandem exchange. Clara doesn&apos;t cost
+        coins — she&apos;s the daily lesson count above. The{" "}
+        {SIGNUP_GRANT}-coin welcome grant is one-time, not a daily amount.
+      </p>
+    </div>
+  );
+}
+
 // PAY-002: €2 for 500 coins top-up — real button when signed in.
 function TopupBanner({
   signedIn,
@@ -416,7 +506,7 @@ function TopupBanner({
       <div>
         <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">Top-up</p>
         <p className="mt-2 font-display text-[18px] font-bold text-ink">Big day in German? Top up any time.</p>
-        <p className="mt-1 font-body text-[14px] text-ink-soft">€2 for a full extra day of coins — 500 coins, whenever you need them.</p>
+        <p className="mt-1 font-body text-[14px] text-ink-soft">€2 for a full extra day of coins — {TOPUP_COINS} coins, whenever you need them.</p>
       </div>
       {!signedIn ? (
         <span className="block shrink-0 rounded-[16px] border-[3px] border-line bg-card px-5 py-3 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink-muted">

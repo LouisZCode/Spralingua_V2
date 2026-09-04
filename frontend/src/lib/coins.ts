@@ -12,6 +12,33 @@ export const LETTER_COST = 15;
 // picker derives its affordable default from it.
 export const VOICE_EXCHANGE_COST = 15;
 
+// PAY-007: mirrors coins/prices.py::DAILY_ALLOWANCE — the daily coin bucket
+// per tier, refilled at 05:00 in the learner's own timezone (coins/engine.py
+// ::next_reset_at). Unused daily coins do not roll over.
+export const DAILY_ALLOWANCE = {
+  free: 75,
+  basic: 200,
+  premium: 500,
+} as const;
+
+// PAY-007: mirrors coins/prices.py::SIGNUP_GRANT — a ONE-TIME grant into the
+// purchased (non-expiring) bucket at account creation, not a daily amount.
+export const SIGNUP_GRANT = 100;
+
+// PAY-007: mirrors coins/prices.py::TOPUP_COINS — coins bought via the €2
+// top-up (payments/routes.py's Checkout price, STRIPE_TOPUP_PRICE_ID).
+export const TOPUP_COINS = 500;
+
+// PAY-007: mirrors teacher/routes.py::teacher_balance's tier-limit dict
+// ({"free": 0, "basic": 1, "premium": 3}) — Clara's daily talk count per
+// tier. Developer role is unlimited and handled separately at each call
+// site (bal.bypass / role === "developer"), not represented here.
+export const CLARA_DAILY_TALKS = {
+  free: 0,
+  basic: 1,
+  premium: 3,
+} as const;
+
 // PAY-002: GET /coins/balance response shape (verified backend contract).
 export type CoinBalance = {
   tier: "free" | "basic" | "premium";

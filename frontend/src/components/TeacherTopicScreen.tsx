@@ -7,6 +7,7 @@ import { fetchStats, UnauthorizedError, type FocusPattern } from "./development/
 import { TEACHER_NAME } from "./shared/teacher";
 import { HTTP_BASE } from "@/lib/api";
 import AppHeader from "@/components/shared/AppHeader";
+import { CLARA_DAILY_TALKS } from "@/lib/coins";
 
 const inkShadow = {
   ["--shadow-color"]: "var(--color-line)",
@@ -32,7 +33,15 @@ export default function TeacherTopicScreen({
     return () => { alive = false; };
   }, [token]);
 
-  const limit = bal?.limit ?? (isDeveloper ? 99 : user?.tier === "premium" ? 3 : user?.tier === "basic" ? 1 : 0);
+  const limit =
+    bal?.limit ??
+    (isDeveloper
+      ? 99
+      : user?.tier === "premium"
+        ? CLARA_DAILY_TALKS.premium
+        : user?.tier === "basic"
+          ? CLARA_DAILY_TALKS.basic
+          : CLARA_DAILY_TALKS.free);
   const used = bal?.used ?? 0;
   const remaining = bal?.remaining ?? Math.max(0, limit - used);
   const isFreeLocked = !isDeveloper && (user?.tier === "free" || limit === 0);
@@ -134,7 +143,7 @@ export default function TeacherTopicScreen({
                 B
               </span>
               <p className="font-display text-[13px] font-black uppercase tracking-[0.06em] text-ink">
-                Clara is included with Basic (1/day) and Premium (3/day)
+                Clara is included with Basic ({CLARA_DAILY_TALKS.basic}/day) and Premium ({CLARA_DAILY_TALKS.premium}/day)
               </p>
             </div>
           ) : exhausted ? (
