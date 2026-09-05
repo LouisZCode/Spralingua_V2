@@ -214,7 +214,7 @@ export default function GenusTrainer({
     setFailed(null);
     setShakeKey(0);
     slippedRef.current = false;
-    // genusfix: the next item's first drag must be a fresh (non-retry)
+    // DATA-009: the next item's first drag must be a fresh (non-retry)
     // attempt server-side.
     articleAttemptedRef.current = false;
     // FLOW-001: no "done" phase in flow mode — hand the result to the parent.
@@ -255,7 +255,7 @@ export default function GenusTrainer({
     if (busy || drop) return;
     setBusy(true);
     setFailed(null);
-    // genusfix BLOCKER 1: capture BEFORE the call — the first drag on this
+    // DATA-009 review blocker 1: capture BEFORE the call — the first drag on this
     // item is a fresh attempt, every one after it (since nothing here
     // blocks a retry on a wrong drop) is a retry the backend must not score
     // against the ledger.

@@ -16,7 +16,7 @@ CONT-002 applies: up to half the round is the learner's own deck nouns
 (``VocabCard.article`` is the truth), classified live by ending shape — no
 forge, no ``user_drill_items`` rows, everything re-derivable at attempt time.
 
-DATA-009 (2026-09-05, revised by genusfix same day after review): the
+DATA-009 (2026-09-05, revised by DATA-009 same day after review): the
 ARTICLE beat (phase="article") is the one and only place gender is scored,
 and one noun encounter produces at most one ``user_errors`` ledger event —
 a wrong drag feeds ``record_grammar_error`` for ``pattern_id="artikel-genus"``
@@ -26,7 +26,7 @@ that further:
 
 - LEDGER-002: a give-up never reaches the ledger either way — it's a
   concession, not evidence.
-- BLOCKER 1/2 (genusfix): the drag beat has no drop that blocks a
+- BLOCKER 1/2 (DATA-009): the drag beat has no drop that blocks a
   second/third attempt on the SAME item after a wrong one (the learner can
   keep dragging), so every attempt after the first for one item instance
   arrives as ``retry=True`` (``AttemptIn.retry``, set by the frontend — see
@@ -550,7 +550,7 @@ class AttemptIn(BaseModel):
     # "article" — that's the only beat Flow deals). Skips validation and
     # grades as a real, distinguishable miss.
     give_up: bool = False
-    # genusfix BLOCKER 1 (2026-09-05): true on every drag after the first for
+    # DATA-009 review blocker 1 (2026-09-05): true on every drag after the first for
     # the SAME item instance — the article beat has no drop that blocks a
     # retry after a wrong drag, so without this flag each retry was an
     # independent scored POST. Only meaningful for phase "article"; a retry
@@ -732,7 +732,7 @@ async def submit_attempt(
         # tests only that one pattern end to end, so it's unconditional there
         # (matches the pre-existing ArticleVerdict.patternId comment: "not
         # consumed on this beat today, but the backend always sends it").
-        # genusfix fix-2: the phrase beat is different — since it never
+        # DATA-009 fix-2: the phrase beat is different — since it never
         # SCORES gender any more (see below), its patternId only appears
         # when the MISS ITSELF was a gender slip (kind "article"/"gender"),
         # so the "Warum?" disclosure only offers to explain gender for a
@@ -759,7 +759,7 @@ async def submit_attempt(
         if payload.get("kind") == "unrecognized":
             return payload
 
-        # genusfix BLOCKER 1/2 + SHOULD-FIX (2026-09-05): the ARTICLE beat is
+        # DATA-009 review blocker 1/2 + SHOULD-FIX (2026-09-05): the ARTICLE beat is
         # the ONE place gender is scored, and one noun encounter produces at
         # most one ledger event.
         #
@@ -801,7 +801,7 @@ async def submit_attempt(
                 if gender_miss
                 else None
             )
-        else:  # phase == "phrase" — genusfix fix-2: the phrase beat never
+        else:  # phase == "phrase" — DATA-009 fix-2: the phrase beat never
             # scores gender at all any more (declension/adjective-ending
             # slips are DATA-004 noise for artikel-genus, not evidence the
             # learner has the GENDER wrong — that's what the article beat

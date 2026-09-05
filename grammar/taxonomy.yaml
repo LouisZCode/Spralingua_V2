@@ -1,7 +1,9 @@
 # Grammar-pattern taxonomy (GRAM-001) — the fixed catalog of German error
-# patterns the extractors classify into. One entry per STRUCTURAL pattern;
-# purely lexical slips (a noun's gender misremembered, a wrong word sense)
-# are deliberately absent — those belong to the vocabulary card's own SRS.
+# patterns the extractors classify into. One entry per STRUCTURAL pattern,
+# plus exactly one deliberately narrow lexical exception, `artikel-genus`
+# (DATA-009, 2026-09-05 — see its own comment below); every other purely
+# lexical slip (a wrong word sense) is deliberately absent — those belong
+# to the vocabulary card's own SRS.
 #
 # Fields per pattern (all required unless marked optional):
 #   id            — stable slug; ledger PK part, never rename once rows exist
@@ -20,7 +22,7 @@
 #                   structural transformation — it covers every German
 #                   noun's gender, so two correct drags on ONE noun must not
 #                   retire the whole pattern the way two correct uses of a
-#                   real structural rule reasonably would (genusfix, 2026-09-05).
+#                   real structural rule reasonably would (DATA-009, 2026-09-05).
 
 patterns:
   # ── A1 ──────────────────────────────────────────────────────────────────
@@ -127,7 +129,7 @@ patterns:
     wrong: "Das Tisch ist neu."
     right: "Der Tisch ist neu."
     elicit: "Ask about everyday objects, people and places — nouns whose ending gives no clue are the best test of whether they know the gender or are guessing."
-    # genusfix (2026-09-05): a slower retire streak than the default 2 —
+    # DATA-009 (2026-09-05): a slower retire streak than the default 2 —
     # this pattern covers EVERY German noun's gender, so two correct drags
     # on one single noun must not retire the whole der/die/das pattern.
     retire_streak: 10
