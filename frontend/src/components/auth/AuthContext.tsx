@@ -14,6 +14,11 @@ import SignInModal from "./SignInModal";
 
 // localStorage key holding { token, user }. The session JWT is replayed on the
 // WS handshake (?token=) and on /say (Authorization: Bearer) — see AUTH-001.
+// SEC-003 (decided 2026-09-05): the token stays in localStorage on purpose.
+// A httpOnly cookie cannot feed the ?token= handshake; the token is
+// log-redacted server-side, expires in 7 days, and the page ships an
+// enforced CSP (SEC-005). Revisit only if the product ever stores PII
+// beyond the Google identity (email/name/avatar).
 const STORAGE_KEY = "spralingua_auth";
 
 // LEVEL-001/LEVEL-002: four buckets, not six — a self-declared level is only

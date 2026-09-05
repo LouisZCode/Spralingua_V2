@@ -5,6 +5,7 @@ import { PipecatClient } from "@pipecat-ai/client-js";
 import {
   WebSocketTransport,
   ProtobufFrameSerializer,
+  WavMediaManager,
 } from "@pipecat-ai/websocket-transport";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import { loadError } from "./shared/copy";
@@ -32,10 +33,18 @@ const DEMO_NOTES = {
   // Backend reported "ok" but the connect still failed (e.g. lost the race
   // to a slot, or some other one-off failure) — never blame the mic here.
   connectFailure: "Couldn't start the demo — try again in a moment.",
-  // Empirical finding (PRODUCT-017): a denied or missing microphone never
-  // rejects client.connect() and never fires onError — see HeroDemo's
-  // start() for the mechanism. The session joins with no mic track instead,
-  // so this is shown *after* a successful connect, not as a connect failure.
+  // SEC-005 mic pre-flight (2026-09-05): this note used to be an "empirical finding"
+  // that a denied/missing mic never rejects connect() or fires onError —
+  // that was true of the OLD default media manager (Daily's). It is NOT
+  // true of the explicit `WavMediaManager` this file now constructs (see
+  // createMediaManager's comment below): with a denied/missing mic and
+  // `enableMic` left at its default `true`, WavMediaManager.connect()
+  // crashes outright, rejecting client.connect(). The honest tolerance this
+  // note describes is application-level now, not a transport fact:
+  // `start()`'s own pre-flight probe (probeMicAvailable) decides
+  // `enableMic` up front, so this is set directly from that probe result —
+  // see the `setNote(DEMO_NOTES.noMic)` call in start(), not in
+  // onConnected.
   noMic: "Your mic isn't available right now.",
 } as const;
 
@@ -59,6 +68,65 @@ async function classifyDemoAvailability(): Promise<DemoAvailability> {
     return "offline";
   } finally {
     clearTimeout(timer);
+  }
+}
+
+// SEC-005 mic pre-flight: WavMediaManager.disconnect() throws
+// "Session ended: please call .begin() first" EVERY time the mic never
+// came up — not a rare race. Read against
+// node_modules/@pipecat-ai/websocket-transport/dist/index.js:
+// WavMediaManager.initialize() always attempts WavRecorder.begin() (i.e.
+// getUserMedia) and silently swallows a failure there, leaving
+// `this.processor` unset; WavMediaManager.disconnect() then unconditionally
+// calls WavRecorder.end() once `_initialized` (set true regardless of
+// whether begin() actually succeeded), and end() throws that same error
+// whenever `processor` is unset. Passing `enableMic: false` on the
+// PipecatClient does NOT fix this — it only skips the separate CONNECT-time
+// crash (WavMediaManager.connect() calls _startRecording(), which throws
+// the same error, only when `_micEnabled` is true) — because
+// initialize()'s begin() call isn't gated on enableMic at all. Left
+// unguarded, that throw happens INSIDE WebSocketTransport._disconnect()'s
+// own await chain, before `await this._ws?.close()` ever runs — so
+// disconnect() never actually closes the socket. For the demo specifically
+// that "just" leaves an orphaned per-client pipeline running server-side
+// until its own timeout/idle-kill; on the other voice surfaces
+// (ConversationView.tsx) the identical bug is what locks a learner out via
+// SESS-001. Fix lives here, at the media-manager boundary, so
+// WebSocketTransport's own disconnect always reaches `_ws.close()` whether
+// or not the mic ever came up.
+const BENIGN_TEARDOWN_ERROR = "Session ended: please call .begin() first";
+class SafeWavMediaManager extends WavMediaManager {
+  async disconnect(): Promise<void> {
+    try {
+      await super.disconnect();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes(BENIGN_TEARDOWN_ERROR)) {
+        console.warn("[HeroDemo] media manager disconnect failed:", e);
+      }
+    }
+  }
+}
+function createMediaManager(): WavMediaManager {
+  return new SafeWavMediaManager(undefined, 16000);
+}
+
+// SEC-005 mic pre-flight: know whether the mic will actually work BEFORE constructing
+// the client, instead of reacting to WavMediaManager's crash after the
+// fact (see createMediaManager above and start() below). The probe's own
+// stream is stopped immediately either way — this never leaves a live mic
+// track open, and never leaves the real device in a bad state for a
+// second, genuine getUserMedia call right after (verified: the transport's
+// own later getUserMedia call succeeds normally against a fake input
+// device after this probe releases it).
+async function probeMicAvailable(): Promise<boolean> {
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -223,16 +291,38 @@ export default function HeroDemo() {
       return;
     }
 
+    // SEC-005 mic pre-flight: pre-flight the mic before constructing the client — see
+    // probeMicAvailable's and createMediaManager's own comments for why
+    // WavMediaManager can't be trusted to degrade gracefully on its own (it
+    // crashes connect() outright on a denied/missing mic unless told
+    // enableMic: false up front).
+    const micAvailable = await probeMicAvailable();
+    if (attemptRef.current !== attempt) return;
+    if (!micAvailable) setNote(DEMO_NOTES.noMic);
+
     try {
       const transport = new WebSocketTransport({
         serializer: new ProtobufFrameSerializer(),
         recorderSampleRate: 16000,
         playerSampleRate: 24000,
+        // SEC-005 (2026-09-05): explicit media manager. The package's
+        // default is Daily's `DailyMediaManager`, which fetches + eval()s a
+        // bundle from c.daily.co on every connect for device enumeration
+        // and is blocked by the enforced CSP (no 'unsafe-eval', no
+        // daily.co origin — see next.config.ts). `WavMediaManager` is the
+        // same package's pure Web Audio recorder/player pair; the 16 kHz
+        // argument matches `recorderSampleRate`. SEC-005 mic pre-flight: wrapped
+        // (createMediaManager, above) so a mic-less teardown still closes
+        // the socket — see that function's comment for the mechanism.
+        mediaManager: createMediaManager(),
       });
       const client = new PipecatClient({
         transport,
         enableCam: false,
-        enableMic: true,
+        // SEC-005 mic pre-flight: honors the pre-flight probe above — a denied/missing
+        // mic must never be told to record; see probeMicAvailable's and
+        // createMediaManager's comments for why.
+        enableMic: micAvailable,
         callbacks: {
           onConnected: () => {
             if (attemptRef.current !== attempt) return;
@@ -244,16 +334,11 @@ export default function HeroDemo() {
             // rejection settles it (via reject), which is why nothing here
             // can be placed after `await client.connect(...)` and expect to
             // run. onConnected is the one reliable "we're live" signal.
-            // Separately: a denied/missing mic never rejects connect() or
-            // fires onError either -- initDevices() tolerates a missing mic
-            // by design (the transport's media manager treats it as a soft
-            // failure, matching how a real conferencing client tolerates a
-            // participant joining with no working mic) -- so this is the
-            // one place left to notice a live session came up with no mic
-            // and let the visitor know they can type instead.
-            if (client.mediaState.mic.state !== "granted") {
-              setNote(DEMO_NOTES.noMic);
-            }
+            // SEC-005 mic pre-flight: the no-mic note itself is now set directly from
+            // the pre-flight probe above, before this callback ever fires
+            // (see DEMO_NOTES.noMic's own comment for why `mediaState` can't
+            // be trusted here) — nothing left to do for that case in this
+            // callback.
           },
           onDisconnected: () => {
             if (attemptRef.current !== attempt) return;

@@ -5,6 +5,7 @@ import { PipecatClient } from "@pipecat-ai/client-js";
 import {
   WebSocketTransport,
   ProtobufFrameSerializer,
+  WavMediaManager,
 } from "@pipecat-ai/websocket-transport";
 import type { SessionParams } from "./SetupView";
 import SessionSummaryModal, {
@@ -102,14 +103,22 @@ const WATCHDOG_DEAD_MS = 80_000;
 // MOBILE-001 P4: fire-and-forget disconnect (BUG-010: never await — a
 // half-open socket's disconnect() promise can stall) that also swallows one
 // specific known-benign rejection: @pipecat-ai/websocket-transport's
-// WavRecorder can throw "Session ended: please call .begin() first" from its
-// own internal audio-level polling racing this exact teardown — reproduces
-// on ANY disconnect() call in this app (confirmFinish's plain `void
-// client.disconnect()` hits it too), not something introduced by or fixable
-// from this guard. The two call sites below fire from a plain event
-// listener with nothing upstream to catch a rejection, unlike
-// confirmFinish/handleFinish's callers, so this local helper is what keeps
-// them from surfacing it as an unhandled rejection.
+// WavRecorder/MediaStreamRecorder can throw "Session ended: please call
+// .begin() first" from an internal race with this exact teardown —
+// reproduces on ANY disconnect() call in this app (confirmFinish's plain
+// `void client.disconnect()` hits it too). The two call sites below fire
+// from a plain event listener with nothing upstream to catch a rejection,
+// unlike confirmFinish/handleFinish's callers, so this local helper is what
+// keeps them from surfacing it as an unhandled rejection. SEC-005 mic pre-flight: this
+// only stops the rejection from becoming an unhandled promise AFTER the
+// fact — by the time it's caught here, WebSocketTransport._disconnect() has
+// already bailed out of its own await chain without reaching
+// `await this._ws?.close()`, so the socket is left open regardless of what
+// this function does with the error. That's a DIFFERENT, deterministic
+// manifestation of this same error string (no mic ever came up, so
+// WavRecorder.end() throws every time, not just on a race) — see
+// createMediaManager below for the actual fix, which swallows it one layer
+// down so the transport's own close() always runs.
 const BENIGN_TEARDOWN_ERROR = "Session ended: please call .begin() first";
 function disconnectQuietly(client: PipecatClient | null): void {
   if (!client) return;
@@ -118,6 +127,63 @@ function disconnectQuietly(client: PipecatClient | null): void {
     if (msg.includes(BENIGN_TEARDOWN_ERROR)) return;
     console.warn("[ConversationView] disconnect() rejected:", e);
   });
+}
+
+// SEC-005 mic pre-flight: WavMediaManager.disconnect() throws BENIGN_TEARDOWN_ERROR
+// EVERY time the mic never came up — not a rare race. Read against
+// node_modules/@pipecat-ai/websocket-transport/dist/index.js:
+// WavMediaManager.initialize() always attempts WavRecorder.begin() (i.e.
+// getUserMedia) and silently swallows a failure there, leaving
+// `this.processor` unset; WavMediaManager.disconnect() then unconditionally
+// calls WavRecorder.end() once `_initialized` (set true regardless of
+// whether begin() actually succeeded), and end() throws
+// BENIGN_TEARDOWN_ERROR whenever `processor` is unset. Passing
+// `enableMic: false` on the PipecatClient does NOT fix this — it only skips
+// the separate CONNECT-time crash (WavMediaManager.connect() calls
+// _startRecording(), which throws the same error, only when `_micEnabled`
+// is true) — because initialize()'s begin() call isn't gated on enableMic
+// at all. Left unguarded, that throw happens INSIDE
+// WebSocketTransport._disconnect()'s own await chain, before
+// `await this._ws?.close()` ever runs — so disconnect() never actually
+// closes the socket, and SESS-001's `/sessions/active` stays "true" until
+// the tab closes. Swallowing it at disconnectQuietly's level (see above)
+// is too late: the socket is already stranded by the time that catch runs.
+// The fix has to live here, at the media-manager boundary, so
+// WebSocketTransport's own disconnect always reaches `_ws.close()` whether
+// or not the mic ever came up.
+class SafeWavMediaManager extends WavMediaManager {
+  async disconnect(): Promise<void> {
+    try {
+      await super.disconnect();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!msg.includes(BENIGN_TEARDOWN_ERROR)) {
+        console.warn("[ConversationView] media manager disconnect failed:", e);
+      }
+    }
+  }
+}
+function createMediaManager(): WavMediaManager {
+  return new SafeWavMediaManager(undefined, 16000);
+}
+
+// SEC-005 mic pre-flight: know whether the mic will actually work BEFORE constructing
+// the client, instead of reacting to WavMediaManager's crash after the
+// fact (see createMediaManager above and startCall below). The probe's own
+// stream is stopped immediately either way — this never leaves a live mic
+// track open, and never leaves the real device in a bad state for a
+// second, genuine getUserMedia call right after (verified: the transport's
+// own later getUserMedia call succeeds normally against a fake input
+// device after this probe releases it).
+async function probeMicAvailable(): Promise<boolean> {
+  if (!navigator.mediaDevices?.getUserMedia) return false;
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 // MOBILE-001 P4: how long the "ended while in the background" notice stays
@@ -393,6 +459,13 @@ export default function ConversationView({
   // MOBILE-001 P4: the one visible line this guard can show — see
   // LivePhase's `notice` prop. Null the rest of the time.
   const [liveNotice, setLiveNotice] = useState<string | null>(null);
+  // SEC-005 mic pre-flight: true once startCall's pre-flight probe found no working mic
+  // (denied, no device, or no mediaDevices API at all) — drives a
+  // persistent, non-alarming notice in LivePhase (distinct from `notice`
+  // above, which is the transient background/dead-socket end-of-session
+  // line). Always false in practice mode — the transport's mic is never
+  // requested there regardless of what the probe would say.
+  const [micUnavailable, setMicUnavailable] = useState(false);
 
   // Fetch briefing copy when the view mounts. Aborted on unmount so a fast
   // unmount can't setState on an unmounted component.
@@ -771,6 +844,16 @@ export default function ConversationView({
     } catch {
       // Fail open — see comment above.
     }
+    // SEC-005 mic pre-flight: pre-flight the mic before constructing the client — see
+    // probeMicAvailable's and createMediaManager's own comments for why
+    // WavMediaManager can't be trusted to degrade gracefully on its own
+    // (it crashes connect() outright on a denied/missing mic unless told
+    // enableMic: false up front). Practice mode never streams mic audio up
+    // regardless (the learner records locally, POST /tandem/say-audio), so
+    // skip asking for a permission the transport will never use.
+    const wantsMic = !practiceMode;
+    const micAvailable = wantsMic ? await probeMicAvailable() : false;
+    setMicUnavailable(wantsMic && !micAvailable);
     setPhase("live");
     // AGENT-001: lessons with `kickoff` open on the agent's turn, not idle — lock
     // Record (and the orb copy) as "agent_thinking" until onBotStartedSpeaking
@@ -788,6 +871,16 @@ export default function ConversationView({
         serializer: new ProtobufFrameSerializer(),
         recorderSampleRate: 16000,
         playerSampleRate: 24000,
+        // SEC-005 (2026-09-05): explicit media manager. The package's
+        // default is Daily's `DailyMediaManager`, which fetches + eval()s a
+        // bundle from c.daily.co on every connect for device enumeration
+        // and is blocked by the enforced CSP (no 'unsafe-eval', no
+        // daily.co origin — see next.config.ts). `WavMediaManager` is the
+        // same package's pure Web Audio recorder/player pair; the 16 kHz
+        // argument matches `recorderSampleRate`. SEC-005 mic pre-flight: wrapped
+        // (createMediaManager, above) so a mic-less teardown still closes
+        // the socket — see that function's comment for the mechanism.
+        mediaManager: createMediaManager(),
       });
 
       const client = new PipecatClient({
@@ -798,8 +891,10 @@ export default function ConversationView({
         // POST /tandem/say-audio instead. Bot audio-out + RTVI messages are
         // unaffected either way (enableMic only gates the transport's own
         // getUserMedia/upstream-audio path, verified against
-        // @pipecat-ai/websocket-transport).
-        enableMic: !practiceMode,
+        // @pipecat-ai/websocket-transport). SEC-005 mic pre-flight: also honors the
+        // pre-flight probe above in Natural mode — a denied/missing mic
+        // must never be told to record; see probeMicAvailable's comment.
+        enableMic: wantsMic && micAvailable,
         callbacks: {
           onConnected: () => setStatus("Connected"),
           // WS close codes are a backstop — entry screens pre-check the bundle/limit
@@ -967,8 +1062,21 @@ export default function ConversationView({
         (params.pattern ? `&pattern=${encodeURIComponent(params.pattern)}` : "") +
         `&token=${encodeURIComponent(token)}`;
       await client.connect({ wsUrl });
-    } catch {
+    } catch (err) {
+      console.warn("[ConversationView] connect() failed:", err);
       setStatus("Couldn't connect — try again in a moment.");
+      // SEC-005 mic pre-flight, belt-and-braces: PipecatClient.connect()'s own catch path
+      // already fires a fire-and-forget disconnect() that (with
+      // createMediaManager's fix) will reach onDisconnected -> handleFinish
+      // shortly after — see handleFinish's SESS-001 "no_session" branch,
+      // which is exactly the right panel for "a connect that died before
+      // the handshake." But that path is async, and `status` isn't rendered
+      // in the live phase — without this, the learner sits on a
+      // live-looking screen with no visible error until it lands. Drive the
+      // same panel synchronously instead of waiting on it; handleFinish is
+      // idempotent (finishedRef) so a later real onDisconnected can't
+      // double-fire it.
+      handleFinish();
     }
   };
 
@@ -1154,6 +1262,7 @@ export default function ConversationView({
               speakerState={speakerState}
               transcriptRef={transcriptRef}
               notice={liveNotice}
+              micUnavailable={micUnavailable}
               onFinish={() => setShowFinishConfirm(true)}
               prominentFinish={TANDEM_LESSONS.has(params.lesson) || params.lesson === TEACHER_LESSON}
               germanWay={TANDEM_LESSONS.has(params.lesson)}
@@ -1489,6 +1598,7 @@ function LivePhase({
   speakerState,
   transcriptRef,
   notice,
+  micUnavailable,
   onFinish,
   prominentFinish,
   germanWay,
@@ -1514,6 +1624,13 @@ function LivePhase({
   // MOBILE-001 P4: the lifecycle guard's one visible line — null the rest of
   // the time. Rendered right under the header, tokens only.
   notice?: string | null;
+  // SEC-005 mic pre-flight: true for the whole live phase whenever startCall's
+  // pre-flight probe found no working mic — unlike `notice` above (a
+  // transient end-of-session line), this is steady-state: the learner can
+  // fully participate by typing, so the tone is informational, not an
+  // alarm. See ConversationView's own `micUnavailable` state for how this
+  // gets set.
+  micUnavailable?: boolean;
   onFinish: () => void;
   // TAND-004: tandem sessions end by user choice — the exchange cap is a
   // rarely-hit backstop — so tandem gets an unmissable primary button here
@@ -1723,6 +1840,19 @@ function LivePhase({
       {notice && (
         <p className="rise-in mt-3 text-center font-body text-[13px] font-semibold text-flag-red-deep">
           {notice}
+        </p>
+      )}
+
+      {/* SEC-005 mic pre-flight: mic-less session — steady-state, not an error (the
+          learner can fully continue by typing), so a warmer tone than
+          `notice` above. Copy adapts to whether a visible Type button
+          exists (teacherLayout / typedInput surfaces) or only the "/"
+          shortcut does (VoiceChat, TandemChat). */}
+      {micUnavailable && (
+        <p className="rise-in mt-3 text-center font-body text-[13px] font-semibold text-flag-gold-deep">
+          {onOpenType
+            ? "Your mic isn't available — you can still type your turns below."
+            : "Your mic isn't available — press / to type your turns instead."}
         </p>
       )}
 
