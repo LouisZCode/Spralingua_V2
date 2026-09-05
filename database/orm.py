@@ -503,11 +503,18 @@ class UserDrillItem(Base):
     __tablename__ = "user_drill_items"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    # CASCADE like the other per-user learning-state tables (user_cards,
+    # user_errors, drill_attempts) — a forged drill item is disposable
+    # per-user content, not audit-of-record like activity_session (DBFIX-1).
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
     exercise: Mapped[str] = mapped_column(String(32))
     source_card_id: Mapped[str] = mapped_column(ForeignKey("cards.id"))
     item: Mapped[dict | None] = mapped_column(JSONB(none_as_null=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=text("now()")
+    )
 
     __table_args__ = (
         UniqueConstraint("user_id", "exercise", "source_card_id"),
@@ -572,8 +579,11 @@ class AudioItem(Base):
     # NULL reserved for a future shared catalog; every importer-written row
     # sets this. CASCADE like the other per-user learning-state tables —
     # a personal pool item is disposable, not audit-of-record.
+    # Explicit String (DBFIX-4): 0022 created this column as sa.String();
+    # left implicit, the ORM infers Text from the users.id FK target
+    # instead, which is what `alembic check` flagged as drift.
     owner_user_id: Mapped[str | None] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+        String, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     title: Mapped[str] = mapped_column(String, nullable=False)
     # CEFR bucket from the workbench's meta.json ("A1"/"A2"/"B1+"), or NULL
@@ -712,8 +722,11 @@ class CoinLedger(Base):
 
     # uuid4().hex minted in app code; migration backfill uses gen_random_uuid()::text.
     id: Mapped[str] = mapped_column(Text, primary_key=True)
+    # No standalone index (DBFIX-3): uq_coin_ledger_user_kind_ref below already
+    # covers every `user_id = ...` lookup by leftmost prefix, so a separate
+    # index was a permanent double write on an append-only table.
     user_id: Mapped[str] = mapped_column(
-        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     kind: Mapped[str] = mapped_column(Text, nullable=False)
     ref: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -61,6 +61,7 @@ from config.settings import (
     sentry_release,
 )
 from database import ActivitySession, dispose_engine, get_sessionmaker, init_engine
+from database.repository import _as_utc_iso
 from pipeline import run_pipeline
 from pipeline.factory import (
     ACTIVE_LESSONS,
@@ -656,8 +657,8 @@ async def get_session(session_id: str, request: Request):
     return {
         "id": str(row.id),
         "lesson_id": row.lesson_id,
-        "started_at": row.started_at.isoformat() if row.started_at else None,
-        "ended_at": row.ended_at.isoformat() if row.ended_at else None,
+        "started_at": _as_utc_iso(row.started_at) if row.started_at else None,
+        "ended_at": _as_utc_iso(row.ended_at) if row.ended_at else None,
         "ended_by": row.ended_by,
         "passed": row.passed,
         "goal_eval": row.goal_eval,

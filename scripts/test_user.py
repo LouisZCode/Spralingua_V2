@@ -168,9 +168,11 @@ async def destroy(user_id: str) -> None:
         sessions_result = await db.execute(
             delete(ActivitySession).where(ActivitySession.user_id == user_id)
         )
-        # user_drill_items.user_id FK has NO ondelete clause (default NO
-        # ACTION, i.e. RESTRICT-like) — the only other non-cascading table,
-        # so it also needs an explicit delete before the user row goes.
+        # user_drill_items.user_id has cascaded since migration 0027
+        # (DB-001, 2026-09-05; before that it had NO ondelete clause and this
+        # explicit delete was load-bearing). Kept, like coin_ledger below, so
+        # a count can be reported and the destroy stays correct even if the
+        # FK were ever changed back — CASCADE is the safety net, not the path.
         drill_items_result = await db.execute(
             delete(UserDrillItem).where(UserDrillItem.user_id == user_id)
         )
@@ -191,7 +193,7 @@ async def destroy(user_id: str) -> None:
 
     print(f"destroyed {user_id!r}")
     print(f"  deleted {sessions_result.rowcount} activity_session row(s) (explicit, FK RESTRICT)")
-    print(f"  deleted {drill_items_result.rowcount} user_drill_items row(s) (explicit, FK has no ondelete)")
+    print(f"  deleted {drill_items_result.rowcount} user_drill_items row(s) (explicit, CASCADE safety net since 0027)")
     print(f"  deleted {coin_ledger_result.rowcount} coin_ledger row(s) (explicit, CASCADE safety net)")
     print(
         f"  cascaded on user delete: {errors_n} user_errors, {cards_n} user_cards, "

@@ -59,7 +59,34 @@ async def init_engine(database_url: str) -> None:
         # long a query / new connection can run, so a hung Postgres can't
         # stall request or cleanup coroutines indefinitely.
         pool_timeout=30,
-        connect_args={"command_timeout": 30, "timeout": 10},
+        connect_args={
+            "command_timeout": 30,
+            "timeout": 10,
+            # DBFIX-5: asyncpg passes these through verbatim as Postgres
+            # session GUCs (both accepted as strings). application_name
+            # makes every backend connection identifiable in
+            # pg_stat_activity; statement_timeout mirrors command_timeout
+            # above so a runaway query is bounded at the DB too, not just
+            # at the client; idle_in_transaction_session_timeout is set
+            # well above the longest provider round-trip a route can hold
+            # a session open across. REL-005 restructured the sites that
+            # held one for learners (briefkasten, bauteil, faelle, both
+            # interview routes, teacher/dealer), but satz / verbformen /
+            # sprechen / genus still run STT + judge inside a
+            # Depends(get_db) request: a learner's coin-gate commit has
+            # already released the connection by then, a developer's
+            # bypass never commits, so a developer caller keeps one
+            # checked out for up to ~25 s (12 s a leg, one retry) — still
+            # a quarter of this bound (DB-001). So it only fires on a
+            # genuinely leaked/forgotten transaction, never a
+            # slow-but-legitimate one, and it exists so that leak can
+            # never pin a pooled connection forever.
+            "server_settings": {
+                "application_name": "spralingua-backend",
+                "statement_timeout": "30000",
+                "idle_in_transaction_session_timeout": "120000",
+            },
+        },
     )
     _sessionmaker = async_sessionmaker(
         bind=_engine,

@@ -30,6 +30,14 @@ if not database_url:
 sync_database_url = database_url.replace(
     "postgresql+asyncpg://", "postgresql+psycopg2://", 1
 )
+# DBFIX-5: identify Alembic's own connections in pg_stat_activity, same
+# reasoning as the app engine's application_name in database/connection.py.
+# Append rather than assume there's no existing querystring.
+sync_database_url += (
+    "&application_name=spralingua-alembic"
+    if "?" in sync_database_url
+    else "?application_name=spralingua-alembic"
+)
 config.set_main_option("sqlalchemy.url", sync_database_url)
 
 target_metadata = Base.metadata
