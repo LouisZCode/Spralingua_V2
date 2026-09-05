@@ -40,6 +40,7 @@ from .observers import PipelineLatencyObserver
 from .tts_duration import TTSDurationTracker
 
 from agents import ClientWrapper, CONVERSATIONAL_MODEL
+from agents.pipecat_wrapper import log_topic_freeform
 from agents.audio_costs import (
     DEEPGRAM_NOVA3_STREAMING_PER_MIN,
     stamp_audio_cost,
@@ -514,7 +515,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         # TAND-012: per-session exchange cap for tandem only, whitelisted to
         # {5, 10, 15} by the frontend/main.py query param. Teacher no longer
         # uses an exchange picker — she caps at teacher.yaml's max_exchanges
-        # (20) and is gated by daily talk count instead (see below). Any other
+        # (15, PAY-007) and is gated by daily talk count instead (see below). Any other
         # type (including a stray query param on a non-tandem /learn connect)
         # leaves the YAML's own max_exchanges untouched. Mutating the snapshot
         # dict (not just a local var) keeps the DB `lesson_snapshot` column
@@ -727,7 +728,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                         # words, so scale down with the exchange cap — fewer
                         # exchanges means fewer words to weave, so the partner
                         # never crams.
-                        # Teacher uses fixed lesson cap (YAML 20), no exchange picker
+                        # Teacher uses fixed lesson cap (YAML 15, PAY-007), no exchange picker
                         vocab_limit = 7 if snapshot_type == "teacher" else {5: 4, 10: 7, 15: 10}.get(exchanges_override or 0, 7)
                         vocab_words = await load_vocab_words(db, user_id=db_user_id, limit=vocab_limit)
                     elif snapshot_type == "teacher":
@@ -806,6 +807,31 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                                         # level-typical suggestion.
                                     },
                                 )
+                        # AGENT-005 follow-up (TOPIC-FREEFORM): the topic
+                        # screen's free-text box, distinguished from a
+                        # tapped focus/starter card by the ABSENCE of a
+                        # validated `?pattern=` (picked_pattern stays None
+                        # for free text — see TeacherChat.tsx's own
+                        # `pattern` state comment, which already documents
+                        # this as the existing signal). Runs here, past the
+                        # daily-talk gate above, so a rejected connect logs
+                        # nothing. Empty topic ("I just want to talk") is
+                        # not a demand signal — nothing to log.
+                        elif pattern:
+                            # A pattern was SENT but is not in the taxonomy
+                            # (stale card after a rename, or a hand-edited
+                            # URL): that is a card tap gone wrong, not free
+                            # text — say so, and do not log it as demand.
+                            logger.warning(
+                                f"Teacher connect sent unknown pattern {pattern!r} "
+                                f"(topic={topic!r}) — ignored, not logged as free text"
+                            )
+                        elif topic and topic.strip():
+                            await log_topic_freeform(
+                                topic.strip(),
+                                user_id=db_user_id,
+                                session_id=trace_session_id,
+                            )
                 logger.info(
                     f"{snapshot_type.capitalize()} layers: focus_patterns={len(grammar_focus)} "
                     f"notes={len(session_notes)} vocab_words={len(vocab_words)} "

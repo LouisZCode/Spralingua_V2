@@ -256,7 +256,7 @@ id: teacher
 type: teacher
 title: Your German Teacher — Clara
 description: Ask why. Clara explains the German you keep getting wrong — simply, in English, one step at a time.
-max_exchanges: 20
+max_exchanges: 15
 goodbye_after: 5
 
 briefing:

@@ -23,7 +23,7 @@ built on these rounded numbers.
   (free 0 / basic 1 / premium 3, developer unlimited), enforced in
   pipeline/factory.py against activity_session rows inside the same
   timezone-aware 05:00 coin day, and read by GET /teacher/balance. Her cost is
-  bounded by teacher.yaml's max_exchanges: 20, not by a per-turn charge — so
+  bounded by teacher.yaml's max_exchanges: 15 (PAY-007, 2026-09-05; was 20), not by a per-turn charge — so
   changing VOICE_EXCHANGE no longer moves what Clara costs or earns.
 
 - INTERVIEW_ANSWER (one judged answer chunk): 20 coins ≈ 1.7¢ measured →

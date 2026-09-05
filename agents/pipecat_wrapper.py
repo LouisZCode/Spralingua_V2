@@ -46,7 +46,7 @@ class _BotOutputMessageWithDuration(RTVIBotOutputMessage):
     data: _BotOutputDataWithDuration
 
 from config.settings import conversation_first_token_s
-from grammar.loader import load_explanations
+from grammar.loader import load_explanations, load_taxonomy
 
 from .conversation_agent import agent_assembly, CONVERSATIONAL_MODEL
 from .dynamic_prompts import Context, get_last_system_prompt
@@ -183,6 +183,96 @@ def _snap_pattern_id(pattern_id: str, known_ids: set[str]) -> str:
         )
         return close[0]
     return pattern_id
+
+
+# Matches grammar/taxonomy.yaml's own id transliteration convention
+# (ä/ö/ü/ß spelled out ASCII, e.g. "wechselpraepositionen") so a learner
+# typing the real German word in the free-text box still hits its id.
+_UMLAUT_TRANSLITERATION = str.maketrans(
+    {"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
+)
+
+
+def _match_taxonomy_pattern(topic: str) -> str | None:
+    """AGENT-005 follow-up / TOPIC-FREEFORM: best-effort match of a free-text
+    Clara topic against `grammar/taxonomy.yaml`'s ids and labels — NOT a
+    grading step, just a signal for the weekly demand read-out to group by
+    ("this free-text ask was probably about a pattern we already cover").
+    Case-insensitive, umlaut-tolerant: an exact id/label match wins first
+    (checked against both the raw text and an ASCII-transliterated form —
+    taxonomy ids are themselves transliterated, e.g. `wechselpraepositionen`
+    for "Wechselpräpositionen", so a learner typing the real German word
+    would otherwise never hit), then a substring match either direction
+    (catches "dative prepositions" against a "Dative prepositions" label).
+    Returns None on no match — never raises, so a caller can treat any
+    exception from `load_taxonomy()` the same as "no match" rather than
+    fail the log.
+    """
+    needle = topic.strip().lower()
+    if not needle:
+        return None
+    try:
+        taxonomy = load_taxonomy()
+    except Exception:  # noqa: BLE001 — matching is best-effort, never fatal
+        return None
+    needle_ascii = needle.translate(_UMLAUT_TRANSLITERATION)
+    for pattern_id, entry in taxonomy.items():
+        pid = pattern_id.lower()
+        label = (entry.get("label") or "").lower()
+        if needle == pid or needle_ascii == pid or needle == label:
+            return pattern_id
+    for pattern_id, entry in taxonomy.items():
+        label = (entry.get("label") or "").lower()
+        if label and (label in needle or needle in label):
+            return pattern_id
+    return None
+
+
+async def log_topic_freeform(topic: str, *, user_id: str, session_id: str) -> None:
+    """AGENT-005 follow-up: log a free-text Clara topic — one typed into the
+    "Or ask about anything else..." box on the topic screen rather than a
+    tapped focus/starter card. A tapped card always carries a validated
+    `?pattern=` (see `pipeline/factory.py`'s `picked_pattern`); the caller is
+    the one place that knows the two apart, and calls this ONLY when
+    `picked_pattern` is None and the topic string is non-empty.
+
+    Mirrors CLARA-15's `_log_exercise_demand` conventions (one span + one
+    loguru line, the same attribute names, the same DEFAULT Langfuse
+    environment — never "forge", this is learner-facing) so
+    `speedtest/demand_readout.py` can read both kinds the same way. One
+    deliberate difference: `_log_exercise_demand` nests under the current
+    turn's trace, while this fires at connect time before any turn exists,
+    so it is its own root span (session id + user id still attached via
+    the baggage processor and the explicit attributes below): "log first, build/pair only where demand shows" now
+    extends from missing exercises to missing pool topics. Called once per
+    admitted teacher connect from `pipeline/factory.py`, AFTER the daily-talk
+    gate — a rejected connect (4002/4003/1011) never reaches this call, so
+    nothing is logged for it. Fail-soft: any exception here must never break
+    the connect.
+    """
+    try:
+        matched = _match_taxonomy_pattern(topic)
+        with tracer.start_as_current_span("teacher-topic-freeform") as span:
+            span.set_attribute("user.id", user_id)
+            span.set_attribute("langfuse.session.id", session_id)
+            span.set_attribute("langfuse.observation.input", topic)
+            span.set_attribute("langfuse.observation.metadata.topic", topic)
+            span.set_attribute("langfuse.observation.metadata.kind", "free")
+            # OTel span attributes can't carry a literal None — omit the key
+            # rather than write one; demand_readout.py treats an absent
+            # `matched_pattern` as "no match", same convention as its
+            # existing `topic`/`kind` `.get(..., "?")` fallbacks.
+            if matched is not None:
+                span.set_attribute(
+                    "langfuse.observation.metadata.matched_pattern", matched
+                )
+        logger.info(
+            f"[TOPIC-FREEFORM] user={user_id!r} topic={topic!r} matched={matched!r}"
+        )
+    except Exception as e:  # noqa: BLE001 — this logging must never break a connect
+        logger.warning(
+            f"[TOPIC-FREEFORM] logging failed (non-fatal): {type(e).__name__}: {e}"
+        )
 
 # Sentinel-IN: the frontend hardcodes this exact literal on a synthetic
 # "here's how that exercise went" turn it sends through the existing POST
