@@ -161,16 +161,118 @@ const KICKER: Record<SourceKind, string> = {
 
 // One dealt turn: exactly one item from exactly one source, tagged with a
 // per-deal counter so the trainer remounts fresh (via `key`) every turn.
+// FLOW-007: the six typed-drill items carry an optional `retry` flag — set
+// when this deal is a Flow-level re-serve of a missed item (see
+// `missedRef`/`buildRetryDeal` below). sprechen/szenario/verbformen keep
+// their own opt-in retry and never enter that queue, so their item types are
+// unchanged.
 type Deal =
-  | { kind: "bauteil"; key: number; item: BauteilItem }
-  | { kind: "verbindungen"; key: number; item: ChunkItem }
-  | { kind: "zeitfaerbung"; key: number; item: ZeitItem }
+  | { kind: "bauteil"; key: number; item: BauteilItem & { retry?: boolean } }
+  | {
+      kind: "verbindungen";
+      key: number;
+      item: ChunkItem & { retry?: boolean };
+    }
+  | { kind: "zeitfaerbung"; key: number; item: ZeitItem & { retry?: boolean } }
   | { kind: "sprechen"; key: number; item: SpokenTask }
-  | { kind: "genus"; key: number; item: GenusItem }
-  | { kind: "faelle"; key: number; item: CaseItem }
-  | { kind: "satzbau"; key: number; item: ClauseItem }
+  | { kind: "genus"; key: number; item: GenusItem & { retry?: boolean } }
+  | { kind: "faelle"; key: number; item: CaseItem & { retry?: boolean } }
+  | { kind: "satzbau"; key: number; item: ClauseItem & { retry?: boolean } }
   | { kind: "szenario"; key: number; item: SzenarioRoundItem }
   | { kind: "verbformen"; key: number; card: DeckCard };
+
+// FLOW-007: one pending miss awaiting its single retry slot. Scoped to the
+// six typed drills that already understand a local `retry: true` item flag
+// (their own re-queue is disabled in Flow mode — see `dealNext` below, which
+// re-implements it one level up since Flow, not the trainer, owns
+// sequencing).
+type RetryKind =
+  | "bauteil"
+  | "verbindungen"
+  | "zeitfaerbung"
+  | "genus"
+  | "faelle"
+  | "satzbau";
+
+type MissedEntry =
+  | { kind: "bauteil"; item: BauteilItem }
+  | { kind: "verbindungen"; item: ChunkItem }
+  | { kind: "zeitfaerbung"; item: ZeitItem }
+  | { kind: "genus"; item: GenusItem }
+  | { kind: "faelle"; item: CaseItem }
+  | { kind: "satzbau"; item: ClauseItem };
+
+// The shape `deal.item` actually has for the six retriable kinds — the same
+// per-kind `& { retry?: boolean }` extension `Deal` carries, so
+// `handleItemDone` can read `item.retry` (to cap re-queue depth at 1)
+// without a cast.
+type FlowRetryItem =
+  | (BauteilItem & { retry?: boolean })
+  | (ChunkItem & { retry?: boolean })
+  | (ZeitItem & { retry?: boolean })
+  | (GenusItem & { retry?: boolean })
+  | (CaseItem & { retry?: boolean })
+  | (ClauseItem & { retry?: boolean });
+
+const RETRY_KINDS: ReadonlySet<SourceKind> = new Set<RetryKind>([
+  "bauteil",
+  "verbindungen",
+  "zeitfaerbung",
+  "genus",
+  "faelle",
+  "satzbau",
+]);
+
+function isRetryKind(kind: SourceKind): kind is RetryKind {
+  return RETRY_KINDS.has(kind);
+}
+
+// Re-serve a pending miss as a fresh dealt turn, marked `retry: true` so the
+// six typed drills' own item-header code (`item.retry ? " · second try" :
+// ""`) would treat it as a second chance — though that code is gated behind
+// `!flow` and never renders in Flow mode, which is why Flow grows its own
+// small "Noch einmal" kicker instead (see the render below).
+function buildRetryDeal(entry: MissedEntry, key: number): Deal {
+  switch (entry.kind) {
+    case "bauteil":
+      return { kind: "bauteil", key, item: { ...entry.item, retry: true } };
+    case "verbindungen":
+      return {
+        kind: "verbindungen",
+        key,
+        item: { ...entry.item, retry: true },
+      };
+    case "zeitfaerbung":
+      return {
+        kind: "zeitfaerbung",
+        key,
+        item: { ...entry.item, retry: true },
+      };
+    case "genus":
+      return { kind: "genus", key, item: { ...entry.item, retry: true } };
+    case "faelle":
+      return { kind: "faelle", key, item: { ...entry.item, retry: true } };
+    case "satzbau":
+      return { kind: "satzbau", key, item: { ...entry.item, retry: true } };
+  }
+}
+
+// True only for a dealt turn that is itself a FLOW-007 retry re-serve — used
+// to show the "Noch einmal" kicker. sprechen/szenario/verbformen can never
+// be true here (they're not in `RetryKind`).
+function isRetryDeal(deal: Deal): boolean {
+  switch (deal.kind) {
+    case "bauteil":
+    case "verbindungen":
+    case "zeitfaerbung":
+    case "genus":
+    case "faelle":
+    case "satzbau":
+      return deal.item.retry === true;
+    default:
+      return false;
+  }
+}
 
 // FLOW-004: the transition beat between deals — names the next exercise so
 // the switch registers, and the mascot reacts to how the last item went.
@@ -469,19 +571,23 @@ function refillIfLow(
   }
 }
 
-type Tally = { done: number; correct: number };
+// FLOW-007: `skipped` counts a deliberate Skip on this exercise — a slot
+// that consumed the round without ever being graded, tracked separately
+// from `done`/`correct` so the "By exercise" list's accuracy math is
+// unaffected by skips.
+type Tally = { done: number; correct: number; skipped: number };
 
 function emptyTallies(): Record<SourceKind, Tally> {
   return {
-    verbformen: { done: 0, correct: 0 },
-    bauteil: { done: 0, correct: 0 },
-    verbindungen: { done: 0, correct: 0 },
-    zeitfaerbung: { done: 0, correct: 0 },
-    sprechen: { done: 0, correct: 0 },
-    genus: { done: 0, correct: 0 },
-    faelle: { done: 0, correct: 0 },
-    satzbau: { done: 0, correct: 0 },
-    szenario: { done: 0, correct: 0 },
+    verbformen: { done: 0, correct: 0, skipped: 0 },
+    bauteil: { done: 0, correct: 0, skipped: 0 },
+    verbindungen: { done: 0, correct: 0, skipped: 0 },
+    zeitfaerbung: { done: 0, correct: 0, skipped: 0 },
+    sprechen: { done: 0, correct: 0, skipped: 0 },
+    genus: { done: 0, correct: 0, skipped: 0 },
+    faelle: { done: 0, correct: 0, skipped: 0 },
+    satzbau: { done: 0, correct: 0, skipped: 0 },
+    szenario: { done: 0, correct: 0, skipped: 0 },
   };
 }
 
@@ -557,11 +663,70 @@ export default function Flow() {
   const pendingDealRef = useRef<Deal | null>(null);
   const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [finished, setFinished] = useState(false);
-  const [totals, setTotals] = useState({ total: 0, correct: 0 });
+  const [totals, setTotals] = useState({ total: 0, correct: 0, skipped: 0 });
   const [perExercise, setPerExercise] =
     useState<Record<SourceKind, Tally>>(emptyTallies());
 
   const bagRef = useRef<FlowBag>(emptyBag());
+
+  // FLOW-007: pending misses (six typed drills only) awaiting their single
+  // retry slot, and the set of deal keys already resolved (by a graded
+  // finish OR a Skip) — the guard a stale async callback (an attempt that
+  // resolves after the learner has already skipped past it, or a doubled
+  // click) checks before touching totals/perExercise/missedRef a second
+  // time for the same slot.
+  const missedRef = useRef<MissedEntry[]>([]);
+  const settledDealKeysRef = useRef<Set<number>>(new Set());
+
+  // FLOW-007 review fix (BLOCKER 1): every typed drill stays mounted after
+  // Check/Give-up, showing its own verdict + its own Next — a Check/Give-up
+  // has already spent a coin and written a drill_attempts/coin_ledger row by
+  // then, even though the trainer hasn't called onFlowDone yet. Skip must
+  // know this or it silently turns an already-graded item into a free skip
+  // (LEDGER-002/PAY-002 both assume grading and skipping are mutually
+  // exclusive events). `gradedRef` is the verdict for whichever deal is
+  // CURRENTLY mounted; `dealGraded` mirrors its presence in React state
+  // purely so the control's label ("Skip" vs "Next →") re-renders — the
+  // handlers below read the ref, not the state, to avoid any stale-closure
+  // risk. `currentDealKeyRef` lets the attempt/give-up handlers (which don't
+  // otherwise see `deal`) find the live deal key and ignore a response that
+  // resolves after the round has already moved on — the same stale-guard
+  // idea as `settledDealKeysRef`.
+  type Graded = { dealKey: number; correct: boolean };
+  const gradedRef = useRef<Graded | null>(null);
+  const [dealGraded, setDealGraded] = useState(false);
+  const currentDealKeyRef = useRef<number | null>(null);
+
+  // Overwrite semantics: the latest grading event for a deal IS the verdict
+  // Skip should honor. Correct for the five typed drills below (Check/Give-up
+  // is a one-shot verdict per deal — the form disappears once `verdict` is
+  // set) and for sprechen/szenario/verbformen (verbformen's own "Try again"
+  // genuinely resets its local "revealed" flag before a fresh attempt, so a
+  // later correct attempt really does supersede an earlier miss).
+  const recordGraded = useCallback((dealKey: number, correct: boolean) => {
+    gradedRef.current = { dealKey, correct };
+    setDealGraded(true);
+  }, []);
+
+  // Genus only: GenusTrainer's `slippedRef` latches true on the FIRST wrong
+  // drag (or a give-up) and is never cleared until the deal itself ends — a
+  // later correct drag on the SAME item does not un-slip it. Mirror that
+  // latch here: once a deal is marked incorrect, a later correct call for
+  // the same deal key must not flip it back to true.
+  const recordGenusGraded = useCallback((dealKey: number, correct: boolean) => {
+    gradedRef.current =
+      gradedRef.current && gradedRef.current.dealKey === dealKey
+        ? { dealKey, correct: gradedRef.current.correct && correct }
+        : { dealKey, correct };
+    setDealGraded(true);
+  }, []);
+
+  // Reset per deal — a fresh mount has nothing graded yet.
+  useEffect(() => {
+    currentDealKeyRef.current = deal?.key ?? null;
+    gradedRef.current = null;
+    setDealGraded(false);
+  }, [deal]);
 
   // OBS-007: one Langfuse practice-session id for the whole sitting, minted
   // lazily on first use — every attempt across every exercise threads it, so
@@ -678,7 +843,35 @@ export default function Flow() {
         setDeal(null);
         return;
       }
-      const next = dealFromSource(bag, kind);
+      // FLOW-007: before pulling a fresh item for `kind`, check for a
+      // pending retry of that SAME kind. Substituting it REPLACES this
+      // slot's fresh pull rather than adding one, so roundTarget/totals need
+      // no change. Three guards: past the round's midpoint (so the retry
+      // isn't served too soon after the miss), never on the round's last
+      // slot (so it never dead-ends unresolved), and `kind !== prevKind`
+      // (review fix, SHOULD-FIX 2) — pickSource only excludes the previous
+      // deal's kind when more than one source is available, so when the
+      // miss's kind is the ONLY source left standing, `kind` can equal
+      // `prevKind` and the retry would otherwise land immediately after its
+      // own miss. `bag.dealCounter` is this round's 0-indexed count of
+      // deals served so far (both dealFromSource and the retry branch below
+      // increment it once per slot), so `+1` is the 1-indexed slot about to
+      // be filled.
+      const dealNumber = bag.dealCounter + 1;
+      const retryEligible =
+        dealNumber > roundTarget / 2 && dealNumber < roundTarget;
+      let next: Deal | null = null;
+      if (retryEligible && kind !== prevKind) {
+        const idx = missedRef.current.findIndex((m) => m.kind === kind);
+        if (idx !== -1) {
+          const missed = missedRef.current[idx];
+          missedRef.current.splice(idx, 1);
+          next = buildRetryDeal(missed, ++bag.dealCounter);
+        }
+      }
+      if (!next) {
+        next = dealFromSource(bag, kind);
+      }
       if (!next) {
         setDeal(null);
         return;
@@ -813,18 +1006,37 @@ export default function Flow() {
   }, [token, expireSession, dealNext, user?.level]);
 
   const handleItemDone = useCallback(
-    (kind: SourceKind, correct: boolean) => {
+    (
+      kind: SourceKind,
+      correct: boolean,
+      dealKey: number,
+      item?: FlowRetryItem,
+    ) => {
+      // FLOW-007: ignore a stale callback for a slot already resolved (by
+      // this same call landing twice, or by a Skip that already moved past
+      // it while an attempt/give-up was in flight).
+      if (settledDealKeysRef.current.has(dealKey)) return;
+      settledDealKeysRef.current.add(dealKey);
       setTotals((t) => ({
+        ...t,
         total: t.total + 1,
         correct: t.correct + (correct ? 1 : 0),
       }));
       setPerExercise((p) => ({
         ...p,
         [kind]: {
+          ...p[kind],
           done: p[kind].done + 1,
           correct: p[kind].correct + (correct ? 1 : 0),
         },
       }));
+      // FLOW-007: queue exactly one retry for a genuine miss on the six
+      // typed drills — capped at depth 1, matching the standalone trainers'
+      // own `!item.retry` guard (a retry missed again is dropped, not
+      // requeued a third time).
+      if (!correct && item && isRetryKind(kind) && !item.retry) {
+        missedRef.current.push({ kind, item } as MissedEntry);
+      }
       // GAME-001: deliberately silent. Every flow source already plays its own
       // win/fail earcon the moment it grades the attempt; this callback fires
       // later, when the learner presses Next, so playing here replayed the same
@@ -835,6 +1047,54 @@ export default function Flow() {
     [dealNext],
   );
 
+  // FLOW-007 (Luis: "we need to add an option to skip also, in case they are
+  // getting stuck, or the program is not working correctly"): a quiet,
+  // always-available escape that lives in Flow's own chrome, outside the
+  // trainer, so it works even if the mounted trainer is itself broken (a
+  // failed fetch, a stuck request) and is never gated by a trainer-local
+  // busy/arming flag. No attempt or give-up is posted — no coin charge, no
+  // ledger row — but the slot IS consumed: the round advances exactly like a
+  // graded deal (the honest reading of "a round ends where it ends" — the
+  // learner spent the slot on purpose). A skipped retry is simply dropped,
+  // never re-queued. Guarded by the same settledDealKeysRef as
+  // handleItemDone so a request already in flight when Skip is pressed can't
+  // double-count this slot when it eventually resolves.
+  const handleSkip = useCallback(() => {
+    const current = deal;
+    if (!current) return;
+    if (settledDealKeysRef.current.has(current.key)) return;
+    // FLOW-007 review fix (BLOCKER 1): the trainer already has a verdict for
+    // this exact deal (Check/Give-up already ran — coin spent, ledger row
+    // already written) even though it hasn't pressed its own Next yet. Skip
+    // must not silently discard that: run the exact accounting a real Next
+    // press would (queues the retry on a miss, counts a correct, never
+    // touches `totals.skipped`), then advance exactly like handleItemDone
+    // does. handleItemDone owns the settledDealKeysRef marking here.
+    if (gradedRef.current && gradedRef.current.dealKey === current.key) {
+      const { correct } = gradedRef.current;
+      switch (current.kind) {
+        case "bauteil":
+        case "verbindungen":
+        case "zeitfaerbung":
+        case "genus":
+        case "faelle":
+        case "satzbau":
+          handleItemDone(current.kind, correct, current.key, current.item);
+          break;
+        default:
+          handleItemDone(current.kind, correct, current.key);
+      }
+      return;
+    }
+    settledDealKeysRef.current.add(current.key);
+    setTotals((t) => ({ ...t, total: t.total + 1, skipped: t.skipped + 1 }));
+    setPerExercise((p) => ({
+      ...p,
+      [current.kind]: { ...p[current.kind], skipped: p[current.kind].skipped + 1 },
+    }));
+    dealNext(current.kind, "neutral");
+  }, [deal, dealNext, handleItemDone]);
+
   // GAME-001: the round-summary card is a bigger moment than any one item —
   // fires once per reveal (round target reached or manual Finish). The `else`
   // reset below is vestigial since PAY-002 retired "Keep going": nothing sets
@@ -844,13 +1104,17 @@ export default function Flow() {
   // The earcon follows the score: celebrating a 4/10 the same way as a 10/10
   // makes the celebration mean nothing. Below 60% the summary gets the warm
   // descending figure instead — informational, never a buzzer (see sound.ts).
-  // A round finished without a single graded item has no outcome to sound.
+  // A round finished without a single GRADED item has no outcome to sound —
+  // FLOW-007: `totals.total` now also counts skips, so the graded count is
+  // `total - skipped`, not `total` on its own (a skip-only round would
+  // otherwise sound a "bigfail" for a round that graded nothing).
   const finishedSoundRef = useRef(false);
   useEffect(() => {
     if (finished && !finishedSoundRef.current) {
       finishedSoundRef.current = true;
-      if (totals.total > 0) {
-        playSound(totals.correct / totals.total >= 0.6 ? "bigwin" : "bigfail");
+      const graded = totals.total - totals.skipped;
+      if (graded > 0) {
+        playSound(totals.correct / graded >= 0.6 ? "bigwin" : "bigfail");
       }
     } else if (!finished) {
       finishedSoundRef.current = false;
@@ -861,12 +1125,17 @@ export default function Flow() {
   // "reveal" moment, own ref so it can't interfere with the earcon's
   // double-fire guard. Same "no graded items, no outcome" rule as the sound:
   // a round finished without a single graded item has no outcome to credit
-  // either. Same vestigial reset as the earcon above.
+  // either — FLOW-007: a round that was entirely skips must not POST
+  // /streak/mode at all (the backend's own has_attempt_today anti-spoof
+  // check would no-op it anyway, since a skip never writes a drill_attempts
+  // row, but there's no reason to make the call). Same vestigial reset as
+  // the earcon above.
   const flowModePingedRef = useRef(false);
   useEffect(() => {
     if (finished && !flowModePingedRef.current) {
       flowModePingedRef.current = true;
-      if (totals.total > 0 && token) {
+      const graded = totals.total - totals.skipped;
+      if (graded > 0 && token) {
         postModeComplete(token, "flow");
       }
     } else if (!finished) {
@@ -892,14 +1161,19 @@ export default function Flow() {
   const handleBauteilAttempt = useCallback(
     async (itemId: string, answer: string): Promise<BauteilVerdict> => {
       if (!token) throw new UnauthorizedError("/bauteil/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitBauteilAttempt(token, itemId, answer, sid());
+        const res = await submitBauteilAttempt(token, itemId, answer, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   // FLOW-002: the deliberate "give up" escape — same auth-guarded shape as
@@ -908,144 +1182,199 @@ export default function Flow() {
   const handleBauteilGiveUp = useCallback(
     async (itemId: string): Promise<BauteilVerdict> => {
       if (!token) throw new UnauthorizedError("/bauteil/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpBauteil(token, itemId, sid());
+        const res = await giveUpBauteil(token, itemId, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleVerbindungenAttempt = useCallback(
     async (itemId: string, answer: string): Promise<ChunkVerdict> => {
       if (!token) throw new UnauthorizedError("/verbindungen/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitVerbindungenAttempt(token, itemId, answer, sid());
+        const res = await submitVerbindungenAttempt(token, itemId, answer, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleVerbindungenGiveUp = useCallback(
     async (itemId: string): Promise<ChunkVerdict> => {
       if (!token) throw new UnauthorizedError("/verbindungen/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpVerbindungen(token, itemId, sid());
+        const res = await giveUpVerbindungen(token, itemId, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleFaelleAttempt = useCallback(
     async (itemId: string, answer: string): Promise<CaseVerdict> => {
       if (!token) throw new UnauthorizedError("/faelle/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitFaelleAttempt(token, itemId, answer, sid());
+        const res = await submitFaelleAttempt(token, itemId, answer, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleFaelleGiveUp = useCallback(
     async (itemId: string): Promise<CaseVerdict> => {
       if (!token) throw new UnauthorizedError("/faelle/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpFaelle(token, itemId, sid());
+        const res = await giveUpFaelle(token, itemId, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleSatzbauAttempt = useCallback(
     async (itemId: string, order: string[]): Promise<ClauseVerdict> => {
       if (!token) throw new UnauthorizedError("/satzbau/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitSatzbauAttempt(token, itemId, order, sid());
+        const res = await submitSatzbauAttempt(token, itemId, order, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleSatzbauGiveUp = useCallback(
     async (itemId: string): Promise<ClauseVerdict> => {
       if (!token) throw new UnauthorizedError("/satzbau/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpSatzbau(token, itemId, sid());
+        const res = await giveUpSatzbau(token, itemId, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleZeitfaerbungAttempt = useCallback(
     async (itemId: string, answer: string): Promise<ZeitVerdict> => {
       if (!token) throw new UnauthorizedError("/zeitfaerbung/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitZeitfaerbungAttempt(token, itemId, answer, sid());
+        const res = await submitZeitfaerbungAttempt(token, itemId, answer, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleZeitfaerbungGiveUp = useCallback(
     async (itemId: string): Promise<ZeitVerdict> => {
       if (!token) throw new UnauthorizedError("/zeitfaerbung/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpZeitfaerbung(token, itemId, sid());
+        const res = await giveUpZeitfaerbung(token, itemId, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleSprechenAttempt = useCallback(
     async (taskId: string, audio: Blob): Promise<SprechenVerdict> => {
       if (!token) throw new UnauthorizedError("/sprechen/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitSprechenAttempt(token, taskId, audio, sid());
+        const res = await submitSprechenAttempt(token, taskId, audio, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.passed);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleSprechenGiveUp = useCallback(
     async (taskId: string): Promise<SprechenVerdict> => {
       if (!token) throw new UnauthorizedError("/sprechen/give-up");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpSprechen(token, taskId, sid());
+        const res = await giveUpSprechen(token, taskId, sid());
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGraded(dealKeyAtCall, res.passed);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   const handleSzenarioAttempt = useCallback(
@@ -1055,20 +1384,30 @@ export default function Flow() {
       audio: Blob,
     ): Promise<StructureResult> => {
       if (!token) throw new UnauthorizedError("/szenario/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitSzenarioAttempt(
+        const res = await submitSzenarioAttempt(
           token,
           scenarioId,
           question,
           audio,
           sid(),
         );
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          // Mirrors SzenarioTrainer's own `next()`: overcomplicated or a
+          // give-up is a miss, everything else counts.
+          recordGraded(
+            dealKeyAtCall,
+            res.verdict !== "overcomplicated" && !res.gaveUp,
+          );
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGraded],
   );
 
   // FLOW-006: szenario has no backend /give-up route yet — unlike bauteil,
@@ -1079,8 +1418,14 @@ export default function Flow() {
   // instead of the full breakdown. Nothing is written to the ledger or
   // drill_attempts here — a known v1 gap, worth a real endpoint (mirroring
   // sprechen/routes.py's give-up route) if this sees real use.
-  const handleSzenarioGiveUp = useCallback(
-    async (): Promise<StructureResult> => ({
+  const handleSzenarioGiveUp = useCallback(async (): Promise<StructureResult> => {
+    const dealKeyAtCall = currentDealKeyRef.current;
+    if (dealKeyAtCall !== null) {
+      // Always a miss — `overcomplicated` + `gaveUp: true` is exactly what
+      // SzenarioTrainer's own `next()` reads as false.
+      recordGraded(dealKeyAtCall, false);
+    }
+    return {
       transcript: "",
       verdict: "overcomplicated",
       levelRead: "",
@@ -1088,9 +1433,8 @@ export default function Flow() {
       sentences: [],
       skeleton: { kern: "", punkte: [], absprung: "", vokabelAnker: [] },
       gaveUp: true,
-    }),
-    [],
-  );
+    };
+  }, [recordGraded]);
 
   const handleGenusArticle = useCallback(
     async (
@@ -1101,27 +1445,39 @@ export default function Flow() {
       retry: boolean = false,
     ): Promise<GenusArticleVerdict> => {
       if (!token) throw new UnauthorizedError("/genus/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitGenusArticle(token, itemId, article, sid(), retry);
+        const res = await submitGenusArticle(token, itemId, article, sid(), retry);
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGenusGraded(dealKeyAtCall, res.correct);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGenusGraded],
   );
 
   const handleGenusGiveUp = useCallback(
     async (itemId: string): Promise<GenusArticleVerdict> => {
       if (!token) throw new UnauthorizedError("/genus/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await giveUpGenusArticle(token, itemId, sid());
+        const res = await giveUpGenusArticle(token, itemId, sid());
+        // Mirrors GenusTrainer's own `giveUp()`: `firstSlip()` runs
+        // unconditionally, regardless of whatever `res.correct` says.
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          recordGenusGraded(dealKeyAtCall, false);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession, sid],
+    [token, expireSession, sid, recordGenusGraded],
   );
 
   const handleVerbformenAttempt = useCallback(
@@ -1131,14 +1487,24 @@ export default function Flow() {
       sessionId: string,
     ): Promise<AttemptResult> => {
       if (!token) throw new UnauthorizedError("/verbformen/attempts");
+      const dealKeyAtCall = currentDealKeyRef.current;
       try {
-        return await submitVerbformenAttempt(token, cardId, audio, sessionId);
+        const res = await submitVerbformenAttempt(token, cardId, audio, sessionId);
+        if (dealKeyAtCall !== null && currentDealKeyRef.current === dealKeyAtCall) {
+          // Mirrors VocabTrainer's own `handleNext()`: `wordOk` decides the
+          // rep, unless a reveal in between overrides it (see
+          // handleVerbformenReveal below, which records false immediately —
+          // this attempt can still supersede it, matching "Try again"
+          // genuinely resetting the trainer's local "revealed" flag).
+          recordGraded(dealKeyAtCall, res.wordOk === true);
+        }
+        return res;
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
     },
-    [token, expireSession],
+    [token, expireSession, recordGraded],
   );
 
   const handleVerbformenRemove = useCallback(
@@ -1184,11 +1550,20 @@ export default function Flow() {
   const handleVerbformenReveal = useCallback(
     (cardId: string) => {
       if (!token) return;
+      // Mirrors VocabTrainer's own `revealed` flag: set synchronously (the
+      // trainer flips its local state the same way, before the network call
+      // even resolves) so Skip sees this deal as graded-a-miss immediately.
+      // A later "Try again" attempt can still supersede it — see
+      // handleVerbformenAttempt above.
+      const dealKeyAtCall = currentDealKeyRef.current;
+      if (dealKeyAtCall !== null) {
+        recordGraded(dealKeyAtCall, false);
+      }
       revealVerbformenCard(token, cardId).catch((e) => {
         if (e instanceof UnauthorizedError) expireSession();
       });
     },
-    [token, expireSession],
+    [token, expireSession, recordGraded],
   );
 
   const handleExplain = useCallback(
@@ -1328,7 +1703,11 @@ export default function Flow() {
                 <div className="mb-4 flex items-center justify-between">
                   <p className="font-body text-[11px] font-bold uppercase tracking-[0.28em] text-ink-muted">
                     {totals.total} item{totals.total === 1 ? "" : "s"} ·{" "}
-                    {totals.correct} ✓ · {totals.total} / {roundTarget}
+                    {/* FLOW-007 review fix (SHOULD-FIX 3): the accuracy
+                        figure is correct/graded, not correct/total — total
+                        includes skips, which were never graded. */}
+                    {totals.correct} / {totals.total - totals.skipped} ✓ ·{" "}
+                    {totals.total} / {roundTarget}
                   </p>
                   <div className="flex items-center gap-3">
                     <ThemeToggle />
@@ -1354,9 +1733,36 @@ export default function Flow() {
 
                 {deal !== null && (
                   <>
-                    <p className="mb-3 text-center font-body text-[11px] font-black uppercase tracking-[0.24em] text-flag-red">
-                      {KICKER[deal.kind]}
-                    </p>
+                    <div className="mb-3 flex items-center justify-between">
+                      <p className="font-body text-[11px] font-black uppercase tracking-[0.24em] text-flag-red">
+                        {KICKER[deal.kind]}
+                        {/* FLOW-007: the six typed drills' own "· second
+                            try" item-header text is gated behind `!flow` and
+                            never renders inside Flow — this is Flow's own
+                            equivalent, inline in the same house style. */}
+                        {isRetryDeal(deal) && (
+                          <span className="normal-case tracking-normal text-ink-muted">
+                            {" "}
+                            · Noch einmal
+                          </span>
+                        )}
+                      </p>
+                      {/* FLOW-007 (Luis's addition): always available, never
+                          disabled by a trainer's own busy/arming state — it
+                          lives here, outside the trainer, on purpose.
+                          Review fix (BLOCKER 1): once the mounted deal is
+                          already graded (Check/Give-up ran, the trainer is
+                          just showing its own verdict + its own Next),
+                          relabel this "Next →" — pressing it now runs the
+                          graded accounting, never a free skip. */}
+                      <button
+                        type="button"
+                        onClick={handleSkip}
+                        className="font-body text-[11px] font-semibold text-ink-muted underline underline-offset-2 hover:text-ink-soft"
+                      >
+                        {dealGraded ? "Next →" : "Skip"}
+                      </button>
+                    </div>
 
                     {deal.kind === "bauteil" && (
                       <BauteilTrainer
@@ -1366,7 +1772,12 @@ export default function Flow() {
                         onNewRound={noopNewRound}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("bauteil", correct)
+                          handleItemDone(
+                            "bauteil",
+                            correct,
+                            deal.key,
+                            deal.item,
+                          )
                         }
                         allowGiveUp
                         onGiveUp={handleBauteilGiveUp}
@@ -1382,7 +1793,12 @@ export default function Flow() {
                         onAdd={handleAddWord}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("verbindungen", correct)
+                          handleItemDone(
+                            "verbindungen",
+                            correct,
+                            deal.key,
+                            deal.item,
+                          )
                         }
                         allowGiveUp
                         onGiveUp={handleVerbindungenGiveUp}
@@ -1396,7 +1812,12 @@ export default function Flow() {
                         onNewRound={noopNewRound}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("zeitfaerbung", correct)
+                          handleItemDone(
+                            "zeitfaerbung",
+                            correct,
+                            deal.key,
+                            deal.item,
+                          )
                         }
                         allowGiveUp
                         onGiveUp={handleZeitfaerbungGiveUp}
@@ -1412,7 +1833,7 @@ export default function Flow() {
                         onAdd={handleAddWord}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("sprechen", correct)
+                          handleItemDone("sprechen", correct, deal.key)
                         }
                         allowGiveUp
                         onGiveUp={handleSprechenGiveUp}
@@ -1431,7 +1852,7 @@ export default function Flow() {
                         onAdd={handleAddWord}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("szenario", correct)
+                          handleItemDone("szenario", correct, deal.key)
                         }
                         allowGiveUp
                         onGiveUp={handleSzenarioGiveUp}
@@ -1447,7 +1868,12 @@ export default function Flow() {
                         flow
                         endings={genusEndings}
                         onFlowDone={(correct) =>
-                          handleItemDone("genus", correct)
+                          handleItemDone(
+                            "genus",
+                            correct,
+                            deal.key,
+                            deal.item,
+                          )
                         }
                         allowGiveUp
                         onGiveUp={handleGenusGiveUp}
@@ -1463,7 +1889,12 @@ export default function Flow() {
                         onAdd={handleAddWord}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("faelle", correct)
+                          handleItemDone(
+                            "faelle",
+                            correct,
+                            deal.key,
+                            deal.item,
+                          )
                         }
                         allowGiveUp
                         onGiveUp={handleFaelleGiveUp}
@@ -1479,7 +1910,12 @@ export default function Flow() {
                         onAdd={handleAddWord}
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("satzbau", correct)
+                          handleItemDone(
+                            "satzbau",
+                            correct,
+                            deal.key,
+                            deal.item,
+                          )
                         }
                         allowGiveUp
                         onGiveUp={handleSatzbauGiveUp}
@@ -1497,7 +1933,7 @@ export default function Flow() {
                         sessionPrefix="vf"
                         flow
                         onFlowDone={(correct) =>
-                          handleItemDone("verbformen", correct)
+                          handleItemDone("verbformen", correct, deal.key)
                         }
                         sessionId={sid()}
                         onGloss={handleGloss}
@@ -1527,10 +1963,13 @@ function SummaryCard({
   totals,
   perExercise,
 }: {
-  totals: { total: number; correct: number };
+  totals: { total: number; correct: number; skipped: number };
   perExercise: Record<SourceKind, Tally>;
 }) {
   const rows = ALL_KINDS.filter((k) => perExercise[k].done > 0);
+  // FLOW-007 review fix (SHOULD-FIX 3): the headline is correct/graded, not
+  // correct/total — total includes skips, which were never graded.
+  const graded = totals.total - totals.skipped;
   return (
     <div
       className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center"
@@ -1540,8 +1979,16 @@ function SummaryCard({
         Flow so far
       </p>
       <h2 className="mt-2 font-display text-[clamp(28px,5vw,40px)] font-black tracking-tight text-ink">
-        {totals.correct} / {totals.total}
+        {totals.correct} / {graded}
       </h2>
+      {/* FLOW-007: only shown when the round actually had a skip — the
+          ending screen here is English, so "übersprungen" becomes "skipped"
+          to match the surrounding copy. */}
+      {totals.skipped > 0 && (
+        <p className="mt-1 font-body text-[13px] font-semibold text-ink-muted">
+          {totals.skipped} skipped
+        </p>
+      )}
       {rows.length > 0 && (
         <div className="mx-auto mt-5 max-w-[420px] text-left">
           <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
