@@ -90,11 +90,6 @@ import { expectedTier, foldSeen, readSeen, writeSeen, type Tier } from "./szenar
 
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import {
-  fetchDeck as fetchSatzDeck,
-  submitAttempt as submitSatzAttempt,
-  removeCard as removeSatzCard,
-  revealCard as revealSatzCard,
-  genderMissCard as genderMissSatzCard,
   explainAttempt,
   flagVerdict,
   addWord,
@@ -121,12 +116,15 @@ const inkShadow = {
   ["--shadow-color"]: "var(--color-line)",
 } as React.CSSProperties;
 
-// FLOW-001/FLOW-006: the nine drills this mode draws from, plus Szenario
-// (FLOW-006) as a capped tenth source — Tandem and Conversation Practice are
+// FLOW-001/FLOW-006: the eight drills this mode draws from, plus Szenario
+// (FLOW-006) as a capped ninth source — Tandem and Conversation Practice are
 // deliberately not in the rotation. Genus deals its DRAG BEAT only (the
 // gender choice); the typed production stays a standalone-page exercise.
+// PRODUCT-003 (2026-09-05): Satzschmiede (satz) deals left the rotation —
+// Satzschmiede has its own /practice card now, so the Flow only carries
+// exercises surfaced nowhere else. Verbformen deals stay (own deck,
+// VocabTrainer only renders them).
 type SourceKind =
-  | "satz"
   | "verbformen"
   | "bauteil"
   | "verbindungen"
@@ -138,7 +136,6 @@ type SourceKind =
   | "szenario";
 
 const ALL_KINDS: SourceKind[] = [
-  "satz",
   "verbformen",
   "bauteil",
   "verbindungen",
@@ -151,7 +148,6 @@ const ALL_KINDS: SourceKind[] = [
 ];
 
 const KICKER: Record<SourceKind, string> = {
-  satz: "WORTSCHATZ",
   verbformen: "VERBFORMEN",
   bauteil: "BAUTEIL",
   verbindungen: "VERBINDUNGEN",
@@ -165,8 +161,6 @@ const KICKER: Record<SourceKind, string> = {
 
 // One dealt turn: exactly one item from exactly one source, tagged with a
 // per-deal counter so the trainer remounts fresh (via `key`) every turn.
-// FLOW-003: satz deals carry `rehearsal` — true for a write-free SATZ-015
-// turn, false for a real graded attempt (see SatzCycle below).
 type Deal =
   | { kind: "bauteil"; key: number; item: BauteilItem }
   | { kind: "verbindungen"; key: number; item: ChunkItem }
@@ -176,17 +170,7 @@ type Deal =
   | { kind: "faelle"; key: number; item: CaseItem }
   | { kind: "satzbau"; key: number; item: ClauseItem }
   | { kind: "szenario"; key: number; item: SzenarioRoundItem }
-  | { kind: "satz"; key: number; card: DeckCard; rehearsal: boolean }
   | { kind: "verbformen"; key: number; card: DeckCard };
-
-// FLOW-003: the only kicker that varies by more than source — a rehearsal
-// satz deal says so plainly rather than presenting a write-free turn as an
-// ordinary graded one. Everything else still reads straight off KICKER.
-function kickerFor(deal: Deal): string {
-  if (deal.kind === "satz" && deal.rehearsal)
-    return "WORTSCHATZ · WIEDERHOLUNG";
-  return KICKER[deal.kind];
-}
 
 // FLOW-004: the transition beat between deals — names the next exercise so
 // the switch registers, and the mascot reacts to how the last item went.
@@ -252,12 +236,9 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// FLOW-003: Verbformen keeps the OLD endless cycle unchanged below — due,
-// then new, then later, shuffled within each tier, rebuilt from the whole
-// deck once exhausted, every deal fully graded. Its route (verbformen/api.ts)
-// has no rehearsal flag (SATZ-015 is a satz-only backend feature), so there
-// is nothing write-free to deal it from; changing its dosing is out of scope
-// for this ticket.
+// Verbformen's endless cycle — due, then new, then later, shuffled within
+// each tier, rebuilt from the whole deck once exhausted, every deal fully
+// graded.
 type CardCycle = { deck: DeckCard[]; order: string[] };
 
 function orderCycle(deck: DeckCard[]): string[] {
@@ -280,59 +261,6 @@ function nextCard(cycle: CardCycle): DeckCard | null {
   return null;
 }
 
-// FLOW-003: satz's schedule-honest replacement for CardCycle. `gradedOrder`
-// is due-first then an allowance-capped drip of new — every deal from it is
-// a REAL graded POST /satz/attempts write, same dosing policy as the
-// standalone trainer's buildQueue. Once it's spent, deals come from
-// `rehearsalOrder` instead: write-free SATZ-015 turns (full STT+judge+
-// feedback, zero schedule/ledger/attempt-log writes) drawn from the WHOLE
-// deck — including cards already graded this sitting and not-yet-due
-// "later" cards, since nothing there can be hurt by an ungraded rep — so
-// Wortschatz stays in the rotation forever instead of re-grinding a rested
-// card's interval once the honest graded slice runs out.
-type SatzCycle = {
-  deck: DeckCard[];
-  gradedOrder: string[];
-  rehearsalOrder: string[];
-};
-
-// Due before new (not shuffled together like buildQueue) so an overdue
-// review can never lose its priority slot to a lucky shuffle — Flow deals
-// one card at a time over a long sitting, not one fixed round, so keeping
-// due strictly first matters more here than in the standalone trainer.
-function buildGradedOrder(deck: DeckCard[], newAllowance: number): string[] {
-  const due = deck.filter((c) => c.srs.status === "due").map((c) => c.id);
-  const fresh = deck.filter((c) => c.srs.status === "new").map((c) => c.id);
-  return [...shuffle(due), ...shuffle(fresh).slice(0, newAllowance)];
-}
-
-function buildRehearsalOrder(deck: DeckCard[]): string[] {
-  return shuffle(deck.map((c) => c.id));
-}
-
-// Returns the next satz card plus whether this deal is a write-free
-// rehearsal turn. Drains gradedOrder first; once empty, deals from (and
-// endlessly rebuilds) rehearsalOrder. An id can still be sitting in a stale
-// order entry after its card left the deck mid-sitting (handleSatzRemove) —
-// skip it rather than dealing a card that's gone.
-function nextSatzCard(cycle: SatzCycle): [DeckCard, boolean] | null {
-  const byId = new Map(cycle.deck.map((c) => [c.id, c] as const));
-  while (cycle.gradedOrder.length > 0) {
-    const id = cycle.gradedOrder.shift() as string;
-    const card = byId.get(id);
-    if (card) return [card, false];
-  }
-  if (cycle.rehearsalOrder.length === 0) {
-    cycle.rehearsalOrder = buildRehearsalOrder(cycle.deck);
-  }
-  while (cycle.rehearsalOrder.length > 0) {
-    const id = cycle.rehearsalOrder.shift() as string;
-    const card = byId.get(id);
-    if (card) return [card, true];
-  }
-  return null;
-}
-
 // Every mutable buffer/cycle lives in one bag, held in a ref so the deal
 // logic never has to fight React's render cycle — turns are dealt by
 // mutating this bag and pushing the result into `deal` state.
@@ -345,7 +273,6 @@ type FlowBag = {
   faelle: CaseItem[];
   satzbau: ClauseItem[];
   szenario: SzenarioRoundItem[];
-  satz: SatzCycle;
   verbformen: CardCycle;
   dealCounter: number;
   // FLOW-006: how many szenario items THIS round has already dealt — read
@@ -365,7 +292,6 @@ function emptyBag(): FlowBag {
     faelle: [],
     satzbau: [],
     szenario: [],
-    satz: { deck: [], gradedOrder: [], rehearsalOrder: [] },
     verbformen: { deck: [], order: [] },
     dealCounter: 0,
     szenarioDealtThisRound: 0,
@@ -381,7 +307,6 @@ function sourceCount(bag: FlowBag, kind: SourceKind): number {
   if (kind === "faelle") return bag.faelle.length;
   if (kind === "satzbau") return bag.satzbau.length;
   if (kind === "szenario") return bag.szenario.length;
-  if (kind === "satz") return bag.satz.deck.length;
   return bag.verbformen.deck.length;
 }
 
@@ -443,10 +368,6 @@ function dealFromSource(bag: FlowBag, kind: SourceKind): Deal | null {
     const item = bag.szenario.shift();
     if (item) bag.szenarioDealtThisRound += 1;
     return item ? { kind, key, item } : null;
-  }
-  if (kind === "satz") {
-    const dealt = nextSatzCard(bag.satz);
-    return dealt ? { kind, key, card: dealt[0], rehearsal: dealt[1] } : null;
   }
   const card = nextCard(bag.verbformen);
   return card ? { kind: "verbformen", key, card } : null;
@@ -552,7 +473,6 @@ type Tally = { done: number; correct: number };
 
 function emptyTallies(): Record<SourceKind, Tally> {
   return {
-    satz: { done: 0, correct: 0 },
     verbformen: { done: 0, correct: 0 },
     bauteil: { done: 0, correct: 0 },
     verbindungen: { done: 0, correct: 0 },
@@ -651,15 +571,6 @@ export default function Flow() {
     sessionIdRef.current ??= "flow-" + crypto.randomUUID().replace(/-/g, "");
     return sessionIdRef.current;
   }, []);
-
-  // FLOW-003: whether the CURRENTLY dealt satz card is a write-free
-  // rehearsal turn — set by dealNext whenever it deals a satz card, read by
-  // handleSatzAttempt so the first attempt on this card carries the right
-  // rehearsal flag. Independent of VocabTrainer's own SATZ-015 rehearsalRef
-  // (which arms a SAME-card retry after a graded pass with a grammar note,
-  // and bypasses onAttempt entirely when armed) — the two never fire on the
-  // same submission, so there's nothing to conflict.
-  const satzRehearsalRef = useRef(false);
 
   useEffect(() => {
     if (ready && !token) {
@@ -790,10 +701,6 @@ export default function Flow() {
           kind === "szenario" ? user?.level : undefined,
         );
       }
-      // FLOW-003: latch this deal's rehearsal flag before it renders — the
-      // attempt handler below has no other way to know which order this
-      // card was dealt from.
-      satzRehearsalRef.current = next.kind === "satz" && next.rehearsal;
       // FLOW-004: park the deal behind a short transition beat that names
       // the next exercise and lets the mascot react to the last one.
       pendingDealRef.current = next;
@@ -883,16 +790,6 @@ export default function Flow() {
       loadOne(fetchSzenarioRound(token, szenarioSeen, 3), ({ tier, items }) => {
         bag.szenario = items;
         foldSzenarioSeen(tier, items, szenarioExpected, szenarioSeen);
-      }),
-      loadOne(fetchSatzDeck(token), (payload) => {
-        // FLOW-003: due-first + the server's dosed daily new-word drip —
-        // rehearsalOrder starts empty and is only built (endlessly) once
-        // gradedOrder runs dry, see nextSatzCard.
-        bag.satz = {
-          deck: payload.cards,
-          gradedOrder: buildGradedOrder(payload.cards, payload.newAllowance),
-          rehearsalOrder: [],
-        };
       }),
       loadOne(fetchVerbformenDeck(token), (cards) => {
         bag.verbformen = { deck: cards, order: orderCycle(cards) };
@@ -1006,8 +903,8 @@ export default function Flow() {
   );
 
   // FLOW-002: the deliberate "give up" escape — same auth-guarded shape as
-  // the attempt handlers above, one per item drill (satz/verbformen keep
-  // their existing onReveal instead; genus wires only its drag beat).
+  // the attempt handlers above, one per item drill (verbformen keeps its
+  // existing onReveal instead; genus wires only its drag beat).
   const handleBauteilGiveUp = useCallback(
     async (itemId: string): Promise<BauteilVerdict> => {
       if (!token) throw new UnauthorizedError("/bauteil/attempts");
@@ -1199,10 +1096,13 @@ export default function Flow() {
     async (
       itemId: string,
       article: GenusArticle,
+      // DATA-009: true for every drag after the first on this item — the
+      // backend scores gender once per noun and ignores retries.
+      retry: boolean = false,
     ): Promise<GenusArticleVerdict> => {
       if (!token) throw new UnauthorizedError("/genus/attempts");
       try {
-        return await submitGenusArticle(token, itemId, article, sid());
+        return await submitGenusArticle(token, itemId, article, sid(), retry);
       } catch (e) {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
@@ -1224,36 +1124,6 @@ export default function Flow() {
     [token, expireSession, sid],
   );
 
-  const handleSatzAttempt = useCallback(
-    async (
-      cardId: string,
-      audio: Blob,
-      sessionId: string,
-    ): Promise<AttemptResult> => {
-      if (!token) throw new UnauthorizedError("/satz/attempts");
-      try {
-        // FLOW-003: satzRehearsalRef reflects the CURRENT deal (latched by
-        // dealNext) — true routes this attempt through the write-free
-        // SATZ-015 path (full STT+judge+feedback, zero schedule/ledger
-        // writes), matching how it was dealt. VocabTrainer's own SATZ-015
-        // retry (armed by its gold "Try again" after a grammar-corrected
-        // pass) never reaches this handler at all — it bypasses onAttempt
-        // and posts straight to the API with rehearsal:true itself.
-        return await submitSatzAttempt(
-          token,
-          cardId,
-          audio,
-          sessionId,
-          satzRehearsalRef.current,
-        );
-      } catch (e) {
-        if (e instanceof UnauthorizedError) expireSession();
-        throw e;
-      }
-    },
-    [token, expireSession],
-  );
-
   const handleVerbformenAttempt = useCallback(
     async (
       cardId: string,
@@ -1267,30 +1137,6 @@ export default function Flow() {
         if (e instanceof UnauthorizedError) expireSession();
         throw e;
       }
-    },
-    [token, expireSession],
-  );
-
-  const handleSatzRemove = useCallback(
-    async (cardId: string): Promise<void> => {
-      if (!token) return;
-      try {
-        await removeSatzCard(token, cardId);
-      } catch (e) {
-        if (e instanceof UnauthorizedError) {
-          expireSession();
-          return;
-        }
-      }
-      // FLOW-001: no page-level refetch here — just drop it from the local
-      // cycle so future deals never pick it again. FLOW-003: both order
-      // arrays need pruning now, not just one.
-      const bag = bagRef.current;
-      bag.satz = {
-        deck: bag.satz.deck.filter((c) => c.id !== cardId),
-        gradedOrder: bag.satz.gradedOrder.filter((id) => id !== cardId),
-        rehearsalOrder: bag.satz.rehearsalOrder.filter((id) => id !== cardId),
-      };
     },
     [token, expireSession],
   );
@@ -1315,34 +1161,6 @@ export default function Flow() {
     [token, expireSession],
   );
 
-  const handleSatzReveal = useCallback(
-    (cardId: string) => {
-      if (!token) return;
-      // FLOW-003: a rehearsal deal is write-free END TO END — the reveal
-      // lapse (interval quartered, leech counter bumped) must not sneak in
-      // through this side door while the graded attempt path is flagged off.
-      if (satzRehearsalRef.current) return;
-      revealSatzCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) expireSession();
-      });
-    },
-    [token, expireSession],
-  );
-
-  // SATZ-010: a wrong gender pick — same fire-and-forget lapse policy as a
-  // reveal. Wired only to the Satzschmiede deal, not Verbformen's verb-only one.
-  const handleSatzGenderMiss = useCallback(
-    (cardId: string) => {
-      if (!token) return;
-      // FLOW-003: same write-free guarantee as the reveal above.
-      if (satzRehearsalRef.current) return;
-      genderMissSatzCard(token, cardId).catch((e) => {
-        if (e instanceof UnauthorizedError) expireSession();
-      });
-    },
-    [token, expireSession],
-  );
-
   // The Artikel item's peekable "Endungen" sheet. GenusTrainer renders the
   // toggle whenever it HAS the sheet, but Flow never passed one — so the whole
   // premise of the exercise ("most endings give the gender away") had no way to
@@ -1362,17 +1180,6 @@ export default function Flow() {
         if (e instanceof UnauthorizedError) expireSession();
       });
   }, [token, deal, expireSession]);
-
-  // SATZ-010 hint: Artikel-Anker's ending labels, fetched on first use.
-  const handleSatzGenderCues = useCallback(async () => {
-    if (!token) throw new UnauthorizedError("/genus/rules");
-    try {
-      return (await fetchGenusMeta(token)).endings;
-    } catch (e) {
-      if (e instanceof UnauthorizedError) expireSession();
-      throw e;
-    }
-  }, [token, expireSession]);
 
   const handleVerbformenReveal = useCallback(
     (cardId: string) => {
@@ -1548,7 +1355,7 @@ export default function Flow() {
                 {deal !== null && (
                   <>
                     <p className="mb-3 text-center font-body text-[11px] font-black uppercase tracking-[0.24em] text-flag-red">
-                      {kickerFor(deal)}
+                      {KICKER[deal.kind]}
                     </p>
 
                     {deal.kind === "bauteil" && (
@@ -1676,27 +1483,6 @@ export default function Flow() {
                         }
                         allowGiveUp
                         onGiveUp={handleSatzbauGiveUp}
-                      />
-                    )}
-                    {deal.kind === "satz" && (
-                      <VocabTrainer
-                        key={deal.key}
-                        deck={[deal.card]}
-                        onRemove={handleSatzRemove}
-                        onAttempt={handleSatzAttempt}
-                        onReveal={handleSatzReveal}
-                        onExplain={handleExplain}
-                        onFlag={handleFlag}
-                        sessionPrefix="satz"
-                        flow
-                        onFlowDone={(correct) =>
-                          handleItemDone("satz", correct)
-                        }
-                        sessionId={sid()}
-                        onGenderMiss={handleSatzGenderMiss}
-                        onGenderCues={handleSatzGenderCues}
-                        onGloss={handleGloss}
-                        onAdd={handleAddWord}
                       />
                     )}
                     {deal.kind === "verbformen" && (

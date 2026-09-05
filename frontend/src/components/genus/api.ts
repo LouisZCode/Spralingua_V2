@@ -60,7 +60,7 @@ export type PhraseVerdict = {
   // Index of the offending token in the TYPED answer — the frontend marks
   // exactly that word red (no strikethrough). null when it's not one token.
   wrongIndex: number | null;
-  // GRAM-009 / DATA-009, narrowed by genusfix: "artikel-genus" only when
+  // GRAM-009 / DATA-009, narrowed by the DATA-009 fix: "artikel-genus" only when
   // `kind` is "article" or "gender" — i.e. this particular miss WAS a
   // gender slip — so the wrong-answer FeedbackCard offers the shared
   // "Warum?" disclosure only for a gender miss, not a declension/adjective
@@ -138,7 +138,7 @@ export async function submitArticle(
   article: Article,
   // OBS-007: the practice-sitting id (minted by the Genus shell).
   sessionId: string,
-  // genusfix BLOCKER 1: true for every drag after the first one on this
+  // DATA-009: true for every drag after the first one on this
   // same item instance — the backend skips the ledger for a retry so a
   // drag-until-correct sequence can't open/credit the pattern more than
   // once. Defaults false so an existing call site that hasn't been updated

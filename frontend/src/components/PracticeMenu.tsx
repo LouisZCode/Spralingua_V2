@@ -385,7 +385,7 @@ export default function PracticeMenu() {
             icon="infinity"
             kicker="alle Übungen"
             title="Flow"
-            body="One stream, every exercise — words, endings, chunks, verb forms, articles, cases, clauses, speaking. You choose the length."
+            body="One stream, every exercise — endings, chunks, verb forms, articles, cases, clauses, speaking. You choose the length."
             cta="Go with the flow"
             done={streak?.modesToday.includes("flow")}
           />

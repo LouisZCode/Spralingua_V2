@@ -105,7 +105,7 @@ export default function GenusTrainer({
   onSelectPool?: (id: string) => void;
   // Grade one dropped article / one typed phrase (POST /genus/attempts via
   // the parent, which owns the token and the OBS-007 practice-session id).
-  // genusfix: `retry` is true for every drag after the first one on the
+  // DATA-009: `retry` is true for every drag after the first one on the
   // SAME item instance (see `submitDrop`'s `articleAttemptedRef`) — the
   // parent must forward it into the attempt payload so the backend can
   // skip the ledger for it (BLOCKER 1/2).
@@ -169,7 +169,7 @@ export default function GenusTrainer({
 
   // Scoring: an item is a first-try green only when BOTH beats were clean.
   const slippedRef = useRef(false);
-  // genusfix BLOCKER 1: the article beat has no drop that blocks a
+  // DATA-009 (review blocker 1): the article beat has no drop that blocks a
   // second/third drag on the SAME item after a wrong one (only a correct
   // drop or a give-up sets `drop` — see `submitDrop` below), so nothing
   // stopped drag-until-correct from being an independent scored POST every
