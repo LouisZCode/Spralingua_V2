@@ -742,8 +742,26 @@ async def has_attempt_today(db: AsyncSession, *, user_id: str, mode: str) -> boo
 
 # Consecutive correct spontaneous productions in tandem sessions before a
 # pattern retires (GRAM-001: "retire on streak >= 2"). One correct use is
-# encouraging; two is acquisition evidence.
+# encouraging; two is acquisition evidence. This is the DEFAULT for every
+# pattern that doesn't opt into its own value — see `_retire_streak_for`.
 _RETIRE_STREAK = 2
+
+
+def _retire_streak_for(pattern_id: str) -> int:
+    """DATA-009 (2026-09-05): a pattern's taxonomy entry may carry its own
+    optional ``retire_streak`` (``grammar/taxonomy.yaml``) — falls back to
+    the module default ``_RETIRE_STREAK`` when the key is absent (every
+    pattern that hasn't opted in) or the lookup fails for any reason (e.g.
+    a pattern id removed from the catalog between error and credit). Exists
+    because `_RETIRE_STREAK = 2` fits a structural rule ("used the Perfekt
+    with sein twice"), but `artikel-genus` is lexical and covers every
+    German noun's gender — two correct drags on ONE noun must not retire
+    the entire pattern the way two correct uses of one real rule would.
+    """
+    try:
+        return load_taxonomy().get(pattern_id, {}).get("retire_streak", _RETIRE_STREAK)
+    except Exception:
+        return _RETIRE_STREAK
 
 
 async def credit_pattern_success(
@@ -759,10 +777,12 @@ async def credit_pattern_success(
 
     The success counterpart to :func:`record_grammar_error`: where a slip resets
     the streak and reopens the pattern, a clean spontaneous production bumps the
-    retire ``streak`` and retires the pattern once it reaches ``_RETIRE_STREAK``.
-    Only ``streak`` / ``status`` / ``last_seen`` move — ``occurrences`` (lifetime
-    error count) and the ``examples`` ring buffer are untouched, since nothing
-    went wrong.
+    retire ``streak`` and retires the pattern once it reaches
+    ``_retire_streak_for(pattern_id)`` (``_RETIRE_STREAK`` by default; a pattern
+    can opt into a slower streak via its taxonomy entry's ``retire_streak`` —
+    see that function). Only ``streak`` / ``status`` / ``last_seen`` move —
+    ``occurrences`` (lifetime error count) and the ``examples`` ring buffer are
+    untouched, since nothing went wrong.
 
     Returns the resulting ``status`` (``"open"`` | ``"retired"``) so the caller
     can flag a fresh retirement for the debrief modal, or ``None`` if the row is
@@ -783,7 +803,7 @@ async def credit_pattern_success(
         row.last_source = source
         if session_id:
             row.last_session_id = session_id
-        if row.streak >= _RETIRE_STREAK:
+        if row.streak >= _retire_streak_for(pattern_id):
             row.status = "retired"
         await db.commit()
         return row.status

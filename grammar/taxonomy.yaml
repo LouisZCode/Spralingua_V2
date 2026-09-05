@@ -3,14 +3,24 @@
 # purely lexical slips (a noun's gender misremembered, a wrong word sense)
 # are deliberately absent — those belong to the vocabulary card's own SRS.
 #
-# Fields per pattern (all required):
-#   id          — stable slug; ledger PK part, never rename once rows exist
-#   label       — short human/LLM-facing name
-#   level       — CEFR tier where the pattern is typically acquired
-#   description — one learner-facing line stating the rule
-#   wrong/right — a minimal contrast pair (used by classifying LLMs)
-#   elicit      — how a conversation partner naturally provokes the structure
-#                 (consumed by the tandem grammar-focus layer, Phase 3)
+# Fields per pattern (all required unless marked optional):
+#   id            — stable slug; ledger PK part, never rename once rows exist
+#   label         — short human/LLM-facing name
+#   level         — CEFR tier where the pattern is typically acquired
+#   description   — one learner-facing line stating the rule
+#   wrong/right   — a minimal contrast pair (used by classifying LLMs)
+#   elicit        — how a conversation partner naturally provokes the
+#                   structure (consumed by the tandem grammar-focus layer,
+#                   Phase 3)
+#   retire_streak — OPTIONAL int. How many consecutive correct productions
+#                   (database/repository.py::credit_pattern_success) retire
+#                   this pattern's ledger row. Falls back to that function's
+#                   own default (2) when absent. Exists for a pattern like
+#                   artikel-genus that is lexical rather than a single
+#                   structural transformation — it covers every German
+#                   noun's gender, so two correct drags on ONE noun must not
+#                   retire the whole pattern the way two correct uses of a
+#                   real structural rule reasonably would (genusfix, 2026-09-05).
 
 patterns:
   # ── A1 ──────────────────────────────────────────────────────────────────
@@ -101,6 +111,26 @@ patterns:
     wrong: "Ich arbeite in Montag."
     right: "Ich arbeite am Montag."
     elicit: "Ask when things happen — days, clock times, months, seasons."
+
+  # DATA-009: noun gender (der/die/das) is a lexical property, not a
+  # structural transformation like every other A1 pattern above — but the
+  # Genus drill (66% of all drill attempts) had nowhere to file a real
+  # wrong-gender miss, so its errors never reached user_errors at all.
+  # Added deliberately narrow: "a noun's gender misremembered" is still the
+  # vocabulary card's own SRS territory (see the file header) EXCEPT when a
+  # learner demonstrably guesses the wrong der/die/das in a live production
+  # — that is the one gender slip structural enough to track here.
+  - id: artikel-genus
+    label: Noun gender (der/die/das)
+    level: A1
+    description: "Every noun's grammatical gender — der, die, or das — is a fixed property of the word, not derived from its meaning; a handful of endings predict it reliably, but most nouns must simply be learned together with their article."
+    wrong: "Das Tisch ist neu."
+    right: "Der Tisch ist neu."
+    elicit: "Ask about everyday objects, people and places — nouns whose ending gives no clue are the best test of whether they know the gender or are guessing."
+    # genusfix (2026-09-05): a slower retire streak than the default 2 —
+    # this pattern covers EVERY German noun's gender, so two correct drags
+    # on one single noun must not retire the whole der/die/das pattern.
+    retire_streak: 10
 
   # ── A2 ──────────────────────────────────────────────────────────────────
   - id: perfekt-aux-sein

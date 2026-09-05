@@ -30,7 +30,7 @@ const FEATURES: {
     accent: "ink",
     icon: "check",
     title: "Get feedback.",
-    body: "Every mistake goes into a personal grammar ledger of 33 patterns — it's what your partners and your drills focus on next.",
+    body: "Every mistake goes into a personal grammar ledger of 34 patterns — it's what your partners and your drills focus on next.",
   },
 ];
 

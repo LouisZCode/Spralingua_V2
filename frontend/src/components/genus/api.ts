@@ -34,6 +34,11 @@ export type ArticleVerdict = {
   // separate "wrong" reveal card to reuse, so this is the only cue that a
   // correct-shaped reveal was actually a concession, not a right guess.
   gaveUp?: boolean;
+  // DATA-009: always "artikel-genus" — Genus tests exactly one taxonomy
+  // pattern, unlike the other typed drills. Not consumed on this beat today
+  // (the drop stays unrevealed on a genuine miss, and the AnchorCard reveal
+  // already carries its own bespoke "why"), but the backend always sends it.
+  patternId?: string | null;
 };
 
 // Verdict for phase="phrase" (typed production). Recognized phrase shapes
@@ -55,6 +60,12 @@ export type PhraseVerdict = {
   // Index of the offending token in the TYPED answer — the frontend marks
   // exactly that word red (no strikethrough). null when it's not one token.
   wrongIndex: number | null;
+  // GRAM-009 / DATA-009, narrowed by genusfix: "artikel-genus" only when
+  // `kind` is "article" or "gender" — i.e. this particular miss WAS a
+  // gender slip — so the wrong-answer FeedbackCard offers the shared
+  // "Warum?" disclosure only for a gender miss, not a declension/adjective
+  // slip (which isn't about gender) or a match/unrecognized result.
+  patternId?: string | null;
 };
 
 // One deck word the vocab nudge picked for the production beat: the word
@@ -126,7 +137,14 @@ export async function submitArticle(
   itemId: string,
   article: Article,
   // OBS-007: the practice-sitting id (minted by the Genus shell).
-  sessionId: string
+  sessionId: string,
+  // genusfix BLOCKER 1: true for every drag after the first one on this
+  // same item instance — the backend skips the ledger for a retry so a
+  // drag-until-correct sequence can't open/credit the pattern more than
+  // once. Defaults false so an existing call site that hasn't been updated
+  // to thread it through still behaves like a (safe, if imprecise) fresh
+  // attempt rather than failing to compile.
+  retry: boolean = false
 ): Promise<ArticleVerdict> {
   return request("/genus/attempts", token, {
     method: "POST",
@@ -136,6 +154,7 @@ export async function submitArticle(
       phase: "article",
       answer: article,
       session_id: sessionId,
+      retry,
     }),
   });
 }

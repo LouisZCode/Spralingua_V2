@@ -33,6 +33,26 @@ item doesn't already give this room). If a future drill can't be reused
 without refactoring the drill itself, drop it here and record why — do not
 edit the drill to fit.
 
+DATA-009 (2026-09-05) added a 34th taxonomy pattern, ``artikel-genus``
+(noun gender), and it is DELIBERATELY absent from ``_ADAPTERS`` — the first
+taxonomy id with no pool adapter at all. Genus is not a seventh reusable
+drill here: it is two beats (a drag, then a typed production) behind one
+``item_id``, mixes curated pool items with live per-user deck items
+(``genus/routes.py::_resolve_item``, DB-backed — every adapter above is a
+pure in-process catalog), and its verdict shapes don't fit the single
+``validate(item, answer) -> grade(item, answer, give_up=)`` contract
+``DrillAdapter`` assumes. Forcing that shape onto Genus would mean editing
+Genus itself, which the paragraph above rules out. This is safe to leave
+uncovered: ``teacher/dealer.py::deal`` already treats zero pool candidates
+as a normal, expected state (``pool_valid = False``) for any pattern, not a
+failure — it just drops "pool" from the format roll and falls back to
+"redo" (once a real Genus miss opens the learner's ``artikel-genus`` ledger
+row — see ``genus/routes.py``) or "produce" (always taxonomy-valid, needs
+only the entry's ``description``/``wrong``/``right``, which the taxonomy
+carries for every pattern including this one). Verified 2026-09-05:
+``GET /teacher/exercise?pattern=artikel-genus`` returns a normal 200
+"produce" payload for a learner with no ledger row yet.
+
 Every catalog loader below is the drill's own ``lru_cache``d ``load_items``,
 so this module builds nothing at import beyond a few closures; the actual
 YAML parse happens (and is cached) the first time any route touches it.

@@ -16,10 +16,40 @@ CONT-002 applies: up to half the round is the learner's own deck nouns
 (``VocabCard.article`` is the truth), classified live by ending shape — no
 forge, no ``user_drill_items`` rows, everything re-derivable at attempt time.
 
-Deliberately NO grammar-ledger writes: ``grammar/taxonomy.yaml`` scopes the
-ledger to structural patterns and excludes lexical slips ("a noun's gender
-misremembered … belongs to the vocabulary card's own SRS"). Attempts land in
-the cross-drill DATA-004 log only, as ``exercise="genus"``.
+DATA-009 (2026-09-05, revised by genusfix same day after review): the
+ARTICLE beat (phase="article") is the one and only place gender is scored,
+and one noun encounter produces at most one ``user_errors`` ledger event —
+a wrong drag feeds ``record_grammar_error`` for ``pattern_id="artikel-genus"``
+(``grammar/taxonomy.yaml``), a correct one feeds ``credit_pattern_success``,
+exactly like faelle/bauteil do for their own patterns. Two things narrow
+that further:
+
+- LEDGER-002: a give-up never reaches the ledger either way — it's a
+  concession, not evidence.
+- BLOCKER 1/2 (genusfix): the drag beat has no drop that blocks a
+  second/third attempt on the SAME item after a wrong one (the learner can
+  keep dragging), so every attempt after the first for one item instance
+  arrives as ``retry=True`` (``AttemptIn.retry``, set by the frontend — see
+  ``GenusTrainer.tsx::submitDrop``) and is inert to the ledger: no write, no
+  credit, no retire-streak progress. Without this, two wrong drags on ONE
+  noun opened the ledger row twice for a single "doesn't know this noun"
+  event, and a wrong-wrong-correct sequence on one noun could both open
+  and immediately credit the pattern.
+
+The PHRASE beat (phase="phrase") never scores gender at all — a
+declension slip (``kind="noun"``) or an adjective-ending slip
+(``kind="adjective"``) is DATA-004 noise for this pattern, not evidence the
+learner has the noun's GENDER wrong, and a genuine gender slip there
+(deterministic ``kind="article"`` or judge ``kind="gender"``) is still just
+a miss on an item whose gender was already tested — for real — at the
+article beat.
+
+Both beats still log every graded (non-"unrecognized") attempt to the
+cross-drill DATA-004 log via ``record_drill_attempt``, but only a first-try
+article-beat attempt (give-up included) tags that row with
+``pattern_id="artikel-genus"`` — a retry drag or any phrase-beat row carries
+``pattern_id=None``, so the row exists for the attempt count without being
+mistaken for a scored gender judgement.
 """
 
 import random
@@ -36,7 +66,11 @@ from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import UserCard, VocabCard
-from database.repository import record_drill_attempt
+from database.repository import (
+    credit_pattern_success,
+    record_drill_attempt,
+    record_grammar_error,
+)
 from genus.content import (
     ARTICLES,
     SAFE_ADJECTIVES,
@@ -51,6 +85,7 @@ from genus.content import (
 from genus.judge import GenderVerdict, judge_gender
 from drills.copy import JUDGE_UNAVAILABLE
 from genus.nudge import suggest_vocab
+from grammar import ledger_guard_reason
 from security import drill_try_admit
 from vocab_nudge import filter_picks, load_deck
 
@@ -515,6 +550,13 @@ class AttemptIn(BaseModel):
     # "article" — that's the only beat Flow deals). Skips validation and
     # grades as a real, distinguishable miss.
     give_up: bool = False
+    # genusfix BLOCKER 1 (2026-09-05): true on every drag after the first for
+    # the SAME item instance — the article beat has no drop that blocks a
+    # retry after a wrong drag, so without this flag each retry was an
+    # independent scored POST. Only meaningful for phase "article"; a retry
+    # never opens/reopens the ledger or credits the streak. Defaults False so
+    # every existing/older caller (a first attempt, or a give-up) is unaffected.
+    retry: bool = False
 
 
 async def _resolve_item(
@@ -685,6 +727,25 @@ async def submit_attempt(
                     )
                 payload = _judge_payload(item, answer, verdict)
 
+        # GRAM-009 / DATA-009: lets the frontend fetch GET /grammar/pattern/
+        # artikel-genus for the shared "Warum?" disclosure. The article beat
+        # tests only that one pattern end to end, so it's unconditional there
+        # (matches the pre-existing ArticleVerdict.patternId comment: "not
+        # consumed on this beat today, but the backend always sends it").
+        # genusfix fix-2: the phrase beat is different — since it never
+        # SCORES gender any more (see below), its patternId only appears
+        # when the MISS ITSELF was a gender slip (kind "article"/"gender"),
+        # so the "Warum?" disclosure only offers to explain gender for a
+        # gender miss — a noun-declension or adjective-ending miss (kind
+        # "noun"/"adjective") gets none, and neither does "match" or
+        # "unrecognized".
+        if body.phase == "article":
+            payload["patternId"] = "artikel-genus"
+        else:  # phase == "phrase"
+            payload["patternId"] = (
+                "artikel-genus" if payload.get("kind") in ("article", "gender") else None
+            )
+
         attempt_span.set_attribute(
             "langfuse.observation.output",
             f"correct={payload['correct']} phase={body.phase}"
@@ -692,15 +753,117 @@ async def submit_attempt(
         )
         attempt_span.set_attribute("verdict.correct", bool(payload["correct"]))
 
+        # "unrecognized" input is NOT an attempt (the frontend keeps the item
+        # live and unscored) — it never reaches the log or the ledger, like
+        # Zeitfärbung. Everything below this point is a real, scored attempt.
+        if payload.get("kind") == "unrecognized":
+            return payload
+
+        # genusfix BLOCKER 1/2 + SHOULD-FIX (2026-09-05): the ARTICLE beat is
+        # the ONE place gender is scored, and one noun encounter produces at
+        # most one ledger event.
+        #
+        # - give_up: unchanged from LEDGER-002 — a concession is never
+        #   evidence, so it never touches the ledger, no matter how many
+        #   wrong drags preceded it on this same item. The DATA-004 row still
+        #   keeps the pattern id (like Fälle's give-up rows).
+        # - retry (BLOCKER 1): the drag beat has no drop that blocks a
+        #   second/third attempt on the same item after a WRONG one — only a
+        #   correct drop or a give-up sets `drop` client-side (see
+        #   GenusTrainer.tsx::submitDrop). Without this, two wrong drags on
+        #   one noun opened the ledger row TWICE (occurrences=2 for one
+        #   "doesn't know this noun" event), and a wrong-wrong-correct
+        #   sequence both opened AND credited the pattern in one sitting
+        #   (BLOCKER 2). The frontend now marks every attempt after the
+        #   first one for the same item instance `retry=True`; a retry never
+        #   opens/reopens the ledger and never credits the streak, and its
+        #   DATA-004 row carries `pattern_id=None` so it isn't mistaken for a
+        #   scored gender judgement (the row still exists — the cross-drill
+        #   attempt count must not go blind to it).
+        # - a genuine first attempt scores exactly as before.
+        if body.phase == "article":
+            if body.give_up:
+                gender_correct = False
+                gender_miss = False
+                attempt_pattern_id = "artikel-genus"
+            elif body.retry:
+                gender_correct = False
+                gender_miss = False
+                attempt_pattern_id = None
+            else:
+                gender_correct = payload["correct"]
+                gender_miss = not payload["correct"]
+                attempt_pattern_id = "artikel-genus"
+            ledger_quote = f"{choice} {item['noun']}" if gender_miss else None
+            ledger_corrected = f"{item['article']} {item['noun']}" if gender_miss else None
+            ledger_note = (
+                payload.get("note") or f"{item['noun']} is {item['article']}, not {choice}."
+                if gender_miss
+                else None
+            )
+        else:  # phase == "phrase" — genusfix fix-2: the phrase beat never
+            # scores gender at all any more (declension/adjective-ending
+            # slips are DATA-004 noise for artikel-genus, not evidence the
+            # learner has the GENDER wrong — that's what the article beat
+            # is for). No ledger write, no credit, and its DATA-004 row
+            # always carries pattern_id=None.
+            gender_correct = False
+            gender_miss = False
+            attempt_pattern_id = None
+
+        try:
+            if gender_correct:
+                await credit_pattern_success(
+                    db,
+                    user_id=user_id,
+                    pattern_id="artikel-genus",
+                    session_id=body.session_id,
+                    source="genus",
+                )
+            elif gender_miss:
+                # STT-006's ASR-specific checks are off (check_asr_artifacts=
+                # False) — Genus is typed/drag, never spoken — but the
+                # guard's verbatim-quote and non-vacuous-correction checks
+                # still run: cheap defense-in-depth on a row that, once
+                # written, is permanent (CLAUDE.md). NOTE: passing the same
+                # value for both `quote` and `source_text` makes
+                # `is_quote_verbatim`'s check a structural no-op here (`q in
+                # s` when `q == s` is always True) — there's no separate
+                # learner "source text" for a drag/typed drill the way a
+                # spoken transcript has one; only the non-vacuous-correction
+                # check actually does anything for this caller.
+                guard_reason = ledger_guard_reason(
+                    pattern_id="artikel-genus",
+                    quote=ledger_quote,
+                    corrected=ledger_corrected,
+                    source_text=ledger_quote,
+                    check_asr_artifacts=False,
+                )
+                if guard_reason is None:
+                    await record_grammar_error(
+                        db,
+                        user_id=user_id,
+                        pattern_id="artikel-genus",
+                        sentence=ledger_quote,
+                        corrected=ledger_corrected,
+                        note=ledger_note,
+                        source="genus",
+                        session_id=body.session_id,
+                    )
+                else:
+                    logger.info(
+                        "Genus ledger write skipped (item {}): {}", item["id"], guard_reason
+                    )
+        except Exception:
+            logger.exception("Genus ledger write failed (item {})", item["id"])
+
         # Cross-drill attempt log (DATA-004) — its own commit, non-fatal like
         # the sibling drills. Both beats log, distinguished via item_ref, so
         # accuracy can later split "knows the gender" from "can inflect it".
-        # "unrecognized" input is NOT an attempt (the frontend keeps the item
-        # live and unscored) — it never reaches the log, like Zeitfärbung.
-        # NO ledger write here on purpose — see the module docstring.
+        # `attempt_pattern_id` is None for a retry drag and for every
+        # phrase-beat outcome (see above) — only a first-try article-beat
+        # attempt (give-up included) tags the row with the taxonomy pattern.
         try:
-            if payload.get("kind") == "unrecognized":
-                return payload
             await record_drill_attempt(
                 db,
                 user_id=user_id,
@@ -712,7 +875,7 @@ async def submit_attempt(
                     if body.give_up
                     else f"{item['id']}:{body.phase}"
                 ),
-                pattern_id=None,
+                pattern_id=attempt_pattern_id,
                 correct=payload["correct"],
                 modality="written",
                 session_id=body.session_id,

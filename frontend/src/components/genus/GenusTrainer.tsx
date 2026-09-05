@@ -105,7 +105,15 @@ export default function GenusTrainer({
   onSelectPool?: (id: string) => void;
   // Grade one dropped article / one typed phrase (POST /genus/attempts via
   // the parent, which owns the token and the OBS-007 practice-session id).
-  onArticle: (itemId: string, article: Article) => Promise<ArticleVerdict>;
+  // genusfix: `retry` is true for every drag after the first one on the
+  // SAME item instance (see `submitDrop`'s `articleAttemptedRef`) — the
+  // parent must forward it into the attempt payload so the backend can
+  // skip the ledger for it (BLOCKER 1/2).
+  onArticle: (
+    itemId: string,
+    article: Article,
+    retry: boolean
+  ) => Promise<ArticleVerdict>;
   // UI-014: optional — the typed-phrase beat never runs in flow mode (see
   // the `flow` prop below), so Flow's mount has nothing real to pass here.
   onPhrase?: (itemId: string, answer: string) => Promise<PhraseVerdict>;
@@ -161,6 +169,14 @@ export default function GenusTrainer({
 
   // Scoring: an item is a first-try green only when BOTH beats were clean.
   const slippedRef = useRef(false);
+  // genusfix BLOCKER 1: the article beat has no drop that blocks a
+  // second/third drag on the SAME item after a wrong one (only a correct
+  // drop or a give-up sets `drop` — see `submitDrop` below), so nothing
+  // stopped drag-until-correct from being an independent scored POST every
+  // time. This ref marks every drag after the first one for the CURRENT
+  // item as a retry; `advance()` resets it whenever a new item is dealt. A
+  // ref, not state, because it must never trigger a re-render on its own.
+  const articleAttemptedRef = useRef(false);
   const [firstTryGreens, setFirstTryGreens] = useState(0);
   const [missed, setMissed] = useState<{ item: GenusItem; expected: string }[]>(
     []
@@ -198,6 +214,9 @@ export default function GenusTrainer({
     setFailed(null);
     setShakeKey(0);
     slippedRef.current = false;
+    // genusfix: the next item's first drag must be a fresh (non-retry)
+    // attempt server-side.
+    articleAttemptedRef.current = false;
     // FLOW-001: no "done" phase in flow mode — hand the result to the parent.
     if (flow) {
       onFlowDone?.(clean);
@@ -236,8 +255,14 @@ export default function GenusTrainer({
     if (busy || drop) return;
     setBusy(true);
     setFailed(null);
+    // genusfix BLOCKER 1: capture BEFORE the call — the first drag on this
+    // item is a fresh attempt, every one after it (since nothing here
+    // blocks a retry on a wrong drop) is a retry the backend must not score
+    // against the ledger.
+    const retry = articleAttemptedRef.current;
     try {
-      const res = await onArticle(item.id, a);
+      const res = await onArticle(item.id, a, retry);
+      articleAttemptedRef.current = true;
       if (res.correct) {
         setTrapNote(null);
         setDrop(res);
@@ -694,6 +719,7 @@ export default function GenusTrainer({
                       attempt={value.trim()}
                       corrected={verdict.expected}
                       note={verdict.note}
+                      patternId={verdict.patternId}
                     />
                   )}
                 </div>

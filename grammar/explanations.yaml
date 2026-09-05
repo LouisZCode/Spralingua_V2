@@ -124,6 +124,15 @@ am-um-im-zeit:
   native_note: German speakers keep um strictly for exact clock times, they would never say am acht Uhr the way English says at eight.
   source: https://german.stackexchange.com/questions/7172
 
+artikel-genus:
+  pair:
+  - Der Tisch ist neu.
+  - Die Uhr ist neu.
+  point: Tisch takes der and Uhr takes die for no reason inside either sentence — that's just each noun's own fixed gender, learned together with the word itself.
+  test: Does the word end in something reliable, like -ung/-heit/-keit/-schaft/-tion for die, -er/-ling/-ismus for der, or -chen/-lein/-um for das? No such ending? Then the article has to be memorized with the noun, not guessed from its meaning.
+  native_note: null
+  source: null
+
 perfekt-aux-sein:
   pair:
   - Ich habe den Bus gefahren.

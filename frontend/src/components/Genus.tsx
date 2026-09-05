@@ -106,10 +106,14 @@ export default function Genus() {
   }, []);
 
   const handleArticle = useCallback(
-    async (itemId: string, article: Article): Promise<ArticleVerdict> => {
+    async (
+      itemId: string,
+      article: Article,
+      retry: boolean
+    ): Promise<ArticleVerdict> => {
       if (!token) throw new UnauthorizedError("/genus/attempts");
       try {
-        return await submitArticle(token, itemId, article, sessionId());
+        return await submitArticle(token, itemId, article, sessionId(), retry);
       } catch (e) {
         if (e instanceof UnauthorizedError) {
           expireSession();

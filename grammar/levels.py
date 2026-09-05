@@ -11,13 +11,14 @@ Four buckets, not six
 ----------------------
 ``A1`` · ``A2`` · ``B1`` · ``B2+``. CEFR has more rungs, but a self-declared
 level is only accurate to about this resolution. B1 and B2+ are split even
-though the grammar taxonomy tops out at B1 (33 patterns: 11 A1, 12 A2, 10
-B1, zero B2) — CONTENT-leveled exercises (Briefkasten seeds, Szenario
-question tiers) and judge calibration need the finer distinction. For
-taxonomy-derived gating specifically, B2+ has no ceiling: no pattern maps to
-it, so a B2+ learner with open ledger gaps drills exactly those, and one
-with a clean ledger gets the whole pool back via ``select()``'s degrade
-ladder — see ``BUCKETS``.
+though the grammar taxonomy tops out at B1 (34 patterns: 12 A1, 12 A2, 10
+B1, zero B2 — DATA-009 added ``artikel-genus`` at A1) — CONTENT-leveled
+exercises (Briefkasten seeds, Szenario question tiers) and judge
+calibration need the finer distinction. For taxonomy-derived gating
+specifically, B2+ has no ceiling: no pattern maps to it, so a B2+ learner
+with open ledger gaps drills exactly those, and one with a clean ledger
+gets the whole pool back via ``select()``'s degrade ladder — see
+``BUCKETS``.
 
 Where item levels come from
 ---------------------------

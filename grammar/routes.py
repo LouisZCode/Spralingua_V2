@@ -1,7 +1,7 @@
 """HTTP route for the curated grammar-pattern explanation bank (GRAM-009).
 
 One read-only endpoint, ``GET /grammar/pattern/{pattern_id}``, surfacing the
-vetted content ``grammar/explanations.yaml`` already carries for all 33
+vetted content ``grammar/explanations.yaml`` already carries for all 34
 taxonomy patterns. Until now the bank's only consumers were both inside
 Clara's voice room (``agents/conversational_prompt.py``'s kickoff seed and
 ``agents/pipecat_wrapper.py``'s ``_augment_first_result``) — invisible to a
@@ -44,7 +44,7 @@ async def get_pattern_explanation(
 
     404s for any id absent from the bank. Today that only happens for an id
     that isn't a real ``grammar/taxonomy.yaml`` pattern at all — the bank
-    currently covers all 33 taxonomy ids (``load_explanations()`` raises at
+    currently covers all 34 taxonomy ids (``load_explanations()`` raises at
     load time if any taxonomy pattern were left uncovered) — but the check
     stays a plain dict lookup rather than assuming that coverage holds
     forever.
