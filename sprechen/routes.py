@@ -14,7 +14,7 @@ import random
 import time
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -35,6 +35,7 @@ from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
+from recordings.service import schedule_recording
 from sprechen import grading
 from sprechen.content import TARGET_PATTERNS, load_tasks
 from drills.copy import JUDGE_UNAVAILABLE
@@ -169,6 +170,7 @@ async def submit_attempt(
     session_id: str | None = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     """Transcribe one spoken clip, judge constraint + target structure, feed
     the ledger, return transcript + verdict (the raw transcript is part of
@@ -290,8 +292,9 @@ async def submit_attempt(
         # Append to the cross-drill attempt log (DATA-004) — its own commit,
         # non-fatal like the ledger write above. `correct` mirrors the same
         # "clean attempt" condition that decides credit vs. record above.
+        attempt_id: int | None = None
         try:
-            await record_drill_attempt(
+            attempt_id = await record_drill_attempt(
                 db,
                 user_id=user_id,
                 exercise="sprechen",
@@ -303,6 +306,23 @@ async def submit_attempt(
             )
         except Exception:
             logger.exception("Drill-attempt log write failed (task {})", task_id)
+
+        # REL-001: archive the spoken clip, linked to the attempt row above.
+        # Queued to run after this response is on the wire. Skipped if the
+        # attempt-log write failed — nothing to link the clip to.
+        if attempt_id is not None:
+            schedule_recording(
+                background_tasks,
+                user_id=user_id,
+                surface="sprechen",
+                exercise="sprechen",
+                ref_kind="drill_attempt",
+                ref_id=str(attempt_id),
+                item_id=task["id"],
+                data=data,
+                content_type=audio.content_type,
+                transcript=transcript,
+            )
 
         return verdict
 

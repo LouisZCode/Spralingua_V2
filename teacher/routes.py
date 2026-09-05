@@ -49,7 +49,7 @@ expensive as a normal drill attempt).
 
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel, Field
 
@@ -68,6 +68,7 @@ from teacher.dealer import deal as deal_exercise
 from teacher.forge import forge_item, get_item as get_forged_item, grade_produced, store_item
 from teacher.registry import get_adapter
 from teacher.starters import starters_for_level
+from recordings.service import schedule_recording
 from drills.copy import JUDGE_UNAVAILABLE
 
 router = APIRouter(prefix="/teacher", tags=["teacher"])
@@ -483,6 +484,7 @@ async def submit_exercise_attempt_audio(
     # for a live-forged production task's answer.
     drill: str = Form("sprechen"),
     user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
 ):
     """Grade one SPOKEN attempt. Two jobs share this multipart audio route
     now (CLARA-16), picked by the `drill` field:
@@ -508,15 +510,24 @@ async def submit_exercise_attempt_audio(
       the format, same philosophy as sprechen.
 
     ============================================================================
-    ABSOLUTE INVARIANT — THIS ROUTE WRITES NOTHING, EVER.
+    ABSOLUTE INVARIANT — THIS ROUTE WRITES NOTHING TO LEARNING STATE, EVER.
     No `record_grammar_error`, no `credit_pattern_success`, no
-    `record_drill_attempt`, no daily-mode credit, no DB session at all. This is
-    the approved design decision for v1 ("stay silent") — Clara's room is
-    deliberately exempt from every evaluator (see ARCHITECTURE.md's teacher
-    branch), and a practice item handed out INSIDE that room must not become a
-    side-channel into the same learning-state tables the exemption exists to
-    keep her out of. If a future version wants these writes, that's a new,
-    deliberate decision — not a bug fix to this comment.
+    `record_drill_attempt`, no daily-mode credit, no ledger-adjacent DB
+    session. This is the approved design decision for v1 ("stay silent") —
+    Clara's room is deliberately exempt from every evaluator (see
+    ARCHITECTURE.md's teacher branch), and a practice item handed out INSIDE
+    that room must not become a side-channel into the same learning-state
+    tables the exemption exists to keep her out of. If a future version
+    wants these writes, that's a new, deliberate decision — not a bug fix
+    to this comment.
+
+    REL-001 (2026-09-05): the spoken clip itself IS still archived — to the
+    voice bucket + the `voice_recordings` table (`ref_kind="teacher_exercise"`,
+    keyed on `itemId`, which has no DB row of its own) via
+    `recordings.service.schedule_recording`, queued to run after the
+    response is already on the wire. This is a raw audio archive, not a
+    graded/ledger write, and a deliberate, separate decision from the
+    invariant above — not an exception to it.
     ============================================================================
     """
     if not drill_try_admit(user_id):
@@ -613,6 +624,20 @@ async def submit_exercise_attempt_audio(
                 f"passed={verdict['passed']} constraintMet={verdict['constraintMet']} "
                 f"hits={verdict['hits']} slips={len(verdict['slips'])}",
             )
+            # REL-001: archive the clip — see the ABSOLUTE INVARIANT note
+            # above this route's docstring for why this isn't a ledger write.
+            schedule_recording(
+                background_tasks,
+                user_id=user_id,
+                surface="teacher",
+                exercise="sprechen",
+                ref_kind="teacher_exercise",
+                ref_id=itemId,
+                item_id=itemId,
+                data=data,
+                content_type=audio.content_type,
+                transcript=transcript,
+            )
             return verdict
 
     # drill == "produce" (CLARA-16): same tracing shape as the sprechen
@@ -668,6 +693,21 @@ async def submit_exercise_attempt_audio(
             "langfuse.observation.output",
             f"correct={correct}" + (f" note={note}" if note else ""),
         )
+        # REL-001: archive the clip — see the ABSOLUTE INVARIANT note above
+        # this route's docstring for why this isn't a ledger write.
+        schedule_recording(
+            background_tasks,
+            user_id=user_id,
+            surface="teacher",
+            exercise="produce",
+            ref_kind="teacher_exercise",
+            ref_id=itemId,
+            item_id=itemId,
+            data=data,
+            content_type=audio.content_type,
+            transcript=transcript,
+        )
+
         # `transcript` rides alongside the verdict — seeing what you actually
         # said is part of the format, same philosophy as sprechen's own
         # response above.

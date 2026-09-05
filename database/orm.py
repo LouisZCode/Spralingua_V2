@@ -732,3 +732,69 @@ class CoinLedger(Base):
             "user_id", "kind", "ref", name="uq_coin_ledger_user_kind_ref"
         ),
     )
+
+
+# ── Voice recordings (REL-001) ──────────────────────────────────────────────
+# One row per learner audio clip kept in the (separate, EU-West) voice
+# bucket: WHO, WHEN, WHAT exercise, and where the object lives.
+# `recordings/store.py` writes the S3 object; `recordings/service.py`
+# writes this row right after, off the request's critical path everywhere
+# it's hooked in (drill audio routes via BackgroundTasks, the voice-session
+# disconnect path via a fire-and-forget task) — a slow/failed upload or
+# insert must never touch a learner's latency or surface as an error.
+
+
+class VoiceRecording(Base):
+    __tablename__ = "voice_recordings"
+
+    # uuid4().hex minted in app code — same PK style as CoinLedger/AudioItem.
+    id: Mapped[str] = mapped_column(Text, primary_key=True)
+    user_id: Mapped[str] = mapped_column(
+        Text, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
+    )
+    # "satz" | "sprechen" | "szenario" | "interview" | "teacher" | "tandem" |
+    # "lesson" | "conversation" — the drill package, or the voice-session
+    # lesson type (pipeline/factory.py's lesson_snapshot["type"]: tandem/
+    # teacher/conversation keep their own name, "respond" folds into
+    # "lesson" since many respond-type lesson ids exist and `exercise`
+    # below already carries the specific one). Content-as-data, not an
+    # enum — same choice as users.tier / drill_attempts.exercise.
+    surface: Mapped[str] = mapped_column(Text, nullable=False)
+    # The drill id / lesson id / teacher `drill` value ("sprechen" |
+    # "produce") this clip belongs to. Not every surface has one worth
+    # stamping (e.g. a szenario answer's scenario id already rides on
+    # `item_id`), so this stays nullable.
+    exercise: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # "drill_attempt" | "activity_session" | "teacher_exercise" |
+    # "interview_comprehension" | "interview_answer" | "satz_rehearsal" —
+    # names what `ref_id` points at. Not an FK: the kinds point at different
+    # tables (or, for teacher_exercise/interview_comprehension/
+    # interview_answer/satz_rehearsal, no table row at all — `ref_id` is
+    # then just the chunk/card id, the closest stable identifier the clip
+    # has). Free text, not a DB enum/CHECK constraint — a new caller can add
+    # a kind without a migration. See the module comment above and the
+    # class docstring at the top of 0026_voice_recordings.py.
+    ref_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    # drill_attempts.id (BigInteger PK, as text) / activity_session.id (the
+    # bare session hex) / a teacher exercise item's own id / an interview
+    # chunk id / a satz card id (no DB row for the last four kinds).
+    ref_id: Mapped[str] = mapped_column(Text, nullable=False)
+    # card id / item id / chunk id, when the surface has one. NULL for a
+    # voice session (activity_session already IS the item).
+    item_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    bucket_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    content_type: Mapped[str] = mapped_column(Text, nullable=False)
+    bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Filled when cheaply known; most upload sites don't decode the clip
+    # just to measure it, so this is NULL far more often than not.
+    duration_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # The STT text the judge saw, when cheap to pass along — lets a later
+    # evaluation replay judge-vs-audio without a second transcription pass.
+    transcript: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        Index("ix_voice_recordings_user_created", "user_id", "created_at"),
+    )

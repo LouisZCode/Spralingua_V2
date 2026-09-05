@@ -23,7 +23,7 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import RedirectResponse
 from loguru import logger
 from sqlalchemy import func, select
@@ -39,6 +39,7 @@ from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
 from coins.prices import INTERVIEW_ANSWER
+from recordings.service import save_recording_now, schedule_recording
 
 from .bucket import presigned_audio_url
 from .display import classify_kind, company_display, dir_name_from_storage_prefix, interviewer_display
@@ -65,11 +66,16 @@ _background_tasks: set[asyncio.Task] = set()
 
 
 async def _background_harvest(
-    transcript: str, session_id: Optional[str], user_id: str, chunk_id: str
+    transcript: str,
+    session_id: Optional[str],
+    user_id: str,
+    chunk_id: str,
+    audio_bytes: Optional[bytes] = None,
+    content_type: Optional[str] = None,
 ) -> None:
     """Fire-and-forget grammar harvest off the answer response's critical
     path (INTV-003 slice 2's ledger write, slice 3B's per-slip
-    ``drill_attempts`` write).
+    ``drill_attempts`` write; REL-001's round-2 recording archive).
 
     Reuses ``agents/error_extractor.py::extract_errors`` — the SAME
     situation-drill harvester ``pipeline/factory.py`` (post-session),
@@ -92,6 +98,21 @@ async def _background_harvest(
     approved SLICE B change: interview is the first harvested-error
     surface to write that row, so its mistakes actually surface in
     ``/me/stats``.
+
+    REL-001 (2026-09-05, widened): round 2's audio has no per-request
+    ``drill_attempts`` row of its own — only harvested slips get one,
+    written inside the loop below, and a clean answer gets none at all. Per
+    Luis's "every learner clip is kept" decision, the recording is archived
+    for EVERY answer regardless — clean or with a harvested slip — under
+    ``ref_kind="interview_answer"`` pointing at the chunk id, deliberately
+    NOT linked to a harvested slip's own ``drill_attempts`` row (that row
+    already carries ``session_id`` + ``item_ref``, which is enough to join
+    back to a recording by user + time + chunk id if that's ever needed).
+    The archive runs even if the harvest above raised — a judge/ledger
+    failure must not cost the learner their recording. Round 1
+    (``/comprehension``) is hooked separately, directly in the route (see
+    ``post_comprehension``) since it has no background task of its own,
+    under ``ref_kind="interview_comprehension"``.
     """
     try:
         # STT-006: this transcript is always a Deepgram spoken transcript
@@ -143,6 +164,25 @@ async def _background_harvest(
                     )
     except Exception:  # noqa: BLE001 — the harvest must never break the attempt
         logger.warning("Interview grammar extraction failed (non-fatal)")
+
+    # REL-001: archive the answer's clip for EVERY answer, clean or not —
+    # see the docstring above for why this sits outside (and after) the
+    # harvest's own try/except rather than nested inside it.
+    if audio_bytes:
+        try:
+            await save_recording_now(
+                user_id=user_id,
+                surface="interview",
+                exercise="interview",
+                ref_kind="interview_answer",
+                ref_id=chunk_id,
+                item_id=chunk_id,
+                data=audio_bytes,
+                content_type=content_type,
+                transcript=transcript,
+            )
+        except Exception:  # noqa: BLE001 — a recording failure must never surface here either
+            logger.warning("Interview recording archive failed (non-fatal)")
 
 
 async def _get_owned_chunk(db: AsyncSession, chunk_id: str, user_id: str) -> tuple[AudioChunk, AudioItem]:
@@ -332,12 +372,19 @@ async def post_comprehension(
     # as round 2 below) — purely for observability; nothing here requires it.
     session_id: Optional[str] = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
 ):
     """Round 1 ("listen & retell"): the learner hears one chunk WITHOUT
     ever seeing the transcript and retells in German what was said (and,
     if there's a question, what's being asked). Ported from
     ``interview_local/app.py::post_comprehension``. No persistence (v1
-    scope) — response shape matches the workbench's exactly."""
+    scope) — response shape matches the workbench's exactly, EXCEPT for the
+    REL-001 voice-recording archive below: this round previously kept no
+    clip at all (nothing to link it to, in the original `drill_attempt` /
+    `activity_session` / `teacher_exercise` vocabulary); it now archives
+    every real attempt under `ref_kind="interview_comprehension"`, `ref_id`
+    = the chunk id — a raw-audio archive, not a graded/ledger write, same
+    carve-out as `teacher/routes.py`'s attempts-audio route."""
     if not drill_try_admit(user_id):
         raise HTTPException(
             status_code=429,
@@ -422,6 +469,23 @@ async def post_comprehension(
             span.record_exception(exc)
             logger.warning(f"interview comprehension judge failed: {exc}")
             response["comprehension_error"] = str(exc)
+
+        # REL-001: archive the retell clip. Reached only past the no_speech/
+        # too-long gates above (a real attempt was made) — independent of
+        # whether the comprehension judge itself succeeded, same reasoning
+        # as round 2's archive running even when its harvest errors.
+        schedule_recording(
+            background_tasks,
+            user_id=user_id,
+            surface="interview",
+            exercise="interview",
+            ref_kind="interview_comprehension",
+            ref_id=chunk_id,
+            item_id=chunk_id,
+            data=audio_bytes,
+            content_type=audio.content_type,
+            transcript=transcript,
+        )
         return response
 
 
@@ -561,7 +625,10 @@ async def post_answer(
     # forget, off the response's critical path, same as szenario/
     # briefkasten's own background harvests.
     harvest_task = asyncio.create_task(
-        _background_harvest(transcript, session_id, user_id, chunk_id)
+        _background_harvest(
+            transcript, session_id, user_id, chunk_id,
+            audio_bytes=audio_bytes, content_type=audio.content_type,
+        )
     )
     _background_tasks.add(harvest_task)
     harvest_task.add_done_callback(_background_tasks.discard)

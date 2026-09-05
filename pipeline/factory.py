@@ -79,6 +79,12 @@ from database.repository import (
     record_grammar_error,
 )
 
+# REL-001: the voice-recording archive — a fire-and-forget upload+DB write
+# scheduled right after the session MP3 export succeeds (see on_audio_data
+# below), same non-fatal, off-critical-path discipline as every other
+# disconnect-side step in this file.
+from recordings.service import save_recording_now
+
 # Cold-start slice: curated starter topics for a teacher session whose
 # ledger is empty (see teacher/starters.py). Imported here, not lazily,
 # same as every other prompt-layer dependency above.
@@ -113,6 +119,9 @@ def _rss_log_suffix() -> str:
 # to inject typed turns into an active session. Per-client isolation rule
 # from CLAUDE.md still holds — this is just a lookup, not shared state.
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
+# REL-001 (2026-09-05): strong refs to in-flight voice-archive uploads, see
+# on_audio_data — outside ACTIVE_TASKS on purpose.
+_RECORDING_TASKS: set[asyncio.Task] = set()
 
 # Lesson id running under each live session, keyed the same as ACTIVE_TASKS.
 # AGENT-001: lets an HTTP route that injects into a live session (e.g.
@@ -946,6 +955,33 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 str(mp3_path), format="mp3", bitrate="128k"
             )
 
+        async def _archive_session_recording(mp3_path, surface: str, transcript_text: str) -> None:
+            """REL-001: archive the just-exported session MP3 to the voice
+            bucket + `voice_recordings` (best-effort; `save_recording_now`
+            itself is a no-op when the bucket isn't configured). Called via
+            `asyncio.create_task` from `on_audio_data` below, NOT awaited —
+            so a slow upload or DB write can never hold up
+            `audiobuffer.stop_recording()`, the post-session-analysis
+            `asyncio.gather`, or the `activity_session` UPDATE that follows.
+            The local mp3 file itself is untouched — kept on disk exactly as
+            before this feature existed."""
+            try:
+                mp3_bytes = await asyncio.to_thread(mp3_path.read_bytes)
+                await save_recording_now(
+                    user_id=db_user_id,
+                    surface=surface,
+                    exercise=lesson_id,
+                    ref_kind="activity_session",
+                    ref_id=session_id,
+                    data=mp3_bytes,
+                    content_type="audio/mpeg",
+                    transcript=transcript_text or None,
+                )
+            except Exception as e:  # noqa: BLE001 — must never affect the live pipeline or cleanup
+                logger.warning(
+                    f"Voice recording archive failed (non-fatal): {type(e).__name__}: {e}"
+                )
+
         @audiobuffer.event_handler("on_audio_data")
         async def on_audio_data(buffer, audio, sample_rate, num_channels):
             base_path = audio_dir / session_id
@@ -966,6 +1002,29 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"Audio saved to: {mp3_path} "
                     f"(session_audio={len(audio) / (1024 * 1024):.1f}MB PCM{_rss_log_suffix()})"
                 )
+                # REL-001: schedule the archive upload as a fire-and-forget
+                # task (never awaited here) so this handler returns
+                # immediately — see _archive_session_recording's docstring
+                # for why. The demo socket's shared anonymous "demo" identity
+                # is excluded outright: never store that audio.
+                if db_user_id != "demo":
+                    _voice_surface = {
+                        "tandem": "tandem",
+                        "teacher": "teacher",
+                        "conversation": "conversation",
+                    }.get(lesson_snapshot.get("type"), "lesson")
+                    # Hold a strong reference (the loop keeps only weak
+                    # ones) so the archive cannot be garbage-collected
+                    # mid-upload — the same pattern as szenario/interview's
+                    # `_background_tasks`. Deliberately NOT in ACTIVE_TASKS:
+                    # a REL-002 drain must not wait on an S3 upload.
+                    _archive_task = asyncio.create_task(
+                        _archive_session_recording(
+                            mp3_path, _voice_surface, wrapper.render_transcript()
+                        )
+                    )
+                    _RECORDING_TASKS.add(_archive_task)
+                    _archive_task.add_done_callback(_RECORDING_TASKS.discard)
             except Exception as e:  # noqa: BLE001 — audio export must not block cleanup
                 logger.warning(f"Audio export failed (non-fatal): {type(e).__name__}: {e}")
             finally:

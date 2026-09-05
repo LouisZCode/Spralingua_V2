@@ -16,7 +16,7 @@ import asyncio
 import random
 import time
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 
 from agents.error_extractor import extract_errors
@@ -34,6 +34,7 @@ from security import drill_try_admit
 
 from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
+from recordings.service import schedule_recording
 from szenario.content import load_scenarios
 from szenario.judge import judge_structure
 from drills.copy import JUDGE_UNAVAILABLE
@@ -347,6 +348,7 @@ async def submit_attempt(
     # /sprechen/attempts.
     sessionId: str = Form(..., max_length=64),
     user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
 ):
     """Transcribe one spoken answer, judge its STRUCTURE, silently feed the
     grammar ledger, return transcript + structure verdict. Grammar never
@@ -470,9 +472,10 @@ async def submit_attempt(
     # LLM-backed) grammar harvest never completes. Non-fatal like every
     # other ledger/log write in this file — pattern_id/correct are always
     # NULL for Szenario (a coach, not a grader; see the migration docstring).
+    attempt_id: int | None = None
     try:
         async with get_sessionmaker()() as attempt_db:
-            await record_drill_attempt(
+            attempt_id = await record_drill_attempt(
                 attempt_db,
                 user_id=user_id,
                 exercise="szenario",
@@ -484,6 +487,23 @@ async def submit_attempt(
             )
     except Exception:
         logger.exception("Drill-attempt log write failed (scenario {})", scenarioId)
+
+    # REL-001: archive the spoken clip, linked to the attempt row above.
+    # Queued to run after this response is on the wire. Skipped if the
+    # attempt-log write failed — nothing to link the clip to.
+    if attempt_id is not None:
+        schedule_recording(
+            background_tasks,
+            user_id=user_id,
+            surface="szenario",
+            exercise="szenario",
+            ref_kind="drill_attempt",
+            ref_id=str(attempt_id),
+            item_id=scenarioId,
+            data=data,
+            content_type=audio.content_type,
+            transcript=transcript,
+        )
 
     # SILENT grammar enrichment (GRAM-001) — must NEVER fail, and (TASK 4)
     # must never ride on the response latency either: fire-and-forget, kicked

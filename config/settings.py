@@ -196,6 +196,23 @@ bucket_name = os.getenv("BUCKET_NAME")
 bucket_access_key_id = os.getenv("BUCKET_ACCESS_KEY_ID")
 bucket_secret_access_key = os.getenv("BUCKET_SECRET_ACCESS_KEY")
 
+# --- Voice recordings bucket (REL-001) ---
+# Railway Bucket "voice" (S3-compatible, EU-West, same convention as the
+# "audio" bucket's BUCKET_* vars above) for the learner voice-recording
+# archive (recordings/store.py): every graded spoken-drill attempt and every
+# voice-session MP3 gets an object here, one per learner per day per
+# surface. All optional, same fail-soft contract as bucket_* above: absent
+# or incomplete -> the feature is inert (recordings/store.py logs ONE
+# warning on first use, never an error, never a slower attempt on the
+# request it would have recorded) until Luis creates the bucket in the
+# Railway dashboard and sets these five vars — no code change needed that
+# day, recordings just start flowing.
+voice_bucket_endpoint = os.getenv("VOICE_BUCKET_ENDPOINT")
+voice_bucket_region = os.getenv("VOICE_BUCKET_REGION")
+voice_bucket_name = os.getenv("VOICE_BUCKET_NAME")
+voice_bucket_access_key_id = os.getenv("VOICE_BUCKET_ACCESS_KEY_ID")
+voice_bucket_secret_access_key = os.getenv("VOICE_BUCKET_SECRET_ACCESS_KEY")
+
 # --- Postgres offsite backups (REL-002) ---
 # Railway's own snapshots don't survive project deletion, so a weekly
 # pg_dump ships offsite to the same Bucket above (scripts/pg_dump_to_bucket.py,

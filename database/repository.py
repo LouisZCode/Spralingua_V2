@@ -34,6 +34,7 @@ from .orm import (
     UserCard,
     UserError,
     VocabCard,
+    VoiceRecording,
 )
 
 # TEST-001: prefix every isolated fixture account must use (scripts/test_user.py
@@ -527,7 +528,7 @@ async def record_drill_attempt(
     word_ok: bool | None = None,
     modality: str,
     session_id: str | None = None,
-) -> None:
+) -> int:
     """Append one row to the drill-attempt event log (DATA-004).
 
     Plain INSERT + commit, mirroring :func:`record_grammar_error`'s shape and
@@ -540,21 +541,29 @@ async def record_drill_attempt(
     ``correct=None`` is a first-class value, not a missing one — Szenario-
     Sparring's structure judge never emits a binary pass/fail, so its rows
     record NULL and still count toward attempt totals, just not accuracy.
+
+    Returns the new row's ``id`` (REL-001: the voice-recording hooks need it
+    as ``ref_id`` to link a stored clip back to the attempt that graded it).
+    Additive — every existing caller ignores the return value, unchanged.
     """
     _assert_test_user(user_id)
+    attempt = DrillAttempt(
+        user_id=user_id,
+        exercise=exercise,
+        item_ref=item_ref,
+        pattern_id=pattern_id,
+        correct=correct,
+        word_ok=word_ok,
+        modality=modality,
+        session_id=session_id,
+    )
     try:
-        db.add(
-            DrillAttempt(
-                user_id=user_id,
-                exercise=exercise,
-                item_ref=item_ref,
-                pattern_id=pattern_id,
-                correct=correct,
-                word_ok=word_ok,
-                modality=modality,
-                session_id=session_id,
-            )
-        )
+        db.add(attempt)
+        # Flush (not just add) so the DB-assigned identity comes back before
+        # commit's default expire_on_commit=True would otherwise force a
+        # second round-trip to re-read it.
+        await db.flush()
+        new_id = attempt.id
         await db.commit()
     except SQLAlchemyError:
         await db.rollback()
@@ -565,6 +574,58 @@ async def record_drill_attempt(
     # frontend end-panel POST for satz/flow, the disconnect path for tandem,
     # the second attempt for briefkasten), which requires 3 of the 4 modes
     # before the streak day is actually earned.
+    return new_id
+
+
+async def record_voice_recording(
+    db: AsyncSession,
+    *,
+    recording_id: str,
+    user_id: str,
+    surface: str,
+    exercise: str | None,
+    ref_kind: str,
+    ref_id: str,
+    item_id: str | None,
+    bucket_key: str,
+    content_type: str,
+    size_bytes: int,
+    duration_ms: int | None = None,
+    transcript: str | None = None,
+) -> None:
+    """Append one row to the voice-recording archive (REL-001).
+
+    Called ONLY after the clip has already landed in the bucket
+    (``recordings/service.py::_upload_and_record`` uploads first, writes
+    this row second) — a row with no matching object would be worse than no
+    row at all. Same non-fatal contract as :func:`record_drill_attempt`:
+    re-raises on ``SQLAlchemyError``; every call site here runs off the
+    request/session's critical path already (a ``BackgroundTasks`` job on
+    the drill routes, a fire-and-forget task on the voice-session disconnect
+    path) and owns its own try/except.
+    """
+    _assert_test_user(user_id)
+    try:
+        db.add(
+            VoiceRecording(
+                id=recording_id,
+                user_id=user_id,
+                surface=surface,
+                exercise=exercise,
+                ref_kind=ref_kind,
+                ref_id=ref_id,
+                item_id=item_id,
+                bucket_key=bucket_key,
+                content_type=content_type,
+                bytes=size_bytes,
+                duration_ms=duration_ms,
+                transcript=transcript,
+            )
+        )
+        await db.commit()
+    except SQLAlchemyError:
+        await db.rollback()
+        raise
 
 
 async def credit_streak_day(db: AsyncSession, *, user_id: str) -> None:

@@ -19,7 +19,7 @@ export default function PrivacyPage() {
   return (
     <>
       <LegalTitle>Privacy Policy (Datenschutzerklärung) for spralingua.com</LegalTitle>
-      <LegalMeta>Last updated: 21 August 2026</LegalMeta>
+      <LegalMeta>Last updated: 5 September 2026</LegalMeta>
 
       <LegalP>
         This Privacy Policy explains what personal data spralingua.com
@@ -98,6 +98,15 @@ export default function PrivacyPage() {
           we store examples of your actual mistakes so we can tailor future
           practice to you.
         </B>
+      </LegalP>
+      <LegalP>
+        For spoken exercises specifically, we also keep the{" "}
+        <B>audio recording of your attempt itself</B> — not just the graded
+        outcome or a text example. Each recording is linked to your account
+        and to the exercise it belongs to, and is used to improve how we
+        grade attempts and to personalize your practice further. It is
+        stored in the same EU-West cloud storage bucket as the voice-
+        conversation recordings described in section 2.2.
       </LegalP>
 
       <LegalH3>2.4 Vocabulary, progress and streak data</LegalH3>
@@ -285,12 +294,12 @@ export default function PrivacyPage() {
           exists, and deleted when you ask us to delete your account.
         </li>
         <li>
-          <B>Session audio recordings</B>: kept on our server infrastructure.
-          Recordings are routinely cleared during infrastructure updates. We
-          are in the process of introducing a fixed retention period for
-          audio; until that is in place, we cannot give you a specific
-          number of days, but recordings do not persist indefinitely as a
-          matter of course.
+          <B>Voice recordings</B> (session audio and spoken-exercise clips,
+          see sections 2.2 and 2.3): stored in our EU-West storage bucket
+          for as long as your account exists, and removed when you ask us
+          to delete your account. We have not yet set a shorter fixed
+          retention period for audio; when we do, this policy will be
+          updated first.
         </li>
         <li>
           <B>Transcripts and other learning records</B>: kept for as long as

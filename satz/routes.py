@@ -16,7 +16,7 @@ from typing import Literal
 from uuid import uuid4
 
 import aiohttp
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import and_, delete, func, literal, select
@@ -42,6 +42,7 @@ from satz.scheduler import lapse_interval, schedule
 
 from coins.gate import admit_coins_or_402
 from coins.prices import SATZ_ATTEMPT
+from recordings.service import schedule_recording
 from satz.verifier import verify_card
 from security import drill_try_admit, gloss_try_admit
 
@@ -756,6 +757,7 @@ async def submit_attempt(
     rehearsal: bool = Form(False),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     """Judge one spoken sentence for a card in the caller's pool.
 
@@ -777,6 +779,9 @@ async def submit_attempt(
     a rehearsal without a migration or ambiguity in per-card stats, so the
     row is skipped entirely rather than logged oddly; the fact still rides
     on this request's span as the ``rehearsal`` attribute either way.
+    REL-001's clip archive is NOT skipped, though — a rehearsal clip is
+    still kept, under ``ref_kind="satz_rehearsal"`` pointing at the card id
+    instead of a (nonexistent) attempt row.
     """
     if not drill_try_admit(user_id):
         raise HTTPException(
@@ -985,9 +990,10 @@ async def submit_attempt(
         # never break the practice attempt it rides on. Skipped on a
         # rehearsal (SATZ-015) — see the route docstring for why the row is
         # dropped rather than marked.
+        attempt_id: int | None = None
         if not rehearsal:
             try:
-                await record_drill_attempt(
+                attempt_id = await record_drill_attempt(
                     db,
                     user_id=user_id,
                     exercise="satz",
@@ -1000,6 +1006,39 @@ async def submit_attempt(
                 )
             except Exception:
                 logger.exception("Drill-attempt log write failed (card {})", card_id)
+
+        # REL-001: archive the spoken clip. A rehearsal (SATZ-015) writes no
+        # `drill_attempts` row by design, but the clip is kept anyway —
+        # "every learner clip is kept" — under its own `ref_kind` pointing
+        # at the card instead of an attempt row. A normal (non-rehearsal)
+        # attempt links to the attempt row just written; skipped only if
+        # that write itself failed above (nothing to link to).
+        if rehearsal:
+            schedule_recording(
+                background_tasks,
+                user_id=user_id,
+                surface="satz",
+                exercise="satz",
+                ref_kind="satz_rehearsal",
+                ref_id=card_id,
+                item_id=card_id,
+                data=data,
+                content_type=audio.content_type,
+                transcript=transcript,
+            )
+        elif attempt_id is not None:
+            schedule_recording(
+                background_tasks,
+                user_id=user_id,
+                surface="satz",
+                exercise="satz",
+                ref_kind="drill_attempt",
+                ref_id=str(attempt_id),
+                item_id=card_id,
+                data=data,
+                content_type=audio.content_type,
+                transcript=transcript,
+            )
 
         # camelCase like every other satz payload (poolSize, cardCount, …).
         return {
