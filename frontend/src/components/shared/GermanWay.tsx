@@ -39,6 +39,7 @@ export default function GermanWay({
   text,
   context,
   target,
+  verb = "say",
   variant = "card",
   onGloss,
   onAdd,
@@ -50,6 +51,10 @@ export default function GermanWay({
 }: {
   // The learner's own line — a verdict card's transcript or a chat bubble.
   text: string;
+  // What the button asks for: "say" (default) for spoken surfaces, "write"
+  // for writing exercises (Briefkasten) where the rewrite replaces written
+  // prose, not speech.
+  verb?: "say" | "write";
   // What the line answered (task prompt / partner's turn) — judge context
   // only, never graded.
   context?: string;
@@ -226,7 +231,9 @@ export default function GermanWay({
               ? "Couldn't ask — retry?"
               : state === "done" && open
                 ? "Hide"
-                : "How would a German say this?"}
+                : verb === "write"
+                  ? "How would a German write this?"
+                  : "How would a German say this?"}
         </button>
         {revealed}
       </div>
@@ -246,7 +253,9 @@ export default function GermanWay({
           ? "Asking…"
           : state === "done" && open
             ? "Hide ▴"
-            : "How would a German say this? ▾"}
+            : verb === "write"
+              ? "How would a German write this? ▾"
+              : "How would a German say this? ▾"}
       </button>
       {state === "error" && (
         <p className="mt-2 font-body text-[12px] font-semibold text-flag-red-deep">

@@ -16,7 +16,40 @@ import { useAuth } from "../auth/AuthContext";
 // and a judge that lowercases its correction must not turn every capitalized
 // noun red (SATZ-016). Never strikethrough: red alone marks the error.
 
-export type MarkedToken = { text: string; changed: boolean };
+export type MarkedToken = {
+  text: string;
+  changed: boolean;
+  // Layout hint from the RAW whitespace that followed this token in its
+  // source string: "line" = a single newline, "para" = a blank line
+  // (paragraph break). Optional — single-line drills never set it, and
+  // MarkedText renders those byte-for-byte as before. Letters (Briefkasten)
+  // set it on both diff sides so the reveal keeps the letter's shape
+  // instead of collapsing into one wall of text.
+  break?: "line" | "para";
+};
+
+// Split into words while remembering what the whitespace BETWEEN words
+// looked like — diffTokens used to throw this away with /\s+/, which is
+// what flattened a judge-written letter into one paragraph. With a capture
+// group, String.split strictly alternates word / separator (odd indices are
+// always separators, even with leading whitespace), so the break after
+// words[i] is derivable from the separator that follows it.
+const splitWords = (
+  s: string,
+): { words: string[]; breaks: ("line" | "para" | "none")[] } => {
+  const parts = s.split(/(\s+)/);
+  const words: string[] = [];
+  const breaks: ("line" | "para" | "none")[] = [];
+  for (let k = 0; k < parts.length; k += 2) {
+    if (!parts[k]) continue;
+    words.push(parts[k]);
+    const sep = parts[k + 1] ?? "";
+    breaks.push(
+      /\n\s*\n/.test(sep) ? "para" : sep.includes("\n") ? "line" : "none",
+    );
+  }
+  return { words, breaks };
+};
 
 const strip = (t: string) =>
   t.replace(/^[„“”"'‚‘.,!?;:()[\]]+|[„“”"'‚‘.,!?;:()[\]]+$/g, "");
@@ -45,8 +78,10 @@ export function diffTokens(
   const rawEqual = opts?.caseInsensitive
     ? (x: string, y: string) => x.toLowerCase() === y.toLowerCase()
     : (x: string, y: string) => x === y;
-  const a = attempt.split(/\s+/).filter(Boolean);
-  const b = corrected.split(/\s+/).filter(Boolean);
+  const aSplit = splitWords(attempt);
+  const bSplit = splitWords(corrected);
+  const a = aSplit.words;
+  const b = bSplit.words;
   const an = a.map(norm);
   const bn = b.map(norm);
   const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
@@ -60,8 +95,16 @@ export function diffTokens(
           : Math.max(dp[i + 1][j], dp[i][j + 1]);
     }
   }
-  const aOut = a.map((text) => ({ text, changed: true }));
-  const bOut = b.map((text) => ({ text, changed: true }));
+  const aOut: MarkedToken[] = a.map((text, i) => ({
+    text,
+    changed: true,
+    break: aSplit.breaks[i] === "none" ? undefined : aSplit.breaks[i],
+  }));
+  const bOut: MarkedToken[] = b.map((text, i) => ({
+    text,
+    changed: true,
+    break: bSplit.breaks[i] === "none" ? undefined : bSplit.breaks[i],
+  }));
   let i = 0;
   let j = 0;
   while (i < a.length && j < b.length) {
@@ -102,12 +145,34 @@ export function MarkedText({
       : mark === "blue"
         ? "font-semibold text-gender-blue"
         : "text-success";
+  const renderWord = (t: MarkedToken, i: number, last: boolean) => (
+    <span key={i} className={t.changed ? markClass : undefined}>
+      {renderToken ? renderToken(t, i) : t.text}
+      {t.break === "line" ? <br /> : !last && t.break !== "para" ? " " : ""}
+    </span>
+  );
+  // Split the stream into paragraphs at "para" breaks so multi-line texts
+  // (a judge-written letter) keep their shape. Single-paragraph token lists —
+  // every drill sentence — take the inline path, identical to before.
+  const paragraphs: MarkedToken[][] = [[]];
+  for (const t of tokens) {
+    paragraphs[paragraphs.length - 1].push(t);
+    if (t.break === "para") paragraphs.push([]);
+  }
+  if (paragraphs[paragraphs.length - 1].length === 0) paragraphs.pop();
+  if (paragraphs.length === 1) {
+    const para = paragraphs[0];
+    return (
+      <>
+        {para.map((t, i) => renderWord(t, i, i === para.length - 1))}
+      </>
+    );
+  }
   return (
     <>
-      {tokens.map((t, i) => (
-        <span key={i} className={t.changed ? markClass : undefined}>
-          {renderToken ? renderToken(t, i) : t.text}
-          {i < tokens.length - 1 ? " " : ""}
+      {paragraphs.map((para, pi) => (
+        <span key={pi} className={`block${pi > 0 ? " mt-3" : ""}`}>
+          {para.map((t, i) => renderWord(t, i, i === para.length - 1))}
         </span>
       ))}
     </>

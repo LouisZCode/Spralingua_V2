@@ -827,6 +827,7 @@ export default function BriefTrainer({
     const naturalToggle = feedbackResult.naturalVersion ? (
       <GermanWay
         text={feedbackResult.correctedText}
+        verb="write"
         value={{ natural: feedbackResult.naturalVersion }}
         onGloss={onGloss}
         onAdd={onAdd}
