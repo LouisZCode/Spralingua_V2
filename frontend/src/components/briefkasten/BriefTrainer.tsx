@@ -814,17 +814,20 @@ export default function BriefTrainer({
           className="rounded-[28px] border-[3px] border-line bg-card p-7"
           style={inkShadow}
         >
-          {/* The writing brief. Present in both phases. This is
-              instructions, not feedback — BRIEF-008 removed the graded
-              coverage ticks from the hints phase: the feedback surface is
-              now the learner's own letter with its inline hints, and the
-              checklist stays a plain, undecided list throughout. */}
+          {/* The writing brief. Present in both phases. In the writing phase
+              it's undecided instructions; in the hints phase BRIEF-008 keeps
+              the coverage verdict here — green check / red mark per point —
+              while the phrase-level feedback itself lives on the letter in
+              HintEditor below. */}
           <div>
             <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
               What to cover
             </p>
             <div className="mt-2">
-              <PointsChecklist points={letter.points} />
+              <PointsChecklist
+                points={letter.points}
+                covered={phase === "hints" ? hintResult?.coveredPoints : undefined}
+              />
             </div>
           </div>
 
