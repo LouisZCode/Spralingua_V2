@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import type {
   AttemptResult,
@@ -38,7 +38,9 @@ const CATEGORY_LABEL: Record<HintItem["category"], string> = {
   wortschatz: "Vocabulary",
   rechtschreibung: "Spelling",
 };
-const CATEGORY_ORDER = Object.keys(CATEGORY_LABEL) as HintItem["category"][];
+// BRIEF-008: kept for the attempt-1 hint tooltip. The category-grouped hint
+// list it used to index is gone — the hint now lives ON the highlighted
+// phrase in the learner's own letter (see HintEditor below).
 
 function wordCount(text: string): number {
   const t = text.trim();
@@ -113,39 +115,29 @@ function findQuotedPhrase(haystack: string, needle: string): DraftMatch | null {
   return null;
 }
 
-// Resolves every hint's quoted phrase to a span, drops any span that
-// overlaps one already accepted (earliest-start wins), and renders the
-// draft as alternating plain-text / <mark> chunks that together reproduce
-// `text` exactly — no character added, dropped, or duplicated.
-function renderHighlightedDraft(text: string, items: HintItem[]) {
+// BRIEF-008: resolves every hint's quoted phrase to a span in the LIVE text,
+// dropping any span that overlaps one already accepted (earliest-start wins).
+// Runs against the current editor value on every keystroke — when the learner
+// rewrites a flagged phrase, its match (and with it the highlight and the
+// hint tooltip) simply disappears: the mark set shrinks as they fix things.
+type ResolvedMatch = { start: number; end: number; item: HintItem };
+
+function resolveMatches(text: string, items: HintItem[]): ResolvedMatch[] {
   const candidates = items
-    .map((item) => findQuotedPhrase(text, item.text))
-    .filter((m): m is DraftMatch => m !== null)
+    .map((item) => {
+      const m = findQuotedPhrase(text, item.text);
+      return m ? { ...m, item } : null;
+    })
+    .filter((m): m is ResolvedMatch => m !== null)
     .sort((a, b) => a.start - b.start);
 
-  const accepted: DraftMatch[] = [];
+  const accepted: ResolvedMatch[] = [];
   for (const m of candidates) {
     const prev = accepted[accepted.length - 1];
     if (prev && m.start < prev.end) continue; // overlaps — discard
     accepted.push(m);
   }
-
-  const nodes: React.ReactNode[] = [];
-  let cursor = 0;
-  accepted.forEach((m, i) => {
-    if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
-    nodes.push(
-      <mark
-        key={i}
-        className="rounded-[4px] bg-flag-gold-soft px-0.5 text-ink"
-      >
-        {text.slice(m.start, m.end)}
-      </mark>
-    );
-    cursor = m.end;
-  });
-  if (cursor < text.length) nodes.push(text.slice(cursor));
-  return nodes;
+  return accepted;
 }
 
 // The four required points as a checklist. Plain (no ticks) until a hint
@@ -328,6 +320,199 @@ function Footer({
   );
 }
 
+// ─── Attempt-1 feedback surface (BRIEF-008) ───
+// The hints phase used to repeat every hint in category boxes below the
+// draft, making the learner ping-pong between the list and the text they
+// were fixing. Now their own letter IS the whole feedback surface: flagged
+// phrases are highlighted in place and clicking/tapping into one opens that
+// hint as a tooltip right there — the hint only, never the fix, matching
+// the hint judge's contract (briefkasten/judge.py).
+//
+// A textarea can't render inline marks, so this is the classic
+// highlight-within-textarea trick: a pixel-mirrored backdrop div (same
+// font, padding, line-height, wrapping) sits underneath a transparent-text
+// textarea whose caret stays visible. The backdrop is re-rendered from the
+// same controlled `value` on every keystroke, so marks stay glued to their
+// phrases as the learner edits.
+//
+// Hover doesn't exist on touch, so activation is caret-based: a click/tap
+// (or arrow-key move) that lands the caret inside a marked range opens
+// that hint; typing, scrolling, or Escape closes it. The tooltip is
+// positioned from the backdrop mark's DOM rect (the backdrop mirrors the
+// wrapping, so its rect IS where the phrase sits on screen) and rendered
+// position:fixed so the editor's overflow can never clip it.
+function HintEditor({
+  value,
+  onChange,
+  matches,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+  matches: ResolvedMatch[];
+}) {
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<number | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; flip: boolean } | null>(
+    null
+  );
+
+  const closeTip = () => {
+    setActive(null);
+    setTip(null);
+  };
+
+  // Mirror the textarea's internal scroll onto the backdrop so the marks
+  // stay aligned with their phrases when the letter outgrows the box.
+  const syncScroll = () => {
+    if (backdropRef.current && taRef.current) {
+      backdropRef.current.scrollTop = taRef.current.scrollTop;
+    }
+  };
+
+  const updateFromCaret = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const pos = ta.selectionStart;
+    const idx = matches.findIndex((m) => pos >= m.start && pos <= m.end);
+    if (idx === -1) {
+      closeTip();
+      return;
+    }
+    if (idx === active && tip) return; // already showing this one
+    const markEl = backdropRef.current?.querySelector<HTMLElement>(
+      `[data-mark="${idx}"]`
+    );
+    if (!markEl) {
+      closeTip();
+      return;
+    }
+    const r = markEl.getBoundingClientRect();
+    setActive(idx);
+    // Above the phrase by default; below when there's no headroom for it.
+    setTip({
+      x: r.left,
+      y: r.top < 130 ? r.bottom + 8 : r.top - 8,
+      flip: r.top < 130,
+    });
+  };
+
+  // Any scroll or resize orphans a fixed-position tooltip — dismiss it
+  // rather than chase the mark. Capture-phase scroll also catches the
+  // textarea's own scrolling (its onScroll dismisses explicitly too).
+  useEffect(() => {
+    if (active === null) return;
+    const dismiss = () => {
+      setActive(null);
+      setTip(null);
+    };
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    return () => {
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+    };
+  }, [active]);
+
+  // Same alternating plain-text / marked-chunk construction the old frozen
+  // replay used, now against the live value. The trailing newline keeps the
+  // backdrop's scroll height honest when the letter ends in a line break.
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  matches.forEach((m, i) => {
+    if (m.start > cursor) nodes.push(value.slice(cursor, m.start));
+    nodes.push(
+      <mark
+        key={i}
+        data-mark={i}
+        className={`rounded-[4px] px-0.5 text-ink ${
+          i === active ? "bg-flag-gold" : "bg-flag-gold-soft"
+        }`}
+      >
+        {value.slice(m.start, m.end)}
+      </mark>
+    );
+    cursor = m.end;
+  });
+  if (cursor < value.length) nodes.push(value.slice(cursor));
+  const current = active !== null ? matches[active] : undefined;
+  return (
+    <div className="relative">
+      <div className="relative h-[300px] min-h-[200px] resize-y overflow-hidden rounded-[18px] border-[3px] border-line bg-card focus-within:border-red-line">
+        <div
+          ref={backdropRef}
+          aria-hidden
+          className="absolute inset-0 overflow-hidden whitespace-pre-wrap break-words p-4 font-body text-[15px] leading-relaxed text-ink"
+        >
+          {nodes}
+          {"\n"}
+        </div>
+        <textarea
+          ref={taRef}
+          value={value}
+          onChange={(e) => {
+            onChange(e.target.value);
+            closeTip();
+          }}
+          onClick={updateFromCaret}
+          // Navigation keys only: character keys re-run through onChange,
+          // which dismisses — re-running here would instantly re-open the
+          // tooltip on the stale match the keystroke is busy rewriting.
+          onKeyUp={(e) => {
+            if (
+              [
+                "ArrowLeft",
+                "ArrowRight",
+                "ArrowUp",
+                "ArrowDown",
+                "Home",
+                "End",
+                "PageUp",
+                "PageDown",
+              ].includes(e.key)
+            ) {
+              updateFromCaret();
+            }
+          }}
+          onScroll={() => {
+            syncScroll();
+            closeTip();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") closeTip();
+          }}
+          placeholder="Schreib deine Antwort auf Deutsch…"
+          className="absolute inset-0 h-full w-full resize-none overflow-y-auto bg-transparent p-4 font-body text-[15px] leading-relaxed text-transparent caret-ink outline-none [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        />
+      </div>
+      {current && tip && (
+        <div
+          role="status"
+          className="fixed z-50 w-[280px] rounded-[14px] border-[3px] border-line bg-card p-3 shadow-lg"
+          style={{
+            top: tip.y,
+            left: Math.max(
+              12,
+              Math.min(
+                tip.x,
+                (typeof window !== "undefined" ? window.innerWidth : 400) - 292
+              )
+            ),
+            transform: tip.flip ? undefined : "translateY(-100%)",
+          }}
+        >
+          <p className="font-body text-[10px] font-black uppercase tracking-[0.2em] text-flag-red">
+            {CATEGORY_LABEL[current.item.category]}
+          </p>
+          <p className="mt-1 font-body text-[13px] leading-snug text-ink">
+            {current.item.hint}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function BriefTrainer({
   letter,
   onAttempt,
@@ -376,6 +561,16 @@ export default function BriefTrainer({
   const words = wordCount(text);
   const inRange = words >= letter.wordTarget.min && words <= letter.wordTarget.max;
   const canSubmit = text.trim().length > 0 && !submitting;
+
+  // BRIEF-008: the attempt-1 highlights, resolved against the LIVE text on
+  // every keystroke. When the learner rewrites a flagged phrase, its match
+  // (and with it the highlight and its hint) simply disappears — the mark
+  // set shrinking as they fix things. Overlapping judge quotes resolve
+  // earliest-start-wins, exactly like the frozen replay they replace.
+  const hintMatches = useMemo(
+    () => (hintResult ? resolveMatches(text, hintResult.items) : []),
+    [text, hintResult]
+  );
 
   async function submitFirst() {
     setSubmitting(true);
@@ -619,30 +814,37 @@ export default function BriefTrainer({
           className="rounded-[28px] border-[3px] border-line bg-card p-7"
           style={inkShadow}
         >
-          {/* The writing brief. Present in both phases — attempt 1 shows it
-              undecided (no ticks yet), attempt 2 shows it graded against
-              `coveredPoints`. This is instructions, not feedback, so unlike
-              the hint message/cards below it never leaves this column. */}
+          {/* The writing brief. Present in both phases. This is
+              instructions, not feedback — BRIEF-008 removed the graded
+              coverage ticks from the hints phase: the feedback surface is
+              now the learner's own letter with its inline hints, and the
+              checklist stays a plain, undecided list throughout. */}
           <div>
             <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
               What to cover
             </p>
             <div className="mt-2">
-              <PointsChecklist
-                points={letter.points}
-                covered={phase === "hints" ? hintResult?.coveredPoints : undefined}
-              />
+              <PointsChecklist points={letter.points} />
             </div>
           </div>
 
           <div className="mt-5">
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={11}
-              placeholder="Schreib deine Antwort auf Deutsch…"
-              className="w-full resize-y rounded-[18px] border-[3px] border-line bg-card p-4 font-body text-[15px] leading-relaxed text-ink outline-none focus:border-red-line"
-            />
+            {phase === "hints" ? (
+              // BRIEF-008: in the hints phase this box IS the feedback
+              // surface — the learner's own letter with the flagged phrases
+              // highlighted in place and their hints on click/tap, editable
+              // right here. The edited text is what "Send the improved
+              // version" submits; there is no separate revise box anymore.
+              <HintEditor value={text} onChange={setText} matches={hintMatches} />
+            ) : (
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={11}
+                placeholder="Schreib deine Antwort auf Deutsch…"
+                className="w-full resize-y rounded-[18px] border-[3px] border-line bg-card p-4 font-body text-[15px] leading-relaxed text-ink outline-none focus:border-red-line"
+              />
+            )}
             <p
               className={`mt-2 font-body text-[11px] font-bold uppercase tracking-[0.16em] ${
                 inRange ? "text-success" : "text-ink-muted"
@@ -690,70 +892,10 @@ export default function BriefTrainer({
         </div>
       </div>
 
-      {/* First-round feedback lives here, below BOTH panels — not stacked
-          above the answer column, where it used to sit right on top of
-          where the learner's own letter was about to go back in. */}
-      {phase === "hints" && hintResult && (
-        <div
-          className="mt-6 rounded-[28px] border-[3px] border-line bg-card p-7"
-          style={inkShadow}
-        >
-          <p className="font-display text-[15px] font-black leading-snug text-ink">
-            {hintResult.message}
-          </p>
-
-          {/* Task 3: replay the first draft with each flagged phrase
-              highlighted. Deliberately `firstAttemptText`, the snapshot
-              taken the moment attempt 1 was sent — NOT the live `text`
-              state. The learner is already editing `text` for attempt 2 by
-              the time this renders, so highlighting the live value would
-              chase a moving target and light up the wrong words the
-              instant a single character changed. */}
-          {firstAttemptText && (
-            <div className="mt-5">
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                Your draft — look at the marked spots
-              </p>
-              <p className="mt-2 whitespace-pre-line font-body text-[14px] leading-relaxed text-ink">
-                {renderHighlightedDraft(firstAttemptText, hintResult.items)}
-              </p>
-            </div>
-          )}
-
-          {hintResult.items.length > 0 && (
-            <div className="mt-5 space-y-4">
-              {CATEGORY_ORDER.map((cat) => {
-                const items = hintResult.items.filter(
-                  (i) => i.category === cat
-                );
-                if (items.length === 0) return null;
-                return (
-                  <div
-                    key={cat}
-                    className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3"
-                  >
-                    <p className="font-body text-[10px] font-black uppercase tracking-[0.2em] text-flag-red">
-                      {CATEGORY_LABEL[cat]}
-                    </p>
-                    <ul className="mt-2 space-y-3">
-                      {items.map((item, i) => (
-                        <li key={i}>
-                          <p className="font-body text-[14px] italic leading-snug text-ink">
-                            “{item.text}”
-                          </p>
-                          <p className="mt-1 font-body text-[13px] leading-snug text-ink-soft">
-                            {item.hint}
-                          </p>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      )}
+      {/* BRIEF-008: the old first-round feedback card (judge message, frozen
+          draft replay, category-grouped hint list) is gone. The hints now
+          live ON the learner's own letter inside HintEditor above — one
+          surface, highlighted and editable, nothing to scroll between. */}
 
       <Footer onNewLetter={onNewLetter} newLetter={false} />
     </div>
