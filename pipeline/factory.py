@@ -80,9 +80,9 @@ from database.repository import (
 )
 
 # REL-001: the voice-recording archive — a fire-and-forget upload+DB write
-# scheduled right after the session MP3 export succeeds (see on_audio_data
-# below), same non-fatal, off-critical-path discipline as every other
-# disconnect-side step in this file.
+# scheduled right after the session MP3 export succeeds (see
+# on_track_audio_data below), same non-fatal, off-critical-path discipline
+# as every other disconnect-side step in this file.
 from recordings.service import save_recording_now
 
 # Cold-start slice: curated starter topics for a teacher session whose
@@ -120,7 +120,7 @@ def _rss_log_suffix() -> str:
 # from CLAUDE.md still holds — this is just a lookup, not shared state.
 ACTIVE_TASKS: dict[str, PipelineTask] = {}
 # REL-001 (2026-09-05): strong refs to in-flight voice-archive uploads, see
-# on_audio_data — outside ACTIVE_TASKS on purpose.
+# on_track_audio_data — outside ACTIVE_TASKS on purpose.
 _RECORDING_TASKS: set[asyncio.Task] = set()
 
 # Lesson id running under each live session, keyed the same as ACTIVE_TASKS.
@@ -953,26 +953,43 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
         def _export_session_audio(wav_path, mp3_path, audio, sample_rate, num_channels):
             """Blocking WAV write + pydub/ffmpeg MP3 encode — runs in a worker
             thread so disconnect-time encoding never stalls other clients'
-            pipelines on the event loop (BUG-003)."""
+            pipelines on the event loop (BUG-003).
+
+            USERTRACK (2026-09-06, Luis's decision): ``audio`` is the
+            LEARNER'S track only — the tandem partner's/Clara's/the demo
+            persona's synthesized reply is never in this file. It used to be
+            the merged learner+bot mix.
+
+            Encoded with LAME's VBR mode (`-q:a 5`), not the old CBR
+            `bitrate="128k"`: a learner-only track is mostly silence (every
+            stretch where the OTHER side was talking), and CBR spends the
+            same bits on silence as on speech, which would erase the size
+            win of dropping the bot track in the first place. `-q:a 5` was
+            chosen on a real 50.6 s two-exchange tandem session: the mix at
+            CBR 128k was 812,204 B, the learner-only track at CBR 128k the
+            SAME 812,204 B (constant bitrate spends as much on silence as on
+            speech), at VBR `-q:a 5` 135,368 B (−83 %) and at `-q:a 2`
+            174,428 B — Deepgram's transcript of the file was byte-identical
+            across all of them (VBR spends its bits where there's signal)."""
             with wave.open(str(wav_path), "wb") as wf:
                 wf.setnchannels(num_channels)
                 wf.setsampwidth(2)
                 wf.setframerate(sample_rate)
                 wf.writeframes(audio)
             AudioSegment.from_wav(str(wav_path)).export(
-                str(mp3_path), format="mp3", bitrate="128k"
+                str(mp3_path), format="mp3", parameters=["-q:a", "5"]
             )
 
         async def _archive_session_recording(mp3_path, surface: str, transcript_text: str) -> None:
-            """REL-001: archive the just-exported session MP3 to the voice
-            bucket + `voice_recordings` (best-effort; `save_recording_now`
-            itself is a no-op when the bucket isn't configured). Called via
-            `asyncio.create_task` from `on_audio_data` below, NOT awaited —
-            so a slow upload or DB write can never hold up
-            `audiobuffer.stop_recording()`, the post-session-analysis
-            `asyncio.gather`, or the `activity_session` UPDATE that follows.
-            The local mp3 file itself is untouched — kept on disk exactly as
-            before this feature existed."""
+            """REL-001: archive the just-exported session MP3 (learner-only,
+            see USERTRACK above) to the voice bucket + `voice_recordings`
+            (best-effort; `save_recording_now` itself is a no-op when the
+            bucket isn't configured). Called via `asyncio.create_task` from
+            `on_track_audio_data` below, NOT awaited — so a slow upload or
+            DB write can never hold up `audiobuffer.stop_recording()`, the
+            post-session-analysis `asyncio.gather`, or the `activity_session`
+            UPDATE that follows. The local mp3 file itself is untouched —
+            kept on disk exactly as before this feature existed."""
             try:
                 mp3_bytes = await asyncio.to_thread(mp3_path.read_bytes)
                 await save_recording_now(
@@ -990,25 +1007,58 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"Voice recording archive failed (non-fatal): {type(e).__name__}: {e}"
                 )
 
-        @audiobuffer.event_handler("on_audio_data")
-        async def on_audio_data(buffer, audio, sample_rate, num_channels):
+        @audiobuffer.event_handler("on_track_audio_data")
+        async def on_track_audio_data(buffer, user_audio, bot_audio, sample_rate, num_channels):
+            # USERTRACK (2026-09-06, Luis's decision): "Remove the saving of
+            # the voices we create via MiniMax etc — we only need to save
+            # the user's." Pipecat's AudioBufferProcessor fires this handler
+            # (separate tracks) right after `on_audio_data` (merged) from the
+            # same flush (`_call_on_audio_data_handler`), silence-padding the
+            # shorter track first (`_align_track_buffers`) so `user_audio`
+            # keeps the session's real timeline — silence exactly where the
+            # partner/Clara/demo persona was talking, not a shifted one.
+            # `bot_audio` is intentionally never read here. Do NOT also
+            # register `on_audio_data` — that would just re-export the old
+            # merged mix alongside this one for no reason.
             base_path = audio_dir / session_id
             wav_path = base_path.with_suffix(".wav")
             mp3_path = base_path.with_suffix(".mp3")
+
+            # Practice-mode clips (`/tandem/say-audio`, `enableMic=false`)
+            # and a typed demo never stream mic input, so the learner track
+            # is either empty or pure silence padding for the whole session
+            # — nothing was actually said into a mic. Exporting/archiving
+            # that file would just reintroduce the old bug in reverse (an
+            # all-silence file instead of an all-bot one), so skip both the
+            # WAV/MP3 export and the bucket archive outright. C-speed check
+            # (`bytes.count`, ~25 ms on a 20-minute buffer), no `any()` loop
+            # over a 10 MB buffer. The `len == 0` half is unreachable under
+            # pipecat 0.0.98 (the flush returns early when both tracks are
+            # empty and pads a shorter track to its counterpart first) — kept
+            # as a guard against a future version. A mic that streamed but
+            # heard no speech is comfort noise, not zeros, so that session
+            # still exports — there was signal.
+            if len(user_audio) == 0 or user_audio.count(b"\x00") == len(user_audio):
+                logger.info(
+                    "Session audio skipped: learner track is silent (no mic "
+                    f"input) — nothing exported or archived (session={session_id})"
+                )
+                return
+
             # Same non-fatal contract as the other disconnect-side steps: an
             # export failure (ffmpeg missing, disk full) must not crash the
             # pipeline, and the temp WAV is removed either way.
             try:
                 await asyncio.to_thread(
                     _export_session_audio,
-                    wav_path, mp3_path, audio, sample_rate, num_channels,
+                    wav_path, mp3_path, user_audio, sample_rate, num_channels,
                 )
                 # MEMORY-003: RSS right after the encode spike (full PCM is
                 # loaded a third time by AudioSegment) — this is where the
                 # graph's tall narrow peaks were born.
                 logger.info(
                     f"Audio saved to: {mp3_path} "
-                    f"(session_audio={len(audio) / (1024 * 1024):.1f}MB PCM{_rss_log_suffix()})"
+                    f"(session_audio={len(user_audio) / (1024 * 1024):.1f}MB PCM{_rss_log_suffix()})"
                 )
                 # REL-001 follow-up (P2-IMPL, 2026-09-05, Luis's decision):
                 # schedule the archive upload as a fire-and-forget task
