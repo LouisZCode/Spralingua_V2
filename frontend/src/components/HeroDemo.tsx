@@ -8,6 +8,7 @@ import {
   WavMediaManager,
 } from "@pipecat-ai/websocket-transport";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
+import { getDemoVisitorId } from "@/lib/demoVisitor";
 import { loadError } from "./shared/copy";
 
 // PRODUCT-017: honest failure copy for the demo. A rejection on
@@ -135,9 +136,19 @@ async function probeMicAvailable(): Promise<boolean> {
 // `/ws/demo/{id}`, which forces the welcome lesson + fixed voice server-side
 // and applies the SEC-001 guards (Origin allowlist, global + per-IP
 // concurrency/rate caps, and a wall-clock session timeout). Each tap mints a
-// fresh ephemeral `demo-<uuid>` user id so concurrent visitors never share
-// conversation memory or collide in the backend's ACTIVE_TASKS map. The backend
-// origin (and ws/wss scheme) comes from NEXT_PUBLIC_API_URL — see lib/api.ts.
+// fresh ephemeral `demo-<uuid>` PATH id so concurrent visitors (and two tabs
+// of the same browser) never share conversation memory or collide in the
+// backend's ACTIVE_TASKS map. The backend origin (and ws/wss scheme) comes
+// from NEXT_PUBLIC_API_URL — see lib/api.ts.
+//
+// REL-001 follow-up (P2-IMPL): separately, `?visitor=` carries the ONE
+// per-BROWSER anonymous token from `lib/demoVisitor.ts` (persisted in
+// localStorage, stable across tabs/reloads/taps) — the backend stores it on
+// the session row so Luis can see repeat demo usage from one visitor, and
+// `AuthContext.tsx` links it to an account the first time that browser
+// signs up. The two ids serve different purposes and must not be confused:
+// the path id keeps concurrent sessions apart server-side; the query token
+// is the identity that persists.
 
 // Reveal the bot bubble when its audio finishes playing in the browser
 // (bot-started time + clip duration + this margin), not when the text
@@ -416,7 +427,13 @@ export default function HeroDemo() {
       clientRef.current = client;
       const demoUserId = `demo-${crypto.randomUUID()}`;
       demoUserIdRef.current = demoUserId;
-      const wsUrl = `${BASE_WS}/ws/demo/${demoUserId}`;
+      // REL-001 follow-up (P2-IMPL): the per-browser visitor token, when
+      // available (private mode / blocked storage -> null, and the demo
+      // still works with no token — the backend accepts a missing one).
+      const visitor = getDemoVisitorId();
+      const wsUrl = visitor
+        ? `${BASE_WS}/ws/demo/${demoUserId}?visitor=${encodeURIComponent(visitor)}`
+        : `${BASE_WS}/ws/demo/${demoUserId}`;
       // NOTE: this never resolves on a successful connect (see the
       // onConnected comment above) -- it only ever settles by throwing, on a
       // genuine pre-accept connection failure. Nothing may be placed after

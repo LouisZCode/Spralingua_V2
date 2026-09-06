@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { HTTP_BASE } from "@/lib/api";
+import { linkDemoVisitor, peekDemoVisitorId } from "@/lib/demoVisitor";
 import SignInModal from "./SignInModal";
 
 // localStorage key holding { token, user }. The session JWT is replayed on the
@@ -81,6 +82,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   // PAY-002: guard so the timezone report fires once per browser session.
   const tzSentRef = useRef(false);
+  // REL-001 follow-up (P2-IMPL): guard so the demo-visitor link attempt
+  // fires at most once per mount (the localStorage flag below is the
+  // actual once-ever-per-browser guard; this just prevents a double
+  // network call from React StrictMode's dev double-invoke racing the
+  // flag write).
+  const demoLinkAttemptedRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -178,6 +185,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     import("@/lib/coins").then(({ putTimezone }) =>
       putTimezone(token, tz).catch(() => {})
     );
+  }, [token, user]);
+
+  // REL-001 follow-up (P2-IMPL): right after the timezone report, a
+  // one-time attempt to link this browser's demo-visitor token (if any) to
+  // the now-signed-in account. Server semantics are first-wins (auth/routes.py
+  // PUT /auth/me/demo-visitor), so a second browser just gets `linked: false`
+  // — the localStorage flag here exists purely to stop THIS browser from
+  // retrying forever, not to mirror the server's own idempotency. The flag
+  // is set only once the server has ANSWERED (any 2xx — `linked` true or
+  // false are both final); a network failure leaves it unset so the next
+  // sign-in tries again. Only an EXISTING token is linked (peek, never
+  // mint): a browser that never tapped the demo has nothing to link and
+  // must not be handed a token here. Never blocks or fails sign-in; the
+  // visitor token itself is deliberately left in place afterward (a
+  // signed-in learner tapping the demo again should still line up under
+  // the same token).
+  useEffect(() => {
+    if (!token || !user) return;
+    if (demoLinkAttemptedRef.current) return;
+    let alreadyLinked = false;
+    try {
+      alreadyLinked = localStorage.getItem("demo-visitor-linked-v1") === "1";
+    } catch {
+      // storage unavailable — treat as "not yet linked" and try once anyway
+    }
+    if (alreadyLinked) {
+      demoLinkAttemptedRef.current = true;
+      return;
+    }
+    const visitor = peekDemoVisitorId();
+    if (!visitor) return;
+    demoLinkAttemptedRef.current = true;
+    linkDemoVisitor(token, visitor).then((landed) => {
+      if (!landed) return;
+      try {
+        localStorage.setItem("demo-visitor-linked-v1", "1");
+      } catch {
+        // ignore — worst case this browser tries again next sign-in
+      }
+    });
   }, [token, user]);
 
   const refreshUser = useCallback(async (): Promise<AuthUser | null> => {

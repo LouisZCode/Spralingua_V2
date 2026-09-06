@@ -16,7 +16,7 @@ written differs. Slips feed the grammar-error ledger with
 import time
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
 from sqlalchemy import and_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -27,6 +27,7 @@ from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.orm import UserCard, UserVerbformen, VocabCard
 from database.repository import _assert_test_user, record_drill_attempt, record_grammar_error
+from recordings.service import schedule_recording
 from satz.examiner import examine_attempt, transcribe_attempt
 from satz.scheduler import lapse_interval, schedule
 from security import drill_try_admit
@@ -141,6 +142,7 @@ async def submit_attempt(
     session_id: str | None = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
+    background_tasks: BackgroundTasks = None,
 ):
     """Judge one spoken past form — the satz pipeline end to end (transcribe →
     examine → verdict), with the schedule written to the ``user_verbformen``
@@ -294,8 +296,9 @@ async def submit_attempt(
 
         # Append to the cross-drill attempt log (DATA-004) — its own commit,
         # non-fatal like the ledger write above.
+        attempt_id: int | None = None
         try:
-            await record_drill_attempt(
+            attempt_id = await record_drill_attempt(
                 db,
                 user_id=user_id,
                 exercise="verbformen",
@@ -307,6 +310,24 @@ async def submit_attempt(
             )
         except Exception:
             logger.exception("Drill-attempt log write failed (card {})", card_id)
+
+        # REL-001 follow-up (P2-IMPL): archive the spoken clip, mirroring
+        # /satz/attempts' non-rehearsal hook exactly — linked to the attempt
+        # row just written, skipped only if that write itself failed above
+        # (nothing to link to).
+        if attempt_id is not None:
+            schedule_recording(
+                background_tasks,
+                user_id=user_id,
+                surface="verbformen",
+                exercise="verbformen",
+                ref_kind="drill_attempt",
+                ref_id=str(attempt_id),
+                item_id=card_id,
+                data=data,
+                content_type=audio.content_type,
+                transcript=transcript,
+            )
 
         # Same payload contract as /satz/attempts — VocabTrainer is reused.
         return {

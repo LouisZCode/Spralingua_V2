@@ -10,7 +10,16 @@ import uuid
 from contextlib import asynccontextmanager
 
 import sentry_sdk
-from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile, WebSocket
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Request,
+    UploadFile,
+    WebSocket,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from loguru import logger
@@ -66,10 +75,12 @@ from pipeline import run_pipeline
 from pipeline.factory import (
     ACTIVE_LESSONS,
     ACTIVE_TASKS,
+    ACTIVE_WRAPPERS,
     is_draining,
     lesson_language,
     validate_lesson_languages,
 )
+from recordings.service import schedule_recording
 from satz import router as satz_router, sync_curated_content
 from satz.examiner import transcribe_attempt
 from security import (
@@ -769,6 +780,14 @@ async def ws_endpoint(
 # public route can't be driven with arbitrary ids.
 _DEMO_USER_ID_RE = re.compile(r"^demo-[A-Za-z0-9_-]{1,64}$")
 
+# REL-001 follow-up (P2-IMPL): the demo's anonymous visitor token, minted
+# client-side (frontend/src/lib/demoVisitor.ts::getDemoVisitorId, a
+# crypto.randomUUID() — 36 chars — persisted in localStorage) and replayed on
+# every demo connect as `?visitor=`. Deliberately lenient: an invalid or
+# missing token degrades to `None`, never a rejection — a cached older
+# frontend bundle mid-deploy (no `?visitor=` at all) must still connect.
+_DEMO_VISITOR_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
+
 
 @app.get("/demo/status")
 async def demo_status(request: Request):
@@ -825,6 +844,15 @@ async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
     the frontend can learn the real reason before it ever opens this socket).
     A successful admit owns one concurrency slot, released in ``finally`` no
     matter how the session ends.
+
+    REL-001 follow-up (P2-IMPL): reads one optional query param, ``visitor``
+    — the frontend's per-browser anonymous demo-visitor token (Proposal-2).
+    Read directly off ``websocket.query_params`` rather than as a typed
+    function parameter, on purpose: a bad or absent value must degrade to
+    ``None`` and a debug log, never a rejection, so a visitor on a cached
+    older frontend bundle (no ``?visitor=`` at all) still connects during a
+    deploy overlap. Threaded into ``run_pipeline`` -> the ``activity_session``
+    INSERT; ``/ws/{user_id}`` never passes one.
     """
     if not origin_allowed(websocket.headers.get("origin")):
         await websocket.close(code=1008)
@@ -832,6 +860,11 @@ async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
     if not _DEMO_USER_ID_RE.match(user_id):
         await websocket.close(code=1008)
         return
+    raw_visitor = websocket.query_params.get("visitor")
+    visitor_id = raw_visitor if raw_visitor and _DEMO_VISITOR_RE.match(raw_visitor) else None
+    if raw_visitor and visitor_id is None:
+        # Client-supplied string: truncate before it reaches the log.
+        logger.debug(f"demo connect: ignoring malformed visitor token {raw_visitor[:80]!r}")
     ip = client_ip(websocket)
     ok, _reason = demo_try_admit(ip)
     if not ok:
@@ -855,6 +888,7 @@ async def ws_demo_endpoint(websocket: WebSocket, user_id: str):
             # routing, but the DB FK points at the shared sentinel so the demo
             # doesn't fill `users` with a row per visitor.
             db_user_id="demo",
+            visitor_id=visitor_id,
         )
     finally:
         demo_release(ip)
@@ -987,6 +1021,7 @@ _TANDEM_AUDIO_MAX_BYTES = 4_000_000
 async def tandem_say_audio(
     audio: UploadFile = File(...),
     user_id: str = Depends(get_current_user_id),
+    background_tasks: BackgroundTasks = None,
 ):
     """Practice-mode counterpart to ``/say`` (TAND-003): the learner records a
     whole utterance at their own pace (tap record -> speak -> tap stop) instead
@@ -1016,6 +1051,13 @@ async def tandem_say_audio(
     from client input. No new HTTP client/SDK needed: aiohttp is the
     established pattern for one-shot Deepgram calls in this codebase
     (satz/examiner.py, also used by sprechen/szenario/verbformen).
+
+    REL-001 follow-up (P2-IMPL): once the transcript is non-empty AND the
+    ``LLMContextFrame`` has actually reached the live pipeline — never for a
+    404/422/502 that stored nothing — the clip is archived under its own
+    ``ref_kind="session_turn"`` (one row per clip; the session MP3 keeps
+    ``ref_kind="activity_session"``), linked to the bare session hex via
+    ``get_trace_session`` and ordered by ``ClientWrapper.exchange_count``.
     """
     if not say_user_try_admit(user_id):
         raise HTTPException(status_code=429, detail="too many requests")
@@ -1041,7 +1083,8 @@ async def tandem_say_audio(
     # (pipeline/factory.py::ENGLISH_LESSONS) while every tandem partner stays
     # German. "tandem" fallback only fires if ACTIVE_LESSONS and ACTIVE_TASKS
     # ever disagree, which preserves today's (German) behavior for that edge.
-    language = lesson_language(ACTIVE_LESSONS.get(user_id, "tandem"))
+    active_lesson_id = ACTIVE_LESSONS.get(user_id, "tandem")
+    language = lesson_language(active_lesson_id)
     # COST-001: without a root span here, the `stt` generation inside
     # transcribe_attempt is a PARENTLESS span with no `user.id`, which is
     # exactly what agents/observability.py::_OrphanFragmentFilterExporter
@@ -1076,4 +1119,49 @@ async def tandem_say_audio(
 
     context = LLMContext([{"role": "user", "content": text}])
     await task.queue_frame(LLMContextFrame(context=context))
+
+    # REL-001 follow-up (P2-IMPL): the clip has now reached the pipeline —
+    # archive it. Surface mirrors pipeline/factory.py's own voice-session
+    # surface map for these three lesson types.
+    if active_lesson_id == "teacher":
+        _clip_surface = "teacher"
+    elif active_lesson_id in ("tandem", "tandem_paul"):
+        _clip_surface = "tandem"
+    else:
+        _clip_surface = "lesson"
+    if session_id is None:
+        logger.warning(
+            f"Tandem say-audio: no trace session for user {user_id} — clip not archived"
+        )
+    else:
+        # get_trace_session returns the surface-prefixed trace id
+        # (tandem-<hex> / teacher-<hex> / lesson-<hex>) — the bare session
+        # hex (activity_session.id) is everything after the first "-".
+        # `partition` rather than `split(...)[1]` so an unprefixed id can
+        # never raise here, after the turn has already been queued.
+        _prefix, _sep, bare_session_id = session_id.partition("-")
+        if not _sep:
+            bare_session_id = session_id
+        wrapper = ACTIVE_WRAPPERS.get(user_id)
+        # The turn just queued above will become exchange
+        # `exchange_count + 1` — see ClientWrapper.exchange_count's docstring.
+        # Known, accepted: unlike `/say` this route has no per-user in-flight
+        # lock, so two clips posted faster than one LLM turn would read the
+        # same count and share an `item_id` — a display-order cosmetic only
+        # (each object still gets its own uuid key); the double-tap that
+        # triggers it is not a real Practice-mode gesture.
+        clip_item_id = str(wrapper.exchange_count + 1) if wrapper is not None else None
+        schedule_recording(
+            background_tasks,
+            user_id=user_id,
+            surface=_clip_surface,
+            exercise=active_lesson_id,
+            ref_kind="session_turn",
+            ref_id=bare_session_id,
+            item_id=clip_item_id,
+            data=data,
+            content_type=audio.content_type,
+            transcript=text,
+        )
+
     return {"transcript": text}

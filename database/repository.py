@@ -68,6 +68,7 @@ async def create_session_row(
     started_at: datetime,
     audio_path: str,
     lesson_snapshot: dict,
+    visitor_id: str | None = None,
 ) -> None:
     """Upsert the user row + insert one ``activity_session`` row.
 
@@ -77,6 +78,10 @@ async def create_session_row(
     columns are left in the schema for now (nullable) and simply not
     written — they were the runtime knobs we removed in favor of YAML
     ``default_level``. Migration to drop them can come with the next batch.
+
+    ``visitor_id`` (REL-001 follow-up, migration 0028) is the demo's
+    anonymous per-browser token — only the demo socket's caller ever passes
+    one; every other caller leaves it ``None``.
     """
     _assert_test_user(user_id)
     try:
@@ -95,6 +100,7 @@ async def create_session_row(
                 started_at=started_at,
                 audio_path=audio_path,
                 lesson_snapshot=lesson_snapshot,
+                visitor_id=visitor_id,
             )
         )
         await db.commit()

@@ -113,6 +113,12 @@ class User(Base):
     purchased_coins: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default=text("0")
     )
+    # REL-001 follow-up (P2-IMPL, migration 0028): set AT MOST ONCE, by
+    # `PUT /me/demo-visitor`'s first-wins UPDATE — the anonymous demo-visitor
+    # token (see `ActivitySession.visitor_id` below) this account's browser
+    # used before signing up, if any. NULL for every account that never used
+    # the demo, or whose demo browser signed up under a different account first.
+    demo_visitor_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (UniqueConstraint("email", name="uq_users_email"),)
 
@@ -187,6 +193,12 @@ class ActivitySession(Base):
     error_eval: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     # Mirrors goal_eval["passed"] for fast indexed lookup. NULL if no eval ran.
     passed: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # REL-001 follow-up (P2-IMPL, migration 0028): the anonymous demo-visitor
+    # token (main.py::ws_demo_endpoint's `?visitor=` param), for the shared
+    # "demo" identity's own sessions only — NULL for every authenticated
+    # session. Lets Luis see how one browser used the demo across repeat
+    # visits, and is what `users.demo_visitor_id` links back to on sign-up.
+    visitor_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         Index(
@@ -195,6 +207,11 @@ class ActivitySession(Base):
             text("started_at DESC"),
         ),
         Index("ix_activity_session_user_lesson", "user_id", "lesson_id"),
+        Index(
+            "ix_activity_session_visitor",
+            "visitor_id",
+            postgresql_where=text("visitor_id IS NOT NULL"),
+        ),
     )
 
 
@@ -768,13 +785,16 @@ class VoiceRecording(Base):
     created_at: Mapped[datetime] = mapped_column(
         TIMESTAMP(timezone=True), nullable=False, server_default=text("now()")
     )
-    # "satz" | "sprechen" | "szenario" | "interview" | "teacher" | "tandem" |
-    # "lesson" | "conversation" — the drill package, or the voice-session
-    # lesson type (pipeline/factory.py's lesson_snapshot["type"]: tandem/
-    # teacher/conversation keep their own name, "respond" folds into
-    # "lesson" since many respond-type lesson ids exist and `exercise`
-    # below already carries the specific one). Content-as-data, not an
-    # enum — same choice as users.tier / drill_attempts.exercise.
+    # "satz" | "sprechen" | "szenario" | "verbformen" | "interview" |
+    # "teacher" | "tandem" | "lesson" | "conversation" | "demo" — the drill
+    # package, or the voice-session lesson type (pipeline/factory.py's
+    # lesson_snapshot["type"]: tandem/teacher/conversation keep their own
+    # name, "respond" folds into "lesson" since many respond-type lesson ids
+    # exist and `exercise` below already carries the specific one; "demo" is
+    # the front-page demo's shared anonymous identity, REL-001 follow-up
+    # P2-IMPL — its visitor identity lives on `activity_session.visitor_id`
+    # instead). Content-as-data, not an enum — same choice as users.tier /
+    # drill_attempts.exercise.
     surface: Mapped[str] = mapped_column(Text, nullable=False)
     # The drill id / lesson id / teacher `drill` value ("sprechen" |
     # "produce") this clip belongs to. Not every surface has one worth
@@ -782,21 +802,28 @@ class VoiceRecording(Base):
     # `item_id`), so this stays nullable.
     exercise: Mapped[str | None] = mapped_column(Text, nullable=True)
     # "drill_attempt" | "activity_session" | "teacher_exercise" |
-    # "interview_comprehension" | "interview_answer" | "satz_rehearsal" —
-    # names what `ref_id` points at. Not an FK: the kinds point at different
-    # tables (or, for teacher_exercise/interview_comprehension/
-    # interview_answer/satz_rehearsal, no table row at all — `ref_id` is
-    # then just the chunk/card id, the closest stable identifier the clip
-    # has). Free text, not a DB enum/CHECK constraint — a new caller can add
-    # a kind without a migration. See the module comment above and the
-    # class docstring at the top of 0026_voice_recordings.py.
+    # "interview_comprehension" | "interview_answer" | "satz_rehearsal" |
+    # "session_turn" — names what `ref_id` points at. Not an FK: the kinds
+    # point at different tables (or, for teacher_exercise/
+    # interview_comprehension/interview_answer/satz_rehearsal/session_turn,
+    # no table row at all — `ref_id` is then just the chunk/card/session id,
+    # the closest stable identifier the clip has). Free text, not a DB enum/
+    # CHECK constraint — a new caller can add a kind without a migration.
+    # See the module comment above and the class docstring at the top of
+    # 0026_voice_recordings.py. "session_turn" (REL-001 follow-up, P2-IMPL) —
+    # one row per Practice-mode clip (`main.py`'s `/tandem/say-audio`) —
+    # `ref_id` is the bare session hex (like `activity_session`, but ONE row
+    # per clip rather than one for the whole session's MP3), `item_id` the
+    # 1-based exchange number so clips sort in spoken order.
     ref_kind: Mapped[str] = mapped_column(Text, nullable=False)
     # drill_attempts.id (BigInteger PK, as text) / activity_session.id (the
-    # bare session hex) / a teacher exercise item's own id / an interview
-    # chunk id / a satz card id (no DB row for the last four kinds).
+    # bare session hex, for both `activity_session` and `session_turn`) / a
+    # teacher exercise item's own id / an interview chunk id / a satz card
+    # id (no DB row for the last four kinds).
     ref_id: Mapped[str] = mapped_column(Text, nullable=False)
-    # card id / item id / chunk id, when the surface has one. NULL for a
-    # voice session (activity_session already IS the item).
+    # card id / item id / chunk id, when the surface has one; the 1-based
+    # exchange number (as text) for a `session_turn` clip. NULL for a voice
+    # session (`activity_session` already IS the item).
     item_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     bucket_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     content_type: Mapped[str] = mapped_column(Text, nullable=False)

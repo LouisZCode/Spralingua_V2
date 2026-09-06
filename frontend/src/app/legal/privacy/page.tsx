@@ -68,9 +68,14 @@ export default function PrivacyPage() {
       </LegalP>
       <LegalUL>
         <li>
-          the unauthenticated homepage demo, which is recorded under a
-          shared, anonymous &quot;demo&quot; identity and capped at roughly
-          three minutes; and
+          the unauthenticated homepage demo. Demo calls are recorded under a
+          shared, anonymous &quot;demo&quot; account together with a random
+          identifier that we store in your browser&apos;s local storage, so
+          that repeat demo calls from the same browser can be recognised. If
+          you later sign up in the same browser, that identifier is linked
+          to your account and those demo recordings are treated as part of
+          your account data. Demo calls are capped at roughly three minutes;
+          and
         </li>
         <li>
           conversations with our AI teacher persona (&quot;Clara&quot;), who

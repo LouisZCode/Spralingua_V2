@@ -1,14 +1,17 @@
 """Auth HTTP routes for Google sign-in (AUTH-001, P-3).
 
-``POST /auth/google`` — exchange a Google ID token for our session JWT.
-``GET  /auth/me``      — return the signed-in user (guarded by the session JWT).
-``PUT  /auth/level``   — set the learner's CEFR bucket (LEVEL-001).
+``POST /auth/google``          — exchange a Google ID token for our session JWT.
+``GET  /auth/me``               — return the signed-in user (guarded by the session JWT).
+``PUT  /auth/level``            — set the learner's CEFR bucket (LEVEL-001).
+``PUT  /auth/me/demo-visitor``  — link a demo-visitor token to this account (REL-001 follow-up, P2-IMPL).
 """
 
+import re
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 
 from database import User, get_sessionmaker, upsert_user
@@ -20,6 +23,11 @@ from .deps import get_current_user_id
 from .tokens import AuthError, issue_session_jwt, verify_google_id_token
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# REL-001 follow-up (P2-IMPL): same shape as main.py's `_DEMO_VISITOR_RE` —
+# duplicated rather than imported (importing from main.py here would be a
+# backwards import, app -> router). A `crypto.randomUUID()` is 36 chars.
+_DEMO_VISITOR_RE = re.compile(r"^[A-Za-z0-9_-]{8,64}$")
 
 
 class GoogleAuthBody(BaseModel):
@@ -162,3 +170,56 @@ async def set_level(
         level=user.level,
         tier=user.tier,
     )
+
+
+class DemoVisitorBody(BaseModel):
+    visitor: str
+
+
+@router.put("/me/demo-visitor")
+async def link_demo_visitor(
+    body: DemoVisitorBody, user_id: str = Depends(get_current_user_id)
+) -> dict:
+    """Link this account to the demo-visitor token its browser used before
+    signing in (REL-001 follow-up, P2-IMPL — Luis's Proposal-2).
+
+    First-wins, never overwrite: ``UPDATE users SET demo_visitor_id = :v
+    WHERE id = :uid AND demo_visitor_id IS NULL``. Returns
+    ``{"linked": true}`` only when that UPDATE actually changed the row —
+    ``{"linked": false}`` covers both "already linked to this token" (a
+    repeat call from the same browser) and "already linked to a DIFFERENT
+    token" (a second browser signing into the same account); either way the
+    column is left exactly as it was, and the frontend is expected to treat
+    a ``false`` as "don't try again this browser", not as a reason to retry.
+
+    Free (no coin gate) — this is bookkeeping, not a graded action. 404 for
+    a JWT whose ``users`` row doesn't exist, mirroring ``PUT /coins/timezone``
+    (SEC-006): a valid JWT is only ever issued after ``upsert_user`` has
+    already created the row, so a missing one means something's actually
+    wrong, not something to silently paper over.
+
+    Accepted risk (review, 2026-09-05): nothing proves the caller's browser
+    ever held the token — any signed-in account can claim any token string.
+    Guessing a 122-bit UUID is infeasible; the realistic path is observation
+    (the token rides in the demo socket's query string, which a proxy access
+    log could capture). Worst case is one anonymous demo session attributed
+    to the wrong account — no PII, no auth bypass, no access to anyone's
+    real account — so it is accepted rather than defended against.
+    """
+    visitor = (body.visitor or "").strip()
+    if not _DEMO_VISITOR_RE.match(visitor):
+        raise HTTPException(status_code=422, detail="Invalid visitor token.")
+    try:
+        async with get_sessionmaker()() as db:
+            user = await db.get(User, user_id)
+            if user is None:
+                raise HTTPException(status_code=404, detail="User not found.")
+            result = await db.execute(
+                update(User)
+                .where(User.id == user_id, User.demo_visitor_id.is_(None))
+                .values(demo_visitor_id=visitor)
+            )
+            await db.commit()
+    except SQLAlchemyError:
+        raise HTTPException(status_code=500, detail="Could not link the visitor token.")
+    return {"linked": result.rowcount > 0}

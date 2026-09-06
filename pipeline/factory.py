@@ -440,8 +440,15 @@ async def begin_drain() -> None:
         logger.info(f"[DRAIN] All session(s) wrapped up after {elapsed:.1f}s")
 
 
-async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None, exchanges: int | None = None, pattern: str | None = None):
-    """Builds and runs a full pipeline for a single client connection."""
+async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", lesson_id: str = "lesson_zero", topic: str = "", session_timeout_s: float | None = None, db_user_id: str | None = None, exchanges: int | None = None, pattern: str | None = None, visitor_id: str | None = None):
+    """Builds and runs a full pipeline for a single client connection.
+
+    ``visitor_id`` (REL-001 follow-up, P2-IMPL) is the demo's anonymous
+    per-browser token — only ``main.py::ws_demo_endpoint`` ever passes one
+    (already validated there against ``_DEMO_VISITOR_RE``); ``/ws/{user_id}``
+    never does. Threaded straight into the connect-time ``activity_session``
+    INSERT below and otherwise unused by the rest of the pipeline.
+    """
     # One Langfuse Session per WebSocket connection. `user_id` is stable across
     # connections (per-tab UUID today, auth-derived later); `session_id` resets
     # on every Connect so the Langfuse UI shows one Session per conversation.
@@ -911,6 +918,7 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     started_at=started_at,
                     audio_path=audio_path,
                     lesson_snapshot=lesson_snapshot,
+                    visitor_id=visitor_id,
                 )
         except (SQLAlchemyError, OSError) as e:  # noqa: BLE001 — non-fatal
             logger.warning(
@@ -1002,29 +1010,38 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                     f"Audio saved to: {mp3_path} "
                     f"(session_audio={len(audio) / (1024 * 1024):.1f}MB PCM{_rss_log_suffix()})"
                 )
-                # REL-001: schedule the archive upload as a fire-and-forget
-                # task (never awaited here) so this handler returns
-                # immediately — see _archive_session_recording's docstring
-                # for why. The demo socket's shared anonymous "demo" identity
-                # is excluded outright: never store that audio.
-                if db_user_id != "demo":
-                    _voice_surface = {
+                # REL-001 follow-up (P2-IMPL, 2026-09-05, Luis's decision):
+                # schedule the archive upload as a fire-and-forget task
+                # (never awaited here) so this handler returns immediately —
+                # see _archive_session_recording's docstring for why. The
+                # demo socket's shared anonymous "demo" identity USED to be
+                # excluded outright ("never store that audio") — that
+                # exclusion is now reversed: privacy §2.2 already discloses
+                # that demo calls are recorded, and the visitor identity that
+                # makes a demo session distinguishable from every other demo
+                # session is `activity_session.visitor_id` (migration 0028),
+                # not `db_user_id` (still the shared "demo" sentinel row).
+                _voice_surface = (
+                    "demo"
+                    if db_user_id == "demo"
+                    else {
                         "tandem": "tandem",
                         "teacher": "teacher",
                         "conversation": "conversation",
                     }.get(lesson_snapshot.get("type"), "lesson")
-                    # Hold a strong reference (the loop keeps only weak
-                    # ones) so the archive cannot be garbage-collected
-                    # mid-upload — the same pattern as szenario/interview's
-                    # `_background_tasks`. Deliberately NOT in ACTIVE_TASKS:
-                    # a REL-002 drain must not wait on an S3 upload.
-                    _archive_task = asyncio.create_task(
-                        _archive_session_recording(
-                            mp3_path, _voice_surface, wrapper.render_transcript()
-                        )
+                )
+                # Hold a strong reference (the loop keeps only weak
+                # ones) so the archive cannot be garbage-collected
+                # mid-upload — the same pattern as szenario/interview's
+                # `_background_tasks`. Deliberately NOT in ACTIVE_TASKS:
+                # a REL-002 drain must not wait on an S3 upload.
+                _archive_task = asyncio.create_task(
+                    _archive_session_recording(
+                        mp3_path, _voice_surface, wrapper.render_transcript()
                     )
-                    _RECORDING_TASKS.add(_archive_task)
-                    _archive_task.add_done_callback(_RECORDING_TASKS.discard)
+                )
+                _RECORDING_TASKS.add(_archive_task)
+                _archive_task.add_done_callback(_RECORDING_TASKS.discard)
             except Exception as e:  # noqa: BLE001 — audio export must not block cleanup
                 logger.warning(f"Audio export failed (non-fatal): {type(e).__name__}: {e}")
             finally:

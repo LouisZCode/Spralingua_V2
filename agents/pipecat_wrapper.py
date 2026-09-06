@@ -1399,6 +1399,19 @@ class ClientWrapper:
         """Format the captured turns as a single string for the evaluator prompt."""
         return "\n\n".join(f"{role.capitalize()}: {body}" for role, body in self._transcript)
 
+    @property
+    def exchange_count(self) -> int:
+        """REL-001 follow-up (P2-IMPL): read-only view of ``_exchange_count``
+        for external callers (``main.py``'s ``/tandem/say-audio`` archive
+        hook, via ``ACTIVE_WRAPPERS``). The counter increments at the top of
+        ``astream``, AFTER turn injection (see the comment near
+        ``pipecat_wrapper.py:722``) — so between turns, while a caller like
+        that route is deciding what to archive, this still holds the number
+        of exchanges already COMPLETED; the turn about to run (or just
+        queued) will become exchange ``exchange_count + 1``.
+        """
+        return self._exchange_count
+
     def bot_character_count(self) -> int:
         """Total characters across this session's bot turns (AUDIO-COST-001).
 

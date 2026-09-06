@@ -1,8 +1,12 @@
 """Orchestrates one voice-recording write: bucket upload, then the DB row
-(REL-001). The one place every hook site (the six drill audio routes,
-``pipeline/factory.py``'s voice-session disconnect path) calls into, so the
-upload-then-record ordering and the non-fatal contract live in one spot
-instead of being re-implemented seven times.
+(REL-001). The one place every hook site calls into — the seven drill audio
+routes (satz, sprechen, szenario, verbformen, both interview rounds, Clara's
+speaking card), ``main.py``'s ``POST /tandem/say-audio`` (a Practice-mode
+clip in a live session) and ``pipeline/factory.py``'s voice-session
+disconnect path (every session MP3, the demo's included since the REL-001
+follow-up of 2026-09-05) — so the upload-then-record ordering and the
+non-fatal contract live in one spot instead of being re-implemented nine
+times.
 
 Two entry points, same underlying work, different scheduling:
 
@@ -43,6 +47,13 @@ today, one call site per kind:
   - ``"satz_rehearsal"`` — ``ref_id`` is the card id. A ``rehearsal=True``
     attempt writes no ``drill_attempts`` row by design (SATZ-015), so
     every rehearsal clip points at the card instead.
+  - ``"session_turn"`` (REL-001 follow-up, P2-IMPL) — ``ref_id`` is the bare
+    session hex, same identifier ``"activity_session"`` uses, but ONE row
+    per Practice-mode clip rather than one for the whole session's MP3.
+    ``item_id`` is the 1-based exchange number so clips sort in spoken
+    order. ``main.py``'s ``POST /tandem/say-audio`` — a mic-in clip for a
+    live tandem/teacher session, injected as text rather than streamed, so
+    it would otherwise never reach the archive at all.
 """
 
 from __future__ import annotations
