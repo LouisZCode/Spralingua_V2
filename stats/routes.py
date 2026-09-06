@@ -33,6 +33,7 @@ from database.repository import (
     count_sessions_since,
     has_attempt_today,
     load_attempt_series,
+    load_first_activity,
     load_focus_with_recency,
     load_period_summary,
     load_recent_sessions,
@@ -98,6 +99,10 @@ async def get_my_stats(
     series = await load_attempt_series(db, user_id=user_id, start=now - timedelta(days=56))
     # GAME-001: forgiving daily streak — O(1) read off the users cache.
     streak = await load_streak(db, user_id=user_id)
+    # STUDY-001: anchor for the "studying German for X months, X weeks and X
+    # days" line — first ever drill attempt, account creation as fallback.
+    first_activity = await load_first_activity(db, user_id=user_id)
+    streak["studyingSince"] = first_activity.isoformat() if first_activity else None
 
     return {
         "week": week,

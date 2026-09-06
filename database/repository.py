@@ -1322,6 +1322,29 @@ async def load_streak(db: AsyncSession, *, user_id: str) -> dict:
     }
 
 
+async def load_first_activity(db: AsyncSession, *, user_id: str) -> datetime | None:
+    """The learner's earliest drill attempt — the moment they actually
+    started studying German (STUDY-001: powers the "studying for X months"
+    line on the Development page).
+
+    Falls back to ``users.created_at`` for the registered-but-never-practiced
+    case, so the line reads from day one of the account rather than vanish.
+    Runs as a single MIN off ``ix_drill_attempts_user_created`` — index-only,
+    no scan.
+    """
+    first = (
+        await db.execute(
+            select(func.min(DrillAttempt.created_at)).where(
+                DrillAttempt.user_id == user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if first is not None:
+        return first
+    user = await db.get(User, user_id)
+    return user.created_at if user is not None else None
+
+
 async def load_period_summary(
     db: AsyncSession, *, user_id: str, start: datetime, end: datetime | None = None
 ) -> dict:

@@ -104,6 +104,11 @@ export type Streak = {
   practicedToday: boolean;
   modesToday: PracticeMode[];
   modesRequired: number;
+  // STUDY-001: ISO timestamp of the learner's first drill attempt (account
+  // creation when they haven't practiced yet) — anchors the "studying German
+  // for X months, X weeks and X days" line. null only if the user row is
+  // missing entirely, which the UI treats as "hide the line".
+  studyingSince: string | null;
 };
 
 // GAME-001: the four practice modes that count toward the daily streak.

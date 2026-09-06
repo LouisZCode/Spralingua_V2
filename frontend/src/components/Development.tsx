@@ -193,6 +193,47 @@ function AllExercisesCard() {
 // ─── Streak hero (DEV-002): current + longest day streak, its own space,
 // zeros stay calm. When today's earn has caught up with the all-time record
 // the number pops once — CSS only. ─────────────────────────────────────────
+// STUDY-001: "2 months, 1 week, and 3 days" from the learner's first-activity
+// anchor. Calendar-accurate month math (Jan 31 → Mar 1 reads as "1 month",
+// not "4 weeks and 1 day"), zero segments dropped, all-zero → a day-one
+// greeting instead of "0 months". null → caller hides the line entirely.
+function studyDurationText(since: string | null): string | null {
+  if (!since) return null;
+  const start = new Date(since);
+  if (Number.isNaN(start.getTime())) return null;
+  const now = new Date();
+  const sy = start.getUTCFullYear();
+  const sm = start.getUTCMonth();
+  const sd = start.getUTCDate();
+  const ty = now.getUTCFullYear();
+  const tm = now.getUTCMonth();
+  const td = now.getUTCDate();
+  let months = (ty - sy) * 12 + (tm - sm);
+  if (td < sd) months -= 1; // this month's anchor day hasn't come around yet
+  if (months < 0) months = 0;
+  // Remainder days: today minus (start shifted forward by the full months).
+  // Date.UTC normalizes overflow day-of-months (Jan 31 + 1mo → Mar 3), and a
+  // negative remainder just means the month boundary eats those days.
+  const anchor = new Date(Date.UTC(sy, sm + months, sd));
+  const DAY = 86400000;
+  let rem = Math.floor(
+    (Date.UTC(ty, tm, td) -
+      Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), anchor.getUTCDate())) /
+      DAY,
+  );
+  if (rem < 0) rem = 0;
+  if (months === 0 && rem === 0) return "…well, you just started — day 1!";
+  const weeks = Math.floor(rem / 7);
+  const days = rem % 7;
+  const segs: string[] = [];
+  if (months > 0) segs.push(`${months} month${months === 1 ? "" : "s"}`);
+  if (weeks > 0) segs.push(`${weeks} week${weeks === 1 ? "" : "s"}`);
+  if (days > 0) segs.push(`${days} day${days === 1 ? "" : "s"}`);
+  if (segs.length === 1) return segs[0];
+  if (segs.length === 2) return `${segs[0]} and ${segs[1]}`;
+  return `${segs[0]}, ${segs[1]}, and ${segs[2]}`;
+}
+
 function StreakCard({ streak }: { streak: Streak }) {
   // GAME-001: longest is a permanent PR that never decreases, so
   // current === longest exactly while the live streak is AT its record —
@@ -200,6 +241,7 @@ function StreakCard({ streak }: { streak: Streak }) {
   // earned (a record matched without today's practice is just history).
   const atRecord =
     streak.practicedToday && streak.current > 0 && streak.current >= streak.longest;
+  const studyText = studyDurationText(streak.studyingSince);
   return (
     <section className="rounded-[28px] border-[3px] border-line bg-card p-7 text-center">
       <p className="font-body text-[11px] font-bold uppercase tracking-[0.22em] text-ink-muted">
@@ -243,6 +285,14 @@ function StreakCard({ streak }: { streak: Streak }) {
         <p className="mt-4 font-body text-[13px] text-ink-soft">
           {streak.modesToday.length} of {streak.modesRequired} modes done today —
           don&apos;t lose it.
+        </p>
+      )}
+      {/* STUDY-001: the long-game counter — keeps counting as long as they
+          study, independent of the streak above. */}
+      {studyText && (
+        <p className="mt-4 border-t-2 border-rule pt-4 font-body text-[13px] text-ink-soft">
+          You have been studying German for{" "}
+          <span className="font-bold text-ink">{studyText}</span>
         </p>
       )}
     </section>
