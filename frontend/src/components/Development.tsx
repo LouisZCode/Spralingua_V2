@@ -288,12 +288,20 @@ function StreakCard({ streak }: { streak: Streak }) {
         </p>
       )}
       {/* STUDY-001: the long-game counter — keeps counting as long as they
-          study, independent of the streak above. */}
+          study, independent of the streak above. Three stacked lines, with
+          the language and the duration carrying the visual weight. */}
       {studyText && (
-        <p className="mt-4 border-t-2 border-rule pt-4 font-body text-[13px] text-ink-soft">
-          You have been studying German for{" "}
-          <span className="font-bold text-ink">{studyText}</span>
-        </p>
+        <div className="mt-4 border-t-2 border-rule pt-4">
+          <p className="font-display text-[14px] font-bold uppercase tracking-[0.18em] text-ink-muted">
+            You have been studying
+          </p>
+          <p className="mt-1 font-display text-[30px] font-black leading-none tracking-tight text-ink">
+            German
+          </p>
+          <p className="mt-1.5 font-body text-[15px] font-bold text-ink-soft">
+            for <span className="text-ink">{studyText}</span>
+          </p>
+        </div>
       )}
     </section>
   );
