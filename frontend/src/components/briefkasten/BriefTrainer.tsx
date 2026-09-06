@@ -202,6 +202,47 @@ function PointsChecklist({
 // uses, so both feedback phases share one visual language.
 type CorrectionMatch = ResolvedMatch<Explanation & { text: string }>;
 
+// Within a corrected phrase, only the words that actually differ from what
+// the learner wrote light up — "das ist normal denke ich" → "das ist normal,
+// denke ich" highlights just "normal,", not the whole phrase. A word-level
+// LCS between the written and corrected tokens decides which corrected words
+// are new/changed; identical words ride along in plain ink so the change
+// jumps out instead of drowning in green. Phrases are short, so the O(n·m)
+// table is nothing.
+function changedWords(written: string, correction: string): boolean[] {
+  const a = written.split(/\s+/).filter(Boolean);
+  const b = correction.split(/\s+/).filter(Boolean);
+  const dp: number[][] = Array.from({ length: a.length + 1 }, () =>
+    new Array<number>(b.length + 1).fill(0)
+  );
+  for (let i = a.length - 1; i >= 0; i--)
+    for (let j = b.length - 1; j >= 0; j--)
+      dp[i][j] =
+        a[i] === b[j]
+          ? dp[i + 1][j + 1] + 1
+          : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const changed: boolean[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      changed.push(false);
+      i++;
+      j++;
+    } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+      i++; // word dropped from the correction — nothing to show
+    } else {
+      changed.push(true); // word added/changed in the correction
+      j++;
+    }
+  }
+  while (j < b.length) {
+    changed.push(true);
+    j++;
+  }
+  return changed;
+}
+
 function CorrectedLetter({
   text,
   matches,
@@ -320,8 +361,25 @@ function CorrectedLetter({
             transform: tip.flip ? undefined : "translateY(-100%)",
           }}
         >
-          <p className="font-body text-[15px] font-bold leading-snug text-success">
-            → {current.item.correction}
+          <p className="font-body text-[15px] leading-snug text-ink">
+            <span className="font-bold text-success">→ </span>
+            {(() => {
+              // Spotlight only what changed: words the LCS match keeps are
+              // plain ink, words the judge added or altered go bold green.
+              const written = text.slice(current.start, current.end);
+              const flags = changedWords(written, current.item.correction);
+              const words = current.item.correction.split(/\s+/).filter(Boolean);
+              return words.map((w, k) => (
+                <span key={k}>
+                  {k > 0 ? " " : null}
+                  {flags[k] ? (
+                    <span className="font-bold text-success">{w}</span>
+                  ) : (
+                    w
+                  )}
+                </span>
+              ));
+            })()}
           </p>
           <p className="mt-1 font-body text-[12px] leading-snug text-ink-muted">
             {current.item.why}
@@ -782,10 +840,10 @@ export default function BriefTrainer({
           style={inkShadow}
         >
           <div className="text-center">
-            <span className="inline-flex items-center rounded-full border-[2px] border-line bg-ink-fill px-4 py-1.5 font-display text-[13px] font-black uppercase tracking-[0.14em] text-on-fill">
+            <span className="inline-flex items-center rounded-full border-[2px] border-line bg-ink-fill px-5 py-2 font-display text-[20px] font-black uppercase tracking-[0.1em] text-on-fill">
               {feedbackResult.score}/100
             </span>
-            <p className="mt-3 font-display text-[18px] font-black leading-snug text-ink">
+            <p className="mt-6 font-display text-[18px] font-black leading-snug text-ink">
               {feedbackResult.feedback}
             </p>
           </div>
@@ -796,7 +854,7 @@ export default function BriefTrainer({
               parallel "What you wrote"/"Corrected" boxes, the "What to fix"
               card list and the "Focus for next time" box are all gone: their
               content lives in the marks or was noise. */}
-          <div className="mt-6">
+          <div className="mt-9">
             <CorrectedLetter text={text} matches={correctionMatches} />
           </div>
 
