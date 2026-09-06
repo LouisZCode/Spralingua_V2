@@ -676,18 +676,20 @@ function AttemptsCard({
           return (
             <div
               key={heading}
-              className="rounded-[20px] border-[3px] border-line bg-paper-warm p-4"
+              className="rounded-[20px] border-[3px] border-line bg-paper-warm p-4 text-center"
             >
               <p className="font-body text-[10px] font-bold uppercase tracking-[0.22em] text-ink-muted">
                 {heading}
               </p>
+              {/* The headline is always the attempt count — only the
+                  correct/incorrect split below flips to percentages. */}
               <p className="mt-1 font-display text-[34px] font-black leading-none tracking-tight text-ink">
-                {fmt === "percent" ? (pc === null ? "—" : `${pc}%`) : n.total}
+                {n.total}
               </p>
               <p className="font-body text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                {fmt === "percent" ? "correct" : "attempts"}
+                attempts
               </p>
-              <div className="mt-2 flex gap-4 font-body text-[12px] font-bold">
+              <div className="mt-2 flex justify-center gap-4 font-body text-[12px] font-bold">
                 {fmt === "percent" ? (
                   <>
                     <span className="text-success">
