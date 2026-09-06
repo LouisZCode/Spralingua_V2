@@ -449,8 +449,9 @@ function ProgressCard({ retired }: { retired: RetiredPattern[] }) {
 
 // ─── Your attempts (DEV-002): attempts vs mistakes vs first-try-correct,
 // weeks first ("Week 1 Aug"-style Monday-anchored labels), weekday names in
-// the day view, plus This-Week/Last-Week stat tiles. Derived entirely from
-// the 56-day daily series — no second endpoint. ───────────────────────────
+// the day view, This-Week/Last-Week stat tiles with a numbers/percent toggle,
+// and a paged window (4 weeks / 7 days at a time, ‹ › to walk the range).
+// Derived entirely from the 56-day daily series — no second endpoint. ──────
 const MONTHS_SHORT = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -463,6 +464,36 @@ function weekBucketLabel(monday: Date): string {
   return `Week ${
     Math.floor((monday.getUTCDate() - 1) / 7) + 1
   } ${MONTHS_SHORT[monday.getUTCMonth()]}`;
+}
+
+// Graded correct share as a whole percent — null when nothing was graded,
+// so a fresh week reads as "—" instead of a fake 0%.
+function gradedPct(correct: number, incorrect: number): number | null {
+  const graded = correct + incorrect;
+  return graded === 0 ? null : Math.round((correct / graded) * 100);
+}
+
+// Bar tooltip in the chosen format: percentages of the graded split, or the
+// raw tally. A bucket with attempts but nothing graded says so instead of
+// inventing a 0%.
+function barTitle(
+  fmt: "counts" | "percent",
+  label: string,
+  count: number,
+  pc: number | null,
+): string {
+  if (pc === null) return "no graded attempts";
+  return fmt === "percent" ? `${pc}% ${label}` : `${count} ${label}`;
+}
+
+// "24 Aug – 30 Aug" caption for the paged window (a single day reads as just
+// "24 Aug"). Week windows caption through their Sunday.
+function rangeCaption(first: Date, last: Date, view: "week" | "day"): string {
+  const end = new Date(last);
+  if (view === "week") end.setUTCDate(end.getUTCDate() + 6);
+  const a = `${first.getUTCDate()} ${MONTHS_SHORT[first.getUTCMonth()]}`;
+  const b = `${end.getUTCDate()} ${MONTHS_SHORT[end.getUTCMonth()]}`;
+  return a === b ? a : `${a} – ${b}`;
 }
 
 // Tile numbers for one rolling week: only graded exercises carry a
@@ -490,31 +521,66 @@ function AttemptsCard({
   series: SeriesPoint[];
 }) {
   const [view, setView] = useState<"week" | "day">("week");
+  // Tiles + bar tooltips as raw tallies or as the graded correct/incorrect
+  // split in percent — some learners read "78% correct" better than "34/44".
+  const [fmt, setFmt] = useState<"counts" | "percent">("counts");
+  // Paged window: 0 = the newest page, each step back shows one older
+  // WINDOW-sized slice. Clamped at render so a stale index (e.g. after a new
+  // day rolls in) can never point past the data.
+  const [page, setPage] = useState(0);
+  const WINDOW = view === "week" ? 4 : 7;
   const byDate = new Map(series.map((p) => [p.date, p]));
-  // zero-filled. Week view: the last 8 Monday-anchored weeks summed.
-  const buckets: { label: string; attempts: number; mistakes: number; firstTryCorrect: number }[] = [];
+  const DAY = 86400000;
   const today = new Date();
+  // Oldest day we hold data for (the 56-day series); falls back to today so
+  // a brand-new user still renders one window of flat zero ground.
+  const oldest = new Date(
+    series.length > 0
+      ? `${series[0].date}T00:00:00Z`
+      : Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+  );
+  const buckets: {
+    label: string;
+    date: Date;
+    attempts: number;
+    mistakes: number;
+    firstTryCorrect: number;
+  }[] = [];
   if (view === "day") {
-    for (let i = 13; i >= 0; i--) {
-      const d = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - i));
-      const key = d.toISOString().slice(0, 10);
-      const p = byDate.get(key);
+    const last = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+    for (
+      let t = Date.UTC(oldest.getUTCFullYear(), oldest.getUTCMonth(), oldest.getUTCDate());
+      t <= last;
+      t += DAY
+    ) {
+      const d = new Date(t);
+      const p = byDate.get(d.toISOString().slice(0, 10));
       buckets.push({
         label: WEEKDAYS_SHORT[(d.getUTCDay() + 6) % 7], // weekday name, resets each Monday
+        date: d,
         attempts: p?.attempts ?? 0,
         mistakes: p?.mistakes ?? 0,
         firstTryCorrect: p?.firstTryCorrect ?? 0,
       });
     }
   } else {
+    // Monday-anchored weeks from the oldest held week through the current one.
     const dow = (today.getUTCDay() + 6) % 7; // Monday = 0
-    for (let w = 7; w >= 0; w--) {
-      const monday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - dow - w * 7));
-      const bucket = { label: weekBucketLabel(monday), attempts: 0, mistakes: 0, firstTryCorrect: 0 };
+    const lastMonday = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - dow);
+    const oldestMonday =
+      Date.UTC(oldest.getUTCFullYear(), oldest.getUTCMonth(), oldest.getUTCDate()) -
+      ((oldest.getUTCDay() + 6) % 7) * DAY;
+    for (let t = oldestMonday; t <= lastMonday; t += 7 * DAY) {
+      const monday = new Date(t);
+      const bucket = {
+        label: weekBucketLabel(monday),
+        date: monday,
+        attempts: 0,
+        mistakes: 0,
+        firstTryCorrect: 0,
+      };
       for (let i = 0; i < 7; i++) {
-        const d = new Date(monday);
-        d.setUTCDate(monday.getUTCDate() + i);
-        const p = byDate.get(d.toISOString().slice(0, 10));
+        const p = byDate.get(new Date(t + i * DAY).toISOString().slice(0, 10));
         if (p) {
           bucket.attempts += p.attempts;
           bucket.mistakes += p.mistakes;
@@ -525,28 +591,58 @@ function AttemptsCard({
     }
   }
 
-  const max = Math.max(1, ...buckets.map((b) => b.attempts));
-  const empty = buckets.every((b) => b.attempts === 0);
+  // End-aligned window: page 0 ends at the newest bucket, each page back
+  // steps one WINDOW further into the past. The oldest page may be partial —
+  // that's the honest edge of the data.
+  const maxPage = Math.max(0, Math.floor((buckets.length - 1) / WINDOW));
+  const paged = Math.min(page, maxPage);
+  const end = buckets.length - paged * WINDOW;
+  const visible = buckets.slice(Math.max(0, end - WINDOW), end);
+
+  const max = Math.max(1, ...visible.map((b) => b.attempts));
+  const empty = visible.every((b) => b.attempts === 0);
 
   return (
     <section className="rounded-[28px] border-[3px] border-line bg-card p-7">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="font-display text-[18px] font-black tracking-tight text-ink">
           Your attempts
         </h2>
-        <div className="inline-flex overflow-hidden rounded-full border-[3px] border-line">
-          {(["week", "day"] as const).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => setView(v)}
-              className={`px-3.5 py-1 font-display text-[11px] font-black uppercase tracking-[0.14em] transition-colors ${
-                v === view ? "bg-ink-fill text-on-fill" : "bg-card text-ink hover:text-flag-red"
-              }`}
-            >
-              {v === "day" ? "Days" : "Weeks"}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          {/* Numbers vs % — % shows the graded correct/incorrect share;
+              numbers stay the raw tallies. Sits left of the Weeks/Days pair. */}
+          <div className="inline-flex overflow-hidden rounded-full border-[3px] border-line">
+            {(["counts", "percent"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => setFmt(f)}
+                aria-pressed={f === fmt}
+                className={`px-3.5 py-1 font-display text-[11px] font-black uppercase tracking-[0.14em] transition-colors ${
+                  f === fmt ? "bg-ink-fill text-on-fill" : "bg-card text-ink hover:text-flag-red"
+                }`}
+              >
+                {f === "percent" ? "%" : "Numbers"}
+              </button>
+            ))}
+          </div>
+          <div className="inline-flex overflow-hidden rounded-full border-[3px] border-line">
+            {(["week", "day"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => {
+                  setView(v);
+                  setPage(0); // the window size changes — snap back to newest
+                }}
+                className={`px-3.5 py-1 font-display text-[11px] font-black uppercase tracking-[0.14em] transition-colors ${
+                  v === view ? "bg-ink-fill text-on-fill" : "bg-card text-ink hover:text-flag-red"
+                }`}
+              >
+                {v === "day" ? "Days" : "Weeks"}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -575,6 +671,8 @@ function AttemptsCard({
           ] as const
         ).map(([heading, s]) => {
           const n = weekTileNumbers(s);
+          const pc = gradedPct(n.correct, n.incorrect);
+          const ungraded = n.total - (n.correct + n.incorrect);
           return (
             <div
               key={heading}
@@ -584,21 +682,68 @@ function AttemptsCard({
                 {heading}
               </p>
               <p className="mt-1 font-display text-[34px] font-black leading-none tracking-tight text-ink">
-                {n.total}
+                {fmt === "percent" ? (pc === null ? "—" : `${pc}%`) : n.total}
               </p>
               <p className="font-body text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
-                attempts
+                {fmt === "percent" ? "correct" : "attempts"}
               </p>
               <div className="mt-2 flex gap-4 font-body text-[12px] font-bold">
-                <span className="text-success">✓ {n.correct} correct</span>
-                <span className="text-flag-red-deep">
-                  ✗ {n.incorrect} incorrect
-                </span>
+                {fmt === "percent" ? (
+                  <>
+                    <span className="text-success">
+                      ✓ {pc === null ? "—" : `${pc}%`} correct
+                    </span>
+                    <span className="text-flag-red-deep">
+                      ✗ {pc === null ? "—" : `${100 - pc}%`} incorrect
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-success">✓ {n.correct} correct</span>
+                    <span className="text-flag-red-deep">
+                      ✗ {n.incorrect} incorrect
+                    </span>
+                  </>
+                )}
               </div>
+              {/* Coach rounds have no right/wrong answer — in percent mode
+                  they'd silently vanish from the split, so own them. */}
+              {fmt === "percent" && ungraded > 0 && (
+                <p className="mt-1 font-body text-[10px] font-semibold text-ink-muted">
+                  + {ungraded} ungraded
+                </p>
+              )}
             </div>
           );
         })}
       </div>
+
+      {/* Window nav — only once there's more than one window to walk. */}
+      {buckets.length > WINDOW && visible.length > 0 && (
+        <div className="mt-5 flex items-center justify-center gap-3">
+          <button
+            type="button"
+            aria-label="Show older"
+            disabled={paged >= maxPage}
+            onClick={() => setPage(paged + 1)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-line font-display text-[14px] font-black text-ink transition-colors hover:text-flag-red disabled:opacity-30 disabled:hover:text-ink"
+          >
+            ‹
+          </button>
+          <span className="font-body text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-muted">
+            {rangeCaption(visible[0].date, visible[visible.length - 1].date, view)}
+          </span>
+          <button
+            type="button"
+            aria-label="Show newer"
+            disabled={paged === 0}
+            onClick={() => setPage(paged - 1)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-full border-[3px] border-line font-display text-[14px] font-black text-ink transition-colors hover:text-flag-red disabled:opacity-30 disabled:hover:text-ink"
+          >
+            ›
+          </button>
+        </div>
+      )}
 
       {empty ? (
         <p className="mt-5 font-body text-[14px] text-ink-soft">
@@ -606,37 +751,52 @@ function AttemptsCard({
         </p>
       ) : (
         <div className="mt-5 flex">
-          {buckets.map((b, i) => (
-            <div key={i} className="flex min-w-0 flex-1 flex-col items-center">
-              {/* Every bucket's bar area carries its own border-b segment;
-                  with no gap between buckets they join into one continuous
-                  baseline, so zero days read as flat ground instead of
-                  floating nubs. */}
-              <div className="flex h-32 w-full items-end justify-center gap-[3px] border-b-2 border-line">
-                {(
-                  [
-                    [b.attempts, "bg-ink-fill"],
-                    [b.mistakes, "bg-flag-red-fill"],
-                    [b.firstTryCorrect, "bg-success"],
-                  ] as const
-                ).map(([value, color], j) =>
-                  value === 0 ? null : (
-                    <div
-                      key={j}
-                      className={`w-2 rounded-t-[3px] ${color}`}
-                      style={{
-                        height: `${Math.max(5, Math.round((value / max) * 122))}px`,
-                      }}
-                      title={`${value}`}
-                    />
-                  )
-                )}
+          {visible.map((b, i) => {
+            // Percent-mode tooltips: bars stay volume-proportional, hover
+            // reads as the graded share of this bucket.
+            const pcB = gradedPct(b.firstTryCorrect, b.mistakes);
+            const titles = [
+              `${b.attempts} attempts`,
+              barTitle(
+                fmt,
+                "incorrect",
+                b.mistakes,
+                pcB === null ? null : 100 - pcB,
+              ),
+              barTitle(fmt, "correct", b.firstTryCorrect, pcB),
+            ];
+            return (
+              <div key={i} className="flex min-w-0 flex-1 flex-col items-center">
+                {/* Every bucket's bar area carries its own border-b segment;
+                    with no gap between buckets they join into one continuous
+                    baseline, so zero days read as flat ground instead of
+                    floating nubs. */}
+                <div className="flex h-32 w-full items-end justify-center gap-[3px] border-b-2 border-line">
+                  {(
+                    [
+                      [b.attempts, "bg-ink-fill"],
+                      [b.mistakes, "bg-flag-red-fill"],
+                      [b.firstTryCorrect, "bg-success"],
+                    ] as const
+                  ).map(([value, color], j) =>
+                    value === 0 ? null : (
+                      <div
+                        key={j}
+                        className={`w-2 rounded-t-[3px] ${color}`}
+                        style={{
+                          height: `${Math.max(5, Math.round((value / max) * 122))}px`,
+                        }}
+                        title={titles[j]}
+                      />
+                    ),
+                  )}
+                </div>
+                <span className="mt-1.5 whitespace-nowrap font-body text-[9px] font-semibold text-ink-muted">
+                  {b.label}
+                </span>
               </div>
-              <span className="mt-1.5 whitespace-nowrap font-body text-[9px] font-semibold text-ink-muted">
-                {b.label}
-              </span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </section>
