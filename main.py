@@ -906,20 +906,24 @@ class SayBody(BaseModel):
 # as the frame is enqueued, well before the turn's LLM/TTS work completes, so
 # "still processing" isn't observable from here without wiring a completion
 # signal back from ClientWrapper — out of scope for this guard. This is the
-# minimal version instead: `_say_locks` serializes two /say calls that land
-# for the same user practically simultaneously (no `await` happens between
-# the `.locked()` check and `.acquire()` below, so this is race-free on the
+# minimal version instead: `_say_locks` serializes two calls that land for
+# the same user practically simultaneously (no `await` happens between the
+# `.locked()` check and `.acquire()` below, so this is race-free on the
 # single-threaded event loop), and `_say_last_queued_at` rejects a second
 # call that lands within `_SAY_INFLIGHT_MIN_GAP_S` of the first — a
 # heuristic backstop for the common case where the first turn is still being
 # generated when the next call arrives, after the lock has already been
-# released. Both dicts are keyed by `target_id` (the resolved id, post-auth)
-# and, unlike ACTIVE_TASKS/ACTIVE_LESSONS in pipeline/factory.py, are never
-# popped — they grow with the set of distinct users who have ever called
-# /say, not just the ones currently connected. Accepted for this minimal
-# version: the population is bounded by real signed-in/demo users, not
-# request volume, and per-user cleanup would need the same identity-guard
-# machinery ACTIVE_TASKS already carries for a map this small to be worth it.
+# released. Both dicts are shared with `tandem_say_audio` below (same
+# key: the resolved user id) so a typed `/say` turn and a recorded
+# Practice-mode clip for the same user serialize against each other too,
+# not just against their own kind. Keyed by `target_id` (the resolved id,
+# post-auth) and, unlike ACTIVE_TASKS/ACTIVE_LESSONS in pipeline/factory.py,
+# never popped — they grow with the set of distinct users who have ever
+# called /say or /tandem/say-audio, not just the ones currently connected.
+# Accepted for this minimal version: the population is bounded by real
+# signed-in/demo users, not request volume, and per-user cleanup would need
+# the same identity-guard machinery ACTIVE_TASKS already carries for a map
+# this small to be worth it.
 _SAY_INFLIGHT_MIN_GAP_S = 1.0
 _say_locks: dict[str, asyncio.Lock] = {}
 _say_last_queued_at: dict[str, float] = {}
@@ -1078,90 +1082,112 @@ async def tandem_say_audio(
             detail="That recording is too long — try a shorter turn.",
         )
 
-    # AGENT-001: derived from the SAME live session looked up above, not from
-    # anything the client sent — Clara's teacher room runs English STT/TTS
-    # (pipeline/factory.py::ENGLISH_LESSONS) while every tandem partner stays
-    # German. "tandem" fallback only fires if ACTIVE_LESSONS and ACTIVE_TASKS
-    # ever disagree, which preserves today's (German) behavior for that edge.
-    active_lesson_id = ACTIVE_LESSONS.get(user_id, "tandem")
-    language = lesson_language(active_lesson_id)
-    # COST-001: without a root span here, the `stt` generation inside
-    # transcribe_attempt is a PARENTLESS span with no `user.id`, which is
-    # exactly what agents/observability.py::_OrphanFragmentFilterExporter
-    # drops before export — so every Practice-mode clip was billed by
-    # Deepgram but invisible in Langfuse (found reconciling 2026-08-24:
-    # 69 billed requests vs 63 traced, Δ = the 6 clips of one tandem
-    # session). Same live-session join as idiom/routes.py: the trace files
-    # into the live tandem/teacher session, and the cost stamp inside
-    # transcribe_attempt rides along.
-    session_id = get_trace_session(user_id)
-    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span(
-        "tandem-say-audio"
-    ) as span:
-        span.set_attribute("user.id", user_id)
-        if session_id:
-            span.set_attribute("langfuse.session.id", session_id)
-        try:
-            transcript = await transcribe_attempt(data, audio.content_type, language=language)
-        except Exception as e:  # noqa: BLE001 — a Deepgram outage must 502, not 500
-            logger.warning(f"Tandem say-audio transcription failed: {type(e).__name__}: {e}")
+    # In-flight guard (hygiene): the SAME per-user lock/gap-timestamp pair
+    # `/say` uses above (`_say_locks` / `_say_last_queued_at`, keyed by the
+    # same user_id), held across transcribe -> queue_frame ->
+    # schedule_recording — so a typed `/say` turn and a recorded clip for
+    # the same user now serialize together, the same way two `/say` calls
+    # already did. Previously this route had no lock at all; a double-tap
+    # could queue two `LLMContextFrame`s before the first turn's LLM call
+    # finished, the exact failure mode `/say`'s own guard above exists to
+    # prevent.
+    lock = _say_locks.setdefault(user_id, asyncio.Lock())
+    if lock.locked():
+        raise HTTPException(
+            status_code=409, detail="a previous message for this user is still being processed"
+        )
+    async with lock:
+        now = time.monotonic()
+        last_queued = _say_last_queued_at.get(user_id)
+        if last_queued is not None and (now - last_queued) < _SAY_INFLIGHT_MIN_GAP_S:
             raise HTTPException(
-                status_code=502,
-                detail="Couldn't process the audio — try again in a moment.",
+                status_code=409,
+                detail="a previous message for this user is still being processed",
+            )
+        _say_last_queued_at[user_id] = now
+
+        # AGENT-001: derived from the SAME live session looked up above, not from
+        # anything the client sent — Clara's teacher room runs English STT/TTS
+        # (pipeline/factory.py::ENGLISH_LESSONS) while every tandem partner stays
+        # German. "tandem" fallback only fires if ACTIVE_LESSONS and ACTIVE_TASKS
+        # ever disagree, which preserves today's (German) behavior for that edge.
+        active_lesson_id = ACTIVE_LESSONS.get(user_id, "tandem")
+        language = lesson_language(active_lesson_id)
+        # COST-001: without a root span here, the `stt` generation inside
+        # transcribe_attempt is a PARENTLESS span with no `user.id`, which is
+        # exactly what agents/observability.py::_OrphanFragmentFilterExporter
+        # drops before export — so every Practice-mode clip was billed by
+        # Deepgram but invisible in Langfuse (found reconciling 2026-08-24:
+        # 69 billed requests vs 63 traced, Δ = the 6 clips of one tandem
+        # session). Same live-session join as idiom/routes.py: the trace files
+        # into the live tandem/teacher session, and the cost stamp inside
+        # transcribe_attempt rides along.
+        session_id = get_trace_session(user_id)
+        with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span(
+            "tandem-say-audio"
+        ) as span:
+            span.set_attribute("user.id", user_id)
+            if session_id:
+                span.set_attribute("langfuse.session.id", session_id)
+            try:
+                transcript = await transcribe_attempt(data, audio.content_type, language=language)
+            except Exception as e:  # noqa: BLE001 — a Deepgram outage must 502, not 500
+                logger.warning(f"Tandem say-audio transcription failed: {type(e).__name__}: {e}")
+                raise HTTPException(
+                    status_code=502,
+                    detail="Couldn't process the audio — try again in a moment.",
+                )
+
+        text = (transcript or "").strip()
+        if not text:
+            raise HTTPException(
+                status_code=422,
+                detail="We couldn't hear anything — try again a bit closer to the mic.",
             )
 
-    text = (transcript or "").strip()
-    if not text:
-        raise HTTPException(
-            status_code=422,
-            detail="We couldn't hear anything — try again a bit closer to the mic.",
-        )
+        context = LLMContext([{"role": "user", "content": text}])
+        await task.queue_frame(LLMContextFrame(context=context))
 
-    context = LLMContext([{"role": "user", "content": text}])
-    await task.queue_frame(LLMContextFrame(context=context))
+        # REL-001 follow-up (P2-IMPL): the clip has now reached the pipeline —
+        # archive it. Surface mirrors pipeline/factory.py's own voice-session
+        # surface map for these three lesson types.
+        if active_lesson_id == "teacher":
+            _clip_surface = "teacher"
+        elif active_lesson_id in ("tandem", "tandem_paul"):
+            _clip_surface = "tandem"
+        else:
+            _clip_surface = "lesson"
+        if session_id is None:
+            logger.warning(
+                f"Tandem say-audio: no trace session for user {user_id} — clip not archived"
+            )
+        else:
+            # get_trace_session returns the surface-prefixed trace id
+            # (tandem-<hex> / teacher-<hex> / lesson-<hex>) — the bare session
+            # hex (activity_session.id) is everything after the first "-".
+            # `partition` rather than `split(...)[1]` so an unprefixed id can
+            # never raise here, after the turn has already been queued.
+            _prefix, _sep, bare_session_id = session_id.partition("-")
+            if not _sep:
+                bare_session_id = session_id
+            wrapper = ACTIVE_WRAPPERS.get(user_id)
+            # The turn just queued above will become exchange
+            # `exchange_count + 1` — see ClientWrapper.exchange_count's
+            # docstring. The in-flight lock above (held for this whole
+            # transcribe -> queue_frame -> schedule_recording span) is what
+            # keeps two overlapping clips from ever reading the same count.
+            clip_item_id = str(wrapper.exchange_count + 1) if wrapper is not None else None
+            schedule_recording(
+                background_tasks,
+                user_id=user_id,
+                surface=_clip_surface,
+                exercise=active_lesson_id,
+                ref_kind="session_turn",
+                ref_id=bare_session_id,
+                item_id=clip_item_id,
+                data=data,
+                content_type=audio.content_type,
+                transcript=text,
+            )
 
-    # REL-001 follow-up (P2-IMPL): the clip has now reached the pipeline —
-    # archive it. Surface mirrors pipeline/factory.py's own voice-session
-    # surface map for these three lesson types.
-    if active_lesson_id == "teacher":
-        _clip_surface = "teacher"
-    elif active_lesson_id in ("tandem", "tandem_paul"):
-        _clip_surface = "tandem"
-    else:
-        _clip_surface = "lesson"
-    if session_id is None:
-        logger.warning(
-            f"Tandem say-audio: no trace session for user {user_id} — clip not archived"
-        )
-    else:
-        # get_trace_session returns the surface-prefixed trace id
-        # (tandem-<hex> / teacher-<hex> / lesson-<hex>) — the bare session
-        # hex (activity_session.id) is everything after the first "-".
-        # `partition` rather than `split(...)[1]` so an unprefixed id can
-        # never raise here, after the turn has already been queued.
-        _prefix, _sep, bare_session_id = session_id.partition("-")
-        if not _sep:
-            bare_session_id = session_id
-        wrapper = ACTIVE_WRAPPERS.get(user_id)
-        # The turn just queued above will become exchange
-        # `exchange_count + 1` — see ClientWrapper.exchange_count's docstring.
-        # Known, accepted: unlike `/say` this route has no per-user in-flight
-        # lock, so two clips posted faster than one LLM turn would read the
-        # same count and share an `item_id` — a display-order cosmetic only
-        # (each object still gets its own uuid key); the double-tap that
-        # triggers it is not a real Practice-mode gesture.
-        clip_item_id = str(wrapper.exchange_count + 1) if wrapper is not None else None
-        schedule_recording(
-            background_tasks,
-            user_id=user_id,
-            surface=_clip_surface,
-            exercise=active_lesson_id,
-            ref_kind="session_turn",
-            ref_id=bare_session_id,
-            item_id=clip_item_id,
-            data=data,
-            content_type=audio.content_type,
-            transcript=text,
-        )
-
-    return {"transcript": text}
+        return {"transcript": text}

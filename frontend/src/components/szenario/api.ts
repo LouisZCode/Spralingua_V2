@@ -57,11 +57,11 @@ export type StructureResult = {
     absprung: string;
     vokabelAnker: string[];
   };
-  // FLOW-006: present and true only on a client-synthesized "gave up"
-  // result (see Flow.tsx's give-up handler) — the trainer uses it to show a
-  // modest "gave up" state instead of the full verdict-card UI a real
-  // attempt would render. There is no backend /szenario/give-up route (the
-  // other Flow drills each have one) — this stays client-side for now.
+  // FLOW-006 / szgiveup: true on a give-up result — either the real
+  // POST /szenario/give-up response (see giveUpAttempt below) or, if that
+  // call fails for any reason, Flow.tsx's client-side fallback of the same
+  // shape. The trainer uses it to show a modest "gave up" state instead of
+  // the full verdict-card UI a real attempt would render.
   gaveUp?: boolean;
 };
 
@@ -177,4 +177,20 @@ export async function submitAttempt(
   form.append("question", question);
   form.append("sessionId", sessionId);
   return request("/szenario/attempts", token, { method: "POST", body: form });
+}
+
+// szgiveup: the FLOW-006 give-up escape hatch, mirroring sprechen/api.ts's
+// giveUp — same shape convention (JSON body, no audio, no judge). Backs
+// Flow.tsx's give-up handler; the standalone Szenario page has no give-up
+// button so nothing else calls this.
+export async function giveUpAttempt(
+  token: string,
+  scenarioId: string,
+  sessionId?: string
+): Promise<StructureResult> {
+  return request("/szenario/give-up", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scenario_id: scenarioId, session_id: sessionId }),
+  });
 }

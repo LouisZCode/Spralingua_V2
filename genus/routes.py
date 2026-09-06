@@ -56,7 +56,7 @@ import random
 import zlib
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from loguru import logger
 from pydantic import BaseModel, Field
 from sqlalchemy import or_, select
@@ -64,7 +64,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
-from database.connection import get_db
+from database.connection import get_db, get_sessionmaker
 from database.orm import UserCard, VocabCard
 from database.repository import (
     credit_pattern_success,
@@ -224,6 +224,14 @@ def _deck_item(card: VocabCard, deck_adjs: tuple[str, ...] = ()) -> dict | None:
 @router.get("/round")
 async def get_round(
     pool: str = "basis",
+    # PRODUCT-011 (2026-09-06): the Flow passes a smaller deck half (3) so its
+    # per-sitting pool rotation isn't crowded out by the learner's own nouns;
+    # the standalone page sends no value at all and keeps today's behaviour
+    # bit-for-bit. Out-of-range is REJECTED (422 via FastAPI's Query bounds),
+    # not silently clamped — same "fail loud on a bad param" posture as the
+    # 422s already thrown below for a bad answer, rather than quietly serving
+    # a round the caller didn't ask for.
+    personal_max: int = Query(PERSONAL_MAX, ge=0, le=PERSONAL_MAX),
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -234,7 +242,10 @@ async def get_round(
     ``pool`` picks the curated half's themed pool (default ``basis``); the
     deck half is always the learner's own nouns regardless of pool. An
     unknown pool id (stale localStorage after a pool rename) degrades to
-    basis rather than failing the round."""
+    basis rather than failing the round. ``personal_max`` bounds how many of
+    the up-to-``PERSONAL_MAX`` deck items actually seat in the round (the
+    curated catalog pads out the rest, exactly as it does today when the deck
+    itself is thin)."""
     personal: list[dict] = []
     try:
         cards = (
@@ -260,7 +271,7 @@ async def get_round(
             if (item := _deck_item(card, deck_adjs))
         ]
         random.shuffle(candidates)
-        personal = candidates[:PERSONAL_MAX]
+        personal = candidates[:personal_max]
     except Exception:
         # A personalisation outage must never break the round.
         logger.exception("Genus deck read failed — serving a curated-only round")
@@ -595,7 +606,6 @@ async def _resolve_item(
 async def submit_attempt(
     body: AttemptIn,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """Grade one beat deterministically, log it, return the verdict (+ the
     anchor scene — only now: shipping it with the round would answer beat 1)."""
@@ -604,19 +614,35 @@ async def submit_attempt(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
-    # Only the free-text phrase beat pays for a judge — the article drop is
-    # deterministic and stays free. 404 BEFORE the charge: a stale item id must
-    # not burn coins. Still BEFORE any STT/judge work.
-    item = await _resolve_item(db, user_id, body.item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Unknown item.")
-    if body.phase == "phrase":
-        try:
-            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-        except HTTPException as _e:
-            if _e.status_code == 402:
-                raise
-            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    # REL-005 (DBFIX review, 2026-09-05): the item lookup and the
+    # (phrase-beat-only) coin gate run inside their OWN short-lived session,
+    # closed (connection released back to the pool) BEFORE judge_gender's
+    # judge call below — reached only on an unrecognized free-text phrase —
+    # a request must never hold a pooled connection across a slow provider
+    # call. No ``Depends(get_db)`` on this route for that reason; same
+    # pattern ``briefkasten/routes.py::get_letter`` uses. `item` crosses the
+    # boundary below as a plain dict (``_resolve_item`` never returns an ORM
+    # row), and a fresh session opens further down, after the possible judge
+    # call, for the ledger + DATA-004 writes. Only the article beat's own
+    # (provider-free) logic runs in between, so this same shape covers both
+    # beats uniformly.
+    async with get_sessionmaker()() as db:
+        # Only the free-text phrase beat pays for a judge — the article drop is
+        # deterministic and stays free. 404 BEFORE the charge: a stale item id must
+        # not burn coins. Still BEFORE any STT/judge work.
+        item = await _resolve_item(db, user_id, body.item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Unknown item.")
+        if body.phase == "phrase":
+            try:
+                await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+            except HTTPException as _e:
+                if _e.status_code == 402:
+                    raise
+                raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    # `db` is closed here — the pooled connection is released before the
+    # judge call below (REL-005).
+
     answer = " ".join(body.answer.split())
     # give_up skips validation entirely — there's no drag/answer to check,
     # the learner is conceding the item.
@@ -811,77 +837,83 @@ async def submit_attempt(
             gender_miss = False
             attempt_pattern_id = None
 
-        try:
-            if gender_correct:
-                await credit_pattern_success(
-                    db,
-                    user_id=user_id,
-                    pattern_id="artikel-genus",
-                    session_id=body.session_id,
-                    source="genus",
-                )
-            elif gender_miss:
-                # STT-006's ASR-specific checks are off (check_asr_artifacts=
-                # False) — Genus is typed/drag, never spoken — but the
-                # guard's verbatim-quote and non-vacuous-correction checks
-                # still run: cheap defense-in-depth on a row that, once
-                # written, is permanent (CLAUDE.md). NOTE: passing the same
-                # value for both `quote` and `source_text` makes
-                # `is_quote_verbatim`'s check a structural no-op here (`q in
-                # s` when `q == s` is always True) — there's no separate
-                # learner "source text" for a drag/typed drill the way a
-                # spoken transcript has one; only the non-vacuous-correction
-                # check actually does anything for this caller.
-                guard_reason = ledger_guard_reason(
-                    pattern_id="artikel-genus",
-                    quote=ledger_quote,
-                    corrected=ledger_corrected,
-                    source_text=ledger_quote,
-                    check_asr_artifacts=False,
-                )
-                if guard_reason is None:
-                    await record_grammar_error(
+        # REL-005: a second, fresh short-lived session for the ledger +
+        # DATA-004 writes — opened only now, after judge_gender above (when
+        # reached) has already returned, so nothing here holds a pooled
+        # connection across that call either.
+        async with get_sessionmaker()() as db:
+            try:
+                if gender_correct:
+                    await credit_pattern_success(
                         db,
                         user_id=user_id,
                         pattern_id="artikel-genus",
-                        sentence=ledger_quote,
-                        corrected=ledger_corrected,
-                        note=ledger_note,
-                        source="genus",
                         session_id=body.session_id,
+                        source="genus",
                     )
-                else:
-                    logger.info(
-                        "Genus ledger write skipped (item {}): {}", item["id"], guard_reason
+                elif gender_miss:
+                    # STT-006's ASR-specific checks are off (check_asr_artifacts=
+                    # False) — Genus is typed/drag, never spoken — but the
+                    # guard's verbatim-quote and non-vacuous-correction checks
+                    # still run: cheap defense-in-depth on a row that, once
+                    # written, is permanent (CLAUDE.md). NOTE: passing the same
+                    # value for both `quote` and `source_text` makes
+                    # `is_quote_verbatim`'s check a structural no-op here (`q in
+                    # s` when `q == s` is always True) — there's no separate
+                    # learner "source text" for a drag/typed drill the way a
+                    # spoken transcript has one; only the non-vacuous-correction
+                    # check actually does anything for this caller.
+                    guard_reason = ledger_guard_reason(
+                        pattern_id="artikel-genus",
+                        quote=ledger_quote,
+                        corrected=ledger_corrected,
+                        source_text=ledger_quote,
+                        check_asr_artifacts=False,
                     )
-        except Exception:
-            logger.exception("Genus ledger write failed (item {})", item["id"])
+                    if guard_reason is None:
+                        await record_grammar_error(
+                            db,
+                            user_id=user_id,
+                            pattern_id="artikel-genus",
+                            sentence=ledger_quote,
+                            corrected=ledger_corrected,
+                            note=ledger_note,
+                            source="genus",
+                            session_id=body.session_id,
+                        )
+                    else:
+                        logger.info(
+                            "Genus ledger write skipped (item {}): {}", item["id"], guard_reason
+                        )
+            except Exception:
+                logger.exception("Genus ledger write failed (item {})", item["id"])
 
-        # Cross-drill attempt log (DATA-004) — its own commit, non-fatal like
-        # the sibling drills. Both beats log, distinguished via item_ref, so
-        # accuracy can later split "knows the gender" from "can inflect it".
-        # `attempt_pattern_id` is None for a retry drag and for every
-        # phrase-beat outcome (see above) — only a first-try article-beat
-        # attempt (give-up included) tags the row with the taxonomy pattern.
-        try:
-            await record_drill_attempt(
-                db,
-                user_id=user_id,
-                exercise="genus",
-                # ":giveup" suffix marks a concession in DATA-004 without a
-                # new column — extends the existing phase-suffix convention.
-                item_ref=(
-                    f"{item['id']}:{body.phase}:giveup"
-                    if body.give_up
-                    else f"{item['id']}:{body.phase}"
-                ),
-                pattern_id=attempt_pattern_id,
-                correct=payload["correct"],
-                modality="written",
-                session_id=body.session_id,
-            )
-        except Exception:
-            logger.exception("Drill-attempt log write failed (item {})", item["id"])
+            # Cross-drill attempt log (DATA-004) — its own commit, non-fatal
+            # like the sibling drills. Both beats log, distinguished via
+            # item_ref, so accuracy can later split "knows the gender" from
+            # "can inflect it". `attempt_pattern_id` is None for a retry drag
+            # and for every phrase-beat outcome (see above) — only a
+            # first-try article-beat attempt (give-up included) tags the row
+            # with the taxonomy pattern.
+            try:
+                await record_drill_attempt(
+                    db,
+                    user_id=user_id,
+                    exercise="genus",
+                    # ":giveup" suffix marks a concession in DATA-004 without a
+                    # new column — extends the existing phase-suffix convention.
+                    item_ref=(
+                        f"{item['id']}:{body.phase}:giveup"
+                        if body.give_up
+                        else f"{item['id']}:{body.phase}"
+                    ),
+                    pattern_id=attempt_pattern_id,
+                    correct=payload["correct"],
+                    modality="written",
+                    session_id=body.session_id,
+                )
+            except Exception:
+                logger.exception("Drill-attempt log write failed (item {})", item["id"])
 
         return payload
 
@@ -896,7 +928,6 @@ class NudgeIn(BaseModel):
 async def vocab_nudge(
     body: NudgeIn,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """The retrieval cue for the production beat: which of the learner's OWN
     deck words would fit a sentence about this noun. The frontend shows only
@@ -910,12 +941,17 @@ async def vocab_nudge(
     # gets no pill, never an error the drill would have to handle.
     if not drill_try_admit(user_id):
         return {"words": []}
-    item = await _resolve_item(db, user_id, body.item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Unknown item.")
+    # REL-005: the item lookup + deck read run in their own short-lived
+    # session, closed before suggest_vocab's judge call below — this route
+    # writes nothing (decorative, no DATA-004 row), so there is no matching
+    # post-call session either.
+    async with get_sessionmaker()() as db:
+        item = await _resolve_item(db, user_id, body.item_id)
+        if item is None:
+            raise HTTPException(status_code=404, detail="Unknown item.")
 
-    noun_l = item["noun"].lower()
-    deck = await load_deck(db, user_id, exclude=frozenset({noun_l}))
+        noun_l = item["noun"].lower()
+        deck = await load_deck(db, user_id, exclude=frozenset({noun_l}))
     if not deck:
         return {"words": []}
 

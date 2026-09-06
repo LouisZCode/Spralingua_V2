@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
-from database.connection import get_db
+from database.connection import get_db, get_sessionmaker
 from database.orm import UserCard, UserVerbformen, VocabCard
 from database.repository import _assert_test_user, record_drill_attempt, record_grammar_error
 from recordings.service import schedule_recording
@@ -141,7 +141,6 @@ async def submit_attempt(
     # attempt of one trainer mount into a single Langfuse Session.
     session_id: str | None = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
     background_tasks: BackgroundTasks = None,
 ):
     """Judge one spoken past form — the satz pipeline end to end (transcribe →
@@ -152,22 +151,45 @@ async def submit_attempt(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
-    row = (
-        await db.execute(_deck_row_query(user_id).where(VocabCard.id == card_id))
-    ).first()
-    if row is None:
-        raise HTTPException(
-            status_code=404, detail="That verb isn't in your Verbformen deck."
-        )
-    # PAY-002: charged AFTER the 404 (stale card must not burn coins) but
-    # BEFORE any STT/judge work.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
-    card, uvf = row
+    # REL-005 (DBFIX review, 2026-09-05): the deck-ownership read and the
+    # coin gate run inside their OWN short-lived session, closed (connection
+    # released back to the pool) BEFORE transcribe_attempt's Deepgram call
+    # and examine_attempt's judge call below start — a request must never
+    # hold a pooled connection across a slow provider call. No
+    # ``Depends(get_db)`` on this route for that reason; same pattern
+    # ``briefkasten/routes.py::get_letter`` and ``satz/routes.py::
+    # submit_attempt`` use. `card` (a `VocabCard`, no relationships) crosses
+    # the boundary below as a plain, already-loaded row; `uvf`'s only field
+    # this route still needs (`interval_days`) is captured as a local
+    # instead, since the write path below upserts by id rather than
+    # mutating the overlay row directly.
+    async with get_sessionmaker()() as db:
+        row = (
+            await db.execute(_deck_row_query(user_id).where(VocabCard.id == card_id))
+        ).first()
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail="That verb isn't in your Verbformen deck."
+            )
+        # PAY-002: charged AFTER the 404 (stale card must not burn coins) but
+        # BEFORE any STT/judge work.
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+        card, uvf = row
+
+        # STT-003 P2: the learner says the past form ("ist gegangen"), not the
+        # lemma — bias the transcription toward both.
+        card_keyterms = [card.target]
+        if card.tense_form:
+            card_keyterms.append(card.tense_form)
+
+        uvf_interval_days = uvf.interval_days if uvf else None
+    # `db` is closed here — the pooled connection is released before the
+    # STT/judge calls below (REL-005).
 
     data = await audio.read()
     if not data:
@@ -177,12 +199,6 @@ async def submit_attempt(
             status_code=413,
             detail="That recording is too long — keep it to one sentence.",
         )
-
-    # STT-003 P2: the learner says the past form ("ist gegangen"), not the
-    # lemma — bias the transcription toward both.
-    card_keyterms = [card.target]
-    if card.tense_form:
-        card_keyterms.append(card.tense_form)
 
     # OBS-007: one trace per judged attempt, named for the exercise like the
     # A/B/D siblings; `stt`/`llm` children nest automatically.
@@ -244,72 +260,89 @@ async def submit_attempt(
         if judgement.pattern_id:
             attempt_span.set_attribute("verdict.pattern_id", judgement.pattern_id)
 
-        # Record the outcome on the OVERLAY row — upserted, since the auto-fed
-        # card may never have been drilled here before. `hidden` is left alone
-        # on conflict (a hidden card can't be served, so it can't be attempted).
-        interval, due_at = schedule(
-            judgement.word_ok, uvf.interval_days if uvf else None, datetime.now()
-        )
-        _assert_test_user(user_id)  # TEST-001: direct overlay write, not via repository
-        await db.execute(
-            pg_insert(UserVerbformen)
-            .values(
-                user_id=user_id,
-                card_id=card_id,
-                interval_days=interval,
-                due_at=due_at,
-                reps=1,
-            )
-            .on_conflict_do_update(
-                index_elements=["user_id", "card_id"],
-                set_={
-                    "interval_days": interval,
-                    "due_at": due_at,
-                    "reps": UserVerbformen.reps + 1,
-                },
-            )
-        )
-        try:
-            await db.commit()
-        except Exception:
-            logger.exception("Verbformen schedule commit failed (card {})", card_id)
-            await db.rollback()
-
-        # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
-        # after the schedule is safe; a ledger failure only logs.
-        if judgement.pattern_id:
+        # REL-005: a second, fresh short-lived session for the overlay
+        # schedule write and the ledger/DATA-004 writes below — opened only
+        # now, AFTER transcribe_attempt/examine_attempt above have already
+        # returned, so nothing here holds a pooled connection across those
+        # up-to-12s-per-leg calls either. `uvf_interval_days` was snapshotted
+        # in the read session above; the write below upserts by
+        # (user_id, card_id) rather than mutating that detached row.
+        interval, due_at = schedule(judgement.word_ok, uvf_interval_days, datetime.now())
+        attempt_id: int | None = None
+        async with get_sessionmaker()() as db:
+            # Record the outcome on the OVERLAY row — upserted, since the
+            # auto-fed card may never have been drilled here before.
+            # `hidden` is left alone on conflict (a hidden card can't be
+            # served, so it can't be attempted).
+            _assert_test_user(user_id)  # TEST-001: direct overlay write, not via repository
+            # The INSERT itself is inside the try, not just the commit: the
+            # overlay row has a composite FK onto user_cards, so a card the
+            # learner removed from the pool DURING the STT/judge window
+            # (the window REL-005 widened) raises ForeignKeyViolationError
+            # on execute — before this guard that was an uncaught 500 on a
+            # request that had already been charged and judged (hygiene
+            # review, 2026-09-06; pre-existing on the single-session code
+            # too). The schedule is simply lost for a card that is gone; the
+            # ledger and attempt-log writes below still run on the rolled-
+            # back session.
             try:
-                await record_grammar_error(
+                await db.execute(
+                    pg_insert(UserVerbformen)
+                    .values(
+                        user_id=user_id,
+                        card_id=card_id,
+                        interval_days=interval,
+                        due_at=due_at,
+                        reps=1,
+                    )
+                    .on_conflict_do_update(
+                        index_elements=["user_id", "card_id"],
+                        set_={
+                            "interval_days": interval,
+                            "due_at": due_at,
+                            "reps": UserVerbformen.reps + 1,
+                        },
+                    )
+                )
+                await db.commit()
+            except Exception:
+                logger.exception("Verbformen schedule write failed (card {})", card_id)
+                await db.rollback()
+
+            # Harvest into the grammar-error ledger (GRAM-001) — its own
+            # commit, after the schedule is safe; a ledger failure only logs.
+            if judgement.pattern_id:
+                try:
+                    await record_grammar_error(
+                        db,
+                        user_id=user_id,
+                        pattern_id=judgement.pattern_id,
+                        sentence=transcript,
+                        corrected=judgement.corrected,
+                        note=judgement.error,
+                        source="verbformen",
+                        session_id=session_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Grammar-ledger write failed (pattern {})", judgement.pattern_id
+                    )
+
+            # Append to the cross-drill attempt log (DATA-004) — its own
+            # commit, non-fatal like the ledger write above.
+            try:
+                attempt_id = await record_drill_attempt(
                     db,
                     user_id=user_id,
+                    exercise="verbformen",
+                    item_ref=card_id,
                     pattern_id=judgement.pattern_id,
-                    sentence=transcript,
-                    corrected=judgement.corrected,
-                    note=judgement.error,
-                    source="verbformen",
+                    correct=judgement.word_ok and judgement.grammar_ok,
+                    modality="spoken",
                     session_id=session_id,
                 )
             except Exception:
-                logger.exception(
-                    "Grammar-ledger write failed (pattern {})", judgement.pattern_id
-                )
-
-        # Append to the cross-drill attempt log (DATA-004) — its own commit,
-        # non-fatal like the ledger write above.
-        attempt_id: int | None = None
-        try:
-            attempt_id = await record_drill_attempt(
-                db,
-                user_id=user_id,
-                exercise="verbformen",
-                item_ref=card_id,
-                pattern_id=judgement.pattern_id,
-                correct=judgement.word_ok and judgement.grammar_ok,
-                modality="spoken",
-                session_id=session_id,
-            )
-        except Exception:
-            logger.exception("Drill-attempt log write failed (card {})", card_id)
+                logger.exception("Drill-attempt log write failed (card {})", card_id)
 
         # REL-001 follow-up (P2-IMPL): archive the spoken clip, mirroring
         # /satz/attempts' non-rehearsal hook exactly — linked to the attempt

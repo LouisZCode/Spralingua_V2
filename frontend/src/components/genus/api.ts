@@ -118,9 +118,17 @@ async function request<T>(
 
 export async function fetchRound(
   token: string,
-  pool?: string
+  pool?: string,
+  // PRODUCT-011: the Flow passes 3 so a rotating themed pool doesn't get
+  // crowded out by the deck half; omitted (the standalone page's call)
+  // keeps the backend's own default (PERSONAL_MAX = 5) — byte-identical to
+  // pre-PRODUCT-011 behaviour.
+  personalMax?: number
 ): Promise<GenusItem[]> {
-  const query = pool ? `?pool=${encodeURIComponent(pool)}` : "";
+  const params = new URLSearchParams();
+  if (pool) params.set("pool", pool);
+  if (personalMax !== undefined) params.set("personal_max", String(personalMax));
+  const query = params.toString() ? `?${params.toString()}` : "";
   const data = await request<{ items: GenusItem[] }>(
     `/genus/round${query}`,
     token

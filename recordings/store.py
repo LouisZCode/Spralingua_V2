@@ -20,6 +20,7 @@ attempt or session it rides on.
 from __future__ import annotations
 
 import asyncio
+import re
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -171,3 +172,100 @@ async def delete_object(key: str) -> bool:
     except Exception as exc:  # noqa: BLE001
         logger.warning(f"voice recording delete failed for {key}: {exc}")
         return False
+
+
+def _list_objects_sync(client, bucket: str, prefix: str) -> list[dict]:
+    """Blocking full-pagination listing of every object under ``prefix`` —
+    each entry is boto3's own dict (``Key``, ``Size``, ...). Shared by
+    :func:`list_prefix` and :func:`delete_prefix` so the paginate logic
+    lives in exactly one place."""
+    paginator = client.get_paginator("list_objects_v2")
+    objects: list[dict] = []
+    for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+        objects.extend(page.get("Contents") or [])
+    return objects
+
+
+async def list_prefix(prefix: str) -> Optional[list[dict]]:
+    """Best-effort, read-only listing of every object under ``prefix``.
+    ``None`` when the bucket isn't configured or the call fails (one
+    warning logged on the latter — ``_get_bucket_client`` already handles
+    "not configured" logging exactly once). Read-only sibling of
+    :func:`delete_prefix` for operator tooling (``scripts/purge_voice.py``'s
+    dry run) that needs to report what WOULD be deleted before anything
+    is — never raises, same contract as the rest of this module."""
+    bucket_client = _get_bucket_client()
+    if bucket_client is None:
+        return None
+    client, bucket = bucket_client
+    try:
+        return await asyncio.to_thread(_list_objects_sync, client, bucket, prefix)
+    except Exception as exc:  # noqa: BLE001 -- must degrade to None, never raise
+        logger.warning(f"voice recording prefix list failed for {prefix!r}: {exc}")
+        return None
+
+
+# The only prefix shape delete_prefix will act on: voice/<one non-empty
+# user-id segment>/ and optionally deeper. Nothing shorter can ever match.
+_DELETABLE_PREFIX_RE = re.compile(r"^voice/[^/]+/")
+
+
+def _delete_prefix_sync(client, bucket: str, prefix: str) -> int:
+    """Blocking: list every object under ``prefix``, then batch-delete in
+    groups of <=1000 keys (S3's ``delete_objects`` limit). Runs entirely
+    inside ``asyncio.to_thread`` — no async calls here. Counts only the
+    keys S3 reports back in ``Deleted``: ``delete_objects`` answers 200
+    for a PARTIAL failure too, listing the failed keys under ``Errors``
+    instead of raising, so ``len(batch)`` would over-report (review,
+    2026-09-06)."""
+    objects = _list_objects_sync(client, bucket, prefix)
+    deleted = 0
+    for i in range(0, len(objects), 1000):
+        batch = [{"Key": obj["Key"]} for obj in objects[i : i + 1000]]
+        if not batch:
+            continue
+        response = client.delete_objects(
+            Bucket=bucket, Delete={"Objects": batch, "Quiet": False}
+        )
+        deleted += len(response.get("Deleted") or [])
+        for err in response.get("Errors") or []:
+            logger.warning(
+                f"voice recording delete_objects left {err.get('Key')!r} in place: "
+                f"{err.get('Code')} {err.get('Message')}"
+            )
+    return deleted
+
+
+async def delete_prefix(prefix: str) -> Optional[int]:
+    """Best-effort recursive delete of every object under ``prefix``
+    (paginated list + batched delete, <=1000 keys per ``delete_objects``
+    call). Returns the number of objects deleted, or ``None`` when the
+    bucket isn't configured or the operation failed (one warning logged) —
+    same not-configured/failure contract as the rest of this module; never
+    raises for those cases.
+
+    Refuses (raises ``ValueError``, before touching the bucket) anything
+    that is not exactly ``voice/<one non-empty segment>/...`` — this is the
+    one function in this module capable of mass deletion, so it must be
+    structurally incapable of wiping the whole bucket even given a caller
+    bug: ``""``, ``"voice/"`` (the bucket-wide root) and ``"voice//"`` (an
+    empty user id interpolated) all raise. A missing trailing slash is
+    normalised to one rather than trusted: S3's ``Prefix`` is a raw string
+    match, so ``voice/test-1`` would also delete ``voice/test-10/…`` (the
+    review reproduced exactly that bleed, 2026-09-06)."""
+    if prefix and not prefix.endswith("/"):
+        prefix = prefix + "/"
+    if not _DELETABLE_PREFIX_RE.match(prefix or ""):
+        raise ValueError(
+            f"delete_prefix refuses a prefix that is not 'voice/<user_id>/…': {prefix!r}"
+        )
+
+    bucket_client = _get_bucket_client()
+    if bucket_client is None:
+        return None
+    client, bucket = bucket_client
+    try:
+        return await asyncio.to_thread(_delete_prefix_sync, client, bucket, prefix)
+    except Exception as exc:  # noqa: BLE001 -- must degrade to None, never raise
+        logger.warning(f"voice recording prefix delete failed for {prefix!r}: {exc}")
+        return None

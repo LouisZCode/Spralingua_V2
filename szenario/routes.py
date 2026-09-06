@@ -18,6 +18,7 @@ import time
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from loguru import logger
+from pydantic import BaseModel, Field
 
 from agents.error_extractor import extract_errors
 from agents.observability import propagate_trace_context, tracer
@@ -530,3 +531,75 @@ async def submit_attempt(
     harvest_task.add_done_callback(_background_tasks.discard)
 
     return response
+
+
+class GiveUpIn(BaseModel):
+    scenario_id: str
+    # OBS-007 practice-sitting id — same contract as /attempts' `sessionId`.
+    # Give-up is Flow-only (SzenarioTrainer's standalone page carries no
+    # give-up button), so this is always Flow's `flow-` prefixed id in
+    # practice, but nothing here requires that.
+    session_id: str | None = Field(None, max_length=64)
+
+
+@router.post("/give-up")
+async def give_up(
+    body: GiveUpIn,
+    user_id: str = Depends(get_current_user_id),
+):
+    """szgiveup: FLOW-006 escape hatch, mirroring sprechen/routes.py's
+    ``give_up_attempt`` — record a deliberate concession as a failed attempt
+    WITHOUT audio, a transcription call or a judge call. No coin gate
+    (nothing was judged, so nothing is charged), no `user_errors` write
+    (LEDGER-002 — there is no recording, so no evidence of what the learner
+    would actually have said; a manufactured ledger row is worse than a
+    missing verdict), and no REL-001 archive hook (there is no audio to
+    archive). Returns the same response shape `/attempts` does, with the
+    same fixed coach line and `gaveUp: true` flag Flow.tsx used to fabricate
+    client-side (SzenarioTrainer's `giveUp()` reads `verdict.gaveUp` to
+    render its modest state instead of the full breakdown UI)."""
+    scenario = load_scenarios().get(body.scenario_id)
+    if scenario is None:
+        raise HTTPException(status_code=404, detail="Unknown scenario.")
+
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("szenario-attempt") as attempt_span:
+        attempt_span.set_attribute("user.id", user_id)
+        attempt_span.set_attribute("scenario_id", scenario["id"])
+        attempt_span.set_attribute("gave_up", True)
+        if body.session_id:
+            attempt_span.set_attribute("langfuse.session.id", body.session_id)
+        attempt_span.set_attribute("langfuse.observation.output", "gave_up=True")
+
+        # LEDGER-002: deliberately no record_grammar_error / user_errors
+        # write here — see sprechen/routes.py::give_up_attempt's docstring
+        # for the full rationale.
+
+        # Cross-drill attempt log (DATA-004), own short-lived session — same
+        # "no request-scoped db" pattern `submit_attempt` above uses (own
+        # session per REL-005, though give-up never touches a provider).
+        try:
+            async with get_sessionmaker()() as db:
+                await record_drill_attempt(
+                    db,
+                    user_id=user_id,
+                    exercise="szenario",
+                    item_ref=f"{scenario['id']}:giveup",
+                    pattern_id=None,
+                    correct=False,
+                    modality="spoken",
+                    session_id=body.session_id,
+                )
+        except Exception:
+            logger.exception(
+                "Drill-attempt log write failed (scenario {})", scenario["id"]
+            )
+
+    return {
+        "transcript": "",
+        "verdict": "overcomplicated",
+        "levelRead": "",
+        "coachMessage": "You gave up — no recording was judged.",
+        "sentences": [],
+        "skeleton": {"kern": "", "punkte": [], "absprung": "", "vokabelAnker": []},
+        "gaveUp": True,
+    }

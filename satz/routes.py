@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agents.observability import mark_span_error, propagate_trace_context, tracer
 from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
-from database.connection import get_db
+from database.connection import get_db, get_sessionmaker
 from database.orm import DrillAttempt, Pack, PackCard, User, UserCard, VocabCard, WordGloss
 from database.repository import _assert_test_user, record_drill_attempt, record_grammar_error
 from drills import forge_items_for_card
@@ -756,7 +756,6 @@ async def submit_attempt(
     # failed retry) wrongly punish the ladder for extra practice.
     rehearsal: bool = Form(False),
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
     background_tasks: BackgroundTasks = None,
 ):
     """Judge one spoken sentence for a card in the caller's pool.
@@ -788,25 +787,72 @@ async def submit_attempt(
             status_code=429,
             detail="You're going very fast — take a short break and try again in a few minutes.",
         )
-    row = (
-        await db.execute(
-            select(VocabCard, UserCard)
-            .join(UserCard, UserCard.card_id == VocabCard.id)
-            .where(UserCard.user_id == user_id, VocabCard.id == card_id)
-        )
-    ).first()
-    if row is None:
-        raise HTTPException(status_code=404, detail="That card isn't in your pool.")
-    # PAY-002: graded satz attempt — 5 coins each. Charged AFTER the 404
-    # (a stale card id must not burn coins) but BEFORE any STT/judge work.
-    # Rehearsal is charged like any other attempt.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
-    card, user_card = row
+    # REL-005 (DBFIX review, 2026-09-05): the pool-ownership read, the coin
+    # gate, and the (cheap) sibling-form lookup all run inside their OWN
+    # short-lived session, closed (connection released back to the pool)
+    # BEFORE transcribe_attempt's Deepgram call and examine_attempt's judge
+    # call below start — a request must never hold a pooled connection
+    # across a slow provider call. No ``Depends(get_db)`` on this route for
+    # that reason; same pattern ``briefkasten/routes.py::get_letter`` and
+    # ``bauteil/routes.py::submit_attempt`` use. `card` and `user_card`
+    # cross the boundary below as plain, already-loaded rows — `VocabCard`/
+    # `UserCard` carry no relationships, so touching their already-fetched
+    # scalar columns after the session closes triggers no lazy load; the
+    # write path re-fetches `user_card` fresh instead of mutating this one.
+    async with get_sessionmaker()() as db:
+        row = (
+            await db.execute(
+                select(VocabCard, UserCard)
+                .join(UserCard, UserCard.card_id == VocabCard.id)
+                .where(UserCard.user_id == user_id, VocabCard.id == card_id)
+            )
+        ).first()
+        if row is None:
+            raise HTTPException(status_code=404, detail="That card isn't in your pool.")
+        # PAY-002: graded satz attempt — 5 coins each. Charged AFTER the 404
+        # (a stale card id must not burn coins) but BEFORE any STT/judge work.
+        # Rehearsal is charged like any other attempt.
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+        card, user_card = row
+        # Snapshotted for the write session below, which re-fetches the row
+        # and must still produce a verdict if that row is gone by then.
+        user_card_interval_days = user_card.interval_days
+
+        # STT-003 P2: the card names the exact word we expect to hear — the
+        # ideal keyterm. For a past-tense card add the spoken past form too
+        # (the learner says "ist gegangen", not the lemma "gehen").
+        card_keyterms = [card.target]
+        if card.tense_form:
+            card_keyterms.append(card.tense_form)
+
+        # SATZ-008: a base verb card accepts spoken past forms, but strong-verb
+        # participles ("erkannt") share no stem with the infinitive — pull the
+        # past sibling's spoken form so STT biasing AND the presence guard see it.
+        extra_forms: list[str] = []
+        if card.type == "verb" and card.tense is None:
+            sibling_form = await db.scalar(
+                select(VocabCard.tense_form).where(
+                    VocabCard.type == "verb",
+                    func.lower(VocabCard.target) == card.target.lower(),
+                    VocabCard.tense == "past",
+                )
+            )
+            if sibling_form:
+                extra_forms.append(sibling_form)
+                card_keyterms.append(sibling_form)
+
+        # SATZ-015: a rehearsal reports the schedule state the ORIGINAL
+        # graded attempt already committed — snapshot it now, before this
+        # session closes, since the write path below never touches it again
+        # on a rehearsal (it skips the write block entirely).
+        rehearsal_due_in_days = user_card.interval_days or 0
+    # `db` is closed here — the pooled connection is released before the
+    # STT/judge calls below (REL-005).
 
     data = await audio.read()
     if not data:
@@ -816,29 +862,6 @@ async def submit_attempt(
             status_code=413,
             detail="That recording is too long — keep it to one sentence.",
         )
-
-    # STT-003 P2: the card names the exact word we expect to hear — the ideal
-    # keyterm. For a past-tense card add the spoken past form too (the learner
-    # says "ist gegangen", not the lemma "gehen").
-    card_keyterms = [card.target]
-    if card.tense_form:
-        card_keyterms.append(card.tense_form)
-
-    # SATZ-008: a base verb card accepts spoken past forms, but strong-verb
-    # participles ("erkannt") share no stem with the infinitive — pull the
-    # past sibling's spoken form so STT biasing AND the presence guard see it.
-    extra_forms: list[str] = []
-    if card.type == "verb" and card.tense is None:
-        sibling_form = await db.scalar(
-            select(VocabCard.tense_form).where(
-                VocabCard.type == "verb",
-                func.lower(VocabCard.target) == card.target.lower(),
-                VocabCard.tense == "past",
-            )
-        )
-        if sibling_form:
-            extra_forms.append(sibling_form)
-            card_keyterms.append(sibling_form)
 
     # OBS-006: one Langfuse trace per judged attempt. The `stt` and `llm`
     # child generations (opened inside transcribe_attempt / examine_attempt
@@ -902,110 +925,142 @@ async def submit_attempt(
         if judgement.pattern_id:
             attempt_span.set_attribute("verdict.pattern_id", judgement.pattern_id)
 
+        attempt_id: int | None = None
         if rehearsal:
             # SATZ-015: judge normally, touch nothing. The original graded
             # attempt already claimed the new-card slot and moved the
             # schedule — report that already-committed state back unchanged
-            # rather than a fresh (and unwritten) computation.
-            due_in_days = user_card.interval_days or 0
+            # rather than a fresh (and unwritten) computation. Snapshotted
+            # before the read session closed above (REL-005) since no write
+            # session opens at all on this path.
+            due_in_days = rehearsal_due_in_days
         else:
-            # SATZ dosing P1: the card's first graded attempt claims its
-            # new-card slot for today (idempotent past the first attempt).
-            if user_card.started_at is None:
-                user_card.started_at = datetime.now()
+            # REL-005: a second, fresh short-lived session for the schedule
+            # write and the ledger/DATA-004 writes below — opened only now,
+            # AFTER transcribe_attempt/examine_attempt above have already
+            # returned, so nothing here holds a pooled connection across
+            # those up-to-12s-per-leg calls either. `user_card` from the
+            # read session above is detached and would silently no-op on
+            # commit — re-fetch it fresh in THIS session instead of mutating
+            # the old instance.
+            async with get_sessionmaker()() as db:
+                user_card = await db.get(UserCard, {"user_id": user_id, "card_id": card_id})
+                if user_card is None:
+                    # The learner removed the card from the pool DURING the
+                    # STT/judge window (the window REL-005 widened). The old
+                    # single-session code silently updated 0 rows here; the
+                    # first two-session cut crashed with a 500 after the
+                    # charge and the judge call (hygiene review, 2026-09-06).
+                    # Keep the old outcome: no schedule to move, the verdict
+                    # still comes back, and the ledger / attempt-log /
+                    # archive writes below still run.
+                    logger.warning(
+                        "Satz attempt on card {} finished after the learner removed it — "
+                        "verdict returned, no schedule to update",
+                        card_id,
+                    )
+                    interval, due_at = schedule(
+                        judgement.word_ok, user_card_interval_days, datetime.now()
+                    )
+                else:
+                    # SATZ dosing P1: the card's first graded attempt claims its
+                    # new-card slot for today (idempotent past the first attempt).
+                    if user_card.started_at is None:
+                        user_card.started_at = datetime.now()
 
-            # Record the outcome. A miss lands on (lapse_interval, now) —
-            # still due, retryable this session; a hit climbs the ladder.
-            interval, due_at = schedule(
-                judgement.word_ok, user_card.interval_days, datetime.now()
-            )
-            user_card.interval_days = interval
-            user_card.due_at = due_at
-            user_card.reps += 1
-            user_card.last_score = 1 if judgement.word_ok else 0
-            # A graded word-miss is a lapse — same signal that already
-            # quartered interval_days above.
-            if not judgement.word_ok:
-                _record_lapse(user_card)
-            try:
-                await db.commit()
-            except Exception:
-                logger.exception("Satz schedule commit failed (card {})", card_id)
-                await db.rollback()
-            # A miss stores a punished (partially reset) interval, not zero —
-            # but the card IS due now. The client's "Back in N days" vs "due
-            # again now" copy keys off this field, so report 0 on any miss
-            # regardless of what got stored on interval_days.
-            due_in_days = interval if judgement.word_ok else 0
+                    # Record the outcome. A miss lands on (lapse_interval, now) —
+                    # still due, retryable this session; a hit climbs the ladder.
+                    interval, due_at = schedule(
+                        judgement.word_ok, user_card.interval_days, datetime.now()
+                    )
+                    user_card.interval_days = interval
+                    user_card.due_at = due_at
+                    user_card.reps += 1
+                    user_card.last_score = 1 if judgement.word_ok else 0
+                    # A graded word-miss is a lapse — same signal that already
+                    # quartered interval_days above.
+                    if not judgement.word_ok:
+                        _record_lapse(user_card)
+                    try:
+                        await db.commit()
+                    except Exception:
+                        logger.exception("Satz schedule commit failed (card {})", card_id)
+                        await db.rollback()
+                # A miss stores a punished (partially reset) interval, not zero —
+                # but the card IS due now. The client's "Back in N days" vs "due
+                # again now" copy keys off this field, so report 0 on any miss
+                # regardless of what got stored on interval_days.
+                due_in_days = interval if judgement.word_ok else 0
 
-        # Harvest into the grammar-error ledger (GRAM-001) — its own commit,
-        # after the schedule is safe; a ledger failure only logs. Skipped on
-        # a rehearsal (SATZ-015): the original graded attempt already
-        # harvested whatever pattern applied — a rehearsal must not
-        # double-write it.
-        #
-        # STT-006: this is the one spoken-drill ledger writer with no
-        # deterministic guard in front of it (the tandem debrief and the
-        # error extractor both go through `ledger_guard_reason` — see
-        # agents/debrief.py, agents/error_extractor.py). `submit_attempt`
-        # always transcribes audio (never a typed path — see the route
-        # docstring), so the guard applies unconditionally here, same as
-        # every other caller of `satz/examiner.py` (SATZ-022's module note).
-        # `quote`/`source_text` are both the same raw transcript: there is
-        # no separate "evidence span" field on `Judgement` the way the
-        # debrief/harvest have one, the judged sentence IS the transcript.
-        if judgement.pattern_id and not rehearsal:
-            guard_reason = ledger_guard_reason(
-                pattern_id=judgement.pattern_id,
-                quote=transcript,
-                corrected=judgement.corrected,
-                source_text=transcript,
-                check_das_dass=True,
-                check_asr_artifacts=True,
-                strip_punctuation=True,
-            )
-            if guard_reason:
-                logger.info(
-                    "Ledger guard dropped satz row: pattern={} reason={} card={} session={}",
-                    judgement.pattern_id, guard_reason, card_id, session_id,
-                )
-            else:
+                # Harvest into the grammar-error ledger (GRAM-001) — its own
+                # commit, after the schedule is safe; a ledger failure only
+                # logs. Rehearsal never reaches this branch (SATZ-015): the
+                # original graded attempt already harvested whatever pattern
+                # applied — a rehearsal must not double-write it.
+                #
+                # STT-006: this is the one spoken-drill ledger writer with no
+                # deterministic guard in front of it (the tandem debrief and
+                # the error extractor both go through `ledger_guard_reason`
+                # — see agents/debrief.py, agents/error_extractor.py).
+                # `submit_attempt` always transcribes audio (never a typed
+                # path — see the route docstring), so the guard applies
+                # unconditionally here, same as every other caller of
+                # `satz/examiner.py` (SATZ-022's module note). `quote`/
+                # `source_text` are both the same raw transcript: there is
+                # no separate "evidence span" field on `Judgement` the way
+                # the debrief/harvest have one, the judged sentence IS the
+                # transcript.
+                if judgement.pattern_id:
+                    guard_reason = ledger_guard_reason(
+                        pattern_id=judgement.pattern_id,
+                        quote=transcript,
+                        corrected=judgement.corrected,
+                        source_text=transcript,
+                        check_das_dass=True,
+                        check_asr_artifacts=True,
+                        strip_punctuation=True,
+                    )
+                    if guard_reason:
+                        logger.info(
+                            "Ledger guard dropped satz row: pattern={} reason={} card={} session={}",
+                            judgement.pattern_id, guard_reason, card_id, session_id,
+                        )
+                    else:
+                        try:
+                            await record_grammar_error(
+                                db,
+                                user_id=user_id,
+                                pattern_id=judgement.pattern_id,
+                                sentence=transcript,
+                                corrected=judgement.corrected,
+                                note=judgement.error,
+                                source="satz",
+                            )
+                        except Exception:
+                            logger.exception(
+                                "Grammar-ledger write failed (pattern {})", judgement.pattern_id
+                            )
+
+                # Append to the cross-drill attempt log (DATA-004) — its own
+                # commit, non-fatal like the ledger write above; an
+                # attempt-log outage must never break the practice attempt
+                # it rides on. Rehearsal never reaches this branch — see the
+                # route docstring for why the row is dropped rather than
+                # marked.
                 try:
-                    await record_grammar_error(
+                    attempt_id = await record_drill_attempt(
                         db,
                         user_id=user_id,
+                        exercise="satz",
+                        item_ref=card_id,
                         pattern_id=judgement.pattern_id,
-                        sentence=transcript,
-                        corrected=judgement.corrected,
-                        note=judgement.error,
-                        source="satz",
+                        correct=judgement.word_ok and judgement.grammar_ok,
+                        word_ok=judgement.word_ok,
+                        modality="spoken",
+                        session_id=session_id,
                     )
                 except Exception:
-                    logger.exception(
-                        "Grammar-ledger write failed (pattern {})", judgement.pattern_id
-                    )
-
-        # Append to the cross-drill attempt log (DATA-004) — its own commit,
-        # non-fatal like the ledger write above; an attempt-log outage must
-        # never break the practice attempt it rides on. Skipped on a
-        # rehearsal (SATZ-015) — see the route docstring for why the row is
-        # dropped rather than marked.
-        attempt_id: int | None = None
-        if not rehearsal:
-            try:
-                attempt_id = await record_drill_attempt(
-                    db,
-                    user_id=user_id,
-                    exercise="satz",
-                    item_ref=card_id,
-                    pattern_id=judgement.pattern_id,
-                    correct=judgement.word_ok and judgement.grammar_ok,
-                    word_ok=judgement.word_ok,
-                    modality="spoken",
-                    session_id=session_id,
-                )
-            except Exception:
-                logger.exception("Drill-attempt log write failed (card {})", card_id)
+                    logger.exception("Drill-attempt log write failed (card {})", card_id)
 
         # REL-001: archive the spoken clip. A rehearsal (SATZ-015) writes no
         # `drill_attempts` row by design, but the clip is kept anyway —
@@ -1266,7 +1321,6 @@ class ExplainIn(BaseModel):
 async def explain_attempt(
     body: ExplainIn,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """SATZ-007: unpack a correction the learner just saw — one on-demand LLM
     call, no schedule/ledger/attempt-log writes. Keyed on the catalog card
@@ -1288,7 +1342,11 @@ async def explain_attempt(
     if body.session_id and len(body.session_id) > 64:
         raise HTTPException(status_code=422, detail="Bad session id.")
 
-    card = await db.get(VocabCard, body.card_id)
+    # REL-005: the card lookup runs in its own short-lived session, closed
+    # before explain_correction's LLM call below — this route writes
+    # nothing, so there is no matching post-call session either.
+    async with get_sessionmaker()() as db:
+        card = await db.get(VocabCard, body.card_id)
     if card is None:
         raise HTTPException(status_code=404, detail="Unknown card.")
 
@@ -1332,7 +1390,6 @@ class GlossIn(BaseModel):
 async def gloss_word_route(
     body: GlossIn,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """UI-007: hover/tap any German word anywhere in the app -> lemma,
     gloss, and a short example, with enough info for the frontend to offer
@@ -1388,9 +1445,12 @@ async def gloss_word_route(
         function_result = function_word_gloss(word, context or word)
         if function_result is not None:
             span.set_attribute("langfuse.observation.output", function_result.lemma)
-            gloss_adds_remaining = max(
-                0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
-            )
+            # REL-005: no provider call on this path — one short session is
+            # all this branch needs.
+            async with get_sessionmaker()() as db:
+                gloss_adds_remaining = max(
+                    0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
+                )
             return {
                 "lemma": function_result.lemma,
                 "article": function_result.article,
@@ -1406,45 +1466,61 @@ async def gloss_word_route(
                 "glossAddsRemaining": gloss_adds_remaining,
             }
 
-        # 1) Catalog hit — the hovered word is already a catalog card's
-        # target exactly as typed (e.g. hovering a word already in base
-        # form). No LLM, no cache write.
-        catalog_card = await _find_canonical(db, word)
-        if catalog_card is not None:
-            lemma, article = catalog_card.target, catalog_card.article
-            gloss_text, example = catalog_card.gloss, catalog_card.example
-            source = "catalog"
-        else:
-            # 2) Cache hit.
-            cached = await db.scalar(
-                select(WordGloss).where(WordGloss.lookup == lookup)
-            )
-            if cached is not None:
-                lemma, article = cached.lemma, cached.article
-                gloss_text, example = cached.gloss, cached.example
-                source = "cache"
+        # REL-005: the catalog/cache reads run in their OWN short-lived
+        # session, closed (connection released back to the pool) BEFORE
+        # gloss_word's LLM call below (only reached on an actual miss) — a
+        # request must never hold a pooled connection across a slow
+        # provider call. No ``Depends(get_db)`` on this route for that
+        # reason; same pattern ``briefkasten/routes.py::get_letter`` uses.
+        need_llm = False
+        async with get_sessionmaker()() as db:
+            # 1) Catalog hit — the hovered word is already a catalog card's
+            # target exactly as typed (e.g. hovering a word already in base
+            # form). No LLM, no cache write.
+            catalog_card = await _find_canonical(db, word)
+            if catalog_card is not None:
+                lemma, article = catalog_card.target, catalog_card.article
+                gloss_text, example = catalog_card.gloss, catalog_card.example
+                source = "catalog"
             else:
-                # 3) Miss — one fresh LLM call, rate-limited per user (only
-                # this branch ever consumes a slot).
-                if not gloss_try_admit(user_id):
-                    raise HTTPException(
-                        status_code=429,
-                        detail="Slow down a little — try that word again in a minute.",
-                    )
-                try:
-                    result = await gloss_word(
-                        word,
-                        context or word,
-                        user_id=user_id,
-                        session_id=body.session_id,
-                    )
-                except Exception as exc:
-                    span.record_exception(exc)
-                    logger.exception("Satz gloss call failed for {!r}", word)
-                    raise HTTPException(
-                        status_code=502,
-                        detail="The dictionary is unavailable right now — try again in a moment.",
-                    )
+                # 2) Cache hit.
+                cached = await db.scalar(
+                    select(WordGloss).where(WordGloss.lookup == lookup)
+                )
+                if cached is not None:
+                    lemma, article = cached.lemma, cached.article
+                    gloss_text, example = cached.gloss, cached.example
+                    source = "cache"
+                else:
+                    need_llm = True
+        # `db` is closed here — the pooled connection is released before the
+        # gloss_word call below (REL-005).
+
+        if need_llm:
+            # 3) Miss — one fresh LLM call, rate-limited per user (only
+            # this branch ever consumes a slot).
+            if not gloss_try_admit(user_id):
+                raise HTTPException(
+                    status_code=429,
+                    detail="Slow down a little — try that word again in a minute.",
+                )
+            try:
+                result = await gloss_word(
+                    word,
+                    context or word,
+                    user_id=user_id,
+                    session_id=body.session_id,
+                )
+            except Exception as exc:
+                span.record_exception(exc)
+                logger.exception("Satz gloss call failed for {!r}", word)
+                raise HTTPException(
+                    status_code=502,
+                    detail="The dictionary is unavailable right now — try again in a moment.",
+                )
+            # REL-005: a second, fresh short-lived session for the cache
+            # write, opened only now that gloss_word above has returned.
+            async with get_sessionmaker()() as db:
                 await db.execute(
                     pg_insert(WordGloss)
                     .values(
@@ -1469,32 +1545,35 @@ async def gloss_word_route(
                 else:
                     lemma, article = result.lemma, result.article
                     gloss_text, example = result.gloss, result.example
-                source = "fresh"
+            source = "fresh"
 
         # Whatever the source, try to resolve a catalog card for the LEMMA
-        # too, so the frontend can offer a one-tap "add to deck".
-        card_for_lemma = await _find_canonical(db, lemma)
-        card_id = None
-        in_deck = False
-        if card_for_lemma is not None:
-            card_id = card_for_lemma.id
-            in_deck = (
-                await db.scalar(
-                    select(UserCard).where(
-                        UserCard.user_id == user_id,
-                        UserCard.card_id == card_for_lemma.id,
+        # too, so the frontend can offer a one-tap "add to deck". No
+        # provider call remains on this path, so one more short session
+        # covers this read and the trailing gloss-quota read below.
+        async with get_sessionmaker()() as db:
+            card_for_lemma = await _find_canonical(db, lemma)
+            card_id = None
+            in_deck = False
+            if card_for_lemma is not None:
+                card_id = card_for_lemma.id
+                in_deck = (
+                    await db.scalar(
+                        select(UserCard).where(
+                            UserCard.user_id == user_id,
+                            UserCard.card_id == card_for_lemma.id,
+                        )
                     )
-                )
-            ) is not None
+                ) is not None
 
-        span.set_attribute("langfuse.observation.output", lemma)
+            span.set_attribute("langfuse.observation.output", lemma)
 
-    # SATZ-013: today's remaining gloss-path allowance, computed up front so
-    # the popover can render "noch N heute" / the limit line BEFORE the
-    # learner ever attempts an add.
-    gloss_adds_remaining = max(
-        0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
-    )
+            # SATZ-013: today's remaining gloss-path allowance, computed up
+            # front so the popover can render "noch N heute" / the limit
+            # line BEFORE the learner ever attempts an add.
+            gloss_adds_remaining = max(
+                0, GLOSS_ADDS_PER_DAY - await _gloss_adds_used_today(db, user_id)
+            )
 
     return {
         "lemma": lemma,

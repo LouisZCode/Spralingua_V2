@@ -21,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
 from auth.deps import get_current_user_id
-from database.connection import get_db
+from database.connection import get_db, get_sessionmaker
 from database.repository import (
     credit_pattern_success,
     load_grammar_focus,
@@ -169,7 +169,6 @@ async def submit_attempt(
     # trainer visit, same contract as /satz/attempts and /bauteil/attempts.
     session_id: str | None = Form(None, max_length=64),
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
     background_tasks: BackgroundTasks = None,
 ):
     """Transcribe one spoken clip, judge constraint + target structure, feed
@@ -183,13 +182,23 @@ async def submit_attempt(
     task = load_tasks().get(task_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")
+    # REL-005: the coin gate runs inside its OWN short-lived session, closed
+    # (connection released back to the pool) BEFORE transcribe_attempt's
+    # Deepgram call and grading.grade's judge call below start — a request
+    # must never hold a pooled connection across a slow provider call. No
+    # ``Depends(get_db)`` on this route for that reason; same pattern
+    # ``briefkasten/routes.py::get_letter`` uses. A fresh session opens
+    # below, after both provider calls, for the ledger + DATA-004 writes.
     # PAY-002: AFTER the 404 (stale task id must not burn coins) but BEFORE any STT/judge.
-    try:
-        await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
-    except HTTPException as _e:
-        if _e.status_code == 402:
-            raise
-        raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    async with get_sessionmaker()() as db:
+        try:
+            await admit_coins_or_402(db, user_id=user_id, price=SATZ_ATTEMPT, kind="spend_attempt")
+        except HTTPException as _e:
+            if _e.status_code == 402:
+                raise
+            raise HTTPException(status_code=503, detail="billing temporarily unavailable")
+    # `db` is closed here — the pooled connection is released before the
+    # STT/judge calls below (REL-005).
 
     data = await audio.read()
     if not data:
@@ -259,53 +268,60 @@ async def submit_attempt(
         attempt_span.set_attribute("verdict.slips_count", len(verdict["slips"]))
         attempt_span.set_attribute("verdict.pattern_id", task["pattern_id"])
 
-        # Feed the ledger (design rule 4) — non-fatal. One write per attempt:
-        # the ledger tracks patterns, not slip counts within one production.
-        try:
-            if passed:
-                await credit_pattern_success(
-                    db,
-                    user_id=user_id,
-                    pattern_id=task["pattern_id"],
-                    session_id=session_id,
-                    source="sprechen",
-                )
-            elif verdict["slips"]:
-                first = verdict["slips"][0]
-                await record_grammar_error(
-                    db,
-                    user_id=user_id,
-                    pattern_id=task["pattern_id"],
-                    sentence=first["quote"],
-                    corrected=first["corrected"],
-                    note=first["note"],
-                    source="sprechen",
-                    session_id=session_id,
-                )
-            # Constraint not met with zero slips = the learner dodged the task
-            # (didn't attempt the structure) — no evidence either way, no write.
-        except Exception:
-            logger.exception(
-                "Sprechen ledger write failed (pattern {})", task["pattern_id"]
-            )
-
-        # Append to the cross-drill attempt log (DATA-004) — its own commit,
-        # non-fatal like the ledger write above. `correct` mirrors the same
-        # "clean attempt" condition that decides credit vs. record above.
+        # REL-005: a second, fresh short-lived session for the ledger +
+        # DATA-004 writes — opened only now, AFTER transcribe_attempt and
+        # grading.grade above have already returned, so nothing here holds
+        # a pooled connection across those up-to-12s-per-leg calls either.
         attempt_id: int | None = None
-        try:
-            attempt_id = await record_drill_attempt(
-                db,
-                user_id=user_id,
-                exercise="sprechen",
-                item_ref=task["id"],
-                pattern_id=task["pattern_id"],
-                correct=passed,
-                modality="spoken",
-                session_id=session_id,
-            )
-        except Exception:
-            logger.exception("Drill-attempt log write failed (task {})", task_id)
+        async with get_sessionmaker()() as db:
+            # Feed the ledger (design rule 4) — non-fatal. One write per
+            # attempt: the ledger tracks patterns, not slip counts within
+            # one production.
+            try:
+                if passed:
+                    await credit_pattern_success(
+                        db,
+                        user_id=user_id,
+                        pattern_id=task["pattern_id"],
+                        session_id=session_id,
+                        source="sprechen",
+                    )
+                elif verdict["slips"]:
+                    first = verdict["slips"][0]
+                    await record_grammar_error(
+                        db,
+                        user_id=user_id,
+                        pattern_id=task["pattern_id"],
+                        sentence=first["quote"],
+                        corrected=first["corrected"],
+                        note=first["note"],
+                        source="sprechen",
+                        session_id=session_id,
+                    )
+                # Constraint not met with zero slips = the learner dodged the task
+                # (didn't attempt the structure) — no evidence either way, no write.
+            except Exception:
+                logger.exception(
+                    "Sprechen ledger write failed (pattern {})", task["pattern_id"]
+                )
+
+            # Append to the cross-drill attempt log (DATA-004) — its own
+            # commit, non-fatal like the ledger write above. `correct`
+            # mirrors the same "clean attempt" condition that decides
+            # credit vs. record above.
+            try:
+                attempt_id = await record_drill_attempt(
+                    db,
+                    user_id=user_id,
+                    exercise="sprechen",
+                    item_ref=task["id"],
+                    pattern_id=task["pattern_id"],
+                    correct=passed,
+                    modality="spoken",
+                    session_id=session_id,
+                )
+            except Exception:
+                logger.exception("Drill-attempt log write failed (task {})", task_id)
 
         # REL-001: archive the spoken clip, linked to the attempt row above.
         # Queued to run after this response is on the wire. Skipped if the
@@ -404,7 +420,6 @@ class NudgeIn(BaseModel):
 async def vocab_nudge(
     body: NudgeIn,
     user_id: str = Depends(get_current_user_id),
-    db: AsyncSession = Depends(get_db),
 ):
     """The retrieval cue before recording: which of the learner's OWN deck
     words would fit an answer to this task. The frontend shows only the
@@ -422,7 +437,12 @@ async def vocab_nudge(
     if task is None:
         raise HTTPException(status_code=404, detail="Unknown task.")
 
-    deck = await load_deck(db, user_id)
+    # REL-005: the deck read runs in its own short-lived session, closed
+    # before suggest_vocab's judge call below — this route writes nothing
+    # (decorative, no DATA-004 row), so there is no matching post-call
+    # session either.
+    async with get_sessionmaker()() as db:
+        deck = await load_deck(db, user_id)
     if not deck:
         return {"words": []}
 

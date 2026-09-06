@@ -46,6 +46,7 @@ from database.orm import (
     UserDrillItem,
     UserError,
 )
+from recordings import store
 from test_profiles import PROFILES, seed_profile
 
 TEST_PREFIX = "test-"
@@ -199,6 +200,19 @@ async def destroy(user_id: str) -> None:
         f"  cascaded on user delete: {errors_n} user_errors, {cards_n} user_cards, "
         f"{attempts_n} drill_attempts, {daily_modes_n} daily_mode_completions (+ user_verbformen)"
     )
+
+    # REL-001/scripts: the voice bucket has no FK onto users — a destroyed
+    # fixture must not leave objects behind under voice/{user_id}/. Runs
+    # AFTER the DB commit above (voice_recordings rows are gone by then too,
+    # via the users CASCADE), so this only ever touches the bucket.
+    if store.is_configured():
+        deleted = await store.delete_prefix(f"voice/{user_id}/")
+        if deleted is None:
+            print("  voice bucket delete failed (see warning above) — 0 objects confirmed deleted")
+        else:
+            print(f"  deleted {deleted} voice object(s) under voice/{user_id}/")
+    else:
+        print("  voice bucket not configured — no objects touched")
 
 
 async def print_profiles() -> None:

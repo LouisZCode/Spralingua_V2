@@ -68,6 +68,7 @@ import {
   type ArticleVerdict as GenusArticleVerdict,
   type EndingSheet,
   type GenusItem,
+  type GenusPool,
 } from "./genus/api";
 
 import SprechenTrainer from "./sprechen/SprechenTrainer";
@@ -83,6 +84,7 @@ import SzenarioTrainer from "./szenario/SzenarioTrainer";
 import {
   fetchSzenarioRound,
   submitAttempt as submitSzenarioAttempt,
+  giveUpAttempt as giveUpSzenario,
   type SzenarioRoundItem,
   type StructureResult,
 } from "./szenario/api";
@@ -513,6 +515,11 @@ function refillIfLow(
   // Only read for the "szenario" branch — the account-level bucket driving
   // its tier guess (SZEN-007). undefined for every other kind.
   szenarioLevel?: string | null,
+  // PRODUCT-011: only read for the "genus" branch — this sitting's rotated
+  // pool id (chosen once at sitting start, see `nextGenusPool` below), so a
+  // mid-sitting refill draws from the SAME themed pool the sitting started
+  // with rather than silently reverting to `basis`.
+  genusPool?: string | null,
 ) {
   if (kind === "bauteil" && bag.bauteil.length <= 1) {
     fetchBauteilRound(token)
@@ -539,7 +546,9 @@ function refillIfLow(
       })
       .catch(() => {});
   } else if (kind === "genus" && bag.genus.length <= 1) {
-    fetchGenusRound(token)
+    // PRODUCT-011: refill from this SITTING's pool (fixed at sitting start),
+    // never a fresh rotation pick mid-sitting.
+    fetchGenusRound(token, genusPool ?? undefined, GENUS_PERSONAL_MAX)
       .then((items) => {
         bag.genus = [...bag.genus, ...items];
       })
@@ -569,6 +578,38 @@ function refillIfLow(
       })
       .catch(() => {});
   }
+}
+
+// PRODUCT-011 (2026-09-06): the Flow silently served the `basis` Genus pool
+// on every sitting (it passed no `pool` at all) — the one gap the
+// 2026-08-28 content audit found. Now each sitting advances to the NEXT
+// curated pool in `GET /genus/rules`' display order, one step past whichever
+// pool the LAST sitting used (persisted here, not per-refill), so a learner
+// tours the whole catalog over successive sittings instead of only ever
+// seeing `basis`. `GENUS_PERSONAL_MAX` (3, down from the standalone page's
+// default 5) keeps the deck half from crowding out the themed pool the
+// rotation is trying to surface.
+const GENUS_POOL_STORAGE_KEY = "flow-genus-pool-v1";
+const GENUS_PERSONAL_MAX = 3;
+
+function nextGenusPool(pools: GenusPool[]): string {
+  if (pools.length === 0) return "basis"; // defensive only — get_round degrades an unknown/empty pool id to basis itself
+  let lastId: string | null = null;
+  try {
+    lastId = localStorage.getItem(GENUS_POOL_STORAGE_KEY);
+  } catch {}
+  // Unset (first-ever sitting) or stale (a pool renamed/removed since the
+  // last sitting) both fall back to the first pool in display order, not an
+  // error — same "degrade, never fail the round" posture as the backend's
+  // own unknown-pool handling.
+  const idx = lastId ? pools.findIndex((p) => p.id === lastId) : -1;
+  return (idx === -1 ? pools[0] : pools[(idx + 1) % pools.length]).id;
+}
+
+function persistGenusPool(id: string) {
+  try {
+    localStorage.setItem(GENUS_POOL_STORAGE_KEY, id);
+  } catch {}
 }
 
 // FLOW-007: `skipped` counts a deliberate Skip on this exercise — a slot
@@ -668,6 +709,14 @@ export default function Flow() {
     useState<Record<SourceKind, Tally>>(emptyTallies());
 
   const bagRef = useRef<FlowBag>(emptyBag());
+  // PRODUCT-011: this sitting's rotated Genus pool, fixed once at sitting
+  // start (the initial-load effect below) and read by every mid-sitting
+  // refill — never recomputed per refill, or one sitting would tour several
+  // pools instead of one. `genusPoolChosenRef` guards the CHOICE itself
+  // (see the initial-load effect's comment) against the effect re-running
+  // more than once for the same mount.
+  const genusPoolRef = useRef<string | null>(null);
+  const genusPoolChosenRef = useRef(false);
 
   // FLOW-007: pending misses (six typed drills only) awaiting their single
   // retry slot, and the set of deal keys already resolved (by a graded
@@ -892,6 +941,7 @@ export default function Flow() {
           kind,
           token,
           kind === "szenario" ? user?.level : undefined,
+          kind === "genus" ? genusPoolRef.current : undefined,
         );
       }
       // FLOW-004: park the deal behind a short transition beat that names
@@ -958,6 +1008,63 @@ export default function Flow() {
       }
     }
 
+    // PRODUCT-011: this sitting's Genus pool is chosen here, once, from
+    // `/genus/rules`' display order — not passed to `loadOne` like the other
+    // sources because the round fetch below depends on it. Persisted right
+    // after it's picked (not after the round fetch succeeds) so the next
+    // sitting still advances even if this sitting's round fetch itself later
+    // fails.
+    //
+    // This effect is NOT guaranteed to run only once per mount: dev's React
+    // Strict Mode double-invokes it (harmless — see below). It USED TO also
+    // re-run in PRODUCTION, doubling every one of the nine sources'
+    // `/round`/`/deck` fetches per sitting: PAY-005's picker seeds
+    // `roundTarget` to the smallest preset before the coin balance resolves
+    // and then updates it once the balance is known, which changed
+    // `dealNext`'s identity (its `useCallback` deps include `roundTarget`)
+    // — and `dealNext` sat in THIS effect's own dependency array below even
+    // though nothing in this effect's body ever calls it (a leftover from
+    // before FLOW-005 split first-deal firing into its own effect above).
+    // FLOW-008 (2026-09-06, from the genusrot review's production
+    // measurement — `wave4/genusrotrev/prodcount_results.json`, all nine
+    // sources fetched exactly twice) fixed this by dropping `dealNext` from
+    // the deps array; see the closing line below. Refetching is harmless for
+    // the other 8 sources (a fresh random round is as good as the one it
+    // replaces), but choosing the NEXT pool is a stateful, one-way step —
+    // rerunning it would silently skip a pool every time this effect
+    // re-executes. `genusPoolChosenRef` (defined with the other per-mount
+    // refs above) makes the rotation choice itself run at most once per true
+    // component mount no matter how many times this effect body
+    // re-executes (Strict Mode's dev-only double-invoke, now the only
+    // remaining trigger): whichever invocation gets there first rotates and
+    // persists; every later one (this mount only) just reuses
+    // `genusPoolRef.current` for its own round refetch.
+    // Takes `tok` as a parameter (rather than closing over the outer
+    // `token`) so it type-checks as `string` — a nested function declaration
+    // doesn't inherit the `if (!token) return;` narrowing above the way a
+    // same-scope expression like `fetchBauteilRound(token)` below does.
+    async function loadGenusForSitting(tok: string): Promise<void> {
+      try {
+        let pool: string;
+        if (!genusPoolChosenRef.current) {
+          const meta = await fetchGenusMeta(tok);
+          if (cancelled) return;
+          pool = nextGenusPool(meta.pools);
+          genusPoolChosenRef.current = true;
+          genusPoolRef.current = pool;
+          persistGenusPool(pool);
+        } else {
+          pool = genusPoolRef.current ?? "basis";
+        }
+        const items = await fetchGenusRound(tok, pool, GENUS_PERSONAL_MAX);
+        if (!cancelled) bag.genus = items;
+      } catch (e) {
+        if (e instanceof UnauthorizedError) {
+          expireSession();
+        }
+      }
+    }
+
     Promise.all([
       loadOne(fetchBauteilRound(token), (items) => {
         bag.bauteil = items;
@@ -971,9 +1078,7 @@ export default function Flow() {
       loadOne(fetchSprechenRound(token), ({ tasks }) => {
         bag.sprechen = tasks;
       }),
-      loadOne(fetchGenusRound(token), (items) => {
-        bag.genus = items;
-      }),
+      loadGenusForSitting(token),
       loadOne(fetchFaelleRound(token), (items) => {
         bag.faelle = items;
       }),
@@ -1003,7 +1108,12 @@ export default function Flow() {
     return () => {
       cancelled = true;
     };
-  }, [token, expireSession, dealNext, user?.level]);
+    // FLOW-008: `dealNext` deliberately excluded — it is never called from
+    // this effect's body (see the comment above this effect for the full
+    // story); including it re-ran this entire nine-source prefetch every
+    // time PAY-005's balance-driven `roundTarget` update changed `dealNext`'s
+    // identity, which a production build doubled every single time.
+  }, [token, expireSession, user?.level]);
 
   const handleItemDone = useCallback(
     (
@@ -1410,31 +1520,43 @@ export default function Flow() {
     [token, expireSession, sid, recordGraded],
   );
 
-  // FLOW-006: szenario has no backend /give-up route yet — unlike bauteil,
-  // verbindungen, zeitfaerbung, sprechen, genus and faelle above, it never
-  // reaches the network. This resolves the same synthetic "gave up" verdict
-  // every time: `overcomplicated` (a miss for the FLOW-006 tally) with
-  // `gaveUp: true` so SzenarioTrainer renders its modest gave-up state
-  // instead of the full breakdown. Nothing is written to the ledger or
-  // drill_attempts here — a known v1 gap, worth a real endpoint (mirroring
-  // sprechen/routes.py's give-up route) if this sees real use.
-  const handleSzenarioGiveUp = useCallback(async (): Promise<StructureResult> => {
-    const dealKeyAtCall = currentDealKeyRef.current;
-    if (dealKeyAtCall !== null) {
-      // Always a miss — `overcomplicated` + `gaveUp: true` is exactly what
-      // SzenarioTrainer's own `next()` reads as false.
-      recordGraded(dealKeyAtCall, false);
-    }
-    return {
-      transcript: "",
-      verdict: "overcomplicated",
-      levelRead: "",
-      coachMessage: "You gave up — no recording was judged.",
-      sentences: [],
-      skeleton: { kern: "", punkte: [], absprung: "", vokabelAnker: [] },
-      gaveUp: true,
-    };
-  }, [recordGraded]);
+  // szgiveup: szenario now has a real backend /give-up route
+  // (szenario/routes.py::give_up, mirroring sprechen's), so this hits the
+  // network like the other six Flow give-ups. It keeps one difference from
+  // those siblings on purpose: a give-up must never dead-end the trainer, so
+  // ANY failure here (network, 401, 5xx — session expiry included; there's
+  // nothing left to authorize a retry against once the learner has already
+  // conceded) falls back to the same client-side "gave up" shape this
+  // handler always returned, logged once rather than surfaced as an error.
+  // `recordGraded(dealKeyAtCall, false)` stays unconditional and in the same
+  // spot — always a miss regardless of whether the network call lands.
+  const handleSzenarioGiveUp = useCallback(
+    async (scenarioId: string): Promise<StructureResult> => {
+      const dealKeyAtCall = currentDealKeyRef.current;
+      if (dealKeyAtCall !== null) {
+        // Always a miss — `overcomplicated` + `gaveUp: true` is exactly what
+        // SzenarioTrainer's own `next()` reads as false.
+        recordGraded(dealKeyAtCall, false);
+      }
+      const fallback: StructureResult = {
+        transcript: "",
+        verdict: "overcomplicated",
+        levelRead: "",
+        coachMessage: "You gave up — no recording was judged.",
+        sentences: [],
+        skeleton: { kern: "", punkte: [], absprung: "", vokabelAnker: [] },
+        gaveUp: true,
+      };
+      if (!token) return fallback;
+      try {
+        return await giveUpSzenario(token, scenarioId, sid());
+      } catch (e) {
+        console.warn("Szenario give-up route failed, using client-side fallback", e);
+        return fallback;
+      }
+    },
+    [token, sid, recordGraded],
+  );
 
   const handleGenusArticle = useCallback(
     async (
