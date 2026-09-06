@@ -64,9 +64,23 @@ export type FocusPattern = {
   lifetime: number;
 };
 
+// DEV-002: retired patterns now carry their own story — when the pattern
+// first/last surfaced and the learner's own sentences from the ledger's slip
+// ring buffer (first = oldest slip we still hold, last = newest). Both
+// example fields are null when the ledger never stored a full
+// sentence+correction pair for the pattern.
+export type RetiredSlipExample = {
+  sentence: string;
+  corrected: string;
+};
+
 export type RetiredPattern = {
   patternId: string;
   label: string;
+  firstSeen: string | null; // ISO (ledger TIMESTAMP, no UTC offset)
+  lastSeen: string | null;
+  firstExample: RetiredSlipExample | null;
+  lastExample: RetiredSlipExample | null;
 };
 
 // DATA-005: one daily bucket of the attempts chart. Weeks are derived
@@ -146,45 +160,6 @@ export async function postModeComplete(
   }
 }
 
-// ── BUG-010 / UI-005 minimal: recent conversation sessions ────────────────
-// Same wire shapes the tandem debrief stores in activity_session.error_eval
-// (snake_case — stored verbatim, mirrors TandemDebriefModal's interfaces).
-
-export type DebriefPattern = {
-  pattern_id: string;
-  label: string;
-  elicited: boolean;
-  produced_correctly: boolean;
-  evidence: string;
-  corrected: string;
-  note: string;
-  retired: boolean;
-};
-
-export type DebriefNewError = {
-  pattern_id: string;
-  label: string;
-  sentence: string;
-  corrected: string;
-  note: string;
-};
-
-export type SessionDebrief = {
-  // session_note exists on the wire but is Lena's private memory — never
-  // rendered (same rule as TandemDebriefModal).
-  patterns?: DebriefPattern[];
-  new_errors?: DebriefNewError[];
-};
-
-export type RecentSession = {
-  id: string;
-  lessonId: string;
-  startedAt: string; // ISO, UTC offset included
-  endedAt: string;
-  endedBy: "user" | "agent" | "crash" | null;
-  debrief: SessionDebrief | null; // tandem only
-};
-
 // ── REC-001: today's recommended pillar for the practice menu ─────────────
 // null = no clear signal (or not enough active days this week) → no banner.
 
@@ -208,18 +183,4 @@ export async function fetchRecommendation(
   }
   const body = (await res.json()) as { recommendation: Recommendation | null };
   return body.recommendation;
-}
-
-export async function fetchSessions(token: string): Promise<RecentSession[]> {
-  const res = await fetch(`${HTTP_BASE}/me/sessions`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (res.status === 401) {
-    throw new UnauthorizedError("/me/sessions");
-  }
-  if (!res.ok) {
-    throw new Error(`/me/sessions failed (${res.status})`);
-  }
-  const body = (await res.json()) as { sessions: RecentSession[] };
-  return body.sessions;
 }

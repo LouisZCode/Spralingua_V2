@@ -1618,13 +1618,16 @@ async def load_retired_patterns(
 ) -> list[dict]:
     """Retired ledger patterns, most recently retired first, cap ``limit``.
 
-    Same taxonomy-membership guard as the other stats helpers — a slug
-    dropped from the catalog since retirement is skipped rather than shown
-    without a label.
+    DEV-002: also carries first/last-seen timestamps and the first + latest
+    slip the ledger stored for the pattern, so the development page can tell
+    the then-vs-now story with the learner's own sentences (Progress card)
+    and quote what was conquered (Conquered card). Same taxonomy-membership
+    guard as the other stats helpers — a slug dropped from the catalog since
+    retirement is skipped rather than shown without a label.
     """
     rows = (
         await db.execute(
-            select(UserError.pattern_id)
+            select(UserError)
             .where(UserError.user_id == user_id, UserError.status == "retired")
             .order_by(UserError.last_seen.desc())
             .limit(limit)
@@ -1632,9 +1635,32 @@ async def load_retired_patterns(
     ).scalars().all()
     catalog = load_taxonomy()
     out: list[dict] = []
-    for pattern_id in rows:
-        pattern = catalog.get(pattern_id)
+    for row in rows:
+        pattern = catalog.get(row.pattern_id)
         if pattern is None:
             continue
-        out.append({"patternId": pattern_id, "label": pattern["label"]})
+        # The ledger's slip ring buffer is capped at 5, most recent last —
+        # examples[0] is therefore the oldest slip we still hold for the
+        # pattern and examples[-1] the newest. Only surfaced when both a
+        # sentence and its correction exist; a half-recorded slip is skipped.
+        examples = row.examples or []
+        first, last = (examples[0] if examples else None), (
+            examples[-1] if examples else None
+        )
+
+        def _pair(ex: dict | None) -> dict | None:
+            if ex and ex.get("sentence") and ex.get("corrected"):
+                return {"sentence": ex["sentence"], "corrected": ex["corrected"]}
+            return None
+
+        out.append(
+            {
+                "patternId": row.pattern_id,
+                "label": pattern["label"],
+                "firstSeen": row.first_seen.isoformat() if row.first_seen else None,
+                "lastSeen": row.last_seen.isoformat() if row.last_seen else None,
+                "firstExample": _pair(first),
+                "lastExample": _pair(last),
+            }
+        )
     return out
