@@ -10,7 +10,6 @@ import type {
   HintResult,
   Letter,
 } from "./api";
-import { diffTokens, MarkedText, type MarkedToken } from "../shared/feedback";
 import Glossable from "../shared/Glossable";
 import GermanWay from "../shared/GermanWay";
 import type { GlossInfo } from "../satzschmiede/api";
@@ -120,18 +119,23 @@ function findQuotedPhrase(haystack: string, needle: string): DraftMatch | null {
 // Runs against the current editor value on every keystroke — when the learner
 // rewrites a flagged phrase, its match (and with it the highlight and the
 // hint tooltip) simply disappears: the mark set shrinks as they fix things.
-type ResolvedMatch = { start: number; end: number; item: HintItem };
+// Generic over the item shape: attempt 1 feeds it HintItems, attempt 2 feeds
+// it the judge's Corrections re-keyed to `text` — same span logic for both.
+type ResolvedMatch<T = HintItem> = { start: number; end: number; item: T };
 
-function resolveMatches(text: string, items: HintItem[]): ResolvedMatch[] {
+function resolveMatches<T extends { text: string }>(
+  text: string,
+  items: T[]
+): ResolvedMatch<T>[] {
   const candidates = items
     .map((item) => {
       const m = findQuotedPhrase(text, item.text);
       return m ? { ...m, item } : null;
     })
-    .filter((m): m is ResolvedMatch => m !== null)
+    .filter((m): m is ResolvedMatch<T> => m !== null)
     .sort((a, b) => a.start - b.start);
 
-  const accepted: ResolvedMatch[] = [];
+  const accepted: ResolvedMatch<T>[] = [];
   for (const m of candidates) {
     const prev = accepted[accepted.length - 1];
     if (prev && m.start < prev.end) continue; // overlaps — discard
@@ -183,46 +187,146 @@ function PointsChecklist({
   );
 }
 
-// The shared diff engine tokenizes on /\s+/, which is right for the one-line
-// answers every other drill marks up and wrong for a letter: it would collapse
-// greeting, paragraphs and closing into a single blob, and the shape of a
-// letter is part of what's being learned here. So we keep `diffTokens` (one
-// diff engine in the codebase, not two) and re-drape its tokens back over the
-// original line structure — walking the lines in order and consuming as many
-// tokens as each line had words. Blank lines survive as spacing.
-function MarkedLetter({
+// ─── Attempt-2 feedback surface (BRIEF-009) ───
+// The final verdict used to render the letter twice ("What you wrote" vs
+// "Corrected") and then repeat every correction in a card list below. Now the
+// learner's own submitted letter is the whole surface, one more time: the
+// phrases the judge corrected are highlighted in place, and hovering (or
+// tapping, on touch) one shows THE FIX — the corrected German plus the rule —
+// since this pass, unlike attempt 1's hints, is allowed to reveal answers.
+//
+// Read-only, so there is no textarea mirror here: the marks are real <mark>
+// elements in rendered text (whitespace-pre-line keeps the letter's own line
+// breaks and shape), and the tooltip is positioned from the mark's DOM rect —
+// the same fixed-position, left-clamped, flip-below treatment HintEditor
+// uses, so both feedback phases share one visual language.
+type CorrectionMatch = ResolvedMatch<Explanation & { text: string }>;
+
+function CorrectedLetter({
   text,
-  tokens,
-  mark,
-  renderToken,
+  matches,
 }: {
   text: string;
-  tokens: MarkedToken[];
-  mark: "red" | "green" | "blue";
-  // BRIEF-002: threaded straight through to each line's MarkedText, same
-  // per-token override GermanWay/VocabTrainer use for Glossable — MarkedLetter
-  // only re-drapes tokens over line structure, it doesn't own rendering.
-  renderToken?: (token: MarkedToken, index: number) => React.ReactNode;
+  matches: CorrectionMatch[];
 }) {
-  const counts = text
-    .split("\n")
-    .map((line) => line.split(/\s+/).filter(Boolean).length);
-  // Prefix sums rather than a running cursor: same walk, no mutation during
-  // render (react-hooks/immutability).
-  const lines = counts.map((count, i) => {
-    const start = counts.slice(0, i).reduce((sum, n) => sum + n, 0);
-    return tokens.slice(start, start + count);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [active, setActive] = useState<number | null>(null);
+  const [tip, setTip] = useState<{ x: number; y: number; flip: boolean } | null>(
+    null
+  );
+
+  // Touch has no hover: on a hover-capable pointer the marks open on
+  // mouseenter (and click is just a re-open), on touch the tap itself
+  // toggles. Computed once — a device doesn't grow a mouse mid-letter.
+  const canHover = useMemo(
+    () =>
+      typeof window !== "undefined" &&
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(hover: hover)").matches,
+    []
+  );
+
+  const openTip = (idx: number) => {
+    const markEl = rootRef.current?.querySelector<HTMLElement>(
+      `[data-mark="${idx}"]`
+    );
+    if (!markEl) return;
+    const r = markEl.getBoundingClientRect();
+    setActive(idx);
+    // Above the phrase by default; below when there's no headroom for it.
+    setTip({
+      x: r.left,
+      y: r.top < 130 ? r.bottom + 8 : r.top - 8,
+      flip: r.top < 130,
+    });
+  };
+
+  const closeTip = () => {
+    setActive(null);
+    setTip(null);
+  };
+
+  // Any scroll or resize orphans a fixed-position tooltip — dismiss it
+  // rather than chase the mark. Escape closes too, same as the hint editor.
+  useEffect(() => {
+    if (active === null) return;
+    const dismiss = () => {
+      setActive(null);
+      setTip(null);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismiss();
+    };
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [active]);
+
+  // Same alternating plain-text / marked-chunk construction HintEditor's
+  // backdrop uses — the slices carry the letter's newlines through intact.
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  matches.forEach((m, i) => {
+    if (m.start > cursor) nodes.push(text.slice(cursor, m.start));
+    nodes.push(
+      <mark
+        key={i}
+        data-mark={i}
+        onMouseEnter={canHover ? () => openTip(i) : undefined}
+        onMouseLeave={canHover ? closeTip : undefined}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!canHover && active === i && tip) {
+            closeTip();
+            return;
+          }
+          openTip(i);
+        }}
+        className={`cursor-help rounded-[4px] px-0.5 text-ink ${
+          i === active ? "bg-flag-gold" : "bg-flag-gold-soft"
+        }`}
+      >
+        {text.slice(m.start, m.end)}
+      </mark>
+    );
+    cursor = m.end;
   });
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+
+  const current = active !== null ? matches[active] : undefined;
   return (
-    <div className="space-y-1">
-      {lines.map((lineTokens, i) =>
-        lineTokens.length === 0 ? (
-          <div key={i} className="h-2" />
-        ) : (
-          <p key={i} className="font-body text-[14px] leading-relaxed">
-            <MarkedText tokens={lineTokens} mark={mark} renderToken={renderToken} />
+    <div ref={rootRef} onClick={closeTip} className="relative">
+      <div className="whitespace-pre-line rounded-[18px] border-[3px] border-line bg-card p-4 font-body text-[15px] leading-relaxed text-ink">
+        {nodes}
+      </div>
+      {current && tip && (
+        <div
+          role="status"
+          className="fixed z-50 w-[280px] rounded-[14px] border-[3px] border-line bg-card p-3 shadow-lg"
+          style={{
+            top: tip.y,
+            left: Math.max(
+              12,
+              Math.min(
+                tip.x,
+                (typeof window !== "undefined" ? window.innerWidth : 400) - 292
+              )
+            ),
+            transform: tip.flip ? undefined : "translateY(-100%)",
+          }}
+        >
+          <p className="font-body text-[15px] font-bold leading-snug text-success">
+            → {current.item.correction}
           </p>
-        )
+          <p className="mt-1 font-body text-[12px] leading-snug text-ink-muted">
+            {current.item.why}
+          </p>
+        </div>
       )}
     </div>
   );
@@ -572,6 +676,24 @@ export default function BriefTrainer({
     [text, hintResult]
   );
 
+  // BRIEF-009: the attempt-2 verdict as spans in the submitted letter. The
+  // judge quotes each correction's `error` "exactly from the revised letter"
+  // (briefkasten/judge.py), so the same tolerant matcher that places attempt
+  // 1's hints places these; a quote that can't be found is skipped silently —
+  // a missed highlight is invisible, a wrong one is not acceptable in the
+  // learner's own writing. `text` is frozen here: the feedback phase has no
+  // editor, so this resolves once per render with nothing to chase.
+  const correctionMatches = useMemo(
+    () =>
+      feedbackResult
+        ? resolveMatches(
+            text,
+            feedbackResult.explanations.map((e) => ({ ...e, text: e.error }))
+          )
+        : [],
+    [text, feedbackResult]
+  );
+
   async function submitFirst() {
     setSubmitting(true);
     setFailed(null);
@@ -633,72 +755,25 @@ export default function BriefTrainer({
   }
 
   if (phase === "feedback" && feedbackResult) {
-    // BRIEF-002: `markPunctuation` on — the learner typed every character of
-    // this letter, so a missing/added comma is a real correction, not an ASR
-    // artifact to hide (unlike every spoken-surface caller of diffTokens).
-    // Case stays sensitive as it was: capitalization is real German grammar
-    // the learner typed, not a transcript's guess.
-    const diff = diffTokens(text, feedbackResult.correctedText, {
-      markPunctuation: true,
-    });
-    // Nothing changed AND nothing to explain — the "Corrected" box would be
-    // a pixel-identical twin of "What you wrote". Show a one-line
-    // confirmation in its place instead of two boxes with the same text.
-    const nothingToCorrect =
-      feedbackResult.explanations.length === 0 &&
-      !diff.attempt.some((t) => t.changed) &&
-      !diff.corrected.some((t) => t.changed);
+    // BRIEF-009: the letter, the score, and the German-way button. The diff
+    // machinery, the parallel boxes and the card lists this phase used to
+    // render are gone — the corrections now live ON the letter in
+    // CorrectedLetter above.
 
-    // SATZ-018/BRIEF-002: same per-token Glossable override GermanWay and
-    // VocabTrainer use — MarkedText/MarkedLetter still own the diff color
-    // and line layout, Glossable just replaces the plain-text leaf. Context
-    // sent to onGloss is always the full block being read, not the single
-    // tapped word. `undefined` when the parent hasn't wired onGloss, so both
-    // boxes fall back to their original plain-text rendering.
-    const renderCorrectedToken = onGloss
-      ? (t: MarkedToken) => (
-          <Glossable
-            text={t.text}
-            onGloss={(word: string) => onGloss(word, feedbackResult.correctedText)}
-            onAdd={onAdd}
-          />
-        )
-      : undefined;
-
-    // IDIOM-002: present only when a native would genuinely phrase things
-    // differently. Sits directly under "Corrected" (or its nothing-to-fix
-    // stand-in) and above "What to fix" — the reveal is one more look at the
-    // letter's language, not a footnote after the error list. When null, a
-    // small praise note takes this same spot instead of rendering nothing —
-    // reuses the nothingToCorrect card treatment (paper-warm rounded card,
-    // ink-soft text) so it reads as one more quiet confirmation, not a new
-    // visual language, and doesn't compete with the "Corrected" block above.
-    //
-    // The rewrite itself already ran server-side (briefkasten/germanizer.py,
-    // alongside feedback_pass) — GermanWay gets it via `value`, not a fetch,
-    // and `autoExpand` opens the card without a click. Diffed against the
-    // CORRECTED letter (not the learner's raw attempt): this reveal answers
-    // "how would a German phrase the fixed version", so the comparison base
-    // is the fix, not the mistake.
+    // IDIOM-002, collapsed (BRIEF-009): the Germanize call already ran
+    // server-side alongside the attempt-2 judge, so this is a pure reveal —
+    // the card starts shut and the button opens it, for learners who want
+    // the native phrasing. `naturalVersion: null` renders nothing at all:
+    // the praise note it used to show was one more card on a screen this
+    // pass just decluttered.
     const naturalToggle = feedbackResult.naturalVersion ? (
       <GermanWay
         text={feedbackResult.correctedText}
         value={{ natural: feedbackResult.naturalVersion }}
-        autoExpand
         onGloss={onGloss}
         onAdd={onAdd}
       />
-    ) : (
-      <div className="mt-6 rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3 text-center">
-        <p className="font-body text-[13px] leading-snug text-ink-soft">
-          {feedbackResult.score >= 90
-            ? "Nothing to Germanize — this letter was German through and through. Perfect!"
-            : feedbackResult.score >= 70
-              ? "Nothing to Germanize — this letter was German enough. Well done!"
-              : "Nothing extra to Germanize — focus on the fixes above and keep working on it!"}
-        </p>
-      </div>
-    );
+    ) : null;
 
     return (
       <div>
@@ -713,87 +788,19 @@ export default function BriefTrainer({
             <p className="mt-3 font-display text-[18px] font-black leading-snug text-ink">
               {feedbackResult.feedback}
             </p>
-            {feedbackResult.improvementsFromFirst && (
-              <p className="mt-2 font-body text-[13px] leading-snug text-ink-soft">
-                {feedbackResult.improvementsFromFirst}
-              </p>
-            )}
           </div>
 
-          <div className="mt-6 space-y-4">
-            <div className="rounded-[18px] border-[3px] border-line bg-card px-4 py-3">
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                What you wrote
-              </p>
-              <div className="mt-2 text-ink-soft">
-                <MarkedLetter text={text} tokens={diff.attempt} mark="red" />
-              </div>
-            </div>
-            {nothingToCorrect ? (
-              <div className="rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3">
-                <p className="font-body text-[13px] leading-snug text-ink-soft">
-                  Nothing to correct — this letter is grammatically clean.
-                </p>
-              </div>
-            ) : (
-              <div className="rounded-[18px] border-[3px] border-line bg-paper-warm px-4 py-3">
-                <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                  Corrected
-                </p>
-                <div className="mt-2 text-ink">
-                  <MarkedLetter
-                    text={feedbackResult.correctedText}
-                    tokens={diff.corrected}
-                    mark="green"
-                    renderToken={renderCorrectedToken}
-                  />
-                </div>
-              </div>
-            )}
+          {/* BRIEF-009: the letter IS the feedback. The learner's own final
+              draft, in its own shape, with the judge's corrections marked in
+              place — hover/tap a marked phrase for the fix and its rule. The
+              parallel "What you wrote"/"Corrected" boxes, the "What to fix"
+              card list and the "Focus for next time" box are all gone: their
+              content lives in the marks or was noise. */}
+          <div className="mt-6">
+            <CorrectedLetter text={text} matches={correctionMatches} />
           </div>
 
           {naturalToggle}
-
-          {feedbackResult.explanations.length > 0 && (
-            <div className="mt-6">
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                What to fix
-              </p>
-              <ul className="mt-2 space-y-2.5">
-                {feedbackResult.explanations.map((e: Explanation, i: number) => (
-                  <li
-                    key={i}
-                    className="rounded-[16px] border-[3px] border-line bg-card px-4 py-3"
-                  >
-                    <p className="font-body text-[13px] font-semibold text-flag-red-deep">
-                      {e.error}
-                    </p>
-                    <p className="mt-1 font-body text-[15px] font-bold text-success">
-                      → {e.correction}
-                    </p>
-                    <p className="mt-1 font-body text-[12px] leading-snug text-ink-muted">
-                      {e.why}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {feedbackResult.focusPoints.length > 0 && (
-            <div className="mt-6 rounded-[18px] border-[3px] border-line bg-card px-4 py-4">
-              <p className="font-body text-[10px] font-black uppercase tracking-[0.22em] text-ink-muted">
-                Focus for next time
-              </p>
-              <ul className="mt-2 list-disc space-y-1 pl-5">
-                {feedbackResult.focusPoints.map((p, i) => (
-                  <li key={i} className="font-body text-[14px] text-ink-soft">
-                    {p}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
         <Footer
