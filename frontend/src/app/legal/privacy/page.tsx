@@ -19,7 +19,7 @@ export default function PrivacyPage() {
   return (
     <>
       <LegalTitle>Privacy Policy (Datenschutzerklärung) for spralingua.com</LegalTitle>
-      <LegalMeta>Last updated: 5 September 2026</LegalMeta>
+      <LegalMeta>Last updated: 11 October 2026</LegalMeta>
 
       <LegalP>
         This Privacy Policy explains what personal data spralingua.com
@@ -129,18 +129,25 @@ export default function PrivacyPage() {
         non-personal UI preferences (such as display settings).
       </LegalP>
       <LegalP>
-        We do <B>not</B> use cookies. We do <B>not</B> use any analytics,
-        tracking, or advertising technology of any kind — not our own, and
-        not from any third party.
+        We do <B>not</B> use cookies, and we do <B>not</B> run our own
+        analytics. We do use one third-party advertising technology: the{" "}
+        <B>Meta Pixel</B> (Meta Platforms Ireland Ltd., Ireland). It loads on
+        every page and reports page views plus three actions — account
+        registration, checkout start, and completed purchase (amount and
+        currency) — so we can measure our own advertising. It does{" "}
+        <B>not</B> receive your account identity: we never send Meta your
+        name, your email address, or anything from your learning record.
+        Like any third party serving code on the page, Meta necessarily
+        receives your IP address and browser information with these requests.
       </LegalP>
       <LegalP>
-        Because the only thing stored locally is a login token that is
-        strictly necessary to keep you signed in, this falls under the
-        &quot;strictly necessary&quot; exemption in § 25(2) of the German
-        Telecommunications-Digital-Services-Data-Protection Act (TDDDG). That
-        is why you do not see a cookie/consent banner on Spralingua: nothing
-        non-essential is being stored without your knowledge, and there is
-        nothing non-essential to ask consent for.
+        The login token in <code>localStorage</code> is strictly necessary to
+        keep you signed in (the &quot;strictly necessary&quot; exemption in
+        § 25(2) TDDDG). The Meta Pixel is <B>not</B> strictly necessary, so
+        under § 25 TDDDG it requires your prior consent — and{" "}
+        <B>a consent mechanism does not exist yet</B>. Until one is in place,
+        the Pixel loads on every visit. That is a known gap, not a decision:
+        see section 10.
       </LegalP>
 
       <LegalH3>2.6 IP addresses</LegalH3>
@@ -403,12 +410,12 @@ export default function PrivacyPage() {
         do.
       </LegalP>
       <LegalP>
-        We do not use analytics, tracking, or advertising today.{" "}
-        <B>
-          If that ever changes, we will update this policy and put a proper
-          consent mechanism in place first
-        </B>
-        , before any such technology goes live — not after.
+        Until 11 October 2026 this policy promised no analytics, tracking, or
+        advertising technology, with a commitment to put a consent mechanism
+        in place <B>before</B> any such technology went live. On that date we
+        activated the Meta Pixel (see section 2.5) <B>before</B> the consent
+        mechanism existed — that sequence broke the promise above, and adding
+        the consent choice is now overdue, not upcoming.
       </LegalP>
     </>
   );
