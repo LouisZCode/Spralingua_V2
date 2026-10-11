@@ -76,6 +76,11 @@ const nextConfig: NextConfig = {
       apiHttp,
       apiWs,
       "https://accounts.google.com",
+      // Meta Pixel (MetaPixel.tsx): fbevents.js posts events to
+      // www.facebook.com/tr and fetches its per-pixel config from
+      // connect.facebook.net/signals/config — both blocked without these.
+      "https://connect.facebook.net",
+      "https://www.facebook.com",
       // No daily.co origin here, on purpose (SEC-005, 2026-09-05):
       // @pipecat-ai/websocket-transport's DEFAULT media manager is Daily's
       // own `DailyMediaManager`, which fetches and eval()s a call-object
@@ -179,12 +184,17 @@ const nextConfig: NextConfig = {
     //   http://localhost backend this exact header is verified against in
     //   a local production build, and it buys nothing extra when the app
     //   is already all-https in real prod.
+    // Meta Pixel (MetaPixel.tsx): script-src carries connect.facebook.net
+    // (the fbevents.js loader); connect-src + img-src + frame-src carry
+    // www.facebook.com (event POSTs, the noscript fallback, iframe
+    // transport). Per Meta's CSP guidance — re-verify live with the Pixel
+    // Helper if Meta changes endpoints.
     const directives = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' blob: https://accounts.google.com",
-      "frame-src https://accounts.google.com",
+      "script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://connect.facebook.net",
+      "frame-src https://accounts.google.com https://www.facebook.com",
       `connect-src ${connectSrc}`,
-      "img-src 'self' data: https://lh3.googleusercontent.com",
+      "img-src 'self' data: https://lh3.googleusercontent.com https://www.facebook.com",
       "style-src 'self' 'unsafe-inline' https://accounts.google.com",
       "font-src 'self'",
       "media-src 'self' blob: data:",
