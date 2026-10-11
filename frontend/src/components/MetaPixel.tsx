@@ -8,7 +8,7 @@ import { Suspense, useEffect, useRef } from "react";
 // NEXT_PUBLIC_ prefix so the browser bundle can read it — inlined at BUILD
 // time, so a changed value needs a rebuild. The hardcoded fallback is the ID
 // from the snippet itself, keeping tracking alive if the env var is unset.
-const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || "2564659417335480";
+const PIXEL_ID = process.env.NEXT_PUBLIC_META_PIXEL_ID || "1841209180646136";
 
 type Fbq = (...args: unknown[]) => void;
 
