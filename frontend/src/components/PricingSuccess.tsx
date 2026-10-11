@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import { trackFbq } from "@/lib/fbpixel";
 import AppHeader from "@/components/shared/AppHeader";
 
 // PAY-001: lands here after Stripe Checkout redirects back
@@ -42,6 +43,49 @@ export default function PricingSuccess() {
   const isTopup = searchParams.get("topup") === "1";
 
   const [status, setStatus] = useState<PollStatus>("waiting");
+  const tier = user?.tier;
+
+  // Meta Pixel Purchase — confirmed branch only, fired once per page visit.
+  //
+  // - eventID is the Stripe session_id straight from the URL: unique, stable,
+  //   and the future Conversions API dedup key for free.
+  // - The ref guard (not state) exists because React StrictMode double-invokes
+  //   effects — without it the event fires twice in dev.
+  // - No session_id (a direct visit, e.g. an existing subscriber opening the
+  //   URL by hand) fires nothing: there is no purchase to attribute.
+  const purchaseFiredRef = useRef(false);
+  useEffect(() => {
+    if (status !== "confirmed") return;
+    if (!sessionId) return;
+    if (purchaseFiredRef.current) return;
+    if (isTopup) {
+      purchaseFiredRef.current = true;
+      trackFbq(
+        "Purchase",
+        {
+          value: 2,
+          currency: "EUR",
+          content_ids: ["coin-topup"],
+          content_type: "product",
+        },
+        { eventID: sessionId },
+      );
+      return;
+    }
+    const value = tier === "basic" ? 15 : tier === "premium" ? 25 : null;
+    if (value === null) return;
+    purchaseFiredRef.current = true;
+    trackFbq(
+      "Purchase",
+      {
+        value,
+        currency: "EUR",
+        content_ids: [`${tier}-monthly`],
+        content_type: "product",
+      },
+      { eventID: sessionId },
+    );
+  }, [status, isTopup, sessionId, tier]);
 
   // PAY-002: top-up variant — poll THIS checkout session's ledger row.
   //

@@ -51,7 +51,7 @@ type AuthState = {
   // this before deciding "not signed in" — otherwise a page refresh would
   // bounce an authenticated user on the first render.
   ready: boolean;
-  signInWithGoogle: (credential: string) => Promise<void>;
+  signInWithGoogle: (credential: string) => Promise<SignInResult>;
   signOut: () => void;
   // UI-016: the one shared reaction to a 401 mid-round. Call sites used to
   // each call signOut() themselves — silent, and it discarded whatever
@@ -75,6 +75,15 @@ type AuthState = {
 };
 
 const AuthContext = createContext<AuthState | null>(null);
+
+// What a Google sign-in resolves to: the stored session plus whether the
+// backend created the account on this sign-in (its is_new_user flag).
+// Callers that react to *registration* (Meta Pixel CompleteRegistration)
+// gate on isNewUser; plain re-logins get isNewUser=false.
+export type SignInResult = {
+  user: AuthUser;
+  isNewUser: boolean;
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
@@ -111,7 +120,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setReady(true);
   }, []);
 
-  async function signInWithGoogle(credential: string) {
+  async function signInWithGoogle(credential: string): Promise<SignInResult> {
     const res = await fetch(`${HTTP_BASE}/auth/google`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -120,13 +129,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!res.ok) {
       throw new Error(`Sign-in failed (${res.status})`);
     }
-    const data = (await res.json()) as { token: string; user: AuthUser };
+    const data = (await res.json()) as {
+      token: string;
+      user: AuthUser;
+      is_new_user?: boolean;
+    };
     setToken(data.token);
     setUser(data.user);
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({ token: data.token, user: data.user })
     );
+    return { user: data.user, isNewUser: data.is_new_user === true };
   }
 
   async function setLevel(level: Level | null) {

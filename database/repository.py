@@ -154,7 +154,7 @@ async def upsert_user(
     email: str | None,
     name: str | None,
     picture: str | None,
-) -> tuple[str, str]:
+) -> tuple[str, str, bool]:
     """Insert or refresh a user from a verified Google sign-in (AUTH-001).
 
     Keyed on the Google ``sub`` (``user_id``). On a repeat sign-in we refresh the
@@ -179,7 +179,10 @@ async def upsert_user(
     uniqueness — Google itself is case-insensitive on the local part, so two
     sign-ins that differ only in case must land on the same row.
 
-    Returns ``(role, tier)``.
+    Returns ``(role, tier, is_new)`` — ``is_new`` is the same ``xmax == 0``
+    insert-vs-update distinction the signup grant above already keys on,
+    surfaced so the sign-in response can tell a registration apart from a
+    re-login (Meta Pixel CompleteRegistration gating).
     """
     _assert_test_user(user_id)
     try:
@@ -241,7 +244,7 @@ async def upsert_user(
                 .on_conflict_do_nothing(index_elements=["user_id", "kind", "ref"])
             )
         await db.commit()
-        return role, tier
+        return role, tier, is_insert
     except SQLAlchemyError:
         await db.rollback()
         raise

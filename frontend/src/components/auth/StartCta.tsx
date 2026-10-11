@@ -2,8 +2,9 @@
 
 import { useState, type CSSProperties, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { useAuth } from "./AuthContext";
+import { useAuth, type SignInResult } from "./AuthContext";
 import SignInModal from "./SignInModal";
+import { trackFbq } from "@/lib/fbpixel";
 
 // Drop-in replacement for the landing page's "Start" <Link>s. Instead of
 // navigating straight into a lesson, it gates on auth: already signed in → go
@@ -48,8 +49,19 @@ export default function StartCta({
       {showModal && (
         <SignInModal
           signInWithGoogle={signInWithGoogle}
-          onSuccess={() => {
+          onSuccess={(result: SignInResult) => {
             setShowModal(false);
+            // Meta Pixel: registration only — returning logins carry
+            // isNewUser=false and must not inflate the event. The
+            // session-expired overlay never fires this (its onSuccess
+            // ignores the result), so re-logins stay out by construction.
+            if (result.isNewUser) {
+              trackFbq(
+                "CompleteRegistration",
+                {},
+                { eventID: `reg_${result.user.id}` },
+              );
+            }
             router.push("/practice");
           }}
           onClose={() => setShowModal(false)}

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createPortal } from "react-dom";
 import { GoogleLogin } from "@react-oauth/google";
+import type { SignInResult } from "./AuthContext";
 
 // Modal hosting Google's official <GoogleLogin> button. That component is the
 // only web path that yields a Google *ID token* (cred.credential) — which is
@@ -22,8 +23,8 @@ export default function SignInModal({
   title = "Sign in to start",
   message = "Sign in with Google to begin your lesson and save your progress.",
 }: {
-  signInWithGoogle: (credential: string) => Promise<void>;
-  onSuccess: () => void;
+  signInWithGoogle: (credential: string) => Promise<SignInResult>;
+  onSuccess: (result: SignInResult) => void;
   onClose: () => void;
   title?: string;
   message?: string;
@@ -76,8 +77,8 @@ export default function SignInModal({
                 return;
               }
               try {
-                await signInWithGoogle(cred.credential);
-                onSuccess();
+                const result = await signInWithGoogle(cred.credential);
+                onSuccess(result);
               } catch {
                 setError("Sign-in failed. Please try again.");
               }

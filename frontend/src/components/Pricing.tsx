@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useAuth } from "./auth/AuthContext";
 import StartCta from "./auth/StartCta";
 import { createCheckout, fetchBillingPortal } from "@/lib/api";
+import { trackFbq } from "@/lib/fbpixel";
 import AppHeader from "@/components/shared/AppHeader";
 import { safeMessage } from "@/components/shared/copy";
 import {
@@ -106,6 +107,13 @@ export default function Pricing() {
     setPending(tier);
     try {
       const url = await createCheckout(tier, token);
+      // Meta Pixel: intent realized — fires only once the Checkout session
+      // exists (a failed createCheckout is not intent). Values mirror the
+      // plan prices above (Basic €15, Premium €25, EUR).
+      trackFbq(
+        "InitiateCheckout",
+        { value: tier === "basic" ? 15 : 25, currency: "EUR" },
+      );
       window.location.assign(url);
     } catch (e) {
       handleFailure(e);
@@ -499,6 +507,8 @@ function TopupBanner({
     try {
       const { createTopupCheckout } = await import("@/lib/coins");
       const url = await createTopupCheckout(token);
+      // Meta Pixel: same realized-intent rule as goCheckout (€2 top-up).
+      trackFbq("InitiateCheckout", { value: 2, currency: "EUR" });
       window.location.assign(url);
     } catch (e) {
       onFailure(e);

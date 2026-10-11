@@ -60,6 +60,10 @@ class LevelBody(BaseModel):
 class AuthOut(BaseModel):
     token: str
     user: UserOut
+    # True when this sign-in created the users row (repository.upsert_user's
+    # xmax insert-vs-update signal). Lets the frontend fire a registration
+    # event only for genuinely new accounts, never for re-logins.
+    is_new_user: bool = False
 
 
 @router.post("/google", response_model=AuthOut)
@@ -95,7 +99,7 @@ async def auth_google(body: GoogleAuthBody, request: Request) -> AuthOut:
 
     try:
         async with get_sessionmaker()() as db:
-            role, tier = await upsert_user(
+            role, tier, is_new = await upsert_user(
                 db, user_id=user_id, email=email, name=name, picture=picture
             )
             # Returning users already have a level; sending it with the
@@ -108,6 +112,7 @@ async def auth_google(body: GoogleAuthBody, request: Request) -> AuthOut:
     token = issue_session_jwt(user_id, role)
     return AuthOut(
         token=token,
+        is_new_user=is_new,
         user=UserOut(
             id=user_id,
             email=email,
