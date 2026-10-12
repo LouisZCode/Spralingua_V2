@@ -84,8 +84,11 @@ Project API key: `e4836b...fce8cd` (public by design, both planes).
 - Delivery: `on_event_callback` showed 3× HTTP 200 `Event sent successfully`
   (user + AI + session end). The `test-verify` sessions in the project are
   these probes — deletable.
-- Browser side unverified by us: needs a human page load → `Viewed Home
-  Page` in the Setup live feed (see §5).
+- Browser side: verified 2026-10-12 — headless Chromium against prod
+  (`speedtest/launch-audit-2026-09-02/env/_amplitude_prod_check.mjs`)
+  captured `POST api2.amplitude.com/2/httpapi → 200, 5 events ingested`,
+  and an MCP query the same day read the landed data back: `Viewed Home
+  Page` — 3 events/24h, all with `prompt_version: BA400.4`.
 
 ## 4. Deliberate tradeoffs
 
@@ -174,6 +177,18 @@ Connected and verified live 2026-10-12 (org `cool-hat-831508`, project
   first use, restart once more if tools don't surface (tool list loads at
   startup, pre-auth). Verify with: *"What Amplitude projects can I
   access?"* → expect `default (877530)`.
+- **pi** (`~/.pi/agent/mcp.json`, user level — personal OAuth-credentialed
+  server, never project-local):
+  `{ "amplitude": { "url": "https://mcp.amplitude.com/mcp",
+  "description": "Amplitude Analytics: query live events, charts, dashboards
+  and Agent Analytics data for the Spralingua project" } }`.
+  Sign in via `pi mcp login amplitude` (browser approval; tokens in
+  `~/.pi/agent/mcp-auth.json`, auto-refresh; sign out via
+  `pi mcp logout amplitude`). Connected 2026-10-12: **49 tools**
+  (codemode exposure — reached via `searchTools()`/`describeTool()` in
+  codemode scripts, not declared per prompt) + 34 resources. Same verify
+  question → `default (877530)`. Agent Analytics queries:
+  `get_amplitude_agent_analytics_info` / `get_agent_results`.
 - **Unlisted clients:** add the URL as a remote MCP server per the client's
   own docs, OAuth with the Amplitude account, enable the needed tools.
 - **Standard checks once connected** (all take `projectId: "877530"`):
