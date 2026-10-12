@@ -359,6 +359,12 @@ export default function LandingPage() {
             >
               Terms
             </Link>
+            <a
+              href="mailto:contact@spralingua.com"
+              className="-my-3.5 py-3.5 font-body text-[11px] uppercase tracking-[0.22em] text-ink-muted transition-colors hover:text-flag-red"
+            >
+              Contact
+            </a>
           </nav>
         </div>
       </footer>

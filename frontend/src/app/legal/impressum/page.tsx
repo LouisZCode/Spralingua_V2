@@ -13,6 +13,15 @@ export default function ImpressumPage() {
 
       <LegalH2>Operator</LegalH2>
       <LegalLines lines={["Spralingua", "Berlin, Germany"]} />
+      <LegalP>
+        Contact:{" "}
+        <a
+          href="mailto:contact@spralingua.com"
+          className="underline hover:no-underline"
+        >
+          contact@spralingua.com
+        </a>
+      </LegalP>
 
       <LegalH2>Responsible for content</LegalH2>
       <LegalP>Pursuant to § 18 Abs. 2 MStV:</LegalP>
