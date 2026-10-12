@@ -86,7 +86,20 @@ const nextConfig: NextConfig = {
       // ingested fine at the SDK default (verified with live 200s), so no
       // serverZone override; if the project ever moves EU-hosted, swap
       // these for cdn.eu/api.eu.amplitude.com.
+      //
+      // The unified package is NOT purely an npm bundle — verified live in
+      // headless Chromium against prod (2026-10-12, the headless run caught
+      // these as CSP violations): it lazy-loads its engagement/autocapture
+      // bundle from cdn.amplitude.com (script-src, see below), fetches
+      // Session Replay's remote config from sr-client-cfg.amplitude.com
+      // (blocked => "Failed to generate joined config" errors + degraded
+      // replay), and uploads replay sessions to api-sr.amplitude.com. The
+      // SDK's own diagnostics endpoint rounds it out. If a violation ever
+      // reappears (SDK update), check the console for the blocked host first.
       "https://api2.amplitude.com",
+      "https://sr-client-cfg.amplitude.com",
+      "https://api-sr.amplitude.com",
+      "https://diagnostics.prod.us-west-2.amplitude.com",
       // No daily.co origin here, on purpose (SEC-005, 2026-09-05):
       // @pipecat-ai/websocket-transport's DEFAULT media manager is Daily's
       // own `DailyMediaManager`, which fetches and eval()s a call-object
@@ -195,13 +208,15 @@ const nextConfig: NextConfig = {
     // www.facebook.com (event POSTs, the noscript fallback, iframe
     // transport). Per Meta's CSP guidance — re-verify live with the Pixel
     // Helper if Meta changes endpoints.
-    // Amplitude (src/amplitude.ts, npm bundle — no external <script> loader,
-    // so script-src needs no new host): connect-src carries
-    // api2.amplitude.com (event ingestion + remote config). If prod Live
-    // Events stay empty, check the browser console for blocked hosts first.
+    // Amplitude (src/amplitude.ts): connect-src carries the ingestion,
+    // replay-config, replay-upload and diagnostics hosts (see the
+    // connectSrc array); script-src carries cdn.amplitude.com — the
+    // unified package lazy-loads its engagement/autocapture bundle from
+    // there, so it is NOT true that script-src needs no new host. If prod
+    // Live Events stay empty, check the browser console for blocked hosts.
     const directives = [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://connect.facebook.net",
+      "script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://connect.facebook.net https://cdn.amplitude.com",
       "frame-src https://accounts.google.com https://www.facebook.com",
       `connect-src ${connectSrc}`,
       "img-src 'self' data: https://lh3.googleusercontent.com https://www.facebook.com",
