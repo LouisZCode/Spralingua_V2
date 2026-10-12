@@ -61,6 +61,7 @@ POST_SESSION_ID, POST_SESSION_DESC = _POST_SESSION
 CANONICAL_MODEL = "gpt-oss-120b"
 
 _ai = None
+_base = None
 _agents: dict = {}
 _no_key_warned = False
 
@@ -105,6 +106,72 @@ def flush_ai() -> None:
             ai.flush()
     except Exception as e:
         logger.warning(f"Agent Analytics flush failed (non-fatal): {e}")
+
+
+def get_base_client():
+    """Module-level plain ``Amplitude`` client for non-agent product events
+    (signups, subscriptions — the Marketing Analytics conversion events).
+    Same key, same US project, separate from the ``AmplitudeAI`` wrapper
+    above (which only speaks the ``[Agent]`` event vocabulary). ``None``
+    when disabled; never raises."""
+    global _base
+    if _base is not None:
+        return _base
+    if not os.environ.get("AMPLITUDE_AI_API_KEY"):
+        return None
+    try:
+        from amplitude import Amplitude
+
+        _base = Amplitude(os.environ["AMPLITUDE_AI_API_KEY"])
+    except Exception as e:
+        logger.warning(f"Amplitude base client init failed (non-fatal): {e}")
+        return None
+    return _base
+
+
+def track_event(
+    user_id: str,
+    event_type: str,
+    event_properties: dict | None = None,
+    *,
+    insert_id: str | None = None,
+    revenue: float | None = None,
+    price: float | None = None,
+    quantity: int | None = None,
+    product_id: str | None = None,
+    revenue_type: str | None = None,
+    currency: str | None = None,
+) -> None:
+    """Fire one plain server-side product event, fail-open (never raises).
+
+    ``insert_id`` is Amplitude's idempotency key — pass a deterministic one
+    (e.g. ``f"sub-started-{checkout_session_id}"``) wherever a retried
+    caller (Stripe redelivery) could otherwise double-count. No flush: the
+    SDK's background uploader owns delivery on a long-lived worker; request
+    paths must not pay a flush round-trip.
+    """
+    try:
+        client = get_base_client()
+        if client is None or not user_id:
+            return
+        from amplitude.event import BaseEvent
+
+        client.track(
+            BaseEvent(
+                event_type=event_type,
+                user_id=user_id,
+                event_properties=event_properties or {},
+                insert_id=insert_id,
+                revenue=revenue,
+                price=price,
+                quantity=quantity,
+                product_id=product_id,
+                revenue_type=revenue_type,
+                currency=currency,
+            )
+        )
+    except Exception as e:
+        logger.warning(f"Amplitude track_event {event_type!r} failed (non-fatal): {e}")
 
 
 @contextmanager

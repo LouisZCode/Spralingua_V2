@@ -110,6 +110,21 @@ async def auth_google(body: GoogleAuthBody, request: Request) -> AuthOut:
         raise HTTPException(status_code=500, detail="Could not persist the user.")
 
     token = issue_session_jwt(user_id, role)
+    if is_new:
+        # Marketing Analytics conversion event (fail-open — never breaks
+        # signup). Same users.id string the agents stamp server-side and the
+        # browser sets via identifyAnalyticsUser, so web + server join.
+        try:
+            from agents.amplitude_ai import track_event
+
+            track_event(
+                user_id,
+                "Sign Up Completed",
+                {"method": "google"},
+                insert_id=f"signup-{user_id}",
+            )
+        except Exception:
+            pass
     return AuthOut(
         token=token,
         is_new_user=is_new,

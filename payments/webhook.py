@@ -204,6 +204,33 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
     )
     await set_user_tier(db, user_id=user_id, tier=tier)
 
+    # Marketing Analytics conversion event (fail-open — never breaks
+    # fulfillment; the tier writes above already happened). checkout.session
+    # .completed in subscription mode fires once per new Checkout subscription,
+    # and insert_id makes a Stripe redelivery a server-side dedup, not a
+    # double count. Upgrades/cancels arrive via subscription.updated/deleted
+    # and deliberately emit nothing here.
+    try:
+        from agents.amplitude_ai import track_event
+
+        amount_cents = session["amount_total"] if "amount_total" in session else None
+        currency = session["currency"] if "currency" in session else None
+        amount = amount_cents / 100.0 if isinstance(amount_cents, (int, float)) else None
+        track_event(
+            user_id,
+            "Subscription Started",
+            {"tier": tier, "price_id": price_id},
+            insert_id=f"sub-started-{checkout_session_id}",
+            revenue=amount,
+            price=amount,
+            quantity=1 if amount is not None else None,
+            product_id=price_id,
+            revenue_type="subscription",
+            currency=currency.upper() if isinstance(currency, str) else None,
+        )
+    except Exception:
+        pass
+
 
 async def _handle_subscription_updated(db: AsyncSession, sub_obj) -> None:
     subscription_id = sub_obj["id"]
