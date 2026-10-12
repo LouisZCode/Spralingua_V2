@@ -143,3 +143,48 @@ _amplitude_prod_check.mjs` (headless Playwright, gitignored).
       (the Pixel gap documented there applies here too).
 - [ ] Remove `prompt_version` from the `Viewed Home Page` call and delete
       the `test-verify`/`verify-session-*` probe sessions once done.
+- [x] Bot traffic inflates uniques — fixed 2026-10-12 (ANALYTICS-001 /
+      ANALYTICS-002, lint + build green, unshipped): `?probe=1` pins the
+      headless verifier to device `probe-headless` (was: one fresh anonymous
+      user per run); `identifyAnalyticsUser(AuthUser.id)` fires on sign-in
+      AND on localStorage hydration, `clearAnalyticsUser()` on sign-out —
+      browser events now stitch to the same `users.id` the agents stamp
+      server-side. Found via MCP: 3 headless "users" + backend turns under
+      `test-verify` and the Google-ID user. The 3 historic probe users stay
+      in history (not retro-merged).
+
+## Query it via MCP (any agent, added 2026-10-12)
+
+The Amplitude MCP server lets any MCP-capable agent read this project's
+events, charts, sessions and agent data directly — no dashboard clicking.
+Connected and verified live 2026-10-12 (org `cool-hat-831508`, project
+`default` = `877530`).
+
+- **Server URLs:** US default `https://mcp.amplitude.com/mcp`;
+  EU residency `https://mcp.eu.amplitude.com/mcp`. This project ingests
+  at the US default — use the US URL.
+- **Requirements:** client must support remote MCP servers over Streaming
+  HTTP **plus OAuth 2.0** (API-key-only or stdio-only clients are
+  incompatible).
+- **opencode** (`~/.config/opencode/opencode.jsonc`, global scope — personal
+  access, never the project config):
+  `mcp: { "amplitude": { "type": "remote",
+  "url": "https://mcp.amplitude.com/mcp", "enabled": true } }`.
+  Quit + restart opencode (no hot-reload), approve the browser OAuth on
+  first use, restart once more if tools don't surface (tool list loads at
+  startup, pre-auth). Verify with: *"What Amplitude projects can I
+  access?"* → expect `default (877530)`.
+- **Unlisted clients:** add the URL as a remote MCP server per the client's
+  own docs, OAuth with the Amplitude account, enable the needed tools.
+- **Standard checks once connected** (all take `projectId: "877530"`):
+  `get_amplitude_context` (no args = list projects), then
+  `search_amp_data_taxonomy` for exact event names (`Viewed Home Page`,
+  `[Amplitude] Page Viewed`, `[Agent] User/AI Message|Response|Session
+  End`), then `query_amplitude_data` (typed `chart`, `date_range`
+  required) for counts — e.g. today's prod visit read as 2× home page,
+  2× page viewed, 4× `drill-judge` turns.
+- **Agent Analytics reads:** Monitor/Sessions/Evaluators views via
+  `get_agent_results` (`agent_type: dashboard_explorer |
+  session_replay_explorer`); our 4 agents are `conversation-partner`,
+  `drill-judge`, `content-forge`, `post-session`, all `metadata_only`
+  (costs/tokens/latency visible, no transcripts — by design).

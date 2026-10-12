@@ -112,6 +112,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // undefined, since callers (e.g. the /pricing page) trust it to
           // always be a string.
           setUser({ ...parsed.user, tier: parsed.user.tier ?? "free" });
+          // ANALYTICS-002: re-attach the browser to the backend identity
+          // after a refresh — without this the session runs anonymous until
+          // the next sign-in. Fire-and-forget, never blocks hydration.
+          import("@/amplitude").then(({ identifyAnalyticsUser }) =>
+            identifyAnalyticsUser(parsed.user.id)
+          ).catch(() => {});
         }
       }
     } catch {
@@ -140,6 +146,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       STORAGE_KEY,
       JSON.stringify({ token: data.token, user: data.user })
     );
+    // ANALYTICS-002: stitch this browser's events to the backend identity
+    // (same users.id string the agents stamp server-side). Fire-and-forget.
+    import("@/amplitude").then(({ identifyAnalyticsUser }) =>
+      identifyAnalyticsUser(data.user.id)
+    ).catch(() => {});
     return { user: data.user, isNewUser: data.is_new_user === true };
   }
 
@@ -264,6 +275,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
     localStorage.removeItem(STORAGE_KEY);
+    // ANALYTICS-002: unlink the browser identity (keeps the device, drops
+    // the user) so the next sign-in on a shared machine starts anonymous.
+    import("@/amplitude").then(({ clearAnalyticsUser }) =>
+      clearAnalyticsUser()
+    ).catch(() => {});
     // Shared-browser hygiene (CHORE-001): don't leave the dev-unlock flag set
     // for whoever signs in next on this device.
     localStorage.removeItem("spralingua_dev_unlocked");
