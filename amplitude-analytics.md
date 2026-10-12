@@ -120,8 +120,22 @@ Project API key: `e4836b...fce8cd` (public by design, both planes).
       (same pattern as `META_PIXEL_ID`) — the rebuild bakes the key in.
 - [x] Prod CSP allows `https://api2.amplitude.com` in `connect-src`
       (`next.config.ts`; US endpoints — live 200s proved the default).
-      No new `script-src` host: the npm bundle loads no external script.
-- [ ] Push → both services rebuild → verify below.
+      ~~No new `script-src` host: the npm bundle loads no external script.~~
+      **Corrected 2026-10-12 (`1ceafea`, headless-Chromium prod run caught
+      both as enforced-CSP violations):** the unified package IS NOT purely
+      an npm bundle — it lazy-loads the engagement/autocapture bundle from
+      `cdn.amplitude.com` (script-src; the old claim was wrong), fetches
+      Session Replay's remote config from `sr-client-cfg.amplitude.com`
+      (blocked => "Failed to generate joined config" + degraded replay),
+      uploads replays to `api-sr.amplitude.com`, and reports to
+      `diagnostics.prod.us-west-2.amplitude.com`. All four now allowlisted;
+      the re-run shows zero violations, the engagement chunks load, replay
+      uploads (`?type=replay`), and ingestion is 200/5 events.
+- [x] Push → both services rebuilt → verified live 2026-10-12:
+      `POST api2.amplitude.com/2/httpapi → 200, 5 events ingested`.
+      Human dashboard confirmation (Setup-page live feed) still pending.
+      Scratch verifier: `speedtest/launch-audit-2026-09-02/env/
+_amplitude_prod_check.mjs` (headless Playwright, gitignored).
 - [ ] Confirm project region (browser init defaults to US endpoints; if the
       project is EU-hosted, both planes need the EU endpoint).
 - [ ] Privacy page: Amplitude is non-essential tracking like the Pixel —
