@@ -19,6 +19,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
+from agents.amplitude_ai import DRILL_JUDGE_DESC, DRILL_JUDGE_ID, ai_session
 from auth.deps import get_current_user_id
 from database.connection import get_db
 from database.repository import (
@@ -270,7 +271,7 @@ async def submit_attempt(
         if reason:
             raise HTTPException(status_code=422, detail=reason)
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satzbau-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satzbau-attempt") as attempt_span, ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, body.session_id):
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("item_id", item["id"])
         if body.session_id:

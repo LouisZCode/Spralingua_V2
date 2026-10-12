@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.error_extractor import extract_errors
 from agents.observability import propagate_trace_context, tracer
+from agents.amplitude_ai import CONTENT_FORGE_DESC, CONTENT_FORGE_ID, DRILL_JUDGE_DESC, DRILL_JUDGE_ID, POST_SESSION_DESC, POST_SESSION_ID, ai_session
 from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import User
@@ -75,12 +76,15 @@ async def _background_harvest(text: str, session_id: str | None, user_id: str) -
         # transcript — no leading-silence dropout, no ASR misheard reorder
         # — so the STT-006 guards must stay off, or a learner who genuinely
         # typed a subjectless sentence would be forgiven.
-        extraction = await extract_errors(
-            transcript=text,
-            session_id=session_id,
-            user_id=user_id,
-            check_asr_artifacts=False,
-        )
+        # Agent Analytics: the harvester's judge call binds to this frame —
+        # same sitting session_id as the attempt that spawned it.
+        with ai_session(POST_SESSION_ID, POST_SESSION_DESC, user_id, session_id):
+            extraction = await extract_errors(
+                transcript=text,
+                session_id=session_id,
+                user_id=user_id,
+                check_asr_artifacts=False,
+            )
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:
@@ -223,7 +227,7 @@ async def get_letter(
     # `db` is closed here — the pooled connection is released before the
     # LLM call below, which is the whole point of this block (REL-005).
 
-    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("briefkasten-letter") as span:
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("briefkasten-letter") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         span.set_attribute("seed_id", seed["id"])
         span.set_attribute("register", seed["register"])
@@ -322,7 +326,7 @@ async def submit_attempt(
             detail="That's longer than this exercise expects — keep it to a letter.",
         )
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("briefkasten-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("briefkasten-attempt") as attempt_span, ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, body.session_id):
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("seed_id", seed["id"])
         attempt_span.set_attribute("attempt", body.attempt)

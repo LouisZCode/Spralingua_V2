@@ -62,6 +62,15 @@ from agents.observability import (
     register_trace_session,
     tracer,
 )
+from agents.amplitude_ai import (
+    CONVERSATION_PARTNER_DESC,
+    CONVERSATION_PARTNER_ID,
+    POST_SESSION_DESC,
+    POST_SESSION_ID,
+    ai_session,
+    flush_ai,
+    get_agent,
+)
 
 from grammar import load_taxonomy
 
@@ -501,6 +510,23 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
     # threading the ids through every call site. Detached at the end of the
     # disconnect `finally` below.
     _trace_ctx_token = attach_trace_context(user_id=user_id, session_id=trace_session_id)
+
+    # Agent Analytics: session frame for this connection — Start on enter,
+    # End + flush in the disconnect finally below. Same-task enter/exit via
+    # a plain handle (pipeline tasks may not inherit these contextvars, and
+    # the per-turn emits in ClientWrapper.astream bind explicitly anyway, so
+    # nothing depends on propagation). A setup failure before runner.run
+    # leaves a queued Start that a later flush delivers as a zero-message
+    # session — rare and harmless; every live connection exits normally.
+    _amp_session_cm = None
+    try:
+        _amp_agent = get_agent(CONVERSATION_PARTNER_ID, CONVERSATION_PARTNER_DESC)
+        if _amp_agent is not None:
+            _amp_session_cm = _amp_agent.session(user_id=user_id, session_id=session_id)
+            await _amp_session_cm.__aenter__()
+    except Exception as _amp_e:  # noqa: BLE001 — analytics must never break connect
+        logger.warning(f"Agent Analytics session enter failed (non-fatal): {_amp_e}")
+        _amp_session_cm = None
 
     # B2: bound the MiniMax TTS session's requests — with no timeout a hung
     # MiniMax request falls back to aiohttp's 5-minute default, stalling this
@@ -1770,11 +1796,18 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 # is caught inside its own try/except and only logs), so
                 # nothing propagates out of these coroutines — no
                 # `return_exceptions=True` needed.
-                await asyncio.gather(
-                    _run_goal_eval(),
-                    _run_grammar_or_tandem(),
-                    _run_pronunciation(),
-                )
+                # Agent Analytics: the harvesters' judge calls (via the
+                # _agenerate hook) bind to this post-session frame — same
+                # activity session_id as the conversation turns, so one
+                # Amplitude session holds the whole sitting. gather copies
+                # this task's contextvars into its children, which is what
+                # the hook reads. Skips cleanly when tracking is disabled.
+                with ai_session(POST_SESSION_ID, POST_SESSION_DESC, db_user_id, session_id):
+                    await asyncio.gather(
+                        _run_goal_eval(),
+                        _run_grammar_or_tandem(),
+                        _run_pronunciation(),
+                    )
             # Finalize the activity_session row (DATA-001). Runs after both
             # evaluators so their results land in the same UPDATE. Same non-fatal
             # contract: a DB outage logs a warning and we proceed to logger
@@ -1887,4 +1920,15 @@ async def run_pipeline(websocket, user_id: str, voice: str = "happy_harry", less
                 detach_trace_context(_trace_ctx_token)
             except Exception:  # noqa: BLE001 — context detach must not block cleanup
                 logger.exception("Trace-context detach failed (non-fatal)")
+            # Agent Analytics: End the connection frame opened after the
+            # trace attach above (same task — plain handle, no contextvars
+            # dependence), then flush so a long-lived worker never holds
+            # this sitting's events past disconnect.
+            try:
+                if _amp_session_cm is not None:
+                    await _amp_session_cm.__aexit__(None, None, None)
+            except Exception:  # noqa: BLE001 — analytics must never break disconnect
+                logger.warning("Agent Analytics session exit failed (non-fatal)")
+            finally:
+                flush_ai()
             logger.info(f"Client disconnected: {user_id}")

@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Outfit, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Providers from "@/components/auth/Providers";
 import MetaPixel from "@/components/MetaPixel";
+import { Amplitude } from "@/amplitude";
 
 const bricolage = Bricolage_Grotesque({
   variable: "--font-display",
@@ -79,6 +80,7 @@ export default function RootLayout({
         className={`${bricolage.variable} ${outfit.variable} ${geistMono.variable} antialiased`}
       >
         <MetaPixel />
+        <Amplitude />
         <Providers>{children}</Providers>
       </body>
     </html>

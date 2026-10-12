@@ -63,6 +63,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import propagate_trace_context, tracer
+from agents.amplitude_ai import CONTENT_FORGE_DESC, CONTENT_FORGE_ID, DRILL_JUDGE_DESC, DRILL_JUDGE_ID, ai_session
 from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import UserCard, VocabCard
@@ -657,7 +658,7 @@ async def submit_attempt(
 
     rule = load_rules().get(item["rule"]) if item.get("rule") else None
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("genus-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("genus-attempt") as attempt_span, ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, body.session_id):
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("item_id", item["id"])
         attempt_span.set_attribute("phase", body.phase)
@@ -955,7 +956,7 @@ async def vocab_nudge(
     if not deck:
         return {"words": []}
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("genus-nudge") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("genus-nudge") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, body.session_id):
         span.set_attribute("user.id", user_id)
         span.set_attribute("item_id", item["id"])
         if body.session_id:

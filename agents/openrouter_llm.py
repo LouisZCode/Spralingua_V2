@@ -147,10 +147,47 @@ class DeadlineChatOpenAI(ProviderChatOpenAI):
     deadline_s: float = 12.0
 
     async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
-        return await asyncio.wait_for(
-            super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs),
-            timeout=self.deadline_s,
+        import time as _time
+
+        from agents.amplitude_ai import CANONICAL_MODEL, emit_one_shot_turn
+
+        start_ns = _time.time_ns()
+        try:
+            result = await asyncio.wait_for(
+                super()._agenerate(messages, stop=stop, run_manager=run_manager, **kwargs),
+                timeout=self.deadline_s,
+            )
+        except Exception as e:
+            # Error path: the turn is invisible in Agent Analytics unless we
+            # emit it here — latency/error-rate charts would miss the failure
+            # entirely. Re-raise after emitting (deadline/fallback semantics
+            # above must not change).
+            emit_one_shot_turn(
+                user_text=_last_human_text(messages),
+                ai_text="",
+                model=CANONICAL_MODEL,
+                provider=_leg_provider(self),
+                latency_ms=(_time.time_ns() - start_ns) / 1_000_000,
+                input_tokens=None,
+                output_tokens=None,
+                context={"ingestion_path": "gateway", "gateway": _leg_gateway(self)},
+                is_error=True,
+                error_message=f"{type(e).__name__}: {e}",
+            )
+            raise
+        latency_ms = (_time.time_ns() - start_ns) / 1_000_000
+        usage, ai_text = _result_usage_and_text(result)
+        emit_one_shot_turn(
+            user_text=_last_human_text(messages),
+            ai_text=ai_text,
+            model=CANONICAL_MODEL,
+            provider=_leg_provider(self),
+            latency_ms=latency_ms,
+            input_tokens=usage.get("input_tokens"),
+            output_tokens=usage.get("output_tokens"),
+            context={"ingestion_path": "gateway", "gateway": _leg_gateway(self)},
         )
+        return result
 
 
 # --- Cerebras-primary / OpenRouter-fallback judge factory (2026-07) --------
@@ -212,6 +249,72 @@ def _openrouter_leg(deadline_s: float, temperature: float | None = None) -> Dead
         # still try Cerebras first.
         extra_body={"provider": {"order": ["cerebras"], "allow_fallbacks": True}},
     )
+
+
+def _leg_gateway(leg: "DeadlineChatOpenAI") -> str:
+    """Which gateway served this leg — the structured segmentation dimension
+    (``context.gateway``), not the provider label sent for cost."""
+    base_url = getattr(leg, "openai_api_base", None) or getattr(leg, "base_url", "")
+    return "cerebras-direct" if CEREBRAS_BASE_URL in str(base_url) else "openrouter"
+
+
+def _leg_provider(_leg: "DeadlineChatOpenAI") -> str:
+    # Cost-attribution provider. Both legs serve Cerebras hardware today, but
+    # the OpenRouter leg can route off Cerebras (allow_fallbacks=True), so it
+    # is labelled for what it is — a gateway hop, not a hardware claim.
+    return "openrouter" if _leg_gateway(_leg) == "openrouter" else "cerebras"
+
+
+def _coerce_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, str):
+                parts.append(block)
+            elif isinstance(block, dict):
+                if block.get("type") == "text":
+                    parts.append(str(block.get("text", "")))
+                elif "text" in block:
+                    parts.append(str(block["text"]))
+        return "".join(parts)
+    return str(content) if content is not None else ""
+
+
+def _last_human_text(messages) -> str:
+    """Last human message text. In ``metadata_only`` mode the SDK drops the
+    body — the call still shapes the turn — so extraction stays best-effort."""
+    try:
+        for m in reversed(messages or []):
+            role = getattr(m, "type", "") or getattr(m, "role", "")
+            if role in ("human", "user"):
+                return _coerce_text(getattr(m, "content", ""))[:2000]
+    except Exception:
+        pass
+    return ""
+
+
+def _result_usage_and_text(result) -> tuple:
+    """``(usage_dict, ai_text)`` from a LangChain ``ChatResult``. The final
+    generation's message carries ``usage_metadata`` (OBS-008 established the
+    same "last wins" shape on the streamed path)."""
+    usage: dict = {}
+    ai_text = ""
+    try:
+        gens = getattr(result, "generations", None) or []
+        if gens:
+            gen = gens[-1]
+            ai_text = getattr(gen, "text", "") or ""
+            msg = getattr(gen, "message", None)
+            meta = getattr(msg, "usage_metadata", None) or {}
+            usage = {
+                "input_tokens": meta.get("input_tokens"),
+                "output_tokens": meta.get("output_tokens"),
+            }
+    except Exception:
+        pass
+    return usage, ai_text
 
 
 def _judge_legs(

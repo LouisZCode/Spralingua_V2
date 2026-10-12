@@ -1272,6 +1272,39 @@ class ClientWrapper:
                 if text.strip() and not is_kickoff and not is_exercise_result and not is_wrap_up:
                     self._user_turn_text.append((self._current_vad_seq, text))
 
+                # Agent Analytics: one user+AI pair per streamed turn, bound
+                # explicitly (this coroutine may run outside the factory's
+                # session contextvars). One trace per exchange so the viewer
+                # groups each turn as its own card. Bodies are dropped
+                # server-side under metadata_only; turn counts, latency,
+                # tokens and cost are what this channel is for. Never raises.
+                try:
+                    from agents.amplitude_ai import CANONICAL_MODEL, emit_conversation_turn
+
+                    _usage = final_usage or {}
+                    emit_conversation_turn(
+                        user_id=self.user_id,
+                        session_id=self.session_id,
+                        trace_id=f"{self.session_id}-turn-{self._exchange_count}",
+                        user_text=text,
+                        ai_text=output_text,
+                        model=CANONICAL_MODEL,
+                        provider="openrouter",
+                        latency_ms=(time.time_ns() - span_start_ns) / 1_000_000,
+                        ttfb_ms=((ttft_ns - span_start_ns) / 1_000_000 if ttft_ns is not None else None),
+                        input_tokens=_usage.get("input_tokens"),
+                        output_tokens=_usage.get("output_tokens"),
+                        context={
+                            "ingestion_path": "gateway",
+                            "gateway": "openrouter",
+                            "lesson_id": self.context.lesson_id,
+                            "exchange": self._exchange_count,
+                            "synthetic_input": bool(is_kickoff or is_exercise_result or is_wrap_up),
+                        },
+                    )
+                except Exception:
+                    pass
+
                 # AGENT-00X / CLARA-15 P3: push the confirmed exercise
                 # marker to the client now that the reply is fully assembled
                 # and stripped above. Guarded like `flush_bot_output`'s own

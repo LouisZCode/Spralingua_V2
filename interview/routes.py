@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.error_extractor import extract_errors
 from agents.observability import mark_span_error, propagate_trace_context, tracer
+from agents.amplitude_ai import DRILL_JUDGE_DESC, DRILL_JUDGE_ID, POST_SESSION_DESC, POST_SESSION_ID, ai_session
 from auth.deps import get_current_user_id
 from database.connection import get_db, get_sessionmaker
 from database.orm import AudioChunk, AudioItem
@@ -118,12 +119,15 @@ async def _background_harvest(
         # STT-006: this transcript is always a Deepgram spoken transcript
         # (transcribe_answer) — never typed — so the ASR-dropout guards
         # apply.
-        extraction = await extract_errors(
-            transcript=transcript,
-            session_id=session_id,
-            user_id=user_id,
-            check_asr_artifacts=True,
-        )
+        # Agent Analytics: the harvester's judge call binds to this frame —
+        # same sitting session_id as the answer that spawned it.
+        with ai_session(POST_SESSION_ID, POST_SESSION_DESC, user_id, session_id):
+            extraction = await extract_errors(
+                transcript=transcript,
+                session_id=session_id,
+                user_id=user_id,
+                check_asr_artifacts=True,
+            )
         async with get_sessionmaker()() as db:
             for err in extraction.errors:
                 try:
@@ -437,7 +441,8 @@ async def post_comprehension(
     # being invisible — and a transcription outage shows up as an ERROR
     # trace rather than a bare 502 in the access log.
     with propagate_trace_context(user_id=user_id, session_id=session_id), \
-            tracer.start_as_current_span("interview-comprehension") as span:
+            tracer.start_as_current_span("interview-comprehension") as span, \
+            ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         span.set_attribute("chunk_id", chunk_id)
         if session_id:
@@ -556,7 +561,8 @@ async def post_answer(
     # Deepgram call's `stt` generation nests under this trace beside the
     # judges — and a transcription outage shows up as an ERROR trace.
     with propagate_trace_context(user_id=user_id, session_id=session_id), \
-            tracer.start_as_current_span("interview-answer") as span:
+            tracer.start_as_current_span("interview-answer") as span, \
+            ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         span.set_attribute("chunk_id", chunk_id)
         if session_id:

@@ -25,6 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.observability import mark_span_error, propagate_trace_context, tracer
+from agents.amplitude_ai import CONTENT_FORGE_DESC, CONTENT_FORGE_ID, DRILL_JUDGE_DESC, DRILL_JUDGE_ID, ai_session
 from auth.deps import get_current_user_id
 from config import langfuse_base_url, langfuse_public_key, langfuse_secret_key
 from database.connection import get_db, get_sessionmaker
@@ -334,7 +335,7 @@ async def _forge_card(
         # All _MAX_FORGE_ATTEMPTS rounds came back rejected — ship the last
         # attempt anyway, but make the failure loud in Langfuse rather than
         # silent.
-        with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
+        with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-forge-gate-exhausted") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, session_id):
             if session_id:
                 span.set_attribute("langfuse.session.id", session_id)
             span.set_attribute("user.id", user_id)
@@ -509,7 +510,7 @@ async def _ensure_past_sibling(
             # Same Langfuse error signal as the base-card gate: giving up is
             # the safe outcome here, but it must never be a *silent* one, or
             # verbs quietly stop getting past siblings and nobody notices.
-            with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-forge-gate-exhausted") as span:
+            with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-forge-gate-exhausted") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, session_id):
                 if session_id:
                     span.set_attribute("langfuse.session.id", session_id)
                 span.set_attribute("user.id", user_id)
@@ -868,7 +869,7 @@ async def submit_attempt(
     # — start_as_current_span nests them here automatically) split the
     # attempt's highly variable latency per stage; the perf_counter log line
     # below answers the same question locally when Langfuse is off.
-    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-attempt") as attempt_span:
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("satz-attempt") as attempt_span, ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
         attempt_span.set_attribute("user.id", user_id)
         attempt_span.set_attribute("card_id", card_id)
         if session_id:
@@ -1350,7 +1351,7 @@ async def explain_attempt(
     if card is None:
         raise HTTPException(status_code=404, detail="Unknown card.")
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satz-explain-attempt") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satz-explain-attempt") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, body.session_id):
         span.set_attribute("user.id", user_id)
         span.set_attribute("card_id", body.card_id)
         if body.session_id:
@@ -1432,7 +1433,7 @@ async def gloss_word_route(
     if not lookup:
         raise HTTPException(status_code=422, detail="Type a word first.")
 
-    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satz-gloss-request") as span:
+    with propagate_trace_context(user_id=user_id, session_id=body.session_id), tracer.start_as_current_span("satz-gloss-request") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, body.session_id):
         span.set_attribute("user.id", user_id)
         if body.session_id:
             span.set_attribute("langfuse.session.id", body.session_id)
@@ -1630,6 +1631,27 @@ async def flag_verdict(
         comment_parts.append(f"verdict: {body.verdict}")
     if body.transcript:
         comment_parts.append(f"transcript: {body.transcript}")
+
+    # Agent Analytics: the same disagree-flag as session-level user feedback.
+    # Session-scoped (no message_id reaches this endpoint), fail-open.
+    try:
+        from agents.amplitude_ai import get_ai, normalize_session_id
+
+        _ai = get_ai()
+        _sid = normalize_session_id(body.session_id)
+        if _ai is not None and _sid:
+            _ai.score(
+                user_id=user_id,
+                name="user-feedback",
+                value=0,
+                target_id=_sid,
+                target_type="session",
+                source="user",
+                session_id=_sid,
+                comment=" | ".join(comment_parts)[:500],
+            )
+    except Exception as _e:  # noqa: BLE001 — feedback mirroring must never break flagging
+        logger.warning(f"Agent Analytics score failed (non-fatal): {_e}")
 
     payload = {
         "traceId": body.trace_id,

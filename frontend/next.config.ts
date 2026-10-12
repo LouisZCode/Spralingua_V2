@@ -81,6 +81,12 @@ const nextConfig: NextConfig = {
       // connect.facebook.net/signals/config — both blocked without these.
       "https://connect.facebook.net",
       "https://www.facebook.com",
+      // Amplitude (@amplitude/unified, src/amplitude.ts): event ingestion
+      // POSTs to api2.amplitude.com/2/httpapi. US endpoints — the project
+      // ingested fine at the SDK default (verified with live 200s), so no
+      // serverZone override; if the project ever moves EU-hosted, swap
+      // these for cdn.eu/api.eu.amplitude.com.
+      "https://api2.amplitude.com",
       // No daily.co origin here, on purpose (SEC-005, 2026-09-05):
       // @pipecat-ai/websocket-transport's DEFAULT media manager is Daily's
       // own `DailyMediaManager`, which fetches and eval()s a call-object
@@ -189,6 +195,10 @@ const nextConfig: NextConfig = {
     // www.facebook.com (event POSTs, the noscript fallback, iframe
     // transport). Per Meta's CSP guidance — re-verify live with the Pixel
     // Helper if Meta changes endpoints.
+    // Amplitude (src/amplitude.ts, npm bundle — no external <script> loader,
+    // so script-src needs no new host): connect-src carries
+    // api2.amplitude.com (event ingestion + remote config). If prod Live
+    // Events stay empty, check the browser console for blocked hosts first.
     const directives = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://connect.facebook.net",

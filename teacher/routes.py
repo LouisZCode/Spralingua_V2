@@ -59,6 +59,7 @@ from agents.observability import (
     propagate_trace_context,
     tracer,
 )
+from agents.amplitude_ai import CONTENT_FORGE_DESC, CONTENT_FORGE_ID, DRILL_JUDGE_DESC, DRILL_JUDGE_ID, ai_session
 from auth.deps import get_current_user_id
 from satz.examiner import transcribe_attempt
 from security import drill_try_admit
@@ -257,7 +258,8 @@ async def forge_exercise(
     # facing, not batch content generation).
     session_id = get_trace_session(user_id)
     with propagate_trace_context(user_id=user_id, session_id=session_id), \
-            tracer.start_as_current_span("teacher-exercise-forge") as span:
+            tracer.start_as_current_span("teacher-exercise-forge") as span, \
+            ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         if session_id:
             span.set_attribute("langfuse.session.id", session_id)
@@ -347,7 +349,8 @@ async def submit_exercise_attempt(
 
         session_id = get_trace_session(user_id)
         with propagate_trace_context(user_id=user_id, session_id=session_id), \
-                tracer.start_as_current_span("teacher-exercise-attempt") as span:
+                tracer.start_as_current_span("teacher-exercise-attempt") as span, \
+                ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
             span.set_attribute("user.id", user_id)
             if session_id:
                 span.set_attribute("langfuse.session.id", session_id)
@@ -396,7 +399,8 @@ async def submit_exercise_attempt(
             )
         session_id = get_trace_session(user_id)
         with propagate_trace_context(user_id=user_id, session_id=session_id), \
-                tracer.start_as_current_span("teacher-exercise-attempt") as span:
+                tracer.start_as_current_span("teacher-exercise-attempt") as span, \
+                ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
             span.set_attribute("user.id", user_id)
             if session_id:
                 span.set_attribute("langfuse.session.id", session_id)
@@ -435,7 +439,8 @@ async def submit_exercise_attempt(
     # untouched; nothing here goes near the ledger.
     session_id = get_trace_session(user_id)
     with propagate_trace_context(user_id=user_id, session_id=session_id), \
-            tracer.start_as_current_span("teacher-exercise-attempt") as span:
+            tracer.start_as_current_span("teacher-exercise-attempt") as span, \
+            ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         if session_id:
             span.set_attribute("langfuse.session.id", session_id)
@@ -575,7 +580,8 @@ async def submit_exercise_attempt_audio(
         # untouched.
         session_id = get_trace_session(user_id)
         with propagate_trace_context(user_id=user_id, session_id=session_id), \
-                tracer.start_as_current_span("teacher-exercise-attempt") as span:
+                tracer.start_as_current_span("teacher-exercise-attempt") as span, \
+                ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
             span.set_attribute("user.id", user_id)
             if session_id:
                 span.set_attribute("langfuse.session.id", session_id)
@@ -646,7 +652,8 @@ async def submit_exercise_attempt_audio(
     # output. Tracing only — the WRITES-NOTHING invariant above is untouched.
     session_id = get_trace_session(user_id)
     with propagate_trace_context(user_id=user_id, session_id=session_id), \
-            tracer.start_as_current_span("teacher-exercise-attempt") as span:
+            tracer.start_as_current_span("teacher-exercise-attempt") as span, \
+            ai_session(DRILL_JUDGE_ID, DRILL_JUDGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         if session_id:
             span.set_attribute("langfuse.session.id", session_id)

@@ -15,6 +15,7 @@ from loguru import logger
 from pydantic import BaseModel, ConfigDict, Field
 
 from agents.observability import get_trace_session, propagate_trace_context, tracer
+from agents.amplitude_ai import CONTENT_FORGE_DESC, CONTENT_FORGE_ID, ai_session
 from auth.deps import get_current_user_id
 from idiom.judge import germanize
 from security import drill_try_admit
@@ -84,7 +85,7 @@ async def rephrase(
     # and user-attributed, same as before.
     session_id = body.session_id or get_trace_session(user_id)
 
-    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("idiom-rephrase") as span:
+    with propagate_trace_context(user_id=user_id, session_id=session_id), tracer.start_as_current_span("idiom-rephrase") as span, ai_session(CONTENT_FORGE_ID, CONTENT_FORGE_DESC, user_id, session_id):
         span.set_attribute("user.id", user_id)
         if session_id:
             span.set_attribute("langfuse.session.id", session_id)
