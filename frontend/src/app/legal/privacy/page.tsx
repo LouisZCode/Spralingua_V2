@@ -257,6 +257,22 @@ export default function PrivacyPage() {
             "Not applicable — this data stays within the EU",
           ],
           [
+            "Error reporting",
+            "Sentry (Functional Software, Inc.)",
+            "European Union (our Sentry organization is hosted in Sentry's EU region, de.sentry.io); Sentry is a US-headquartered company",
+            <>
+              Error reports when something breaks: stack traces, the URL and
+              the route involved, and browser/operating-system information.{" "}
+              <B>
+                Never cookies, never authentication tokens, never your
+                account identity
+              </B>{" "}
+              — the reporting layer explicitly strips all three before
+              anything is sent.
+            </>,
+            "Processing occurs within the EU; EU-U.S. Data Privacy Framework applies to any incidental US-based administrative or support access",
+          ],
+          [
             "Sign-in",
             "Google LLC",
             "United States",
