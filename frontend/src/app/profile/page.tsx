@@ -7,6 +7,7 @@ import { useEffect } from "react";
 import AppHeader from "@/components/shared/AppHeader";
 import { useAuth } from "@/components/auth/AuthContext";
 import { CoinPill, useCoinBalance } from "@/components/shared/Coins";
+import { setConsent, useConsent } from "@/lib/consent";
 
 // Same ink-shadow constant every screen defines locally (no shared visuals
 // lib exists — see TopicScreen/Pricing) — kept in that per-file convention.
@@ -31,6 +32,12 @@ export default function ProfilePage() {
   const { token, ready, user, signOut } = useAuth();
   const router = useRouter();
   const bal = useCoinBalance();
+
+  // LEGAL-003 (A1): tracking toggle state — derived from the consent store
+  // (useSyncExternalStore), so there is no setState-in-effect and no
+  // hydration mismatch: the server snapshot is null (renders "…"), the
+  // client syncs to the stored choice right after hydration.
+  const consent = useConsent();
 
   // Auth guard: wait for localStorage hydration, then bounce signed-out
   // visitors to the landing page — same pattern as the practice screens.
@@ -164,6 +171,33 @@ export default function ProfilePage() {
             >
               Change your level on the practice menu →
             </Link>
+          </section>
+
+          <section className="rounded-[28px] border-[3px] border-line bg-card px-6 py-5">
+            <h2 className="font-display text-[16px] font-black uppercase tracking-[0.06em] text-ink">
+              Tracking
+            </h2>
+            <p className="mt-2 font-body text-[14px] leading-relaxed text-ink-soft">
+              Analytics and advertising measurement (Meta Pixel, Amplitude){" "}
+              {consent === "granted"
+                ? "are ON."
+                : consent === "declined"
+                  ? "are OFF."
+                  : "…"}{" "}
+              Nothing loads while it is off, and switching takes effect
+              immediately.
+            </p>
+            {consent !== null && (
+              <button
+                type="button"
+                onClick={() =>
+                  setConsent(consent === "granted" ? "declined" : "granted")}
+                className="btn-3d mt-3 rounded-[14px] border-[3px] border-line px-5 py-2 font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink"
+                style={inkShadow}
+              >
+                {consent === "granted" ? "Turn off" : "Turn on"}
+              </button>
+            )}
           </section>
 
           <button

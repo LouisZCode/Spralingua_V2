@@ -1,6 +1,8 @@
 "use client";
 
 import * as amplitude from "@amplitude/unified";
+import { useEffect } from "react";
+import { consentGranted, useConsent } from "@/lib/consent";
 
 const AMPLITUDE_API_KEY = process.env.NEXT_PUBLIC_AMPLITUDE_API_KEY;
 
@@ -13,21 +15,50 @@ const isProbe =
   typeof window !== "undefined" &&
   new URLSearchParams(window.location.search).get("probe") === "1";
 
-if (typeof window !== "undefined") {
+// LEGAL-003 (A1): nothing starts before consent. The <Amplitude /> component
+// in layout.tsx calls enableAnalytics() once consent is granted; before that
+// this module has no side effects at all. Revocation mid-session calls
+// setOptOut(true) — already-queued events stop, future ones never send.
+let initPromise: Promise<void> | null = null;
+let pendingUserId: string | undefined;
+
+function initAnalytics(): Promise<void> {
+  if (initPromise) return initPromise;
   if (!AMPLITUDE_API_KEY) {
     console.warn("Amplitude API key missing — analytics disabled");
-  } else {
-    // Track only after init resolves so the probe device ID (below) is
-    // already in place before the first event is stamped.
-    void amplitude
-      .initAll(AMPLITUDE_API_KEY, {
-        analytics: { autocapture: true },
-        sessionReplay: { sampleRate: 1 },
-      })
-      .then(() => {
-        if (isProbe) amplitude.setDeviceId(PROBE_DEVICE_ID);
-        amplitude.track("Viewed Home Page", { prompt_version: "BA400.4" }); // helps improve this setup flow — safe to remove once you've verified the event lands
-      });
+    return Promise.resolve();
+  }
+  initPromise = amplitude
+    .initAll(AMPLITUDE_API_KEY, {
+      analytics: { autocapture: true },
+      sessionReplay: { sampleRate: 1 },
+    })
+    .then(() => {
+      if (isProbe) amplitude.setDeviceId(PROBE_DEVICE_ID);
+      // ANALYTICS-002 stitching may have identified the user before consent
+      // arrived (sign-in earlier in the session) — apply it now.
+      if (pendingUserId) amplitude.setUserId(pendingUserId);
+      amplitude.track("Viewed Home Page", { prompt_version: "BA400.4" }); // helps improve this setup flow — safe to remove once you've verified the event lands
+    });
+  return initPromise;
+}
+
+export function enableAnalytics() {
+  if (!consentGranted()) return;
+  void initAnalytics().then(() => {
+    try {
+      amplitude.setOptOut(false); // re-grant after a revoke
+    } catch {
+      /* never break the app over tracking */
+    }
+  });
+}
+
+export function disableAnalytics() {
+  try {
+    amplitude.setOptOut(true);
+  } catch {
+    /* never break the app over tracking */
   }
 }
 
@@ -36,16 +67,30 @@ if (typeof window !== "undefined") {
 // every server-side event — setting the same string here merges a
 // learner's devices and their backend turns into one Amplitude user.
 // Probes never carry a real identity, even if one were available.
+// LEGAL-003: remembered in pendingUserId so the stitch survives a consent
+// grant that arrives AFTER sign-in (identify fires once, at sign-in).
 export function identifyAnalyticsUser(userId: string) {
   if (typeof window === "undefined" || !AMPLITUDE_API_KEY || isProbe) return;
-  amplitude.setUserId(userId);
+  pendingUserId = userId;
+  if (consentGranted()) amplitude.setUserId(userId);
 }
 
 export function clearAnalyticsUser() {
   if (typeof window === "undefined" || !AMPLITUDE_API_KEY || isProbe) return;
+  pendingUserId = undefined;
   amplitude.setUserId(undefined);
 }
 
-export const Amplitude = () => null;
+// Mounted in layout.tsx next to <MetaPixel />. Renders nothing; reacts to
+// consent changes (banner / login notice / profile toggle all dispatch the
+// same event through useConsent).
+export function Amplitude() {
+  const consent = useConsent();
+  useEffect(() => {
+    if (consent === "granted") enableAnalytics();
+    else if (consent === "declined") disableAnalytics();
+  }, [consent]);
+  return null;
+}
 
 export default amplitude;

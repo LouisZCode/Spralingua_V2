@@ -3,6 +3,7 @@
 import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
+import { useConsent } from "@/lib/consent";
 
 // Meta Pixel base code (Events Manager snippet), adapted for the App Router.
 // NEXT_PUBLIC_ prefix so the browser bundle can read it — inlined at BUILD
@@ -37,6 +38,15 @@ function PixelTracker() {
 }
 
 export default function MetaPixel() {
+  // LEGAL-003 (A1): the whole Pixel — base snippet, route-change tracker
+  // and the noscript fallback — mounts only after consent is granted.
+  // Consent arriving later (banner/notice/toggle) re-renders this and the
+  // snippet's own init fires PageView; consent revoked unmounts it, and
+  // lib/fbpixel.ts::trackFbq additionally guards every explicit event so
+  // an already-loaded fbq can never fire post-revoke.
+  const consent = useConsent();
+  if (consent !== "granted") return null;
+
   return (
     <>
       <Script id="meta-pixel" strategy="afterInteractive">

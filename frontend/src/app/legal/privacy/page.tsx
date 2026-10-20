@@ -19,7 +19,7 @@ export default function PrivacyPage() {
   return (
     <>
       <LegalTitle>Privacy Policy (Datenschutzerklärung) for spralingua.com</LegalTitle>
-      <LegalMeta>Last updated: 11 October 2026</LegalMeta>
+      <LegalMeta>Last updated: 19 October 2026</LegalMeta>
 
       <LegalP>
         This Privacy Policy explains what personal data spralingua.com
@@ -124,30 +124,48 @@ export default function PrivacyPage() {
       <LegalH3>2.5 What we store in your browser — and what we don&apos;t</LegalH3>
       <LegalP>
         We use your browser&apos;s <code>localStorage</code> (not cookies) to
-        store two things: your session token and a local copy of your
-        profile (together, <code>spralingua_auth</code>), and a small set of
-        non-personal UI preferences (such as display settings).
+        store three things: your session token and a local copy of your
+        profile (together, <code>spralingua_auth</code>), your tracking
+        choice (<code>spralingua-consent-v1</code> — see below; remembering
+        that you declined is the only way not to re-ask on every page), and
+        a small set of non-personal UI preferences (such as display
+        settings).
       </LegalP>
       <LegalP>
         We do <B>not</B> use cookies, and we do <B>not</B> run our own
-        analytics. We do use one third-party advertising technology: the{" "}
-        <B>Meta Pixel</B> (Meta Platforms Ireland Ltd., Ireland). It loads on
-        every page and reports page views plus three actions — account
+        analytics. We do use two third-party technologies, both gated
+        behind your consent: the <B>Meta Pixel</B> for advertising
+        measurement and <B>Amplitude</B> for product analytics. The Pixel
+        loads after you accept and page views plus three actions — account
         registration, checkout start, and completed purchase (amount and
         currency) — so we can measure our own advertising. It does{" "}
         <B>not</B> receive your account identity: we never send Meta your
         name, your email address, or anything from your learning record.
         Like any third party serving code on the page, Meta necessarily
-        receives your IP address and browser information with these requests.
+        receives your IP address and browser information with these
+        requests.
+      </LegalP>
+      <LegalP>
+        Our product analytics tool, <B>Amplitude</B> (Amplitude Inc., United
+        States), helps us understand which parts of Spralingua are used and
+        where learners get stuck. After you consent, it records page views,
+        clicks and similar interactions, anonymized session recordings of
+        what the screen displayed, and technical information such as browser
+        and device type. Once you are signed in it receives a pseudonymous
+        account identifier (our internal user id) — never your name, email
+        address, Google identity, voice audio, or learning-record content.
+        Amplitude is hosted in the United States; see section 4 for the
+        safeguard that applies.
       </LegalP>
       <LegalP>
         The login token in <code>localStorage</code> is strictly necessary to
         keep you signed in (the &quot;strictly necessary&quot; exemption in
-        § 25(2) TDDDG). The Meta Pixel is <B>not</B> strictly necessary, so
-        under § 25 TDDDG it requires your prior consent — and{" "}
-        <B>a consent mechanism does not exist yet</B>. Until one is in place,
-        the Pixel loads on every visit. That is a known gap, not a decision:
-        see section 10.
+        § 25(2) TDDDG). The Meta Pixel and Amplitude are <B>not</B> strictly
+        necessary, so under § 25 TDDDG they load only after your consent: a
+        small banner on your first visit, a one-time notice when you sign
+        in, and a switch on your profile page to change your choice at any
+        time. Nothing tracking-related loads before you accept, and
+        switching it off stops it immediately.
       </LegalP>
 
       <LegalH3>2.6 IP addresses</LegalH3>
@@ -188,6 +206,10 @@ export default function PrivacyPage() {
           [
             "Observability and tracing of our systems (via Langfuse), for reliability and cost monitoring",
             "Art. 6(1)(f) GDPR — our legitimate interest in keeping the service reliable and financially sustainable. Note: these technical traces include the content of your conversations and the prompts used to generate replies",
+          ],
+          [
+            "Measuring how Spralingua is used — the Meta Pixel and Amplitude analytics described in section 2.5",
+            "Art. 6(1)(a) GDPR and § 25(1) TDDDG — your consent, given via the first-visit banner or the sign-in notice, withdrawable at any time in your profile",
           ],
         ]}
       />
@@ -273,6 +295,13 @@ export default function PrivacyPage() {
             "Processing occurs within the EU; EU-U.S. Data Privacy Framework applies to any incidental US-based administrative or support access",
           ],
           [
+            "Product analytics (after consent)",
+            "Amplitude Inc.",
+            "United States",
+            "Usage events (pages viewed, clicks, interactions), anonymized session recordings of what the screen displayed, device and browser information, and a pseudonymous account identifier — no name, email address, voice audio, or learning-record content",
+            "EU Standard Contractual Clauses (SCCs)",
+          ],
+          [
             "Sign-in",
             "Google LLC",
             "United States",
@@ -305,7 +334,11 @@ export default function PrivacyPage() {
           In plain terms: all of your application data at rest — your
           account, your database records, your audio recordings — is stored
           on servers in the EU.
-        </B>
+        </B>{" "}
+        Consented usage analytics is the one exception to that EU rule: the
+        Amplitude data described in section 2.5 is processed in the United
+        States under the safeguard above, and the Meta Pixel involves Meta
+        (Ireland/US) as described there.
       </LegalP>
       <LegalP>
         We do not currently process any payment data. Spralingua is free
@@ -364,9 +397,11 @@ export default function PrivacyPage() {
         </li>
         <li>
           <B>Withdraw consent</B> at any time, for any processing that is
-          based on consent. Note: none of the processing described in this
-          policy is currently based on your consent (Art. 6(1)(a)) — see
-          Section 3 for the actual bases we rely on.
+          based on consent. Tracking and analytics (section 2.5) run on
+          your consent: switch them off on your profile page — it takes
+          effect immediately and stops future tracking. Withdrawing does
+          not affect the lawfulness of processing that happened before you
+          withdrew.
         </li>
       </LegalUL>
       <LegalP>
@@ -430,8 +465,11 @@ export default function PrivacyPage() {
         advertising technology, with a commitment to put a consent mechanism
         in place <B>before</B> any such technology went live. On that date we
         activated the Meta Pixel (see section 2.5) <B>before</B> the consent
-        mechanism existed — that sequence broke the promise above, and adding
-        the consent choice is now overdue, not upcoming.
+        mechanism existed — that sequence broke the promise above. Since 19
+        October 2026 the consent mechanism is in place: nothing
+        tracking-related loads before you accept (first-visit banner,
+        sign-in notice, profile switch), and it covers both the Meta Pixel
+        and Amplitude.
       </LegalP>
     </>
   );
