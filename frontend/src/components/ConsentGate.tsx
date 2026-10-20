@@ -57,7 +57,7 @@ export default function ConsentGate() {
               <button
                 type="button"
                 onClick={grant}
-                className="btn-3d rounded-[14px] border-[3px] border-line bg-ink-fill px-5 py-2 font-display text-[11px] font-black uppercase tracking-[0.14em] text-on-fill"
+                className="btn-3d rounded-[14px] border-[3px] border-line bg-gender-blue-fill px-5 py-2 font-display text-[11px] font-black uppercase tracking-[0.14em] text-on-fill"
                 style={inkShadow}
               >
                 Accept
@@ -98,7 +98,7 @@ export default function ConsentGate() {
                 type="button"
                 autoFocus
                 onClick={grant}
-                className="btn-3d rounded-[14px] border-[3px] border-line bg-ink-fill px-6 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill"
+                className="btn-3d rounded-[14px] border-[3px] border-line bg-gender-blue-fill px-6 py-2.5 font-display text-[12px] font-black uppercase tracking-[0.14em] text-on-fill"
                 style={inkShadow}
               >
                 Continue
