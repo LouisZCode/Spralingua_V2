@@ -16,6 +16,7 @@
 
 import { useAuth } from "@/components/auth/AuthContext";
 import { setConsent, useConsent } from "@/lib/consent";
+import Link from "next/link";
 
 // House ink-shadow per-file constant (see profile/page.tsx convention).
 const inkShadow = {
@@ -48,11 +49,11 @@ export default function ConsentGate() {
         >
           <div className="mx-auto flex w-full max-w-[560px] flex-col gap-3 rounded-[22px] border-[3px] border-line bg-card px-5 py-4 shadow-[6px_6px_0_0_var(--color-line)]">
             <p className="font-body text-[13px] leading-relaxed text-ink-soft">
-              We use analytics and advertising measurement (Meta, Amplitude)
-              to understand what works — nothing loads until you accept. You
-              can change this anytime in your profile.
+              We use cookies, webpage use and analytics and advertising
+              measurement to improve the experience of our students on the
+              webpage.
             </p>
-            <div className="flex gap-3">
+            <div className="flex items-center gap-3">
               <button
                 type="button"
                 onClick={grant}
@@ -69,6 +70,12 @@ export default function ConsentGate() {
               >
                 Decline
               </button>
+              <Link
+                href="/legal/privacy"
+                className="ml-auto font-body text-[11px] font-bold uppercase tracking-[0.18em] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
+              >
+                Privacy →
+              </Link>
             </div>
           </div>
         </div>
@@ -82,13 +89,9 @@ export default function ConsentGate() {
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
         >
           <div className="w-full max-w-[440px] rounded-[28px] border-[3px] border-line bg-card px-6 py-6 shadow-[8px_8px_0_0_var(--color-line)]">
-            <h2 className="font-display text-[16px] font-black uppercase tracking-[0.06em] text-ink">
-              Welcome back!
-            </h2>
-            <p className="mt-3 font-body text-[14px] leading-relaxed text-ink-soft">
-              We appreciate you logging in! To give you a better experience,
-              we track some use of the website — you can change this always
-              in your personal profile.
+            <p className="font-body text-[14px] leading-relaxed text-ink-soft">
+              We track some website use to improve your experience — change
+              it anytime in your profile.
             </p>
             <div className="mt-5 flex flex-col items-start gap-2">
               <button
