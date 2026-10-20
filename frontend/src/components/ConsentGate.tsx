@@ -53,7 +53,7 @@ export default function ConsentGate() {
               measurement to improve the experience of our students on the
               webpage.
             </p>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-3">
               <button
                 type="button"
                 onClick={grant}
@@ -72,7 +72,7 @@ export default function ConsentGate() {
               </button>
               <Link
                 href="/legal/privacy"
-                className="ml-auto font-body text-[11px] font-bold uppercase tracking-[0.18em] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
+                className="font-body text-[11px] font-bold uppercase tracking-[0.18em] text-ink-faint underline-offset-4 hover:text-ink hover:underline"
               >
                 Privacy →
               </Link>
@@ -93,7 +93,7 @@ export default function ConsentGate() {
               We track some website use to improve your experience — change
               it anytime in your profile.
             </p>
-            <div className="mt-5 flex flex-col items-start gap-2">
+            <div className="mt-5 flex flex-col items-center gap-2">
               <button
                 type="button"
                 autoFocus
