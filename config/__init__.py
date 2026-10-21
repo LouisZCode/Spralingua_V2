@@ -6,6 +6,8 @@ from .settings import (
     openrouter_api_key,
     openrouter_base_url,
     cerebras_api_key,
+    tts_or_fallback,
+    tts_or_model,
     langfuse_public_key,
     langfuse_secret_key,
     langfuse_base_url,

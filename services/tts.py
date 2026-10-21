@@ -8,11 +8,21 @@ tts_minimax
 """
 import aiohttp
 import asyncio
+import time
+from io import BytesIO
 from typing import AsyncGenerator
 
-from pipecat.frames.frames import Frame
+from loguru import logger
+from pipecat.frames.frames import ErrorFrame, Frame, TTSAudioRawFrame
 from pipecat.services.minimax.tts import MiniMaxHttpTTSService
-from config import minimax_api_key, minimax_group_id
+from config import (
+    minimax_api_key,
+    minimax_group_id,
+    openrouter_api_key,
+    openrouter_base_url,
+    tts_or_fallback,
+    tts_or_model,
+)
 from pipecat.transcriptions.language import Language
 
 # Single source of truth — both tts_minimax() and the TTS trace observer
@@ -39,6 +49,21 @@ VOICE_MAP = {
     # Cloned voices (exist in the MiniMax account)
     "luis_clone": "moss_audio_744c4375-eb2b-11f0-b8d7-fa843b4be43a",     # best Luis clone (old luis_voice_clone deleted)
     "German_Female": "moss_audio_4872e74b-124f-11f1-841b-1e2fac512910",  # German female (won A/B vs deleted v2)
+}
+
+# OpenRouter fallback voice substitutions (TTS-FB-001). OpenRouter proxies the
+# same MiniMax speech models, but only voice ids that are NOT bound to a
+# specific MiniMax account resolve there — verified live 2026-10-21:
+#   PASS through OpenRouter unchanged: clara_ttv, German_PlayfulMan,
+#     Calm_Woman, German_SweetLady (+ the 45 stock English voices).
+#   502 (account-bound, need a substitute): both moss_audio clones,
+#     german_bavarian_male_v2, german_bavarian_female.
+# Keyed by MiniMax voice_id (not the app key) — run_tts only sees the id.
+OR_TTS_VOICE_SUBSTITUTES = {
+    "moss_audio_4872e74b-124f-11f1-841b-1e2fac512910": "German_SweetLady",   # German_Female (demo + Lena)
+    "moss_audio_744c4375-eb2b-11f0-b8d7-fa843b4be43a": "German_PlayfulMan",  # luis_clone
+    "german_bavarian_male_v2": "German_PlayfulMan",   # happy_harry (pipeline default)
+    "german_bavarian_female": "German_SweetLady",    # sophie
 }
 
 class FirstOnlyTracedMiniMaxTTS(MiniMaxHttpTTSService):
@@ -93,9 +118,141 @@ class FirstOnlyTracedMiniMaxTTS(MiniMaxHttpTTSService):
                 self._tracing_enabled = saved
 
 
+class OpenRouterFallbackMiniMaxTTS(FirstOnlyTracedMiniMaxTTS):
+    """MiniMax TTS that falls back to OpenRouter when MiniMax yields no audio.
+
+    The credit-exhaustion failure mode (MiniMax ``base_resp.status_code`` 2053,
+    seen in production 2026-10-21) is INVISIBLE to pipecat: the HTTP response
+    is 200, so ``MiniMaxHttpTTSService.run_tts`` simply yields no audio frames
+    and the learner hears silence while every span stays green. This subclass
+    wraps each turn: if the primary generator completes without a single
+    ``TTSAudioRawFrame`` — or dies with a non-cancel exception — the same text
+    is synthesized through OpenRouter's ``/audio/speech`` endpoint (same
+    MiniMax model, billed to the existing OpenRouter credits) and yielded as
+    the same frame type, so nothing downstream changes.
+
+    Account-bound MiniMax voice ids 502 through OpenRouter's provider, so
+    ``OR_TTS_VOICE_SUBSTITUTES`` swaps those for a pass-through voice — a
+    slightly different voice during an outage beats silence.
+    """
+
+    _OR_TIMEOUT_S = 15.0
+    _ALERT_EVERY_S = 600.0  # rate-limit the Sentry/log alarm to 1 per 10 min
+    _last_alert_ts: float = 0.0  # class-level: one alarm for the outage, not per turn
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.or_fallback_used = 0  # turns this service fell back (introscope/tests)
+
+    async def run_tts(self, text: str) -> AsyncGenerator[Frame, None]:
+        got_audio = False
+        try:
+            async for item in super().run_tts(text):
+                if isinstance(item, TTSAudioRawFrame):
+                    got_audio = True
+                yield item
+        except asyncio.CancelledError:
+            # Interruption/barge-in cancels the generator — never "fall back"
+            # from a deliberate cancellation.
+            raise
+        except Exception as e:  # noqa: BLE001 — provider failure is exactly the fallback case
+            logger.warning(f"TTS primary (MiniMax) raised {type(e).__name__}: {e} — trying OpenRouter fallback")
+        if not got_audio:
+            async for item in self._run_openrouter_fallback(text):
+                yield item
+
+    async def _run_openrouter_fallback(self, text: str) -> AsyncGenerator[Frame, None]:
+        """Synthesize ``text`` via OpenRouter; yield the same frame type as MiniMax.
+
+        Never raises — a total failure yields ``ErrorFrame`` so the turn ends
+        visibly wrong instead of hanging in green-span silence (the exact bug
+        this class exists to prevent).
+        """
+        voice_id = OR_TTS_VOICE_SUBSTITUTES.get(self._voice_id, self._voice_id)
+        substituted = voice_id != self._voice_id
+        self.or_fallback_used += 1
+        self._alarm(substituted)
+        try:
+            # aiohttp session is per-client (factory) and shared with the MiniMax
+            # leg — same lifecycle, no extra connection pool.
+            async with self._session.post(
+                f"{openrouter_base_url}/audio/speech",
+                headers={
+                    "Authorization": f"Bearer {openrouter_api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": tts_or_model,
+                    "input": text,
+                    "voice": voice_id,
+                    # OpenRouter's MiniMax route only accepts mp3 (400 on pcm).
+                    "response_format": "mp3",
+                },
+                timeout=aiohttp.ClientTimeout(total=self._OR_TIMEOUT_S),
+            ) as resp:
+                if resp.status != 200:
+                    body = (await resp.text())[:200]
+                    logger.error(f"TTS OpenRouter fallback HTTP {resp.status}: {body}")
+                    yield ErrorFrame(error=f"TTS fallback HTTP {resp.status}")
+                    return
+                mp3 = await resp.read()
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:  # noqa: BLE001 — see docstring
+            logger.error(f"TTS OpenRouter fallback failed: {type(e).__name__}: {e}")
+            yield ErrorFrame(error="TTS fallback failed")
+            return
+
+        # mp3 -> PCM (pydub/ffmpeg, already a dep for session exports). The
+        # output transport re-chunks and resamples from frame.sample_rate, so
+        # one frame with the true rate is all it needs.
+        try:
+            from pydub import AudioSegment  # local import: heavy module, fallback-only path
+
+            seg = AudioSegment.from_file(BytesIO(mp3), format="mp3")
+            sample_rate = getattr(self, "sample_rate", 24000) or 24000
+            seg = seg.set_frame_rate(sample_rate).set_channels(1)
+            if seg.raw_data:
+                yield TTSAudioRawFrame(
+                    audio=seg.raw_data, sample_rate=sample_rate, num_channels=1
+                )
+            else:
+                yield ErrorFrame(error="TTS fallback returned empty audio")
+        except Exception as e:  # noqa: BLE001 — decode failure must not hang the turn
+            logger.error(f"TTS fallback mp3 decode failed: {type(e).__name__}: {e}")
+            yield ErrorFrame(error="TTS fallback decode failed")
+
+    @classmethod
+    def _alarm(cls, substituted: bool) -> None:
+        """One loud warning per outage window — this is the operator signal."""
+        now = time.monotonic()
+        if now - cls._last_alert_ts < cls._ALERT_EVERY_S:
+            return
+        cls._last_alert_ts = now
+        logger.warning(
+            "TTS FALLBACK ACTIVE — MiniMax returned no audio; synthesizing via "
+            f"OpenRouter ({tts_or_model}){' with substituted voice' if substituted else ''}. "
+            "Check MiniMax points/credits (console → Resource Packages)."
+        )
+        try:
+            import sentry_sdk  # no-op unless SENTRY_DSN initialized the SDK
+
+            sentry_sdk.capture_message(
+                "TTS fallback active: MiniMax returned no audio (credit-exhausted?)",
+                level="warning",
+            )
+        except Exception:  # noqa: BLE001 — alerting must never break audio
+            pass
+
+
 def tts_minimax(session, voice: str = "happy_harry", language: str = "de"):
     voice_id = VOICE_MAP.get(voice, "german_bavarian_male_v2")
-    return FirstOnlyTracedMiniMaxTTS(
+    cls = (
+        OpenRouterFallbackMiniMaxTTS
+        if (tts_or_fallback and openrouter_api_key)
+        else FirstOnlyTracedMiniMaxTTS
+    )
+    return cls(
         api_key=minimax_api_key,
         group_id=minimax_group_id,
         aiohttp_session=session,

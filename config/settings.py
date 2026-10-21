@@ -15,6 +15,16 @@ deepgram_api_key=os.getenv("DEEPGRAM_API_KEY")
 minimax_api_key=os.getenv("MINIMAX_API_KEY")
 minimax_group_id=os.getenv("MINIMAX_GROUP_ID")
 
+# OpenRouter TTS fallback (TTS-FB-001, 2026-10-21): when a MiniMax turn yields
+# no audio (credit-exhausted "2053" responses, provider outage), the same text
+# is synthesized through OpenRouter's speech endpoint on the existing
+# OPENROUTER_API_KEY. MiniMax voice ids that are bound to OUR account (clones,
+# bavarian presets) can't ride along — OpenRouter's provider 502s them — so
+# services/tts.py::OR_TTS_VOICE_SUBSTITUTES swaps in a pass-through voice.
+# Same model, same $/M chars, only pays when MiniMax fails.
+tts_or_fallback = os.getenv("TTS_OPENROUTER_FALLBACK", "1") == "1"
+tts_or_model = os.getenv("TTS_OR_MODEL", "minimax/speech-2.8-turbo")
+
 #OpenRouter
 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
 openrouter_base_url = os.getenv("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1")
