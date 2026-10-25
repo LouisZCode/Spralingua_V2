@@ -132,7 +132,10 @@ async def track_purchase_capi(
                 # THE dedup key — same id the browser pixel event carries.
                 "event_id": checkout_session_id,
                 "action_source": "website",
-                "event_data": {"currency": currency, "value": value},
+                # Meta's spec names this key custom_data — a wrong key (e.g.
+                # "event_data") is silently dropped and the Purchase arrives
+                # with no value/currency: unusable for ads optimization.
+                "custom_data": {"currency": currency, "value": value},
                 "user_data": user_data,
             }
         ],
