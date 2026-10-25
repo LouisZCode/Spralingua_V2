@@ -76,6 +76,27 @@ type AuthState = {
 
 const AuthContext = createContext<AuthState | null>(null);
 
+// FRONTEND-4 (Sentry, 2026-10-25): Next.js renders app/error.tsx and
+// app/not-found.tsx OUTSIDE <AuthProvider> on some bot/error paths (e.g. an
+// action-shaped POST to / — the app has no server actions, so no real
+// browser ever sends one). useAuth used to throw there, turning bot noise
+// into a 500. On the server, return this signed-out shell instead: those
+// boundaries only render, they never call the auth actions, so the no-op
+// functions are unreachable by construction. The client keeps the loud
+// throw — a missing provider in the browser is a real bug worth a crash.
+const SSR_SHELL: AuthState = {
+  token: null,
+  user: null,
+  ready: false,
+  signInWithGoogle: async () => {
+    throw new Error("useAuth: sign-in is unavailable during server rendering");
+  },
+  signOut: () => {},
+  expireSession: () => {},
+  setLevel: async () => {},
+  refreshUser: async () => null,
+};
+
 // What a Google sign-in resolves to: the stored session plus whether the
 // backend created the account on this sign-in (its is_new_user flag).
 // Callers that react to *registration* (Meta Pixel CompleteRegistration)
@@ -326,6 +347,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) {
+    // See SSR_SHELL above — no provider during a server render means a
+    // Next error/boundary render path (bot traffic), not a broken app.
+    if (typeof window === "undefined") return SSR_SHELL;
     throw new Error("useAuth must be used within <AuthProvider>");
   }
   return ctx;
