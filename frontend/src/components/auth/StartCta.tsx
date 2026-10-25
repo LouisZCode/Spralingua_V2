@@ -6,6 +6,8 @@ import { useAuth, type SignInResult } from "./AuthContext";
 import SignInModal from "./SignInModal";
 import { trackFbq } from "@/lib/fbpixel";
 import { setWelcomeGiftStatus } from "@/lib/welcomeGift";
+import { trackEvent, setUserPropertiesOnce } from "@/amplitude";
+import { readStoredUtm } from "@/lib/utm";
 
 // Drop-in replacement for the landing page's "Start" <Link>s. Instead of
 // navigating straight into a lesson, it gates on auth: already signed in → go
@@ -63,9 +65,22 @@ export default function StartCta({
               // stamps "done" on dismiss; the server flag can't fire
               // again, so no path re-shows it.
               setWelcomeGiftStatus("pending");
+              // Signup attribution (2026-10-25): the utm_* params parked
+              // at first landing (lib/utm.ts) ride the signup moment
+              // everywhere — Amplitude event props, Amplitude user
+              // properties (setOnce = first-touch, so every later event
+              // including the server-side Coins Purchased stays
+              // attributable without re-attaching anything), and the
+              // Pixel's CompleteRegistration for Events Manager
+              // readability. Both consent-gated legs queue if the
+              // non-blocking banner is still unanswered and land the
+              // moment it's accepted.
+              const utm = readStoredUtm();
+              trackEvent("Sign Up Completed", { ...utm });
+              setUserPropertiesOnce(utm);
               trackFbq(
                 "CompleteRegistration",
-                {},
+                utm,
                 { eventID: `reg_${result.user.id}` },
               );
             }

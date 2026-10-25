@@ -4,6 +4,7 @@ import Script from "next/script";
 import { usePathname, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useRef } from "react";
 import { useConsent } from "@/lib/consent";
+import { flushQueuedFbq } from "@/lib/fbpixel";
 
 // Meta Pixel base code (Events Manager snippet), adapted for the App Router.
 // NEXT_PUBLIC_ prefix so the browser bundle can read it — inlined at BUILD
@@ -45,6 +46,13 @@ export default function MetaPixel() {
   // lib/fbpixel.ts::trackFbq additionally guards every explicit event so
   // an already-loaded fbq can never fire post-revoke.
   const consent = useConsent();
+  // Signup attribution (2026-10-25): draining pre-consent events (a
+  // signup that beat the banner) belongs exactly here — this component
+  // renders only under a granted flag, so nothing else can ever send
+  // them. flushQueuedFbq waits for the fbq stub itself.
+  useEffect(() => {
+    flushQueuedFbq();
+  }, []);
   if (consent !== "granted") return null;
 
   return (

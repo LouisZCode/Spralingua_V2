@@ -40,13 +40,18 @@ not just how they arrive and pay. All client-side via
 initializes after consent; pre-grant and post-revoke calls are no-ops, the
 same LEGAL-003 promise the pixel obeys), never throwing into app code, and
 riding the init promise so an event fired in the same tick as the grant
-still lands. Per-item drill detail deliberately stays DB-only
+still lands. **Pre-consent events queue instead of dropping** (2026-10-25):
+a signup can beat the non-blocking banner, so `trackEvent`/
+`setUserPropertiesOnce`/`trackFbq` park pre-consent calls and flush the
+moment consent is granted — a decline leaves them unsent, which is the
+legal contract. Per-item drill detail deliberately stays DB-only
 (`drill_attempts` is the exact record); Amplitude carries the sitting's
 shape. Props are snake_case to match the existing server events
   (`price_id`, `revenue_type`, `prompt_version`).
 
 | Event | Props | Fires from |
 |---|---|---|
+| `Sign Up Completed` | `utm_source` · `utm_medium` · `utm_campaign` · `utm_content` · `utm_term` (present when the landing carried them; absent props are omitted, not empty strings) | `StartCta.tsx` on a server-confirmed `isNewUser` signup — the same moment that fires the Pixel's `CompleteRegistration`. The UTMs come from `lib/utm.ts` (parked at first landing, before the Google redirect can wipe them) and are ALSO written as Amplitude **user properties** (`setOnce`, first-touch) so every later event — including the server-side `Coins Purchased` — is attributable to the ad without a join |
 | `Mode Opened` | `mode`: satz · flow · tandem · briefkasten · clara | `PracticeMenu.tsx` card click (incl. the recommendation banner; the dev-only interview card fires nothing) |
 | `Round Started` | `mode`, `rounds`, `cost` (coins) | the three pickers' Start (`Flow.tsx`, `Satzschmiede.tsx`, `Briefkasten.tsx`) — voice surfaces have no picker, their "start" is `Voice Session Started` |
 | `Round Completed` | `mode`, `items`, `correct`, `skipped` (flow only), `target` (flow), `duration_s` | the three drill end screens — auto-finish AND manual Finish (once-guarded per sitting; satz `correct` = cards left the queue by passing, miss-out cards count in `items` only; briefkasten carries just `items` + `duration_s`) |

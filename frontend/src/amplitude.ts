@@ -22,6 +22,15 @@ const isProbe =
 let initPromise: Promise<void> | null = null;
 let pendingUserId: string | undefined;
 
+// Signup attribution (2026-10-25): events fired before the consent choice
+// (a signup can beat the banner — it is non-blocking) park here and flush
+// the moment consent grants the SDK; a decline leaves them unsent, and the
+// queue dies with the page. Bounded so a bug can't grow it unbounded.
+let queuedEvents: Array<{ name: string; props?: Record<string, unknown> }> =
+  [];
+let queuedUserProps: Record<string, string> | null = null;
+const QUEUE_CAP = 20;
+
 function initAnalytics(): Promise<void> {
   if (initPromise) return initPromise;
   if (!AMPLITUDE_API_KEY) {
@@ -48,6 +57,22 @@ export function enableAnalytics() {
   void initAnalytics().then(() => {
     try {
       amplitude.setOptOut(false); // re-grant after a revoke
+      // Drain what fired while the SDK wasn't allowed to start — the
+      // signup moment is the one event that regularly beats the banner.
+      // Identify first so the attribution user-props exist when the
+      // queued events process.
+      if (queuedUserProps) {
+        const identify = new amplitude.Identify();
+        for (const [key, value] of Object.entries(queuedUserProps)) {
+          identify.setOnce(key, value);
+        }
+        amplitude.identify(identify);
+        queuedUserProps = null;
+      }
+      for (const event of queuedEvents) {
+        amplitude.track(event.name, event.props);
+      }
+      queuedEvents = [];
     } catch {
       /* never break the app over tracking */
     }
@@ -91,10 +116,41 @@ export function clearAnalyticsUser() {
 // fired in the same tick as the grant still lands after the SDK is ready.
 export function trackEvent(name: string, props?: Record<string, unknown>) {
   if (typeof window === "undefined" || !AMPLITUDE_API_KEY || isProbe) return;
-  if (!consentGranted() || !initPromise) return;
+  if (!consentGranted() || !initPromise) {
+    // Pre-consent: park it (see queuedEvents) instead of dropping it —
+    // flushed on grant, unsent on decline by construction.
+    if (queuedEvents.length < QUEUE_CAP) queuedEvents.push({ name, props });
+    return;
+  }
   void initPromise.then(() => {
     try {
       amplitude.track(name, props);
+    } catch {
+      /* never break the app over tracking */
+    }
+  });
+}
+
+// Signup attribution (2026-10-25): stamp the campaign that produced a
+// learner onto their Amplitude USER properties (setOnce = the first touch
+// is never overwritten by a later campaign click). With utm_* as user
+// props, every later event — including the server-side Coins Purchased —
+// is attributable to the ad without re-attaching anything at the call
+// site. Same consent contract as trackEvent.
+export function setUserPropertiesOnce(props: Record<string, string>) {
+  if (typeof window === "undefined" || !AMPLITUDE_API_KEY || isProbe) return;
+  if (Object.keys(props).length === 0) return;
+  if (!consentGranted() || !initPromise) {
+    queuedUserProps = { ...(queuedUserProps ?? {}), ...props };
+    return;
+  }
+  void initPromise.then(() => {
+    try {
+      const identify = new amplitude.Identify();
+      for (const [key, value] of Object.entries(props)) {
+        identify.setOnce(key, value);
+      }
+      amplitude.identify(identify);
     } catch {
       /* never break the app over tracking */
     }

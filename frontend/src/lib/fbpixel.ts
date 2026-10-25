@@ -41,13 +41,26 @@ export function metaTrackingContext(): MetaTrackingContext {
   return { consent: consentGranted(), fbp, fbc };
 }
 
+// Pre-consent events (a signup can beat the non-blocking banner) park
+// here and drain when the pixel mounts under a granted flag; on decline
+// they are simply never sent. Bounded like the Amplitude queue. Only
+// MetaPixel (which renders exclusively under a granted flag) drains them.
+const fbqQueue: Array<{
+  event: string;
+  params?: Record<string, unknown>;
+  opts?: { eventID?: string };
+}> = [];
+
 export function trackFbq(
   event: string,
   params?: Record<string, unknown>,
   opts?: { eventID?: string },
 ): void {
   try {
-    if (!consentGranted()) return;
+    if (!consentGranted()) {
+      if (fbqQueue.length < 20) fbqQueue.push({ event, params, opts });
+      return;
+    }
     const fbq = (
       window as unknown as {
         fbq?: (
@@ -59,6 +72,42 @@ export function trackFbq(
       }
     ).fbq;
     fbq?.("track", event, params ?? {}, opts ?? {});
+  } catch {
+    // ignore — tracking must never break the app
+  }
+}
+
+// The parked pre-consent events' drain point — see fbqQueue above.
+
+/** Drain the pre-consent queue once the pixel's fbq stub exists.
+ *
+ * Called from MetaPixel's mount effect. The base snippet loads
+ * `afterInteractive`, so the fbq stub may not exist on the first tick —
+ * this retries briefly (~5s cap) and gives up silently either way; a
+ * queued event that never drains was never consented to. */
+export function flushQueuedFbq(attempt = 0): void {
+  try {
+    if (typeof window === "undefined" || fbqQueue.length === 0) return;
+    const fbq = (
+      window as unknown as {
+        fbq?: (
+          cmd: string,
+          name: string,
+          params?: Record<string, unknown>,
+          opts?: { eventID?: string },
+        ) => void;
+      }
+    ).fbq;
+    if (!fbq) {
+      if (attempt < 100) {
+        window.setTimeout(() => flushQueuedFbq(attempt + 1), 50);
+      }
+      return;
+    }
+    const queue = fbqQueue.splice(0, fbqQueue.length);
+    for (const queued of queue) {
+      fbq("track", queued.event, queued.params ?? {}, queued.opts ?? {});
+    }
   } catch {
     // ignore — tracking must never break the app
   }
