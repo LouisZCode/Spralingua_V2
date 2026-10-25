@@ -7,6 +7,8 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import LevelPickerModal from "./LevelPickerModal";
+import { useConsent } from "@/lib/consent";
+import { useWelcomeGift } from "@/lib/welcomeGift";
 import { CoinPill, useCoinBalance } from "./shared/Coins";
 import {
   fetchRecommendation,
@@ -160,6 +162,11 @@ export default function PracticeMenu() {
     }
   }, [ready, token, router]);
 
+  // PAY-002 sequencing inputs: the level picker queues behind the welcome
+  // gift and the consent notice — agreed order is gift → consent → picker.
+  const welcome = useWelcomeGift();
+  const consent = useConsent();
+
   // LEVEL-001: ask once, here, because /practice is the hub every signed-in
   // learner passes through. `user.level === null` alone can't gate this —
   // "Not sure" also stores null, and re-asking someone who declined on every
@@ -167,6 +174,7 @@ export default function PracticeMenu() {
   // to them; a new device asks once more, which is cheap and harmless.
   useEffect(() => {
     if (!ready || !token || !user) return;
+    if (welcome === "pending" || consent === null) return;
     if (user.level) return;
     try {
       if (window.localStorage.getItem(LEVEL_ASKED_KEY) === "1") return;
@@ -175,7 +183,7 @@ export default function PracticeMenu() {
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAskLevel(true);
-  }, [ready, token, user]);
+  }, [ready, token, user, welcome, consent]);
 
   // Don't flash the menu before auth is known, nor render it for a signed-out
   // visitor mid-redirect.

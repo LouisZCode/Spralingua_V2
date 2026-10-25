@@ -16,6 +16,7 @@
 
 import { useAuth } from "@/components/auth/AuthContext";
 import { setConsent, useConsent } from "@/lib/consent";
+import { useWelcomeGift } from "@/lib/welcomeGift";
 import Link from "next/link";
 
 // House ink-shadow per-file constant (see profile/page.tsx convention).
@@ -32,7 +33,12 @@ export default function ConsentGate() {
   // IS the once-per-browser semantics. Signed in + no choice -> notice;
   // signed out + no choice -> banner. A banner choice made before sign-in
   // means the notice never appears.
-  const showNotice = !!user && consent === null;
+  // PAY-002 welcome gift: the notice queues behind it — agreed order is
+  // gift → consent → level picker. `useWelcomeGift` subscribes to the same
+  // store the modal writes, so the notice appears the moment the gift is
+  // dismissed (or never, if the gift already consumed the moment).
+  const welcome = useWelcomeGift();
+  const showNotice = !!user && consent === null && welcome !== "pending";
   const showBanner = !user && consent === null;
   if (!showNotice && !showBanner) return null;
 

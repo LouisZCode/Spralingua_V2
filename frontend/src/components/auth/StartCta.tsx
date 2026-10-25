@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth, type SignInResult } from "./AuthContext";
 import SignInModal from "./SignInModal";
 import { trackFbq } from "@/lib/fbpixel";
+import { setWelcomeGiftStatus } from "@/lib/welcomeGift";
 
 // Drop-in replacement for the landing page's "Start" <Link>s. Instead of
 // navigating straight into a lesson, it gates on auth: already signed in → go
@@ -56,6 +57,12 @@ export default function StartCta({
             // session-expired overlay never fires this (its onSuccess
             // ignores the result), so re-logins stay out by construction.
             if (result.isNewUser) {
+              // PAY-002: queue the once-ever welcome-gift popup — the
+              // 100-coin SIGNUP_GRANT already went to purchased_coins at
+              // row creation; this only announces it. WelcomeGiftModal
+              // stamps "done" on dismiss; the server flag can't fire
+              // again, so no path re-shows it.
+              setWelcomeGiftStatus("pending");
               trackFbq(
                 "CompleteRegistration",
                 {},
