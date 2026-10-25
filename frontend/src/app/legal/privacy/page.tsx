@@ -138,12 +138,15 @@ export default function PrivacyPage() {
         measurement and <B>Amplitude</B> for product analytics. The Pixel
         loads after you accept and page views plus three actions — account
         registration, checkout start, and completed purchase (amount and
-        currency) — so we can measure our own advertising. It does{" "}
-        <B>not</B> receive your account identity: we never send Meta your
-        name, your email address, or anything from your learning record.
-        Like any third party serving code on the page, Meta necessarily
-        receives your IP address and browser information with these
-        requests.
+        currency) — so we can measure our own advertising. For a completed
+        purchase we also report the same event from our own server, so a
+        closed browser tab or a slow bank transfer cannot lose it; to match
+        that report to you it carries a <B>one-way hashed</B> (irreversible)
+        form of your email address and Meta&apos;s own browser cookie ids,
+        and nothing else. We <B>never</B> send Meta your name, a readable
+        email address, or anything from your learning record. Like any
+        third party serving code on the page, Meta necessarily receives your
+        IP address and browser information with these requests.
       </LegalP>
       <LegalP>
         Our product analytics tool, <B>Amplitude</B> (Amplitude Inc., United

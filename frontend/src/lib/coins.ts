@@ -106,10 +106,23 @@ export async function fetchTopupCredited(
   return data.credited === true;
 }
 
-export async function createTopupCheckout(token: string): Promise<string> {
+export async function createTopupCheckout(
+  token: string,
+  tracking?: import("@/lib/fbpixel").MetaTrackingContext
+): Promise<string> {
   const res = await fetch(`${HTTP_BASE}/payments/topup/checkout`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}` },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    // Older bundles POST with no body; the backend keeps accepting that
+    // (TopupCheckoutBody is optional there), so this body is additive.
+    body: JSON.stringify({
+      analytics_consent: tracking?.consent ?? false,
+      fbp: tracking?.fbp ?? null,
+      fbc: tracking?.fbc ?? null,
+    }),
   });
   if (!res.ok) {
     const detail = (await res.json().catch(() => null))?.detail;

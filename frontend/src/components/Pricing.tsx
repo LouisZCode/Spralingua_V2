@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "./auth/AuthContext";
 import StartCta from "./auth/StartCta";
 import { createCheckout, fetchBillingPortal } from "@/lib/api";
-import { trackFbq } from "@/lib/fbpixel";
+import { trackFbq, metaTrackingContext } from "@/lib/fbpixel";
 import AppHeader from "@/components/shared/AppHeader";
 import { safeMessage } from "@/components/shared/copy";
 import {
@@ -106,7 +106,9 @@ export default function Pricing() {
     setError(null);
     setPending(tier);
     try {
-      const url = await createCheckout(tier, token);
+      // P3: consent + Meta cookie ids ride into the Stripe session's
+      // metadata so the webhook can fire the server-side Purchase.
+      const url = await createCheckout(tier, token, metaTrackingContext());
       // Meta Pixel: intent realized — fires only once the Checkout session
       // exists (a failed createCheckout is not intent). Values mirror the
       // plan prices above (Basic €15, Premium €25, EUR).
@@ -506,7 +508,7 @@ function TopupBanner({
     onStart("topup");
     try {
       const { createTopupCheckout } = await import("@/lib/coins");
-      const url = await createTopupCheckout(token);
+      const url = await createTopupCheckout(token, metaTrackingContext());
       // Meta Pixel: same realized-intent rule as goCheckout (€2 top-up).
       trackFbq("InitiateCheckout", { value: 2, currency: "EUR" });
       window.location.assign(url);

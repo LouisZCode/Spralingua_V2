@@ -55,8 +55,45 @@ def _require_configured() -> None:
         raise HTTPException(status_code=503, detail="billing not configured")
 
 
-class CheckoutBody(BaseModel):
+class TrackingBody(BaseModel):
+    """P3 (2026-10-25): fields the browser stamps into a Checkout session so
+    the webhook can report the purchase server-side (payments/meta_capi.py).
+    All optional — an older bundle or a non-consented learner simply sends
+    none of them, and the webhook then skips the Meta Conversions API call.
+    """
+
+    analytics_consent: bool = False
+    fbp: str | None = None
+    fbc: str | None = None
+
+
+class CheckoutBody(TrackingBody):
     tier: Literal["basic", "premium"]
+
+
+class TopupCheckoutBody(TrackingBody):
+    """Empty marker: exists so /topup/checkout accepts the same optional
+    tracking fields while staying bodyless-compatible with older bundles
+    (a POST with no body resolves to None, never a 422)."""
+
+
+def _tracking_metadata(user_id: str, body: TrackingBody | None) -> dict[str, str]:
+    """Stripe session-level metadata for the P3 consent stamp.
+
+    Strings only — Stripe rejects null metadata values. The cookie ids are
+    short by construction; anything longer than 120 chars is not a value we
+    recognise and is clipped rather than trusted.
+    """
+    md: dict[str, str] = {"user_id": user_id}
+    if body is None:
+        return md
+    if body.analytics_consent:
+        md["analytics_consent"] = "1"
+    for key in ("fbp", "fbc"):
+        v = getattr(body, key)
+        if v and v.strip():
+            md[key] = v.strip()[:120]
+    return md
 
 
 @router.post("/checkout")
@@ -100,6 +137,10 @@ async def create_checkout(
             "line_items": [{"price": price_id, "quantity": 1}],
             "client_reference_id": user_id,
             "subscription_data": {"metadata": {"user_id": user_id}},
+            # Session-level metadata — distinct from subscription_data above
+            # (which lands on the Subscription object): this is what the
+            # webhook's checkout.session.completed handler reads. P3 stamp.
+            "metadata": _tracking_metadata(user_id, body),
             # {CHECKOUT_SESSION_ID} is a Stripe-side placeholder Stripe fills
             # in on redirect — the doubled braces keep it literal through the
             # f-string.
@@ -133,6 +174,7 @@ async def create_checkout(
 
 @router.post("/topup/checkout")
 async def create_topup_checkout(
+    body: TopupCheckoutBody | None = None,
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -164,7 +206,7 @@ async def create_topup_checkout(
             customer=customer_id,
             line_items=[{"price": stripe_topup_price_id, "quantity": 1}],
             client_reference_id=user_id,
-            metadata={"user_id": user_id, "kind": "topup"},
+            metadata={**_tracking_metadata(user_id, body), "kind": "topup"},
             success_url=f"{frontend_base_url}/pricing/success?session_id={{CHECKOUT_SESSION_ID}}&topup=1",
             cancel_url=f"{frontend_base_url}/pricing",
             locale="auto",

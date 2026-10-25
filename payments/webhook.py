@@ -165,6 +165,12 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
             logger.exception(f"Stripe topup credit failed for session {checkout_session_id}: {e}")
             raise
 
+        # Purchase amount off the session once, for both analytics sinks
+        # (Amplitude below, Meta CAPI after it).
+        amount_cents = session["amount_total"] if "amount_total" in session else None
+        currency = session["currency"] if "currency" in session else None
+        amount = amount_cents / 100.0 if isinstance(amount_cents, (int, float)) else None
+
         # Marketing Analytics conversion event (fail-open — never breaks
         # fulfillment; the credit above already happened and committed).
         # Fires on EVERY dispatch, not just credited=True: a redelivery after
@@ -175,9 +181,6 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
             from agents.amplitude_ai import track_event
             from coins.prices import TOPUP_COINS as _TOPUP
 
-            amount_cents = session["amount_total"] if "amount_total" in session else None
-            currency = session["currency"] if "currency" in session else None
-            amount = amount_cents / 100.0 if isinstance(amount_cents, (int, float)) else None
             track_event(
                 user_id,
                 "Coins Purchased",
@@ -189,6 +192,26 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
                 product_id="coin-topup",
                 revenue_type="purchase",
                 currency=currency.upper() if isinstance(currency, str) else None,
+            )
+        except Exception:
+            pass
+
+        # P3 (2026-10-25): Meta Conversions API Purchase — server-side,
+        # deduped against the browser pixel event by the shared event id
+        # (the Stripe session id). Fires only for consented learners
+        # (analytics_consent in the session metadata, stamped at checkout
+        # start) and no-ops until META_CAPI_TOKEN is set. Fail-open: the
+        # coins above are already credited and committed.
+        try:
+            from payments.meta_capi import track_purchase_capi
+
+            await track_purchase_capi(
+                db,
+                user_id=user_id,
+                checkout_session_id=checkout_session_id,
+                value=amount,
+                currency=currency.upper() if isinstance(currency, str) else None,
+                metadata=session["metadata"] if "metadata" in session else None,
             )
         except Exception:
             pass
@@ -232,6 +255,12 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
     )
     await set_user_tier(db, user_id=user_id, tier=tier)
 
+    # Purchase amount off the session once, for both analytics sinks
+    # (Amplitude below, Meta CAPI after it).
+    amount_cents = session["amount_total"] if "amount_total" in session else None
+    currency = session["currency"] if "currency" in session else None
+    amount = amount_cents / 100.0 if isinstance(amount_cents, (int, float)) else None
+
     # Marketing Analytics conversion event (fail-open — never breaks
     # fulfillment; the tier writes above already happened). checkout.session
     # .completed in subscription mode fires once per new Checkout subscription,
@@ -241,9 +270,6 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
     try:
         from agents.amplitude_ai import track_event
 
-        amount_cents = session["amount_total"] if "amount_total" in session else None
-        currency = session["currency"] if "currency" in session else None
-        amount = amount_cents / 100.0 if isinstance(amount_cents, (int, float)) else None
         track_event(
             user_id,
             "Subscription Started",
@@ -255,6 +281,25 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
             product_id=price_id,
             revenue_type="subscription",
             currency=currency.upper() if isinstance(currency, str) else None,
+        )
+    except Exception:
+        pass
+
+    # P3 (2026-10-25): Meta Conversions API Purchase — server-side, deduped
+    # against the browser pixel event by the shared event id (the Stripe
+    # session id). Consent-gated via the session metadata stamped at
+    # checkout start; inert until META_CAPI_TOKEN is set. Fail-open: the
+    # tier change above already happened.
+    try:
+        from payments.meta_capi import track_purchase_capi
+
+        await track_purchase_capi(
+            db,
+            user_id=user_id,
+            checkout_session_id=checkout_session_id,
+            value=amount,
+            currency=currency.upper() if isinstance(currency, str) else None,
+            metadata=session["metadata"] if "metadata" in session else None,
         )
     except Exception:
         pass

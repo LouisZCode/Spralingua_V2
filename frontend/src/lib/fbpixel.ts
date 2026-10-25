@@ -8,6 +8,39 @@
 // revoke that happens while the snippet is already loaded.
 import { consentGranted } from "@/lib/consent";
 
+// P3 (2026-10-25): what the backend needs to report a purchase server-side
+// (Meta Conversions API, payments/meta_capi.py). Read ONCE at checkout
+// start and stamped into the Stripe session's metadata, so the webhook
+// fires the server Purchase only for consented learners — the same
+// LEGAL-003 gate the pixel itself obeys. _fbp/_fbc are Meta's own
+// first-party cookies (browser id / ad-click id): they tie the server
+// event to the browser Meta already saw, which is what makes the match.
+// Never a PII payload: consent flag + two cookie strings, nothing else.
+export type MetaTrackingContext = {
+  consent: boolean;
+  fbp?: string;
+  fbc?: string;
+};
+
+export function metaTrackingContext(): MetaTrackingContext {
+  if (typeof window === "undefined") return { consent: false };
+  let fbp: string | undefined;
+  let fbc: string | undefined;
+  try {
+    for (const part of document.cookie.split(";")) {
+      const eq = part.indexOf("=");
+      if (eq < 1) continue;
+      const k = part.slice(0, eq).trim();
+      const v = part.slice(eq + 1).trim();
+      if (k === "_fbp") fbp = v;
+      else if (k === "_fbc") fbc = v;
+    }
+  } catch {
+    // ignore — tracking must never break checkout
+  }
+  return { consent: consentGranted(), fbp, fbc };
+}
+
 export function trackFbq(
   event: string,
   params?: Record<string, unknown>,

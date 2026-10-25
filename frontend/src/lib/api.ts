@@ -39,12 +39,18 @@ async function billingRequest(path: string, token: string, init?: RequestInit): 
 // subscription; the /pricing page enforces that, this client doesn't.
 export async function createCheckout(
   tier: "basic" | "premium",
-  token: string
+  token: string,
+  tracking?: import("@/lib/fbpixel").MetaTrackingContext
 ): Promise<string> {
   const { url } = await billingRequest("/payments/checkout", token, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tier }),
+    body: JSON.stringify({
+      tier,
+      analytics_consent: tracking?.consent ?? false,
+      fbp: tracking?.fbp ?? null,
+      fbc: tracking?.fbc ?? null,
+    }),
   });
   return url;
 }
