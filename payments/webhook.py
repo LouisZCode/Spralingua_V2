@@ -214,7 +214,9 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
                 metadata=session["metadata"] if "metadata" in session else None,
             )
         except Exception:
-            pass
+            # Fail-open, but never SILENT — reporting can't break fulfillment,
+            # yet silence hid a real diagnosis on 2026-10-25 (P3 follow-up).
+            logger.warning("Meta CAPI: top-up purchase report failed", exc_info=True)
         return
 
     user_id = session["client_reference_id"]
@@ -302,7 +304,8 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
             metadata=session["metadata"] if "metadata" in session else None,
         )
     except Exception:
-        pass
+        # Fail-open, but never SILENT — same reasoning as the top-up branch.
+        logger.warning("Meta CAPI: subscription purchase report failed", exc_info=True)
 
 
 async def _handle_subscription_updated(db: AsyncSession, sub_obj) -> None:

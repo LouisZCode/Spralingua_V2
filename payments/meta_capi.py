@@ -54,6 +54,11 @@ from database.orm import User
 
 logger = logging.getLogger(__name__)
 
+# Distinguish "disabled" from "broken": the no-token no-op logs ONE INFO
+# line per process. A silent no-op cost a full diagnosis session on
+# 2026-10-25 (webhook ran on a pre-token deployment and said nothing).
+_disabled_logged = False
+
 _GRAPH_URL = "https://graph.facebook.com/v21.0"
 # Same fallback as frontend/src/components/MetaPixel.tsx — the production
 # pixel, so a token alone is enough to go live.
@@ -86,6 +91,12 @@ async def track_purchase_capi(
     """
     token = _capi_token()
     if not token:
+        global _disabled_logged
+        if not _disabled_logged:
+            _disabled_logged = True
+            logger.info(
+                "Meta CAPI: META_CAPI_TOKEN not set — server Purchase reporting disabled"
+            )
         return
     meta = metadata if isinstance(metadata, dict) else {}
     if meta.get("analytics_consent") != "1":
