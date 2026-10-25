@@ -17,6 +17,7 @@ import { useAuth } from "../auth/AuthContext";
 import { useSpeakHotkey } from "../shared/useSpeakHotkey";
 import { playSound } from "../shared/sound";
 import { InsufficientCoinsError } from "@/lib/coins";
+import { trackEvent } from "@/amplitude";
 import { OutOfCoinsPanel, refreshCoins } from "../shared/Coins";
 import { useSlowNotice } from "../shared/useSlowNotice";
 import { slowTranscriptionNotice } from "../shared/copy";
@@ -466,8 +467,31 @@ export default function VocabTrainer({
   // SATZ-012: `card` flipping to null is the render signal; doneRef mutates
   // in the same updates that advance the queue, so this re-runs on time.
   const roundDone = !card && doneRef.current.size > 0;
+  // P1 analytics: mount time = round start (the parent mounts this trainer
+  // the moment the picker commits) and the once-guard for the event below.
+  const mountedAtRef = useRef(Date.now());
+  const roundCompletedTrackedRef = useRef(false);
   useEffect(() => {
     onDoneChange?.(roundDone);
+    // P1 analytics: one Round Completed per sitting — fires when the queue
+    // exhausts with at least one graded card (the "Alles geschmiedet!"
+    // state, never the empty-pool "Heute ist nichts fällig" landing).
+    // correct = cards that left the queue by passing; a card that lapsed
+    // MISS_CAP times counts in items but not correct — the same honest
+    // split the DB's drill_attempts has exactly.
+    if (roundDone && !roundCompletedTrackedRef.current) {
+      roundCompletedTrackedRef.current = true;
+      let passed = 0;
+      doneRef.current.forEach((id) => {
+        if ((missesRef.current.get(id) ?? 0) < MISS_CAP) passed += 1;
+      });
+      trackEvent("Round Completed", {
+        mode: "satz",
+        items: doneRef.current.size,
+        correct: passed,
+        duration_s: Math.round((Date.now() - mountedAtRef.current) / 1000),
+      });
+    }
   }, [roundDone, onDoneChange]);
 
   // GAME-001: "Alles geschmiedet!" fires once per round, not on every render

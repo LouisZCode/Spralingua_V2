@@ -8,6 +8,7 @@ import { useAuth } from "./auth/AuthContext";
 import { playSound } from "./shared/sound";
 import { loadError } from "./shared/copy";
 import { SATZ_ATTEMPT_COST } from "@/lib/coins";
+import { trackEvent } from "@/amplitude";
 import { useCoinBalance, useCoinsBypassed } from "./shared/Coins";
 import SoundToggle from "./shared/SoundToggle";
 import ThemeToggle from "./shared/ThemeToggle";
@@ -705,6 +706,12 @@ export default function Flow() {
   const beatTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [finished, setFinished] = useState(false);
   const [totals, setTotals] = useState({ total: 0, correct: 0, skipped: 0 });
+  // P1 analytics: round start timestamp (for duration_s on Round
+  // Completed) and a once-guard so the event fires exactly once per
+  // sitting, whichever end path got there first (auto-finish at the target
+  // or the manual Finish button).
+  const roundStartedAtRef = useRef<number | null>(null);
+  const roundCompletedTrackedRef = useRef(false);
   const [perExercise, setPerExercise] =
     useState<Record<SourceKind, Tally>>(emptyTallies());
 
@@ -876,6 +883,12 @@ export default function Flow() {
 
   const handleStart = useCallback(() => {
     persistRoundChoice(roundChoice);
+    roundStartedAtRef.current = Date.now();
+    trackEvent("Round Started", {
+      mode: "flow",
+      rounds: targetFromChoice(roundChoice),
+      cost: targetFromChoice(roundChoice) * SATZ_ATTEMPT_COST,
+    });
     setScreen("playing");
   }, [roundChoice]);
 
@@ -1263,6 +1276,26 @@ export default function Flow() {
       setFinished(true);
     }
   }, [totals.total, roundTarget]);
+
+  // P1 analytics: one Round Completed per sitting, at whichever moment
+  // `finished` flips — target reached (above) or the manual Finish button
+  // (items done so far, honestly partial). correct is correct/graded, same
+  // arithmetic as the header line (total includes skips, which were never
+  // graded).
+  useEffect(() => {
+    if (!finished || roundCompletedTrackedRef.current) return;
+    roundCompletedTrackedRef.current = true;
+    trackEvent("Round Completed", {
+      mode: "flow",
+      items: totals.total,
+      correct: totals.correct,
+      skipped: totals.skipped,
+      target: roundTarget,
+      duration_s: roundStartedAtRef.current
+        ? Math.round((Date.now() - roundStartedAtRef.current) / 1000)
+        : null,
+    });
+  }, [finished, totals, roundTarget]);
 
   // onNewRound is never called in flow mode — the round-trainers only reach
   // their own "done" phase without the flow flag, which we never pass.

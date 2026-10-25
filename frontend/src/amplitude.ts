@@ -81,6 +81,26 @@ export function clearAnalyticsUser() {
   amplitude.setUserId(undefined);
 }
 
+// P1 semantic events (2026-10-25): round-level product events fired from the
+// practice surfaces — Mode Opened / Round Started / Round Completed / Voice
+// Session Started / Voice Session Ended (see ARCHITECTURE.md's Marketing
+// Analytics section for the taxonomy). Consent-gated by construction: the
+// SDK only initializes after consent, so before a grant (or after a revoke)
+// this is a no-op — the same LEGAL-003 promise the pixel obeys. Never
+// throws, never blocks the caller; rides on the init promise so an event
+// fired in the same tick as the grant still lands after the SDK is ready.
+export function trackEvent(name: string, props?: Record<string, unknown>) {
+  if (typeof window === "undefined" || !AMPLITUDE_API_KEY || isProbe) return;
+  if (!consentGranted() || !initPromise) return;
+  void initPromise.then(() => {
+    try {
+      amplitude.track(name, props);
+    } catch {
+      /* never break the app over tracking */
+    }
+  });
+}
+
 // Mounted in layout.tsx next to <MetaPixel />. Renders nothing; reacts to
 // consent changes (banner / login notice / profile toggle all dispatch the
 // same event through useConsent).

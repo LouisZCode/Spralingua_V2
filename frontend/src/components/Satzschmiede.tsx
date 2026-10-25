@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
+import { SATZ_ATTEMPT_COST } from "@/lib/coins";
+import { trackEvent } from "@/amplitude";
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import SatzschmiedePicker from "./satzschmiede/SatzschmiedePicker";
 import PackModal from "./satzschmiede/PackModal";
@@ -98,6 +100,11 @@ export default function Satzschmiede() {
   }, [refreshDeck]);
 
   const handlePickerStart = useCallback((count: number) => {
+    trackEvent("Round Started", {
+      mode: "satz",
+      rounds: count,
+      cost: count * SATZ_ATTEMPT_COST,
+    });
     setRoundTarget(count);
     setPhase("playing");
   }, []);

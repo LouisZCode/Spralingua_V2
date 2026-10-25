@@ -114,6 +114,7 @@ export default function TandemChat() {
   return (
     <ConversationView
       params={{ lesson: partner.lessonId, voice: partner.voice, topic, exchanges }}
+      analyticsMode="tandem"
       practiceMode={practiceMode}
       // Debrief modal's "Back to modes" button promises /practice (BUG-008) —
       // leave /tandem, don't just reset topic state. Backing out of the

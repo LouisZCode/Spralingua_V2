@@ -13,6 +13,7 @@ import SessionSummaryModal, {
 } from "./SessionSummaryModal";
 import TandemDebriefModal from "./TandemDebriefModal";
 import { useAuth } from "./auth/AuthContext";
+import { trackEvent } from "@/amplitude";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import GermanWay from "./shared/GermanWay";
 import Glossable from "./shared/Glossable";
@@ -210,6 +211,7 @@ export default function ConversationView({
   exerciseSlot,
   localEchoRef,
   teacherLayout,
+  analyticsMode,
 }: {
   params: SessionParams;
   onFinish: () => void;
@@ -295,6 +297,13 @@ export default function ConversationView({
   // transcript.) Optional/absent (every existing caller but Clara) is
   // byte-identical to today.
   teacherLayout?: boolean;
+  // P1 analytics: which surface this view is mounted for. TandemChat passes
+  // "tandem", TeacherChat "teacher", VoiceChat (the /learn lessons)
+  // "lesson" — it labels the Voice Session Started/Ended Amplitude events
+  // fired at the session_started handshake and in handleFinish. Absent =
+  // no events (the optionality keeps this component ignorant of surface
+  // taxonomy it doesn't otherwise need).
+  analyticsMode?: "tandem" | "teacher" | "lesson";
 }) {
   // Guaranteed non-null here: VoiceChat only mounts this view once a token is
   // in hand. We still guard before each network call to keep TypeScript happy.
@@ -401,6 +410,15 @@ export default function ConversationView({
   // session that actually started (session_started arrived) from one that
   // never did (a gate reject or a connect that died before the handshake).
   const sessionIdRef = useRef<string | null>(null);
+  // P1 analytics: session start timestamp (set in the session_started
+  // handler, null before it — a gate-rejected or dead-before-handshake
+  // connect never had a session) and the bot-turn count bumped in
+  // flushPendingBot — the same "one exchange = one revealed bot reply"
+  // arithmetic the server's exchange counter uses. Both read in
+  // handleFinish, which runs from stale closures (see sessionIdRef's
+  // comment) — refs, not state, on purpose.
+  const sessionStartRef = useRef<number | null>(null);
+  const botTurnsRef = useRef(0);
   const pendingBotTextRef = useRef<string | null>(null);
   // AGENT-00X: set by onServerMessage when an "exercise_request" RTVI
   // message arrives (always strictly before this turn's bot-output message —
@@ -576,6 +594,7 @@ export default function ConversationView({
       revealTimerRef.current = null;
     }
     setMessages((prev) => [...prev, { speaker: "bot", text }]);
+    botTurnsRef.current += 1; // P1 analytics — one exchange = one revealed bot reply
     // AGENT-00X: this is the single place a turn's reply becomes visible to
     // the learner (the timer above, or onBotStoppedSpeaking's fallback,
     // both funnel through here) — so it's the right place to fire the
@@ -645,6 +664,19 @@ export default function ConversationView({
       audioRef.current.srcObject = null;
     }
     const reason: "user" | "agent" = endReasonRef.current ?? "agent";
+    // P1 analytics: one Voice Session Ended per started session — placed
+    // after `reason` resolves and before either branch, so a user-finish
+    // (which returns/unmounts below) still reports. sessionStartRef guards
+    // the never-started paths (gate reject, dead-before-handshake) — no
+    // session, no event. ended_by mirrors the DB's own ended_by vocabulary.
+    if (analyticsMode && sessionStartRef.current !== null) {
+      trackEvent("Voice Session Ended", {
+        mode: analyticsMode,
+        ended_by: reason,
+        exchanges: botTurnsRef.current,
+        duration_s: Math.round((Date.now() - sessionStartRef.current) / 1000),
+      });
+    }
     setShowFinishConfirm(false);
     // User-initiated finish → straight back to the list, tandem included
     // (BUG-010, supersedes the TANDEM-001 Phase 4 always-show rule): the
@@ -982,6 +1014,17 @@ export default function ConversationView({
               if (typeof sid === "string") {
                 setSessionId(sid);
                 sessionIdRef.current = sid; // SESS-001 — see the ref's own comment
+                // P1 analytics: the session is genuinely live — past the
+                // auth/coin/gate checks. exchanges_chosen is the picker's
+                // value (tandem only; Clara and lessons carry none).
+                sessionStartRef.current = Date.now();
+                if (analyticsMode) {
+                  trackEvent("Voice Session Started", {
+                    mode: analyticsMode,
+                    topic: params.topic ?? null,
+                    exchanges_chosen: params.exchanges ?? null,
+                  });
+                }
               }
             } else if (
               data &&

@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import LevelPickerModal from "./LevelPickerModal";
 import { useConsent } from "@/lib/consent";
+import { trackEvent } from "@/amplitude";
 import { useWelcomeGift } from "@/lib/welcomeGift";
 import { CoinPill, useCoinBalance } from "./shared/Coins";
 import {
@@ -352,6 +353,7 @@ export default function PracticeMenu() {
         <div className="rise-in mt-10" style={{ animationDelay: "80ms" }}>
           <ModeCard
             href="/teacher"
+            mode="clara"
             accent="red"
             icon="bulb"
             kicker="Your teacher · in English"
@@ -379,6 +381,7 @@ export default function PracticeMenu() {
         >
           <ModeCard
             href="/satzschmiede"
+            mode="satz"
             accent="gold"
             icon="pencil"
             kicker="Satzschmiede"
@@ -389,6 +392,7 @@ export default function PracticeMenu() {
           />
           <ModeCard
             href="/flow"
+            mode="flow"
             accent="red"
             icon="infinity"
             kicker="alle Übungen"
@@ -399,6 +403,7 @@ export default function PracticeMenu() {
           />
           <ModeCard
             href="/tandem"
+            mode="tandem"
             accent="ink"
             icon="chat"
             kicker="Grammatik-Tandem"
@@ -409,6 +414,7 @@ export default function PracticeMenu() {
           />
           <ModeCard
             href="/briefkasten"
+            mode="briefkasten"
             accent="gold"
             icon="mail"
             kicker="Briefkasten"
@@ -464,6 +470,7 @@ export default function PracticeMenu() {
             </div>
             <Link
               href={REC_TARGETS[rec.pillar].href}
+              onClick={() => trackEvent("Mode Opened", { mode: rec.pillar })}
               className="btn-3d shrink-0 rounded-[16px] border-[3px] border-line bg-card px-5 py-2.5 text-center font-display text-[13px] font-black uppercase tracking-[0.14em] text-ink"
               style={inkShadow}
             >
@@ -596,6 +603,7 @@ const MODE_ACCENT_STYLES: Record<
 
 function ModeCard({
   href,
+  mode,
   accent,
   icon,
   title,
@@ -606,6 +614,9 @@ function ModeCard({
   badge,
 }: {
   href: string;
+  // P1 analytics: fires "Mode Opened" on card click. Absent (the dev-only
+  // interview card) = no event — developer traffic stays out of the funnel.
+  mode?: string;
   accent: "red" | "gold" | "ink";
   icon: ModeIconName;
   title: string;
@@ -627,6 +638,9 @@ function ModeCard({
   return (
     <Link
       href={href}
+      onClick={() => {
+        if (mode) trackEvent("Mode Opened", { mode });
+      }}
       className={`btn-3d flex flex-col rounded-[28px] border-[3px] border-line p-7 ${
         done ? "bg-flag-gold-soft" : `bg-card ${wash}`
       }`}

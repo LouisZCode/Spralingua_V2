@@ -31,6 +31,10 @@ export default function VoiceChat() {
   }
 
   return (
-    <ConversationView params={params} onFinish={() => setParams(null)} />
+    <ConversationView
+      params={params}
+      analyticsMode="lesson"
+      onFinish={() => setParams(null)}
+    />
   );
 }

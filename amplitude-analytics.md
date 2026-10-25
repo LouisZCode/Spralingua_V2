@@ -27,12 +27,44 @@ Project API key: `e4836b...fce8cd` (public by design, both planes).
 - **First event:** `Viewed Home Page` (user's pick), fired once right after
   `initAll` in the same module (the SDK queues pre-init events), carrying
   `{ prompt_version: "BA400.4" }` — safe to remove once verified in the live
-  feed. No other custom events: autocapture covers page views/sessions/
-  attribution; anything more goes through `npx @amplitude/wizard`/MCP, not
-  hand-rolled taxonomy.
+  feed. Autocapture covers page views/sessions/attribution; the product
+  semantics below are the hand-rolled taxonomy (deliberately small — see
+  the P1 section).
 - **Build:** `npm run build` passes (all routes prerender).
 
-## 2. Agent Analytics (backend)
+## 2. P1 semantic events — the product taxonomy (2026-10-25)
+
+Round-level product events so Amplitude answers *how learners use the app*,
+not just how they arrive and pay. All client-side via
+`amplitude.ts::trackEvent` — consent-gated by construction (the SDK only
+initializes after consent; pre-grant and post-revoke calls are no-ops, the
+same LEGAL-003 promise the pixel obeys), never throwing into app code, and
+riding the init promise so an event fired in the same tick as the grant
+still lands. Per-item drill detail deliberately stays DB-only
+(`drill_attempts` is the exact record); Amplitude carries the sitting's
+shape. Props are snake_case to match the existing server events
+  (`price_id`, `revenue_type`, `prompt_version`).
+
+| Event | Props | Fires from |
+|---|---|---|
+| `Mode Opened` | `mode`: satz · flow · tandem · briefkasten · clara | `PracticeMenu.tsx` card click (incl. the recommendation banner; the dev-only interview card fires nothing) |
+| `Round Started` | `mode`, `rounds`, `cost` (coins) | the three pickers' Start (`Flow.tsx`, `Satzschmiede.tsx`, `Briefkasten.tsx`) — voice surfaces have no picker, their "start" is `Voice Session Started` |
+| `Round Completed` | `mode`, `items`, `correct`, `skipped` (flow only), `target` (flow), `duration_s` | the three drill end screens — auto-finish AND manual Finish (once-guarded per sitting; satz `correct` = cards left the queue by passing, miss-out cards count in `items` only; briefkasten carries just `items` + `duration_s`) |
+| `Voice Session Started` | `mode`: tandem · teacher · lesson, `topic`, `exchanges_chosen` | `ConversationView.tsx` at the `session_started` handshake — past every gate, so rejected/dead connects fire nothing |
+| `Voice Session Ended` | `mode`, `ended_by` (user · agent), `exchanges` (revealed bot turns), `duration_s` | `ConversationView.tsx::handleFinish` — before the user-branch return, guarded by the start ref (no session, no event) |
+
+Funnel that now exists: landing → signup → `Mode Opened` → (`Round
+Started` | `Voice Session Started`) → (`Round Completed` | `Voice Session
+Ended`) → purchase. `mode` values match the streak/mode vocabulary
+(`daily_mode_completions`), so DB cross-references stay one join.
+
+**Not tracked, on purpose:** the nine dev-door drills standalone (no real
+learner route), the demo socket (no identity), and per-item attempts
+(server events there would bypass consent; the DB already owns that detail
+— Proposal-2 in ARCHITECTURE.md's Marketing Analytics section if ever
+needed).
+
+## 3. Agent Analytics (backend)
 
 - **Package:** `amplitude-ai>=1.17.0`, pinned in `pyproject.toml` (`uv add`).
 - **Key:** `AMPLITUDE_AI_API_KEY` — in root `.env` (real key) and
@@ -75,7 +107,7 @@ Project API key: `e4836b...fce8cd` (public by design, both planes).
 - **Feedback:** `POST /satz/flag` mirrors the disagree-flag via `ai.score`
   (`user-feedback`, session target), fail-open.
 
-## 3. Verification evidence
+## 4. Verification evidence
 
 - `ruff check` clean on all 17 touched files; backend import smoke
   (`scripts/ci_smoke.py`) 19/19 routers; `amplitude-ai-doctor` all green.
@@ -90,7 +122,7 @@ Project API key: `e4836b...fce8cd` (public by design, both planes).
   and an MCP query the same day read the landed data back: `Viewed Home
   Page` — 3 events/24h, all with `prompt_version: BA400.4`.
 
-## 4. Deliberate tradeoffs
+## 5. Deliberate tradeoffs
 
 - **`metadata_only`, not `full`.** Token counts/latency/model/cost flow;
   prompt/response text does not. Langfuse already owns content traces;
@@ -114,7 +146,7 @@ Project API key: `e4836b...fce8cd` (public by design, both planes).
   sitting shows every attempt, not just token-costing ones); `user_id`
   `"0001"` (4 chars) may fall under Amplitude's 5-char minimum.
 
-## 5. To ship
+## 6. To ship
 
 - [ ] Human loads `/` → `Viewed Home Page` in Setup live feed (browser proof).
 - [x] Railway vars set (2026-10-12): `AMPLITUDE_AI_API_KEY` (backend,
@@ -203,3 +235,16 @@ Connected and verified live 2026-10-12 (org `cool-hat-831508`, project
   session_replay_explorer`); our 4 agents are `conversation-partner`,
   `drill-judge`, `content-forge`, `post-session`, all `metadata_only`
   (costs/tokens/latency visible, no transcripts — by design).
+- **ALWAYS read the clock before any time-windowed MCP query
+  (2026-10-12 rule — two wrong windows in one evening each returned
+  confident zeros).** Run `date -u +%s` (+ `date -u`) first and derive
+  every epoch from it — never from memory, never from a requestId
+  prefix. `query_amplitude_data` takes absolute epoch seconds only
+  (relative strings are rejected) and returns all-zero series for
+  future or empty windows without erroring, so a wrong epoch reads
+  exactly like "tracking is broken". Corollaries: chart aggregates
+  lag Live Events by minutes — for fresh activity read the user
+  timeline (`get_amp_user_data` `include: timeline`) or Live Events,
+  and use charts only for settled windows; `use_amplitude_cohorts`
+  `find` does not strictly honor `timeRange`, so confirm recency
+  from event timestamps, not from membership.

@@ -1162,6 +1162,7 @@ export default function TeacherChat() {
   return (
     <ConversationView
       params={{ lesson: TEACHER_LESSON, voice: TEACHER_VOICE, topic, pattern }}
+      analyticsMode="teacher"
       // AGENT-001 note 1: the teacher room is never open-mic — the learner
       // needs time to think before speaking to a teacher. No natural/practice
       // toggle here on purpose, unlike TopicScreen.

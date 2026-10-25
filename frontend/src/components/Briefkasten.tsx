@@ -14,7 +14,8 @@ import {
   type Letter,
 } from "./briefkasten/api";
 import { addWord, fetchGloss, type GlossInfo } from "./satzschmiede/api";
-import { InsufficientCoinsError } from "@/lib/coins";
+import { InsufficientCoinsError, LETTER_COST } from "@/lib/coins";
+import { trackEvent } from "@/amplitude";
 import { OutOfCoinsPanel, refreshCoins } from "./shared/Coins";
 import { loadError } from "./shared/copy";
 import AppHeader from "@/components/shared/AppHeader";
@@ -73,6 +74,11 @@ export default function Briefkasten() {
   const [roundTarget, setRoundTarget] = useState<number | null>(null);
   // Letters completed in this round
   const [lettersCompleted, setLettersCompleted] = useState(0);
+  // P1 analytics: round start timestamp + once-guard for Round Completed
+  // (lettersCompleted hitting the target is the only end path — PAY-002
+  // removed every continue button from the ending screen).
+  const roundStartedAtRef = useRef<number | null>(null);
+  const roundCompletedTrackedRef = useRef(false);
 
   // One Langfuse Session per practice sitting (OBS-007): minted lazily on the
   // first attempt, held for the whole page visit — "New letter" top-ups
@@ -120,6 +126,21 @@ export default function Briefkasten() {
 
   const isRoundComplete = roundTarget !== null && lettersCompleted >= roundTarget;
 
+  // P1 analytics: one Round Completed per sitting, at the "Round complete!"
+  // moment. A letter counts when BriefTrainer signals it done (attempts and
+  // verdicts live in the DB; items is the sitting's shape).
+  useEffect(() => {
+    if (!isRoundComplete || roundCompletedTrackedRef.current) return;
+    roundCompletedTrackedRef.current = true;
+    trackEvent("Round Completed", {
+      mode: "briefkasten",
+      items: lettersCompleted,
+      duration_s: roundStartedAtRef.current
+        ? Math.round((Date.now() - roundStartedAtRef.current) / 1000)
+        : null,
+    });
+  }, [isRoundComplete, lettersCompleted]);
+
   // Load first letter when entering playing phase
   useEffect(() => {
     if (phase === "playing") {
@@ -143,6 +164,12 @@ export default function Briefkasten() {
 
   const handlePickerStart = useCallback(
     (count: number) => {
+      roundStartedAtRef.current = Date.now();
+      trackEvent("Round Started", {
+        mode: "briefkasten",
+        rounds: count,
+        cost: count * LETTER_COST,
+      });
       setRoundTarget(count);
       setLettersCompleted(0);
       setPhase("playing");
