@@ -164,6 +164,34 @@ async def _fulfill_checkout(db: AsyncSession, checkout_session_id: str) -> None:
             # contract as the subscription path (never silently swallow).
             logger.exception(f"Stripe topup credit failed for session {checkout_session_id}: {e}")
             raise
+
+        # Marketing Analytics conversion event (fail-open — never breaks
+        # fulfillment; the credit above already happened and committed).
+        # Fires on EVERY dispatch, not just credited=True: a redelivery after
+        # a crash-between-credit-and-record lands here with credited=False,
+        # and insert_id is what keeps Amplitude single-counted either way —
+        # the same contract the subscription branch below uses.
+        try:
+            from agents.amplitude_ai import track_event
+            from coins.prices import TOPUP_COINS as _TOPUP
+
+            amount_cents = session["amount_total"] if "amount_total" in session else None
+            currency = session["currency"] if "currency" in session else None
+            amount = amount_cents / 100.0 if isinstance(amount_cents, (int, float)) else None
+            track_event(
+                user_id,
+                "Coins Purchased",
+                {"coins": _TOPUP},
+                insert_id=f"coins-purchased-{checkout_session_id}",
+                revenue=amount,
+                price=amount,
+                quantity=1 if amount is not None else None,
+                product_id="coin-topup",
+                revenue_type="purchase",
+                currency=currency.upper() if isinstance(currency, str) else None,
+            )
+        except Exception:
+            pass
         return
 
     user_id = session["client_reference_id"]
