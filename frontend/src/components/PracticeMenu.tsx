@@ -60,6 +60,11 @@ export default function PracticeMenu() {
   const [askLevel, setAskLevel] = useState(false);
   const router = useRouter();
   const isDev = user?.role === "developer";
+  // ONBOARD-001 (owner, 2026-10-22): while free-locked, Clara renders BELOW
+  // the four pillars — the hub's hero position must not be a paywall the
+  // learner meets before trying anything (PAY-004). Unlocked (basic/premium/
+  // developer) she keeps AGENT-001's full-width top spot.
+  const claraLocked = !isDev && (user?.tier ?? "free") === "free";
 
   // REC-001: today's data-driven pick, shown as a banner above the modes.
   // Non-fatal — any load failure just means no banner; the menu is the core.
@@ -346,27 +351,29 @@ export default function PracticeMenu() {
           </div>
         )}
 
-        {/* AGENT-001: Clara stands alone above the three practice pillars —
-            she isn't a drill, she's who you ask when a drill made no sense, so
-            burying her among the modes hid the one thing that explains the
-            others. Full width on purpose: this is the promotion, not a card. */}
-        <div className="rise-in mt-10" style={{ animationDelay: "80ms" }}>
-          <ModeCard
-            href="/teacher"
-            mode="clara"
-            accent="red"
-            icon="bulb"
-            kicker="Your teacher · in English"
-            title="Clara the Teacher" // CLARA-19: plain card copy
-            body="Ask her about any topic."
-            cta="Ask Clara"
-            // PAY-004: the wall should be visible on the menu, not after a
-            // friend has already picked a topic and typed a question.
-            badge={
-              isDev || (user?.tier ?? "free") !== "free" ? undefined : "Basic"
-            }
-          />
-        </div>
+        {/* AGENT-001 placed Clara alone above the pillars; ONBOARD-001
+            (owner, 2026-10-22) moves her below them while free-locked and
+            back here once unlocked. Full width either way: when she's on
+            top this is the promotion, not a card. */}
+        {!claraLocked && (
+          <div className="rise-in mt-10" style={{ animationDelay: "80ms" }}>
+            <ModeCard
+              href="/teacher"
+              mode="clara"
+              accent="red"
+              icon="bulb"
+              kicker="Your teacher · in English"
+              title="Clara the Teacher" // CLARA-19: plain card copy
+              body="Ask her about any topic."
+              cta="Ask Clara"
+              // PAY-004: the wall should be visible on the menu, not after a
+              // friend has already picked a topic and typed a question.
+              badge={
+                isDev || (user?.tier ?? "free") !== "free" ? undefined : "Basic"
+              }
+            />
+          </div>
+        )}
 
         {/* MVP-001: the four core exercises, and only these four. Every other
             drill still exists and still runs — it is reached from the dev
@@ -424,6 +431,24 @@ export default function PracticeMenu() {
             done={streak?.modesToday.includes("briefkasten")}
           />
         </div>
+
+        {/* ONBOARD-001: the free-locked Clara slot — below the pillars, so
+            the first thing a new learner meets is practice, not a paywall. */}
+        {claraLocked && (
+          <div className="rise-in mt-10" style={{ animationDelay: "120ms" }}>
+            <ModeCard
+              href="/teacher"
+              mode="clara"
+              accent="red"
+              icon="bulb"
+              kicker="Your teacher · in English"
+              title="Clara the Teacher"
+              body="Ask her about any topic."
+              cta="Ask Clara"
+              badge="Basic"
+            />
+          </div>
+        )}
 
         {/* Developer-only: Interview exercise (not yet fully surfaced) */}
         {isDev && (
