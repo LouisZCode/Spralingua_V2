@@ -170,6 +170,22 @@ export default function PrivacyPage() {
         time. Nothing tracking-related loads before you accept, and
         switching it off stops it immediately.
       </LegalP>
+      <LegalP>
+        <B>Server-side lifecycle events.</B> Separate from these
+        consent-gated technologies, our servers also record a small number
+        of account-lifecycle events — account creation, subscription
+        purchases, coin purchases, and technical quality metrics for voice
+        sessions (such as response times and processing cost per turn) —
+        into the same Amplitude project. These carry only your pseudonymous
+        account id, the event type and, where applicable, the amount — no
+        browsing behavior, page views, or clicks. We process them under
+        Art.&nbsp;6(1)(b) and 6(1)(f) GDPR (performance of your
+        subscription contract, and our legitimate interest in revenue
+        accounting and service-quality measurement), because billing
+        records and basic service metrics exist independently of your
+        tracking choice. Switching analytics off therefore does not stop
+        these events; only deleting your account does.
+      </LegalP>
 
       <LegalH3>2.6 IP addresses</LegalH3>
       <LegalP>
@@ -209,6 +225,10 @@ export default function PrivacyPage() {
           [
             "Observability and tracing of our systems (via Langfuse), for reliability and cost monitoring",
             "Art. 6(1)(f) GDPR — our legitimate interest in keeping the service reliable and financially sustainable. Note: these technical traces include the content of your conversations and the prompts used to generate replies",
+          ],
+          [
+            "Recording server-side account-lifecycle events (signup, subscription and coin purchases, voice-session quality metrics) in Amplitude, as described in section 2.5",
+            "Art. 6(1)(b) and Art. 6(1)(f) GDPR — contract performance, and our legitimate interest in revenue accounting and service-quality measurement. These events are pseudonymous (account id, event type, amount) and continue even with analytics switched off",
           ],
           [
             "Measuring how Spralingua is used — the Meta Pixel and Amplitude analytics described in section 2.5",
