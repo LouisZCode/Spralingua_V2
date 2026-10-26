@@ -134,10 +134,10 @@ export default function TeacherTopicScreen({
           {isFreeLocked ? (
             <>
               <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">Clara is your personal German teacher!</h1>
-              <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
+              <p className="mt-6 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
                 She explains in English and gives you real exercises on your personal improvement areas.
               </p>
-              <p className="mt-3 max-w-xl font-body text-[16px] font-semibold leading-relaxed text-ink">
+              <p className="mt-5 max-w-xl font-body text-[16px] font-semibold leading-relaxed text-ink">
                 You can have daily personalized German lessons with Clara by upgrading your account:
               </p>
             </>
@@ -203,7 +203,7 @@ export default function TeacherTopicScreen({
           </div>
         )}
 
-        <div className="rise-in mt-9 flex flex-col items-start gap-4" style={{ animationDelay: "260ms" }}>
+        <div className={`rise-in ${isFreeLocked ? "mt-12" : "mt-9"} flex flex-col items-start gap-4`} style={{ animationDelay: "260ms" }}>
           {isFreeLocked ? (
             <Link href="/pricing" className="btn-3d inline-flex w-full items-center justify-center gap-2 rounded-2xl border-[3px] border-line bg-flag-red-fill px-7 py-4 font-display text-[16px] font-black uppercase tracking-[0.14em] text-on-fill sm:w-auto" style={inkShadow}>Upgrade my Account →</Link>
           ) : exhausted ? (
