@@ -76,7 +76,12 @@ export default function StartCta({
               // non-blocking banner is still unanswered and land the
               // moment it's accepted.
               const utm = readStoredUtm();
-              trackEvent("Sign Up Completed", { ...utm });
+              // "Sign Up Attributed", NOT "Sign Up Completed": the server
+              // (auth/routes.py) already fires Sign Up Completed
+              // unconditionally with {method} — this client event is the
+              // attribution record (UTMs), and a shared name would
+              // double-count signups in every funnel.
+              trackEvent("Sign Up Attributed", { ...utm });
               setUserPropertiesOnce(utm);
               trackFbq(
                 "CompleteRegistration",

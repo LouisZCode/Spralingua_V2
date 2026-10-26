@@ -1,7 +1,7 @@
 // Signup attribution (2026-10-25): ad-click UTMs live only in the landing
 // URL and die in the Google sign-in redirect, so we park them in
 // localStorage at first load and read them back at the signup moment
-// (StartCta fires them onto Sign Up Completed / CompleteRegistration).
+// (StartCta fires them onto Sign Up Attributed / CompleteRegistration).
 //
 // Local-only by design: writing here is not tracking — nothing leaves the
 // browser, no third party is involved — so it runs before any consent
