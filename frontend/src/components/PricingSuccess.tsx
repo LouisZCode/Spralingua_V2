@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useAuth } from "./auth/AuthContext";
 import { trackFbq } from "@/lib/fbpixel";
+import { celebrate } from "@/lib/celebrate";
+import { DAILY_ALLOWANCE, CLARA_DAILY_TALKS } from "@/lib/coins";
 import AppHeader from "@/components/shared/AppHeader";
 
 // PAY-001: lands here after Stripe Checkout redirects back
@@ -166,6 +168,21 @@ export default function PricingSuccess() {
     };
   }, [isTopup, ready, token, refreshUser]);
 
+  // PAY-009: the upgrade payoff — big celebration exactly once per purchase.
+  // sessionStorage keyed on the checkout session id, so a page refresh or a
+  // later visit to this URL shows the paid state WITHOUT re-firing; the
+  // checkout redirect (which carries session_id) is the one moment.
+  const celebrateKeyRef = useRef(searchParams.get("session_id"));
+  useEffect(() => {
+    if (isTopup || status !== "confirmed") return;
+    const key = celebrateKeyRef.current
+      ? `celebrated-${celebrateKeyRef.current}`
+      : null;
+    if (key && sessionStorage.getItem(key)) return;
+    if (key) sessionStorage.setItem(key, "1");
+    celebrate("big");
+  }, [isTopup, status]);
+
   let body: React.ReactNode;
   if (ready && !token) {
     // Rare: the Stripe redirect landed but the local session is gone
@@ -203,17 +220,39 @@ export default function PricingSuccess() {
         </>
       );
     } else {
+      // PAY-009: the owner's copy + the honest unlock list. Numbers come
+      // from the lib/coins.ts mirror (never hardcoded). Deliberately NOT
+      // listed: tandem length and vocab space — those are coin-priced, not
+      // tier-gated, so promising them would invent mechanics that don't
+      // exist.
+      const tier = user?.tier === "premium" ? "premium" : "basic";
+      const claraTalks = CLARA_DAILY_TALKS[tier];
+      const unlocks = [
+        `${DAILY_ALLOWANCE[tier]} coins every day — up from ${DAILY_ALLOWANCE.free}`,
+        `${claraTalks} Clara lesson${claraTalks !== 1 ? "s" : ""} a day — your personal German teacher`,
+      ];
       body = (
         <>
           <div className="grid h-16 w-16 place-items-center rounded-full border-[3px] border-success bg-success-soft">
             <CheckIcon />
           </div>
           <h1 className="mt-6 font-display text-[26px] font-black leading-tight text-ink">
-            You&apos;re on {tierLabel(user?.tier)}!
+            Congrats on getting serious on your German journey!
           </h1>
-          <p className="mt-3 font-body text-[15px] leading-relaxed text-ink-soft">
-            Your coins are ready — jump back into practice.
+          <p className="mt-3 font-body text-[15px] font-semibold text-ink">
+            You&apos;re on {tierLabel(user?.tier)} — you unlocked:
           </p>
+          <ul className="mt-4 w-full max-w-sm space-y-2">
+            {unlocks.map((u) => (
+              <li
+                key={u}
+                className="flex items-start gap-2.5 rounded-2xl border-[3px] border-line bg-paper-warm px-4 py-2.5 text-left font-body text-[14px] font-semibold leading-snug text-ink"
+              >
+                <span aria-hidden className="font-black text-success">✓</span>
+                <span>{u}</span>
+              </li>
+            ))}
+          </ul>
           <Link
             href="/practice"
             className="btn-3d mt-8 inline-flex items-center justify-center rounded-[24px] border-[3px] border-red-line bg-flag-red-fill px-7 py-4 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
