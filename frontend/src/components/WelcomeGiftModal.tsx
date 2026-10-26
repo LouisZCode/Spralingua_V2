@@ -10,10 +10,12 @@
 // order is gift → consent → level picker.
 
 import Image from "next/image";
+import { useEffect } from "react";
 import {
   setWelcomeGiftStatus,
   useWelcomeGift,
 } from "@/lib/welcomeGift";
+import { celebrate } from "@/lib/celebrate";
 
 // House ink-shadow per-file constant (see ConsentGate convention).
 const inkShadow = {
@@ -22,7 +24,15 @@ const inkShadow = {
 
 export default function WelcomeGiftModal() {
   const status = useWelcomeGift();
-  if (status !== "pending") return null;
+  const show = status === "pending";
+  // ONBOARD-004 update: the gift arrives with the big celebration burst
+  // (owner picked the big variant 2026-10-26 — "trigger it once"; the
+  // welcome-gift-v1 flag guarantees exactly that). Shared util with
+  // PAY-009; no audio by owner decision — see lib/celebrate.ts.
+  useEffect(() => {
+    if (show) celebrate("big");
+  }, [show]);
+  if (!show) return null;
 
   return (
     <div
