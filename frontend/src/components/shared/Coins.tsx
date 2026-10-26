@@ -19,12 +19,16 @@ export function CoinPill({
   nextResetAt?: string | null;
 }) {
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-line bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink"
+    // PAY-008 (owner, 2026-10-26): the coins ARE the top-up door — clicking
+    // the pill leads to /pricing, same place OutOfCoinsPanel sends you.
+    <Link
+      href="/pricing"
+      aria-label={`${balance} coins — go to plans and top-up`}
+      className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-line bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink transition-transform hover:-translate-y-0.5 active:translate-y-0"
     >
       <span aria-hidden>🪙</span>
       <span>{balance}</span>
-    </span>
+    </Link>
   );
 }
 

@@ -904,7 +904,17 @@ export default function BriefTrainer({
               // highlighted in place and their hints on click/tap, editable
               // right here. The edited text is what "Send the improved
               // version" submits; there is no separate revise box anymore.
-              <HintEditor value={text} onChange={setText} matches={hintMatches} />
+              <>
+                {/* PRODUCT-005 update (owner, 2026-10-26): nothing told the
+                    learner the marks were interactive — say it explicitly,
+                    but only when there is something to click. */}
+                {hintMatches.length > 0 && (
+                  <p className="mb-3 font-body text-[13px] font-bold text-flag-red-deep">
+                    ✏️ Click the mistake to understand more!
+                  </p>
+                )}
+                <HintEditor value={text} onChange={setText} matches={hintMatches} />
+              </>
             ) : (
               <textarea
                 value={text}
