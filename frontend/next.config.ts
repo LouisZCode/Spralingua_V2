@@ -100,6 +100,11 @@ const nextConfig: NextConfig = {
       "https://sr-client-cfg.amplitude.com",
       "https://api-sr.amplitude.com",
       "https://diagnostics.prod.us-west-2.amplitude.com",
+      // The unified SDK's Guides/Resource-Center ping (gs.amplitude.com/
+      //sdk/v1/config) — non-essential ("Continuing with empty data" when
+      // blocked), but a blocked fetch on every consented load dirties real
+      // consoles; allowed to keep them clean (seen live 2026-10-26).
+      "https://gs.amplitude.com",
       // No daily.co origin here, on purpose (SEC-005, 2026-09-05):
       // @pipecat-ai/websocket-transport's DEFAULT media manager is Daily's
       // own `DailyMediaManager`, which fetches and eval()s a call-object
