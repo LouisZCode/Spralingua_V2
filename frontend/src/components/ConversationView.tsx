@@ -14,6 +14,7 @@ import SessionSummaryModal, {
 import TandemDebriefModal from "./TandemDebriefModal";
 import { useAuth } from "./auth/AuthContext";
 import { trackEvent } from "@/amplitude";
+import { refreshCoins } from "./shared/Coins";
 import { HTTP_BASE, WS_BASE as BASE_WS } from "@/lib/api";
 import GermanWay from "./shared/GermanWay";
 import Glossable from "./shared/Glossable";
@@ -678,6 +679,17 @@ export default function ConversationView({
       });
     }
     setShowFinishConfirm(false);
+    // BUG-012: tandem/Flow voice sessions are charged SERVER-side at WS
+    // disconnect (spend_capped) — nothing client-side learns the balance
+    // moved, so the header pill served the pre-session number until a full
+    // reload. Refresh shortly after the socket closes (the charge lands
+    // with the server's disconnect handler), twice: one fast flip for the
+    // common case, one confirmation after evaluators/debrief settle. The
+    // store dedupes concurrent fetches; both survive unmount (user-finish
+    // navigates away immediately). PracticeMenu's mount refresh is the
+    // catch-all for endings that bypass this component.
+    setTimeout(refreshCoins, 2000);
+    setTimeout(refreshCoins, 6000);
     // User-initiated finish → straight back to the list, tandem included
     // (BUG-010, supersedes the TANDEM-001 Phase 4 always-show rule): the
     // debrief still runs server-side once the socket closes and becomes
