@@ -16,7 +16,7 @@ import {
 import { addWord, fetchGloss, type GlossInfo } from "./satzschmiede/api";
 import { InsufficientCoinsError, LETTER_COST } from "@/lib/coins";
 import { trackEvent } from "@/amplitude";
-import { OutOfCoinsPanel, refreshCoins } from "./shared/Coins";
+import { OutOfCoinsPanel, refreshCoins, HeaderCoinChip } from "./shared/Coins";
 import { loadError } from "./shared/copy";
 import AppHeader from "@/components/shared/AppHeader";
 
@@ -270,7 +270,10 @@ export default function Briefkasten() {
           className="pointer-events-none absolute inset-0 bg-paper-grid opacity-50"
         />
 
-        <AppHeader back={{ href: "/practice", label: "← Menu" }} />
+        <AppHeader
+          back={{ href: "/practice", label: "← Menu" }}
+          right={<HeaderCoinChip />}
+        />
 
         <main className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center px-6 py-12">
           <BriefkastenPicker onStart={handlePickerStart} />
@@ -288,7 +291,10 @@ export default function Briefkasten() {
 
       {/* APPHDR-001: shared header — the logo targets /practice, the
           signed-in learner's home. */}
-      <AppHeader back={{ href: "/practice", label: "← Menu" }} />
+      <AppHeader
+        back={{ href: "/practice", label: "← Menu" }}
+        right={<HeaderCoinChip />}
+      />
 
       <main className="relative mx-auto flex w-full max-w-4xl flex-1 flex-col justify-center px-6 py-12">
         <div className="mb-5 text-center">

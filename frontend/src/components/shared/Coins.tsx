@@ -11,23 +11,40 @@ import { useAuth } from "../auth/AuthContext";
 
 export function CoinPill({
   balance,
+  preview = null,
 }: {
   balance: number;
+  // PAY-010: pending deduction for the sitting being configured — the picker
+  // screens mirror their cost here in green (affordable) or red (not).
+  preview?: number | null;
   // nextResetAt stays in the props for API compatibility with existing
   // callers, but the "· return at HH:MM" suffix was dropped (the reset time
   // reads like a deadline in every screen that shows the pill).
   nextResetAt?: string | null;
 }) {
+  const insufficient = preview !== null && preview > balance;
   return (
     // PAY-008 (owner, 2026-10-26): the coins ARE the top-up door — clicking
     // the pill leads to /pricing, same place OutOfCoinsPanel sends you.
     <Link
       href="/pricing"
-      aria-label={`${balance} coins — go to plans and top-up`}
+      aria-label={
+        preview !== null
+          ? `${balance} coins, next sitting costs ${preview} — go to plans and top-up`
+          : `${balance} coins — go to plans and top-up`
+      }
       className="inline-flex items-center gap-1.5 rounded-full border-[3px] border-line bg-card px-3 py-1.5 font-display text-[13px] font-black tracking-[0.08em] text-ink transition-transform hover:-translate-y-0.5 active:translate-y-0"
     >
       <span aria-hidden>🪙</span>
       <span>{balance}</span>
+      {preview !== null && (
+        <span
+          aria-hidden
+          className={insufficient ? "text-flag-red" : "text-success"}
+        >
+          −{preview}
+        </span>
+      )}
     </Link>
   );
 }
@@ -71,6 +88,43 @@ export function OutOfCoinsPanel({
       </div>
     </div>
   );
+}
+
+// ─── pending-cost preview (PAY-010) ───────────────────────────────────
+// What the sitting being configured will deduct. Set by the round/exchange/
+// letter pickers while they are open, cleared on start/dismiss/unmount —
+// the same module-store pattern as the balance (shared listener set, so one
+// notify() refreshes both).
+let coinPreview: number | null = null;
+
+export function setCoinPreview(coins: number | null): void {
+  if (coinPreview === coins) return;
+  coinPreview = coins;
+  notify();
+}
+
+function getPreviewSnapshot(): number | null {
+  return coinPreview;
+}
+
+export function useCoinPreview(): number | null {
+  return useSyncExternalStore(subscribe, getPreviewSnapshot, getPreviewSnapshot);
+}
+
+// The header chip for the picker screens: balance + the pending-cost
+// preview, hidden signed-out, preview suppressed for developers (their
+// balance is frozen by design — useCoinsBypassed). Carries the BUG-012
+// mount refresh so every screen that hosts a picker shows an honest
+// number too.
+export function HeaderCoinChip() {
+  const bal = useCoinBalance();
+  const preview = useCoinPreview();
+  const bypassed = useCoinsBypassed();
+  useEffect(() => {
+    refreshCoins();
+  }, []);
+  if (!bal) return null;
+  return <CoinPill balance={bal.balance} preview={bypassed ? null : preview} nextResetAt={bal.nextResetAt} />;
 }
 
 // ─── developer bypass ───────────────────────────────────────────────────

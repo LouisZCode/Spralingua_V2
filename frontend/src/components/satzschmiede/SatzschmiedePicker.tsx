@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useCoinBalance, useCoinsBypassed } from "@/components/shared/Coins";
+import { useCoinBalance, useCoinsBypassed, setCoinPreview } from "@/components/shared/Coins";
 import { SATZ_ATTEMPT_COST } from "@/lib/coins";
 
 const SATZ_PRESETS = [
@@ -89,6 +89,13 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
   const customNumber = customText === "" ? null : Number(customText);
   const roundChoice = customNumber ?? presetChoice;
   const cost = roundChoice * SATZ_ATTEMPT_COST;
+  // PAY-010: mirror the cost into the header chip while this picker is
+  // open — updates live per preset/custom change, cleared on unmount
+  // (which covers Start: the whole picker leaves the tree).
+  useEffect(() => {
+    setCoinPreview(cost);
+    return () => setCoinPreview(null);
+  }, [cost]);
   const insufficient = !bypassed && bal !== null && bal.balance < cost;
   const disabled = insufficient || roundChoice < 1 || roundChoice > effectiveMax;
 

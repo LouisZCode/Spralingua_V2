@@ -29,6 +29,7 @@ import SoundToggle from "./shared/SoundToggle";
 import { loadError } from "./shared/copy";
 import ThemeToggle from "./shared/ThemeToggle";
 import AppHeader from "@/components/shared/AppHeader";
+import { HeaderCoinChip } from "@/components/shared/Coins";
 
 const redShadow = {
   ["--shadow-color"]: "var(--color-red-line)",
@@ -344,6 +345,7 @@ export default function Satzschmiede() {
             <>
               <ThemeToggle />
               <SoundToggle />
+              <HeaderCoinChip />
             </>
           }
           back={{ href: "/practice", label: "← Menu" }}
@@ -376,6 +378,7 @@ export default function Satzschmiede() {
             <>
               <ThemeToggle />
               <SoundToggle />
+              <HeaderCoinChip />
             </>
           }
           back={{ href: "/practice", label: "← Menu" }}
@@ -401,6 +404,7 @@ export default function Satzschmiede() {
           <>
             <ThemeToggle />
             <SoundToggle />
+            <HeaderCoinChip />
           </>
         }
         back={{ href: "/practice", label: "← Menu" }}

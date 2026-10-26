@@ -10,7 +10,7 @@ import LevelPickerModal from "./LevelPickerModal";
 import { useConsent } from "@/lib/consent";
 import { trackEvent } from "@/amplitude";
 import { useWelcomeGift } from "@/lib/welcomeGift";
-import { CoinPill, useCoinBalance, refreshCoins } from "./shared/Coins";
+import { HeaderCoinChip } from "./shared/Coins";
 import {
   fetchRecommendation,
   fetchStats,
@@ -235,8 +235,8 @@ export default function PracticeMenu() {
             {/* DARK-001: the light/dark switch lives here because /practice is
                 the one header every learner passes through. */}
             <ThemeToggle />
-            {/* PAY-002: balance chip — informative even at 0, hidden when signed out */}
-            <PracticeMenuCoinChip />
+            {/* PAY-002: balance chip — informative even at 0, hidden when signed out. PAY-010: this is now the shared preview-aware chip. */}
+            <HeaderCoinChip />
             {/* PAY-001/PAYHUB-001: the door to /pricing adapts to the plan.
                 Signed out or free → visible (compare plans, upgrade, top-up).
                 Paying → not in the header at all; /profile's "Manage plan →"
@@ -888,18 +888,4 @@ function ModeIcon({ name }: { name: ModeIconName }) {
   );
 }
 
-// PAY-002: header coin chip — signed-out sees nothing; signed-in always sees
-// the pill (even at 0) so the currency is discoverable.
-function PracticeMenuCoinChip() {
-  const bal = useCoinBalance();
-  // BUG-012 catch-all: voice sessions are charged server-side at WS
-  // disconnect, so the cached balance can be stale the moment the learner
-  // navigates back to this menu (in-app nav = no token change, no window
-  // focus, no drill refresh). One cheap GET per menu visit; the store
-  // dedupes concurrent fetches.
-  useEffect(() => {
-    refreshCoins();
-  }, []);
-  if (!bal) return null;
-  return <CoinPill balance={bal.balance} nextResetAt={bal.nextResetAt} />;
-}
+

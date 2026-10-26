@@ -40,6 +40,7 @@ import {
   type CaseVerdict,
 } from "./faelle/api";
 import AppHeader from "@/components/shared/AppHeader";
+import { HeaderCoinChip, setCoinPreview } from "@/components/shared/Coins";
 
 import SatzbauTrainer from "./satzbau/SatzbauTrainer";
 import {
@@ -848,6 +849,16 @@ export default function Flow() {
   const customNumber = customText === "" ? null : Number(customText);
   const roundChoice: StoredRoundChoice = customNumber ?? presetChoice;
   const roundTarget = targetFromChoice(roundChoice);
+
+  // PAY-010: while the picker is open, the header chip previews what this
+  // sitting will deduct — updating live with every preset/custom change,
+  // cleared the moment the round starts (charges then happen per deal).
+  const pickerOpen = screen === "picker" && phase !== "error";
+  useEffect(() => {
+    if (!pickerOpen) return;
+    setCoinPreview(roundTarget * SATZ_ATTEMPT_COST);
+    return () => setCoinPreview(null);
+  }, [pickerOpen, roundTarget]);
 
   // PAY-006: the picker's own coin gate — mirrors SatzschmiedePicker's
   // cost/maxAffordable/effectiveMax/insufficient/disabled chain, adapted to
@@ -1822,8 +1833,9 @@ export default function Flow() {
       />
 
       {/* APPHDR-001: shared header — the logo targets /practice, the
-          signed-in learner's home. */}
-      <AppHeader back={{ href: "/practice", label: "← Menu" }} />
+          signed-in learner's home. PAY-010: the chip previews the round's
+          cost while the picker is open (set/cleared just below). */}
+      <AppHeader back={{ href: "/practice", label: "← Menu" }} right={<HeaderCoinChip />} />
 
       <main className="relative mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center px-6 py-12">
         {screen === "picker" && phase !== "error" ? (

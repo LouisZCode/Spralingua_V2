@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useCoinBalance, useCoinsBypassed } from "@/components/shared/Coins";
+import { useCoinBalance, useCoinsBypassed, setCoinPreview } from "@/components/shared/Coins";
 import { LETTER_COST } from "@/lib/coins";
 import Link from "next/link";
 
@@ -58,6 +58,13 @@ export default function BriefkastenPicker({ onStart }: BriefkastenPickerProps) {
   const customNumber = customText === "" ? null : Number(customText);
   const roundChoice = customNumber ?? presetChoice;
   const cost = roundChoice * LETTER_COST;
+  // PAY-010: mirror the cost into the header chip while this picker is
+  // open — updates live per preset/custom change, cleared on unmount
+  // (which covers Start: the whole picker leaves the tree).
+  useEffect(() => {
+    setCoinPreview(cost);
+    return () => setCoinPreview(null);
+  }, [cost]);
   const maxAffordable = bal ? Math.floor(bal.balance / LETTER_COST) : 10;
   // PAY-002: developer bypass — same trap as SatzschmiedePicker (see there).
   const effectiveMax = bypassed ? 10 : Math.min(10, maxAffordable);
