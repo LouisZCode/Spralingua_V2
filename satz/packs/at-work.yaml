@@ -5,7 +5,7 @@ id: at-work
 title: At Work
 description: Meetings, deadlines, and colleagues — office German
 kind: situation
-level: A2–B1
+level: A2
 position: 6
 cards:
   - id: n-termin
@@ -131,3 +131,114 @@ cards:
     gloss: '"to keep (someone) posted"'
     note: collocation · office talk
     example: Halten Sie mich bitte auf dem Laufenden.
+
+  - id: n-buero
+    type: noun
+    target: Büro
+    article: das
+    level: A2
+    gloss: the office
+    note: "neuter · plural: die Büros"
+    example: Ich bin heute nicht im Büro.
+
+  - id: n-urlaub
+    type: noun
+    target: Urlaub
+    article: der
+    level: A2
+    gloss: the vacation
+    note: "masculine · plural: die Urlaube"
+    example: Ich habe im August Urlaub.
+
+  - id: n-e-mail
+    type: noun
+    target: E-Mail
+    article: die
+    level: A2
+    gloss: the email
+    note: "feminine · plural: die E-Mails"
+    example: Ich schicke Ihnen die Unterlagen per E-Mail.
+
+  - id: v-anrufen
+    type: verb
+    target: anrufen
+    level: B1
+    gloss: to call (on the phone)
+    example: Ich rufe Sie morgen nach dem Meeting an.
+
+  # CONT-003: spoken-past sibling — separable (an + rufen, strong:
+  # rufen/rief/gerufen), ge- lands between the prefix and the stem.
+  - id: v-anrufen-past
+    type: verb
+    target: anrufen
+    level: B1
+    gloss: to call (on the phone)
+    tense: past
+    tense_form: hat angerufen
+    example: Er hat mich leider nicht angerufen.
+
+  - id: v-arbeiten
+    type: verb
+    target: arbeiten
+    level: A2
+    gloss: to work
+    example: Ich arbeite von zu Hause.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-arbeiten-past
+    type: verb
+    target: arbeiten
+    level: A2
+    gloss: to work
+    tense: past
+    tense_form: hat gearbeitet
+    example: Sie hat bis spät in die Nacht gearbeitet.
+
+  - id: v-kuendigen
+    type: verb
+    target: kündigen
+    level: B1
+    gloss: to quit (a job)
+    example: Sie will ihre Stelle kündigen.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-kuendigen-past
+    type: verb
+    target: kündigen
+    level: B1
+    gloss: to quit (a job)
+    tense: past
+    tense_form: hat gekündigt
+    example: Er hat bei der Firma gekündigt.
+
+  - id: p-ich-habe-da-eine-frage
+    type: phrase
+    target: Ich habe da eine Frage.
+    level: B1
+    gloss: '"I have a question."'
+    note: collocation · meetings
+    example: Ich habe da eine Frage zum neuen Ablauf.
+
+  - id: p-schoenen-feierabend
+    type: phrase
+    target: Schönen Feierabend!
+    level: A2
+    gloss: '"Enjoy your evening off!"'
+    note: spoken · leaving work
+    example: „Ich gehe dann mal." – „Schönen Feierabend!"
+
+  - id: p-das-passt-mir
+    type: phrase
+    target: Das passt mir gut.
+    level: A2
+    gloss: '"That works for me."'
+    note: spoken · scheduling
+    example: „Dienstag um zehn?" – „Das passt mir gut."
+
+  - id: p-in-ordnung
+    type: phrase
+    target: In Ordnung.
+    level: A2
+    gloss: '"Understood. / That''s fine."'
+    note: spoken · neutral
+    example: „Das Meeting fällt aus." – „In Ordnung, danke."

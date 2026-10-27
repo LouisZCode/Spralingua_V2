@@ -131,9 +131,6 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
       <h1 className="mt-3 font-display text-[clamp(28px,4.6vw,44px)] font-black leading-[1.03] tracking-tight text-ink">
         How many words to practice?
       </h1>
-      <p className="mt-4 max-w-xl font-body text-[16px] leading-relaxed text-ink-soft">
-        Pick a round length — each word costs 5 coins.
-      </p>
 
       <div className="mt-8 grid gap-4 sm:grid-cols-3">
         {SATZ_PRESETS.map(({ value, label }) => {
@@ -176,10 +173,11 @@ export default function SatzschmiedePicker({ onStart }: SatzschmiedePickerProps)
         />
       </div>
 
-      {/* Balance / cost note */}
+      {/* Balance / cost note — PAY-002: cost mirrors the header chip; the
+          phrasing frames the spend as an investment (Luis's copy). */}
       {bal && !bypassed && (
         <p className="mt-3 font-body text-[12px] text-ink-muted">
-          🪙 {bal.balance} coins · this round costs {cost} coins
+          Investing {cost} coins into your German!
           {insufficient && (
             <>
               {" — "}

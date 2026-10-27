@@ -1,0 +1,244 @@
+# Situation pack: the arrival — first days in Germany. Introductions,
+# politeness floor, asking where things are. Authored per
+# .claude/skills/satz-cards/SKILL.md. Word choices checked against the
+# frequency list in "2000 Most Common German Words in Context"
+# (Name 338, Nummer 500, Frau 124, Freund 153, Stadt 315, heißen 226,
+# sprechen 178, fragen 198, sagen 50). Every verb carries its CONT-003
+# spoken-past sibling.
+id: first-days
+title: First Days
+description: Just arrived? Introduce yourself, ask the way, be polite
+kind: situation
+level: A1
+position: 8
+cards:
+  - id: n-name
+    type: noun
+    target: Name
+    article: der
+    level: A1
+    gloss: the name
+    note: "masculine · plural: die Namen"
+    example: Mein Name ist Anna.
+
+  - id: n-nummer
+    type: noun
+    target: Nummer
+    article: die
+    level: A1
+    gloss: the number
+    note: "feminine · plural: die Nummern"
+    example: Meine Nummer ist null-eins-sieben-drei.
+
+  - id: n-frau
+    type: noun
+    target: Frau
+    article: die
+    level: A1
+    gloss: the woman / Mrs.
+    note: "feminine · plural: die Frauen"
+    example: Die Frau da drüben ist unsere Nachbarin.
+
+  - id: n-herr
+    type: noun
+    target: Herr
+    article: der
+    level: A1
+    gloss: the gentleman / Mr.
+    note: "masculine · plural: die Herren"
+    example: Guten Tag, Herr Klein!
+
+  - id: n-freund
+    type: noun
+    target: Freund
+    article: der
+    level: A1
+    gloss: the friend
+    note: "masculine · plural: die Freunde"
+    example: Tom ist mein bester Freund.
+
+  - id: n-sprache
+    type: noun
+    target: Sprache
+    article: die
+    level: A1
+    gloss: the language
+    note: "feminine · plural: die Sprachen"
+    example: Die deutsche Sprache ist nicht leicht.
+
+  - id: n-land
+    type: noun
+    target: Land
+    article: das
+    level: A1
+    gloss: the country
+    note: "neuter · plural: die Länder"
+    example: Deutschland ist ein schönes Land.
+
+  - id: v-heissen
+    type: verb
+    target: heißen
+    level: A1
+    gloss: to be called / named
+    example: Ich heiße Anna.
+
+  # CONT-003: spoken-past sibling — strong verb (heißen/hieß/geheißen).
+  - id: v-heissen-past
+    type: verb
+    target: heißen
+    level: A1
+    gloss: to be called / named
+    tense: past
+    tense_form: hat geheißen
+    example: Früher habe ich anders geheißen.
+
+  - id: v-kommen
+    type: verb
+    target: kommen
+    level: A1
+    gloss: to come / come from
+    example: Ich komme aus Brasilien.
+
+  # CONT-003: spoken-past sibling — strong verb (kommen/kam/gekommen).
+  # NOTE: kommen uses SEIN, not haben.
+  - id: v-kommen-past
+    type: verb
+    target: kommen
+    level: A1
+    gloss: to come / come from
+    tense: past
+    tense_form: ist gekommen
+    example: Er ist leider zu spät gekommen.
+
+  - id: v-sprechen
+    type: verb
+    target: sprechen
+    level: A1
+    gloss: to speak
+    example: Ich spreche ein wenig Deutsch.
+
+  # CONT-003: spoken-past sibling — strong verb (sprechen/sprach/gesprochen).
+  - id: v-sprechen-past
+    type: verb
+    target: sprechen
+    level: A1
+    gloss: to speak
+    tense: past
+    tense_form: hat gesprochen
+    example: Er hat schon auf dem Telefon gesprochen.
+
+  - id: v-fragen
+    type: verb
+    target: fragen
+    level: A1
+    gloss: to ask
+    example: Ich frage nach dem Weg.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-fragen-past
+    type: verb
+    target: fragen
+    level: A1
+    gloss: to ask
+    tense: past
+    tense_form: hat gefragt
+    example: Sie hat mich nach der Zeit gefragt.
+
+  - id: v-leben
+    type: verb
+    target: leben
+    level: A1
+    gloss: to live (lead a life)
+    example: Ich lebe jetzt in Deutschland.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-leben-past
+    type: verb
+    target: leben
+    level: A1
+    gloss: to live (lead a life)
+    tense: past
+    tense_form: hat gelebt
+    example: Er hat lange in zwei Ländern gelebt.
+
+  - id: v-lernen
+    type: verb
+    target: lernen
+    level: A1
+    gloss: to learn
+    example: Ich lerne Deutsch.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-lernen-past
+    type: verb
+    target: lernen
+    level: A1
+    gloss: to learn
+    tense: past
+    tense_form: hat gelernt
+    example: Wir haben die Wörter zusammen gelernt.
+
+  - id: v-sagen
+    type: verb
+    target: sagen
+    level: A1
+    gloss: to say
+    example: Wie sagt man das auf Deutsch?
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-sagen-past
+    type: verb
+    target: sagen
+    level: A1
+    gloss: to say
+    tense: past
+    tense_form: hat gesagt
+    example: Du hast das aber schön gesagt.
+
+  - id: p-freut-mich
+    type: phrase
+    target: Freut mich!
+    level: A1
+    gloss: '"Nice to meet you!"'
+    note: spoken · introductions
+    example: „Das ist mein Kollege Tim." – „Freut mich!"
+
+  - id: p-wo-ist
+    type: phrase
+    target: Wo ist …?
+    level: A1
+    gloss: '"Where is …?"'
+    note: spoken · asking the way
+    example: Wo ist der Bahnhof, bitte?
+
+  - id: p-entschuldigung
+    type: phrase
+    target: Entschuldigung!
+    level: A1
+    gloss: '"Excuse me! / Sorry!"'
+    note: spoken · polite interruption
+    example: Entschuldigung! Wo ist hier der Ausgang?
+
+  - id: p-danke-schoen
+    type: phrase
+    target: Danke schön!
+    level: A1
+    gloss: '"Thank you very much!"'
+    note: spoken · polite
+    example: „Dein Kaffee." – „Danke schön!"
+
+  - id: p-sprechen-sie-englisch
+    type: phrase
+    target: Sprechen Sie Englisch?
+    level: A1
+    gloss: '"Do you speak English?"'
+    note: spoken · arrival staple
+    example: Entschuldigung, sprechen Sie Englisch?
+
+  - id: p-ich-verstehe-nicht
+    type: phrase
+    target: Ich verstehe nicht.
+    level: A1
+    gloss: '"I don''t understand."'
+    note: spoken · essential
+    example: Langsamer, bitte — ich verstehe nicht.

@@ -130,3 +130,113 @@ cards:
     gloss: '"No idea."'
     note: spoken · casual
     example: „Wo ist Tom?" – „Keine Ahnung."
+
+  - id: n-tag
+    type: noun
+    target: Tag
+    article: der
+    level: A1
+    gloss: the day
+    note: "masculine · plural: die Tage"
+    example: Heute ist ein schöner Tag.
+
+  - id: n-zeit
+    type: noun
+    target: Zeit
+    article: die
+    level: A1
+    gloss: the time
+    note: feminine · usually no plural
+    example: Ich habe heute keine Zeit.
+
+  - id: n-geld
+    type: noun
+    target: Geld
+    article: das
+    level: A1
+    gloss: the money
+    note: neuter · usually no plural
+    example: Ich habe kein Geld dabei.
+
+  - id: v-machen
+    type: verb
+    target: machen
+    level: A1
+    gloss: to do / make
+    example: Was machst du heute?
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-machen-past
+    type: verb
+    target: machen
+    level: A1
+    gloss: to do / make
+    tense: past
+    tense_form: hat gemacht
+    example: Ich habe die Hausaufgaben gemacht.
+
+  - id: v-essen
+    type: verb
+    target: essen
+    level: A1
+    gloss: to eat
+    example: Wir essen um zwölf Uhr.
+
+  # CONT-003: spoken-past sibling — strong verb (essen/aß/gegessen), hat + ge-.
+  - id: v-essen-past
+    type: verb
+    target: essen
+    level: A1
+    gloss: to eat
+    tense: past
+    tense_form: hat gegessen
+    example: Wir haben zusammen Pizza gegessen.
+
+  - id: v-lesen
+    type: verb
+    target: lesen
+    level: A1
+    gloss: to read
+    example: Ich lese gern Bücher.
+
+  # CONT-003: spoken-past sibling — strong verb (lesen/las/gelesen), hat + ge-.
+  - id: v-lesen-past
+    type: verb
+    target: lesen
+    level: A1
+    gloss: to read
+    tense: past
+    tense_form: hat gelesen
+    example: Sie hat das ganze Buch gelesen.
+
+  - id: p-noch-einmal-bitte
+    type: phrase
+    target: Noch einmal, bitte.
+    level: A1
+    gloss: '"One more time, please."'
+    note: spoken · polite
+    example: Noch einmal, bitte. Das war zu schnell.
+
+  - id: p-natuerlich
+    type: phrase
+    target: Natürlich!
+    level: A1
+    gloss: '"Of course!"'
+    note: spoken · casual
+    example: „Kannst du morgen kommen?" – „Natürlich!"
+
+  - id: p-bis-bald
+    type: phrase
+    target: Bis bald!
+    level: A1
+    gloss: '"See you soon!"'
+    note: spoken · casual
+    example: „Danke, tschüss!" – „Bis bald!"
+
+  - id: p-alles-klar
+    type: phrase
+    target: Alles klar.
+    level: A1
+    gloss: '"All right. / Okay."'
+    note: spoken · casual
+    example: „Wir treffen uns um acht." – „Alles klar."

@@ -1,0 +1,242 @@
+# Level pack: A2 everyday expansion — weather, shopping, travel, and
+# small celebrations. Authored per .claude/skills/satz-cards/SKILL.md —
+# noun/verb/reflexive rules. Same shape as a1-basics: every verb carries
+# its CONT-003 spoken-past sibling.
+id: a2-basics
+title: A2 Basics
+description: Everyday expansion — weather, shopping, travel, and small celebrations
+kind: level
+level: A2
+position: 7
+cards:
+  - id: n-wetter
+    type: noun
+    target: Wetter
+    article: das
+    level: A2
+    gloss: the weather
+    note: neuter · usually no plural
+    example: Das Wetter ist heute schön.
+
+  - id: n-einkauf
+    type: noun
+    target: Einkauf
+    article: der
+    level: A2
+    gloss: the shopping (trip) / purchase
+    note: "masculine · plural: die Einkäufe"
+    example: Ich mache den Einkauf für die ganze Woche.
+
+  - id: n-arzt
+    type: noun
+    target: Arzt
+    article: der
+    level: A2
+    gloss: the doctor
+    note: "masculine · plural: die Ärzte"
+    example: Ich muss morgen zum Arzt.
+
+  - id: n-bahnhof
+    type: noun
+    target: Bahnhof
+    article: der
+    level: A2
+    gloss: the train station
+    note: "masculine · plural: die Bahnhöfe"
+    example: Der Zug kommt um zehn Uhr am Bahnhof an.
+
+  - id: n-geschenk
+    type: noun
+    target: Geschenk
+    article: das
+    level: A2
+    gloss: the present / gift
+    note: "neuter · plural: die Geschenke"
+    example: Das Geschenk ist für meine Mutter.
+
+  - id: n-familie
+    type: noun
+    target: Familie
+    article: die
+    level: A2
+    gloss: the family
+    note: "feminine · plural: die Familien"
+    example: Meine Familie wohnt in Hamburg.
+
+  - id: n-ticket
+    type: noun
+    target: Ticket
+    article: das
+    level: A2
+    gloss: the ticket
+    note: "neuter · plural: die Tickets"
+    example: Ich brauche ein Ticket nach Köln.
+
+  - id: v-kaufen
+    type: verb
+    target: kaufen
+    level: A2
+    gloss: to buy
+    example: Ich kaufe das Brot beim Bäcker.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-kaufen-past
+    type: verb
+    target: kaufen
+    level: A2
+    gloss: to buy
+    tense: past
+    tense_form: hat gekauft
+    example: Ich habe gestern neue Schuhe gekauft.
+
+  - id: v-suchen
+    type: verb
+    target: suchen
+    level: A2
+    gloss: to look for / search
+    example: Ich suche eine kleine Wohnung.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-suchen-past
+    type: verb
+    target: suchen
+    level: A2
+    gloss: to look for / search
+    tense: past
+    tense_form: hat gesucht
+    example: Wir haben den Schlüssel eine Stunde gesucht.
+
+  - id: v-bringen
+    type: verb
+    target: bringen
+    level: A2
+    gloss: to bring
+    example: Kannst du das Paket zur Post bringen?
+
+  # CONT-003: spoken-past sibling — mixed verb (bringen/brachte/gebracht),
+  # no prefix, hat + ge-.
+  - id: v-bringen-past
+    type: verb
+    target: bringen
+    level: A2
+    gloss: to bring
+    tense: past
+    tense_form: hat gebracht
+    example: Er hat mir die Post gebracht.
+
+  - id: v-telefonieren
+    type: verb
+    target: telefonieren
+    level: A2
+    gloss: to make a phone call
+    example: Sie telefoniert jeden Abend mit ihrer Schwester.
+
+  # CONT-003: spoken-past sibling — weak -ieren verb, no ge- (the stress
+  # already sits on -ie-).
+  - id: v-telefonieren-past
+    type: verb
+    target: telefonieren
+    level: A2
+    gloss: to make a phone call
+    tense: past
+    tense_form: hat telefoniert
+    example: Ich habe eine Stunde mit dem Support telefoniert.
+
+  - id: v-planen
+    type: verb
+    target: planen
+    level: A2
+    gloss: to plan
+    example: Wir planen unseren Urlaub im Sommer.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-planen-past
+    type: verb
+    target: planen
+    level: A2
+    gloss: to plan
+    tense: past
+    tense_form: hat geplant
+    example: Ich habe die Reise schon geplant.
+
+  - id: v-feiern
+    type: verb
+    target: feiern
+    level: A2
+    gloss: to celebrate
+    example: Wir feiern heute Abend.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-feiern-past
+    type: verb
+    target: feiern
+    level: A2
+    gloss: to celebrate
+    tense: past
+    tense_form: hat gefeiert
+    example: Wir haben bis drei Uhr gefeiert.
+
+  - id: v-gratulieren
+    type: verb
+    target: gratulieren
+    level: A2
+    gloss: to congratulate
+    example: Ich gratuliere dir zum Geburtstag!
+
+  # CONT-003: spoken-past sibling — weak -ieren verb, no ge-.
+  - id: v-gratulieren-past
+    type: verb
+    target: gratulieren
+    level: A2
+    gloss: to congratulate
+    tense: past
+    tense_form: hat gratuliert
+    example: Alle haben ihr herzlich gratuliert.
+
+  - id: p-wie-ist-das-wetter
+    type: phrase
+    target: Wie ist das Wetter?
+    level: A2
+    gloss: '"What''s the weather like?"'
+    note: spoken · small talk
+    example: Wie ist das Wetter bei euch in Berlin?
+
+  - id: p-gute-besserung
+    type: phrase
+    target: Gute Besserung!
+    level: A2
+    gloss: '"Get well soon!"'
+    note: spoken · wishing well
+    example: „Ich bin krank." – „Oh, gute Besserung!"
+
+  - id: p-glueckwunsch
+    type: phrase
+    target: Herzlichen Glückwunsch!
+    level: A2
+    gloss: '"Happy birthday! / Congratulations!"'
+    note: spoken · celebrations
+    example: Herzlichen Glückwunsch zum Geburtstag!
+
+  - id: p-naechster-zug
+    type: phrase
+    target: Wann fährt der nächste Zug?
+    level: A2
+    gloss: '"When does the next train leave?"'
+    note: spoken · travel
+    example: Wann fährt der nächste Zug nach Köln?
+
+  - id: p-umtauschen
+    type: phrase
+    target: Kann ich das umtauschen?
+    level: A2
+    gloss: '"Can I exchange this?"'
+    note: spoken · shopping
+    example: Der Pullover ist zu klein — kann ich ihn umtauschen?
+
+  - id: p-kein-problem
+    type: phrase
+    target: Kein Problem.
+    level: A2
+    gloss: '"No problem."'
+    note: spoken · casual
+    example: „Danke für deine Hilfe!" – „Kein Problem."

@@ -1,0 +1,247 @@
+# Level pack: B2 core vocabulary — adult everyday life you actually meet
+# (moving, rent, contracts, neighbors), not officialese. Authored per
+# .claude/skills/satz-cards/SKILL.md — noun/verb/reflexive rules. Every verb
+# carries its CONT-003 spoken-past sibling. v-ueberzeugen stays ref'd by
+# job-interview, so it must keep its id.
+id: b2-basics
+title: B2 Basics
+description: Practical words for adult everyday life — moving, rent, contracts
+kind: level
+level: B2
+position: 3
+cards:
+  - id: n-umzug
+    type: noun
+    target: Umzug
+    article: der
+    level: B2
+    gloss: the move (to a new home)
+    note: "masculine · plural: die Umzüge"
+    example: Der Umzug ist nächsten Samstag.
+
+  - id: n-nachbar
+    type: noun
+    target: Nachbar
+    article: der
+    level: B2
+    gloss: the neighbor
+    note: "masculine · plural: die Nachbarn"
+    example: Mein neuer Nachbar ist sehr freundlich.
+
+  - id: n-miete
+    type: noun
+    target: Miete
+    article: die
+    level: B2
+    gloss: the rent
+    note: "feminine · plural: die Mieten"
+    example: Die Miete ist letztes Jahr wieder gestiegen.
+
+  - id: n-vertrag
+    type: noun
+    target: Vertrag
+    article: der
+    level: B2
+    gloss: the contract
+    note: "masculine · plural: die Verträge"
+    example: Bevor du den Vertrag unterschreibst, lies ihn genau.
+
+  - id: n-versicherung
+    type: noun
+    target: Versicherung
+    article: die
+    level: B2
+    gloss: the insurance
+    note: "feminine · plural: die Versicherungen"
+    example: Die Versicherung bezahlt die Reparatur nicht.
+
+  - id: n-verein
+    type: noun
+    target: Verein
+    article: der
+    level: B2
+    gloss: the club / association
+    note: "masculine · plural: die Vereine"
+    example: Ich spiele Fußball in einem Verein.
+
+  - id: n-umwelt
+    type: noun
+    target: Umwelt
+    article: die
+    level: B2
+    gloss: the environment
+    note: feminine · usually no plural
+    example: Wir wollen die Umwelt schützen.
+
+  - id: v-sparen
+    type: verb
+    target: sparen
+    level: B2
+    gloss: to save (money)
+    example: Ich spare für einen neuen Laptop.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-sparen-past
+    type: verb
+    target: sparen
+    level: B2
+    gloss: to save (money)
+    tense: past
+    tense_form: hat gespart
+    example: Sie hat zwei Jahre für das Auto gespart.
+
+  - id: v-mieten
+    type: verb
+    target: mieten
+    level: B2
+    gloss: to rent
+    example: Wir mieten ein Haus am Stadtrand.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-mieten-past
+    type: verb
+    target: mieten
+    level: B2
+    gloss: to rent
+    tense: past
+    tense_form: hat gemietet
+    example: Er hat die Wohnung ohne Makler gemietet.
+
+  - id: v-vergleichen
+    type: verb
+    target: vergleichen
+    level: B2
+    gloss: to compare
+    example: Ich vergleiche die Preise von drei Anbietern.
+
+  # CONT-003: spoken-past sibling — inseparable ver- prefix, strong
+  # (vergleichen/verglich/verglichen), no ge-.
+  - id: v-vergleichen-past
+    type: verb
+    target: vergleichen
+    level: B2
+    gloss: to compare
+    tense: past
+    tense_form: hat verglichen
+    example: Hast du die Angebote schon verglichen?
+
+  - id: v-beschweren
+    type: verb
+    target: beschweren
+    reflexive: true
+    level: B2
+    gloss: to complain
+    example: Ich beschwere mich über den Lärm.
+
+  # CONT-003: spoken-past sibling — reflexive, weak verb, hat sich + ge-.
+  - id: v-beschweren-past
+    type: verb
+    target: beschweren
+    reflexive: true
+    level: B2
+    gloss: to complain
+    tense: past
+    tense_form: hat sich beschwert
+    example: Sie hat sich beim Kundenservice beschwert.
+
+  - id: v-vorbereiten
+    type: verb
+    target: vorbereiten
+    level: B2
+    gloss: to prepare
+    example: Ich bereite das Abendessen vor.
+
+  # CONT-003: spoken-past sibling — separable vor- BUT no ge- in the
+  # participle: the stem "bereiten" carries an inseparable be-, and that
+  # blocks it (Duden: hat vorbereitet, never "vorgebereitet").
+  - id: v-vorbereiten-past
+    type: verb
+    target: vorbereiten
+    level: B2
+    gloss: to prepare
+    tense: past
+    tense_form: hat vorbereitet
+    example: Wir haben das Fest gut vorbereitet.
+
+  - id: v-dauern
+    type: verb
+    target: dauern
+    level: B2
+    gloss: to last / take (time)
+    example: Der Film dauert zwei Stunden.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-dauern-past
+    type: verb
+    target: dauern
+    level: B2
+    gloss: to last / take (time)
+    tense: past
+    tense_form: hat gedauert
+    example: Der Umzug hat den ganzen Tag gedauert.
+
+  - id: v-ueberzeugen
+    type: verb
+    target: überzeugen
+    level: B2
+    gloss: to convince
+    example: Seine Argumente überzeugen mich.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  # KEEP THIS ID: job-interview.yaml refs both halves.
+  - id: v-ueberzeugen-past
+    type: verb
+    target: überzeugen
+    level: B2
+    gloss: to convince
+    tense: past
+    tense_form: hat überzeugt
+    example: Sie hat mich von dem neuen Konzept überzeugt.
+
+  - id: p-guter-punkt
+    type: phrase
+    target: Das ist ein guter Punkt.
+    level: B2
+    gloss: '"That''s a good point."'
+    note: spoken · discussion
+    example: „Das ist ein guter Punkt — daran habe ich nicht gedacht."
+
+  - id: p-deiner-meinung
+    type: phrase
+    target: Da bin ich ganz deiner Meinung.
+    level: B2
+    gloss: '"I completely agree."'
+    note: spoken · agreeing (informal)
+    example: „Hunde brauchen viel Auslauf." – „Da bin ich ganz deiner Meinung."
+
+  - id: p-laesst-sich-machen
+    type: phrase
+    target: Das lässt sich machen.
+    level: B2
+    gloss: '"That can be arranged."'
+    note: spoken · casual assurance
+    example: „Geht auch Mittwoch?" – „Das lässt sich machen."
+
+  - id: p-kommt-nicht-in-frage
+    type: phrase
+    target: Das kommt nicht in Frage!
+    level: B2
+    gloss: '"That''s out of the question!"'
+    note: spoken · emphatic
+    example: Noch eine Woche warten? Das kommt nicht in Frage!
+
+  - id: p-lass-dir-zeit
+    type: phrase
+    target: Lass dir Zeit.
+    level: B2
+    gloss: '"Take your time."'
+    note: spoken · reassuring
+    example: „Ich bin gleich fertig." – „Kein Stress, lass dir Zeit."
+
+  - id: p-nichts-fuer-mich
+    type: phrase
+    target: Das ist nichts für mich.
+    level: B2
+    gloss: '"That''s not for me."'
+    note: spoken · polite declining
+    example: Danke, aber das ist nichts für mich.

@@ -1,0 +1,252 @@
+# Situation pack: getting sick in Germany — symptoms, the doctor's
+# appointment, the pharmacy. Authored per .claude/skills/satz-cards/SKILL.md.
+# Word choices checked against "2000 Most Common German Words in Context"
+# (Kopf 307, Schmerz 710, Arzt 515, krank 582, gesund 724, schlafen 383,
+# Körper 599, müde 909, besser 220). Tablette/Rezept/Apotheke/Fieber rank
+# below the top 2000 but are theme-critical. Every verb carries its
+# CONT-003 spoken-past sibling.
+id: doctor-visit
+title: Sick Days
+description: At the doctor and the pharmacy — symptoms, prescriptions, rest
+kind: situation
+level: A2
+position: 9
+cards:
+  - id: n-kopf
+    type: noun
+    target: Kopf
+    article: der
+    level: A2
+    gloss: the head
+    note: "masculine · plural: die Köpfe"
+    example: Mir tut der Kopf weh.
+
+  - id: n-bauch
+    type: noun
+    target: Bauch
+    article: der
+    level: A2
+    gloss: the stomach / belly
+    note: "masculine · plural: die Bäuche"
+    example: Mein Bauch ist heute sehr empfindlich.
+
+  - id: n-schmerz
+    type: noun
+    target: Schmerz
+    article: der
+    level: A2
+    gloss: the pain
+    note: "masculine · plural: die Schmerzen"
+    example: Ich habe Schmerzen im Rücken.
+
+  - id: n-rezept
+    type: noun
+    target: Rezept
+    article: das
+    level: A2
+    gloss: the prescription (from the doctor)
+    note: "neuter · plural: die Rezepte"
+    example: Der Arzt hat mir ein Rezept ausgestellt.
+
+  - id: n-apotheke
+    type: noun
+    target: Apotheke
+    article: die
+    level: A2
+    gloss: the pharmacy
+    note: "feminine · plural: die Apotheken"
+    example: Die Apotheke um die Ecke hat bis 19 Uhr offen.
+
+  - id: n-tablette
+    type: noun
+    target: Tablette
+    article: die
+    level: A2
+    gloss: the tablet / pill
+    note: "feminine · plural: die Tabletten"
+    example: Ich nehme zweimal am Tag eine Tablette.
+
+  - id: n-fieber
+    type: noun
+    target: Fieber
+    article: das
+    level: A2
+    gloss: the fever
+    note: neuter · usually no plural
+    example: Das Kind hat hohes Fieber.
+
+  - id: v-wehtun
+    type: verb
+    target: wehtun
+    level: A2
+    gloss: to hurt
+    example: Mein Zahn tut wieder weh.
+
+  # CONT-003: spoken-past sibling — irregular: tun → tat → getan, so the
+  # participle is "wehgetan", not "wehgetun"/"wegedacht".
+  - id: v-wehtun-past
+    type: verb
+    target: wehtun
+    level: A2
+    gloss: to hurt
+    tense: past
+    tense_form: hat wehgetan
+    example: Gestern hat alles wehgetan.
+
+  - id: v-einnehmen
+    type: verb
+    target: einnehmen
+    level: A2
+    gloss: to take (medicine)
+    example: Nimm die Tabletten dreimal am Tag ein!
+
+  # CONT-003: spoken-past sibling — separable (ein + nehmen, strong:
+  # nehmen/nahm/eingenommen), ge- lands between prefix and stem.
+  - id: v-einnehmen-past
+    type: verb
+    target: einnehmen
+    level: A2
+    gloss: to take (medicine)
+    tense: past
+    tense_form: hat eingenommen
+    example: Ich habe die ganze Packung eingenommen.
+
+  - id: v-schlafen
+    type: verb
+    target: schlafen
+    level: A2
+    gloss: to sleep
+    example: Ich schlafe schlecht, wenn ich krank bin.
+
+  # CONT-003: spoken-past sibling — strong verb (schlafen/schlaf/geschlafen).
+  - id: v-schlafen-past
+    type: verb
+    target: schlafen
+    level: A2
+    gloss: to sleep
+    tense: past
+    tense_form: hat geschlafen
+    example: Ich habe die ganze Nacht schlecht geschlafen.
+
+  - id: v-erkaelten
+    type: verb
+    target: erkälten
+    reflexive: true
+    level: A2
+    gloss: to catch a cold
+    example: Zieh dich warm an, sonst erkältest du dich!
+
+  # CONT-003: spoken-past sibling — reflexive, inseparable er- prefix, no ge-.
+  - id: v-erkaelten-past
+    type: verb
+    target: erkälten
+    reflexive: true
+    level: A2
+    gloss: to catch a cold
+    tense: past
+    tense_form: hat sich erkältet
+    example: Ich habe mich im Regen erkältet.
+
+  - id: v-ausruhen
+    type: verb
+    target: ausruhen
+    reflexive: true
+    level: A2
+    gloss: to rest
+    example: Ruhen Sie sich zu Hause aus.
+
+  # CONT-003: spoken-past sibling — reflexive, separable (aus + ruhen),
+  # ge- lands between prefix and stem.
+  - id: v-ausruhen-past
+    type: verb
+    target: ausruhen
+    reflexive: true
+    level: A2
+    gloss: to rest
+    tense: past
+    tense_form: hat sich ausgeruht
+    example: Ich habe mich zwei Tage ausgeruht.
+
+  - id: v-fuehlen
+    type: verb
+    target: fühlen
+    reflexive: true
+    level: A2
+    gloss: to feel
+    example: Ich fühle mich heute nicht gut.
+
+  # CONT-003: spoken-past sibling — reflexive, weak verb, hat sich + ge-.
+  - id: v-fuehlen-past
+    type: verb
+    target: fühlen
+    reflexive: true
+    level: A2
+    gloss: to feel
+    tense: past
+    tense_form: hat sich gefühlt
+    example: Er hat sich nach der Tablette gleich besser gefühlt.
+
+  - id: v-husten
+    type: verb
+    target: husten
+    level: A2
+    gloss: to cough
+    example: Ich huste seit drei Tagen.
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-husten-past
+    type: verb
+    target: husten
+    level: A2
+    gloss: to cough
+    tense: past
+    tense_form: hat gehustet
+    example: Er hat die ganze Nacht gehustet.
+
+  - id: p-termin-beim-arzt
+    type: phrase
+    target: Ich möchte einen Termin beim Arzt.
+    level: A2
+    gloss: '"I''d like an appointment at the doctor''s."'
+    note: spoken · making appointments
+    example: Guten Tag, ich möchte einen Termin beim Arzt, bitte.
+
+  - id: p-wo-tut-es-weh
+    type: phrase
+    target: Wo tut es weh?
+    level: A2
+    gloss: '"Where does it hurt?"'
+    note: spoken · doctor's question
+    example: „Guten Tag, was fehlt Ihnen?" – „Ich habe Bauchschmerzen." – „Wo tut es weh?"
+
+  - id: p-kopfschmerzen
+    type: phrase
+    target: Ich habe Kopfschmerzen.
+    level: A2
+    gloss: '"I have a headache."'
+    note: spoken · describing symptoms
+    example: Ich habe Kopfschmerzen und kann nicht arbeiten.
+
+  - id: p-rezept-dafuer
+    type: phrase
+    target: Brauche ich ein Rezept dafür?
+    level: A2
+    gloss: '"Do I need a prescription for that?"'
+    note: spoken · at the pharmacy
+    example: Ist das verschreibungspflichtig? Brauche ich ein Rezept dafür?
+
+  - id: p-geht-es-besser
+    type: phrase
+    target: Mir geht es besser, danke.
+    level: A2
+    gloss: '"I''m feeling better, thank you."'
+    note: spoken · recovering
+    example: „Wie geht es dir?" – „Mir geht es besser, danke."
+
+  - id: p-ist-es-schlimm
+    type: phrase
+    target: Ist es schlimm?
+    level: A2
+    gloss: '"Is it serious?"'
+    note: spoken · worried patient
+    example: Doktor, ist es schlimm? Muss ich ins Krankenhaus?

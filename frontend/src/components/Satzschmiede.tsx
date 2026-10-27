@@ -8,6 +8,7 @@ import { trackEvent } from "@/amplitude";
 import VocabTrainer from "./satzschmiede/VocabTrainer";
 import SatzschmiedePicker from "./satzschmiede/SatzschmiedePicker";
 import PackModal from "./satzschmiede/PackModal";
+import FirstRunChooser from "./satzschmiede/FirstRunChooser";
 import {
   addWord,
   explainAttempt,
@@ -31,10 +32,6 @@ import ThemeToggle from "./shared/ThemeToggle";
 import AppHeader from "@/components/shared/AppHeader";
 import { HeaderCoinChip } from "@/components/shared/Coins";
 
-const redShadow = {
-  ["--shadow-color"]: "var(--color-red-line)",
-} as React.CSSProperties;
-
 // The review-queue cap VocabTrainer's buildQueue applies, most-overdue
 // first — matches satz/routes.py's REVIEW_SHARE: reviews claim at most 15
 // of the 20-card daily target, so the cap here and the allowance the server
@@ -48,7 +45,7 @@ const REVIEW_CAP = 15;
 // into that popup instead of cards. This component is the auth-guarded page
 // shell + state; VocabTrainer owns the card interaction.
 export default function Satzschmiede() {
-  const { token, ready, expireSession } = useAuth();
+  const { token, ready, expireSession, user, setLevel } = useAuth();
   const router = useRouter();
 
   const [deck, setDeck] = useState<DeckCard[] | null>(null); // null = loading
@@ -440,24 +437,17 @@ export default function Satzschmiede() {
             {loadError("your deck")}
           </p>
         ) : deck === null ? null : emptyPool ? (
-          /* First-run state: no cards yet — everything funnels into the popup. */
-          <div className="text-center">
-            <h2 className="font-display text-[clamp(26px,5vw,36px)] font-black leading-tight tracking-tight text-ink">
-              Your pool is empty.
-            </h2>
-            <p className="mx-auto mt-3 max-w-[360px] font-body text-[15px] leading-relaxed text-ink-soft">
-              Grab a pack of words — by level or by situation — or forge your
-              own, and start building sentences.
-            </p>
-            <button
-              type="button"
-              onClick={() => setPacksOpen(true)}
-              className="btn-3d mt-7 inline-flex items-center gap-2 rounded-[20px] border-[3px] border-red-line bg-flag-red-fill px-7 py-3.5 font-display text-[15px] font-black uppercase tracking-[0.16em] text-on-fill"
-              style={redShadow}
-            >
-              + Add Cards
-            </button>
-          </div>
+          /* ONBOARD-002 first-run state: the level-keyed starter-pack
+             chooser replaces the old "Your pool is empty." + Add Cards
+             dead-end. One tap adds a pack; the deck refetch below flips the
+             page into the picker (SATZ-028 keeps it parked until then). */
+          <FirstRunChooser
+            token={token}
+            level={user?.level ?? null}
+            onLevelChosen={setLevel}
+            onPoolChanged={refreshDeck}
+            onUnauthorized={expireSession}
+          />
         ) : (
           <VocabTrainer
             deck={deck}

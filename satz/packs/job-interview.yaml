@@ -5,7 +5,7 @@ id: job-interview
 title: Job Interview
 description: Apply, present yourself, and talk salary
 kind: situation
-level: B1–B2
+level: B1
 position: 5
 cards:
   - id: n-vorstellungsgespraech
@@ -128,3 +128,86 @@ cards:
     gloss: '"to work under pressure"'
     note: collocation · job talk
     example: Ich kann gut unter Druck arbeiten.
+
+  - id: n-ausbildung
+    type: noun
+    target: Ausbildung
+    article: die
+    level: B1
+    gloss: the (vocational) training
+    note: "feminine · plural: die Ausbildungen"
+    example: Ich habe eine Ausbildung zum Elektriker abgeschlossen.
+
+  - id: n-lebenslauf
+    type: noun
+    target: Lebenslauf
+    article: der
+    level: B1
+    gloss: the CV / résumé
+    note: "masculine · plural: die Lebensläufe"
+    example: Bitte bringen Sie Ihren Lebenslauf mit.
+
+  - id: n-stelle
+    type: noun
+    target: Stelle
+    article: die
+    level: B1
+    gloss: the job / position
+    note: "feminine · plural: die Stellen"
+    example: Die Stelle ist noch offen.
+
+  - id: v-vermitteln
+    type: verb
+    target: vermitteln
+    level: B2
+    gloss: to convey (skills / an impression)
+    example: Man sollte im Interview seine Stärken klar vermitteln.
+
+  # CONT-003: spoken-past sibling — inseparable ver- prefix, no ge-.
+  - id: v-vermitteln-past
+    type: verb
+    target: vermitteln
+    level: B2
+    gloss: to convey (skills / an impression)
+    tense: past
+    tense_form: hat vermittelt
+    example: Sie hat ihre Motivation gut vermittelt.
+
+  # Reused from other packs via ref (defined once): convincing the panel
+  # and the "why did you leave?" question are interview staples.
+  - ref: v-ueberzeugen
+  - ref: v-ueberzeugen-past
+  - ref: v-kuendigen
+  - ref: v-kuendigen-past
+
+  - id: p-ich-arbeite-gern-im-team
+    type: phrase
+    target: Ich arbeite gern im Team.
+    level: B1
+    gloss: '"I enjoy working in a team."'
+    note: collocation · interviews
+    example: Ich arbeite gern im Team, kann aber auch selbstständig arbeiten.
+
+  - id: p-das-ist-eine-gute-frage
+    type: phrase
+    target: Das ist eine gute Frage.
+    level: B1
+    gloss: '"That''s a good question."'
+    note: spoken · buying time
+    example: Das ist eine gute Frage. Ich habe mich damit noch nicht beschäftigt.
+
+  - id: p-lust-auf-neue-aufgaben
+    type: phrase
+    target: Ich habe Lust auf neue Aufgaben.
+    level: B1
+    gloss: '"I''m keen on new challenges."'
+    note: collocation · motivation talk
+    example: Nach fünf Jahren im alten Job habe ich Lust auf neue Aufgaben.
+
+  - id: p-ich-bringe-erfahrung-mit
+    type: phrase
+    target: Ich bringe viel Erfahrung mit.
+    level: B1
+    gloss: '"I bring a lot of experience."'
+    note: collocation · interviews
+    example: Ich bringe fünf Jahre Erfahrung im Vertrieb mit.

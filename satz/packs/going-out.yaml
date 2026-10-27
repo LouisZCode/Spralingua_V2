@@ -1,0 +1,245 @@
+# Situation pack: social life — inviting, accepting, cancelling, and
+# suggesting plans. B1's real life event: building friendships in German.
+# Authored per .claude/skills/satz-cards/SKILL.md. Word choices checked
+# against "2000 Most Common German Words in Context" (Freund 153,
+# Freundin 473, Party 609, Kino 1708, Bar 879, Spaß 460, Lust 1256,
+# Wochenende 1516, zusammen 257, treffen 259, einladen 1694, Geburtstag
+# 985). n-freund is reused from first-days via ref. Every verb carries its
+# CONT-003 spoken-past sibling.
+id: going-out
+title: Going Out
+description: Invite, accept, cancel — making plans with friends
+kind: situation
+level: B1
+position: 10
+cards:
+  - id: n-kino
+    type: noun
+    target: Kino
+    article: das
+    level: B1
+    gloss: the cinema
+    note: "neuter · plural: die Kinos"
+    example: Wir gehen heute Abend ins Kino.
+
+  - id: n-bar
+    type: noun
+    target: Bar
+    article: die
+    level: B1
+    gloss: the bar
+    note: "feminine · plural: die Bars"
+    example: Die neue Bar an der Ecke ist sehr gemütlich.
+
+  - id: n-geburtstag
+    type: noun
+    target: Geburtstag
+    article: der
+    level: B1
+    gloss: the birthday
+    note: "masculine · plural: die Geburtstage"
+    example: Am Samstag habe ich Geburtstag.
+
+  - id: n-freundin
+    type: noun
+    target: Freundin
+    article: die
+    level: B1
+    gloss: the friend (female) / girlfriend
+    note: "feminine · plural: die Freundinnen"
+    example: Meine Freundin kommt später dazu.
+
+  - id: n-einladung
+    type: noun
+    target: Einladung
+    article: die
+    level: B1
+    gloss: the invitation
+    note: "feminine · plural: die Einladungen"
+    example: Danke für die Einladung zur Party!
+
+  - id: n-lust
+    type: noun
+    target: Lust
+    article: die
+    level: B1
+    gloss: the mood / desire (to do something)
+    note: feminine · usually no plural
+    example: Ich habe Lust auf einen Film heute Abend.
+
+  - ref: n-freund
+
+  - id: v-treffen
+    type: verb
+    target: treffen
+    reflexive: true
+    level: B1
+    gloss: to meet (up)
+    example: Wir treffen uns um acht vor dem Kino.
+
+  # CONT-003: spoken-past sibling — reflexive, strong verb
+  # (treffen/traf/getroffen), hat sich + ge-.
+  - id: v-treffen-past
+    type: verb
+    target: treffen
+    reflexive: true
+    level: B1
+    gloss: to meet (up)
+    tense: past
+    tense_form: hat sich getroffen
+    example: Wir haben uns zufällig in der Stadt getroffen.
+
+  - id: v-einladen
+    type: verb
+    target: einladen
+    level: B1
+    gloss: to invite
+    example: Ich lade dich zum Geburtstag ein!
+
+  # CONT-003: spoken-past sibling — separable (ein + laden, strong:
+  # laden/lud/eingeladen), ge- lands between prefix and stem.
+  - id: v-einladen-past
+    type: verb
+    target: einladen
+    level: B1
+    gloss: to invite
+    tense: past
+    tense_form: hat eingeladen
+    example: Sie hat zwanzig Leute zur Party eingeladen.
+
+  - id: v-absagen
+    type: verb
+    target: absagen
+    level: B1
+    gloss: to cancel / call off
+    example: Ich muss das Treffen leider absagen.
+
+  # CONT-003: spoken-past sibling — separable (ab + sagen), ge- lands
+  # between prefix and stem.
+  - id: v-absagen-past
+    type: verb
+    target: absagen
+    level: B1
+    gloss: to cancel / call off
+    tense: past
+    tense_form: hat abgesagt
+    example: Er hat wegen der Arbeit abgesagt.
+
+  - id: v-vorhaben
+    type: verb
+    target: vorhaben
+    level: B1
+    gloss: to plan / have planned
+    example: Was hast du am Wochenende vor?
+
+  # CONT-003: spoken-past sibling — separable (vor + haben), ge- lands
+  # between prefix and stem.
+  - id: v-vorhaben-past
+    type: verb
+    target: vorhaben
+    level: B1
+    gloss: to plan / have planned
+    tense: past
+    tense_form: hat vorgehabt
+    example: Ich hatte eigentlich vorgehabt, früher zu kommen.
+
+  - id: v-ausgehen
+    type: verb
+    target: ausgehen
+    level: B1
+    gloss: to go out (in the evening)
+    example: Gehen wir heute Abend aus?
+
+  # CONT-003: spoken-past sibling — separable (aus + gehen, strong:
+  # gehen/ging/gegangen). NOTE: ausgehen uses SEIN.
+  - id: v-ausgehen-past
+    type: verb
+    target: ausgehen
+    level: B1
+    gloss: to go out (in the evening)
+    tense: past
+    tense_form: ist ausgegangen
+    example: Wir sind gestern sehr spät ausgegangen.
+
+  - id: v-bleiben
+    type: verb
+    target: bleiben
+    level: B1
+    gloss: to stay
+    example: Bleiben wir heute zu Hause?
+
+  # CONT-003: spoken-past sibling — weak-ish verb (bleiben/blieb/geblieben).
+  # NOTE: bleiben uses SEIN.
+  - id: v-bleiben-past
+    type: verb
+    target: bleiben
+    level: B1
+    gloss: to stay
+    tense: past
+    tense_form: ist geblieben
+    example: Wir sind gestern den ganzen Abend zu Hause geblieben.
+
+  - id: v-tanzen
+    type: verb
+    target: tanzen
+    level: B1
+    gloss: to dance
+    example: Tanzt du gern auf Partys?
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-tanzen-past
+    type: verb
+    target: tanzen
+    level: B1
+    gloss: to dance
+    tense: past
+    tense_form: hat getanzt
+    example: Wir haben bis Mitternacht getanzt.
+
+  - id: p-ich-lade-dich-ein
+    type: phrase
+    target: Ich lade dich ein!
+    level: B1
+    gloss: '"It''s my treat! / My invitation."'
+    note: spoken · inviting
+    example: „Wollen wir eine Pizza holen?" – „Ja! Ich lade dich ein."
+
+  - id: p-hast-du-was-vor
+    type: phrase
+    target: Hast du schon was vor?
+    level: B1
+    gloss: '"Do you already have plans?"'
+    note: spoken · asking plans
+    example: Hast du am Freitag schon was vor?
+
+  - id: p-wie-waere-es-mit
+    type: phrase
+    target: Wie wäre es mit …?
+    level: B1
+    gloss: '"How about …?"'
+    note: spoken · suggesting
+    example: Wie wäre es mit einem Film am Samstag?
+
+  - id: p-lust-auf-kaffee
+    type: phrase
+    target: Hast du Lust auf einen Kaffee?
+    level: B1
+    gloss: '"Fancy a coffee?"'
+    note: spoken · casual inviting
+    example: Hast du kurz Zeit? Hast du Lust auf einen Kaffee?
+
+  - id: p-muss-absagen
+    type: phrase
+    target: Ich muss leider absagen.
+    level: B1
+    gloss: '"I''m sorry, I have to cancel."'
+    note: spoken · cancelling
+    example: Ich bin krank, ich muss leider absagen.
+
+  - id: p-das-macht-spass
+    type: phrase
+    target: Das macht Spaß!
+    level: B1
+    gloss: '"That''s fun!"'
+    note: spoken · casual
+    example: Tanzen mit dir macht richtig Spaß!

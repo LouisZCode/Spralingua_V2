@@ -1,0 +1,243 @@
+# Situation pack: bureaucracy — the Anmeldung, forms, deadlines, the
+# counter at the Amt. THE adult-in-Germany event, and v-bewerben's cousin
+# v-beantragen returns to its natural home here. Authored per
+# .claude/skills/satz-cards/SKILL.md. Word choices checked against
+# "2000 Most Common German Words in Context" (Pass 499, Brief 835,
+# Post 1735 — the paperwork nouns rank below the top 2000 in media
+# frequency but are the theme). n-vertrag is reused from b2-basics via
+# ref. Every verb carries its CONT-003 spoken-past sibling.
+id: bureaucracy
+title: At the Office
+description: Papierkram — the Amt, forms, deadlines, and signatures
+kind: situation
+level: B2
+position: 11
+cards:
+  - id: n-amt
+    type: noun
+    target: Amt
+    article: das
+    level: B2
+    gloss: the (public) office / authority
+    note: "neuter · plural: die Ämter"
+    example: Ich war heute beim Amt, um mich anzumelden.
+
+  - id: n-antrag
+    type: noun
+    target: Antrag
+    article: der
+    level: B2
+    gloss: the application (official request)
+    note: "masculine · plural: die Anträge"
+    example: Mein Antrag auf Verlängerung läuft in vier Wochen.
+
+  - id: n-formular
+    type: noun
+    target: Formular
+    article: das
+    level: B2
+    gloss: the form (paperwork)
+    note: "neuter · plural: die Formulare"
+    example: Füllen Sie das Formular in Blockschrift aus.
+
+  - id: n-frist
+    type: noun
+    target: Frist
+    article: die
+    level: B2
+    gloss: the deadline
+    note: "feminine · plural: die Fristen"
+    example: Die Frist endet am Ende des Monats.
+
+  - id: n-unterlagen
+    type: noun
+    target: Unterlagen
+    article: die
+    level: B2
+    gloss: the documents / paperwork
+    note: feminine · usually plural
+    example: Bringen Sie bitte alle Unterlagen mit.
+
+  - id: n-ausweis
+    type: noun
+    target: Ausweis
+    article: der
+    level: B2
+    gloss: the ID card
+    note: "masculine · plural: die Ausweise"
+    example: Zeigen Sie bitte Ihren Ausweis.
+
+  - ref: n-vertrag
+
+  - id: v-ausfuellen
+    type: verb
+    target: ausfüllen
+    level: B2
+    gloss: to fill in (a form)
+    example: Können Sie dieses Formular ausfüllen?
+
+  # CONT-003: spoken-past sibling — separable (aus + füllen), ge- lands
+  # between prefix and stem.
+  - id: v-ausfuellen-past
+    type: verb
+    target: ausfüllen
+    level: B2
+    gloss: to fill in (a form)
+    tense: past
+    tense_form: hat ausgefüllt
+    example: Ich habe alle Felder ausgefüllt.
+
+  - id: v-unterschreiben
+    type: verb
+    target: unterschreiben
+    level: B2
+    gloss: to sign
+    example: Unterschreiben Sie hier unten.
+
+  # CONT-003: spoken-past sibling — inseparable unter- prefix (like
+  # unterbrechen, unterhalten), strong (schreiben/schrieb), no ge-:
+  # hat unterschrieben.
+  - id: v-unterschreiben-past
+    type: verb
+    target: unterschreiben
+    level: B2
+    gloss: to sign
+    tense: past
+    tense_form: hat unterschrieben
+    example: Sie hat den Vertrag gestern unterschrieben.
+
+  - id: v-abholen
+    type: verb
+    target: abholen
+    level: B2
+    gloss: to pick up / collect
+    example: Ich hole meinen Pass morgen ab.
+
+  # CONT-003: spoken-past sibling — separable (ab + holen), ge- lands
+  # between prefix and stem.
+  - id: v-abholen-past
+    type: verb
+    target: abholen
+    level: B2
+    gloss: to pick up / collect
+    tense: past
+    tense_form: hat abgeholt
+    example: Sie hat die Unterlagen gestern abgeholt.
+
+  - id: v-beantragen
+    type: verb
+    target: beantragen
+    level: B2
+    gloss: to apply for (officially)
+    example: Ich möchte einen Reisepass beantragen.
+
+  # CONT-003: spoken-past sibling — inseparable be- prefix, no ge-.
+  - id: v-beantragen-past
+    type: verb
+    target: beantragen
+    level: B2
+    gloss: to apply for (officially)
+    tense: past
+    tense_form: hat beantragt
+    example: Wir haben den Zuschuss im Frühjahr beantragt.
+
+  - id: v-verlaengern
+    type: verb
+    target: verlängern
+    level: B2
+    gloss: to extend (a deadline / document)
+    example: Ich muss mein Visum verlängern.
+
+  # CONT-003: spoken-past sibling — inseparable ver- prefix, no ge-.
+  - id: v-verlaengern-past
+    type: verb
+    target: verlängern
+    level: B2
+    gloss: to extend (a deadline / document)
+    tense: past
+    tense_form: hat verlängert
+    example: Sie hat die Frist um zwei Wochen verlängert.
+
+  - id: v-einreichen
+    type: verb
+    target: einreichen
+    level: B2
+    gloss: to submit (documents)
+    example: Reichen Sie die Unterlagen am Schalter ein.
+
+  # CONT-003: spoken-past sibling — separable (ein + reichen), ge- lands
+  # between prefix and stem.
+  - id: v-einreichen-past
+    type: verb
+    target: einreichen
+    level: B2
+    gloss: to submit (documents)
+    tense: past
+    tense_form: hat eingereicht
+    example: Ich habe den Antrag letzte Woche eingereicht.
+
+  - id: v-mitbringen
+    type: verb
+    target: mitbringen
+    level: B2
+    gloss: to bring along
+    example: Bringen Sie bitte Ihren Ausweis mit.
+
+  # CONT-003: spoken-past sibling — separable (mit + bringen), ge- lands
+  # between prefix and stem.
+  - id: v-mitbringen-past
+    type: verb
+    target: mitbringen
+    level: B2
+    gloss: to bring along
+    tense: past
+    tense_form: hat mitgebracht
+    example: Sie hat alle Nachweise mitgebracht.
+
+  - id: p-unterlagen-fehlen
+    type: phrase
+    target: Welche Unterlagen fehlen noch?
+    level: B2
+    gloss: '"Which documents are still missing?"'
+    note: spoken · at the counter
+    example: Man sagte mir am Schalter, es fehlen noch zwei Unterlagen.
+
+  - id: p-unterschreiben-bitte
+    type: phrase
+    target: Hier unterschreiben, bitte.
+    level: B2
+    gloss: '"Sign here, please."'
+    note: spoken · instruction
+    example: So, das Formular ist fertig — hier unterschreiben, bitte.
+
+  - id: p-termin-beim-amt
+    type: phrase
+    target: Ich brauche einen Termin beim Amt.
+    level: B2
+    gloss: '"I need an appointment at the office."'
+    note: spoken · calling ahead
+    example: Guten Tag, ich brauche einen Termin beim Amt für die Anmeldung.
+
+  - id: p-mich-anmelden
+    type: phrase
+    target: Ich möchte mich anmelden.
+    level: B2
+    gloss: '"I''d like to register (my address)."'
+    note: spoken · the Anmeldung
+    example: Guten Tag, ich bin neu hier — ich möchte mich anmelden.
+
+  - id: p-wie-lange-dauert-das
+    type: phrase
+    target: Wie lange dauert das?
+    level: B2
+    gloss: '"How long does that take?"'
+    note: spoken · asking processing time
+    example: Und wann kann ich den Pass abholen? Wie lange dauert das?
+
+  - id: p-original-oder-kopie
+    type: phrase
+    target: Im Original oder als Kopie?
+    level: B2
+    gloss: '"Original or copy?"'
+    note: spoken · clerk question
+    example: Brauchen Sie die Urkunde im Original oder als Kopie?

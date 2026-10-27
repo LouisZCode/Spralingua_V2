@@ -5,7 +5,7 @@ id: coffee-shop
 title: Coffee Shop
 description: Order, pay, and small-talk at the café
 kind: situation
-level: A1–A2
+level: A1
 position: 4
 cards:
   - id: n-kaffee
@@ -119,3 +119,104 @@ cards:
     gloss: '"Keep the change."'
     note: spoken · tipping
     example: „Das macht 8,50 Euro." – „Zehn Euro — stimmt so."
+
+  - id: n-tisch
+    type: noun
+    target: Tisch
+    article: der
+    level: A1
+    gloss: the table
+    note: "masculine · plural: die Tische"
+    example: Ist dieser Tisch frei?
+
+  - id: n-tasse
+    type: noun
+    target: Tasse
+    article: die
+    level: A1
+    gloss: the cup
+    note: "feminine · plural: die Tassen"
+    example: Eine Tasse Tee, bitte.
+
+  - id: n-wasser
+    type: noun
+    target: Wasser
+    article: das
+    level: A1
+    gloss: the water
+    note: neuter · usually no plural
+    example: Ein großes Wasser, bitte.
+
+  - id: v-trinken
+    type: verb
+    target: trinken
+    level: A1
+    gloss: to drink
+    example: Ich trinke meinen Kaffee ohne Milch.
+
+  # CONT-003: spoken-past sibling — strong verb (trinken/trank/getrunken), hat + ge-.
+  - id: v-trinken-past
+    type: verb
+    target: trinken
+    level: A1
+    gloss: to drink
+    tense: past
+    tense_form: hat getrunken
+    example: Er hat den Kaffee schnell getrunken.
+
+  - id: v-zahlen
+    type: verb
+    target: zahlen
+    level: A1
+    gloss: to pay
+    example: Wo kann ich zahlen?
+
+  # CONT-003: spoken-past sibling — weak verb, no prefix, hat + ge-.
+  - id: v-zahlen-past
+    type: verb
+    target: zahlen
+    level: A1
+    gloss: to pay
+    tense: past
+    tense_form: hat gezahlt
+    example: Ich habe mit Karte gezahlt.
+
+  - id: p-die-karte-bitte
+    type: phrase
+    target: Die Karte, bitte.
+    level: A1
+    gloss: '"The menu, please."'
+    note: spoken · ordering
+    example: Die Karte, bitte. Was empfehlen Sie?
+
+  - id: p-zahlen-bitte
+    type: phrase
+    target: Zahlen, bitte!
+    level: A1
+    gloss: '"The check, please!"'
+    note: spoken · café & restaurant
+    example: Zahlen, bitte! Es war wunderbar.
+
+  - id: p-sonst-noch-etwas
+    type: phrase
+    target: Sonst noch etwas?
+    level: A1
+    gloss: '"Anything else?"'
+    note: spoken · staff question
+    example: „Das war's." – „Sonst noch etwas?"
+
+  - id: p-das-war-lecker
+    type: phrase
+    target: Das war lecker.
+    level: A1
+    gloss: '"That was delicious."'
+    note: spoken · casual compliment
+    example: „Das war lecker, vielen Dank!"
+
+  - id: p-guten-appetit
+    type: phrase
+    target: Guten Appetit!
+    level: A1
+    gloss: '"Enjoy your meal!"'
+    note: spoken · before eating
+    example: „Guten Appetit!" – „Danke, gleichfalls!"

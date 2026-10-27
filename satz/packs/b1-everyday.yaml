@@ -137,3 +137,117 @@ cards:
     gloss: '"It''s worth it."'
     note: spoken · neutral register
     example: Der Film ist toll — es lohnt sich!
+
+  - id: n-meinung
+    type: noun
+    target: Meinung
+    article: die
+    level: B1
+    gloss: the opinion
+    note: "feminine · plural: die Meinungen"
+    example: Meiner Meinung nach ist der Film zu lang.
+
+  - id: n-alltag
+    type: noun
+    target: Alltag
+    article: der
+    level: B1
+    gloss: the everyday life / routine
+    note: masculine · usually no plural
+    example: Der Alltag mit zwei Kindern ist anstrengend.
+
+  - id: n-verabredung
+    type: noun
+    target: Verabredung
+    article: die
+    level: B1
+    gloss: the arrangement / date
+    note: "feminine · plural: die Verabredungen"
+    example: Ich habe heute Abend eine Verabredung.
+
+  - id: v-aergern
+    type: verb
+    target: ärgern
+    reflexive: true
+    level: B1
+    gloss: to be annoyed (about)
+    example: Ich ärgere mich über den ständigen Lärm.
+
+  # CONT-003: spoken-past sibling — reflexive, weak verb, hat sich + ge-.
+  - id: v-aergern-past
+    type: verb
+    target: ärgern
+    reflexive: true
+    level: B1
+    gloss: to be annoyed (about)
+    tense: past
+    tense_form: hat sich geärgert
+    example: Sie hat sich über die Verspätung geärgert.
+
+  - id: v-aufpassen
+    type: verb
+    target: aufpassen
+    level: B1
+    gloss: to pay attention / watch out
+    example: Pass auf, wenn du die Straße überquerst.
+
+  # CONT-003: spoken-past sibling — separable (auf + passen), ge- lands
+  # between the prefix and the stem.
+  - id: v-aufpassen-past
+    type: verb
+    target: aufpassen
+    level: B1
+    gloss: to pay attention / watch out
+    tense: past
+    tense_form: hat aufgepasst
+    example: Ich habe nicht aufgepasst und die Haltestelle verpasst.
+
+  - id: v-ausgeben
+    type: verb
+    target: ausgeben
+    level: B1
+    gloss: to spend (money)
+    example: Ich gebe gern Geld für gute Bücher aus.
+
+  # CONT-003: spoken-past sibling — separable (aus + geben, strong:
+  # geben/gab/gegeben), ge- lands between the prefix and the stem.
+  - id: v-ausgeben-past
+    type: verb
+    target: ausgeben
+    level: B1
+    gloss: to spend (money)
+    tense: past
+    tense_form: hat ausgegeben
+    example: Sie hat ihr ganzes Gehalt für das Kleid ausgegeben.
+
+  - id: p-stimmt
+    type: phrase
+    target: Stimmt.
+    level: B1
+    gloss: '"True. / Right."'
+    note: spoken · agreeing
+    example: „Montags hat der Laden zu." – „Stimmt."
+
+  - id: p-so-ein-mist
+    type: phrase
+    target: So ein Mist!
+    level: B1
+    gloss: '"Darn it!"'
+    note: spoken · casual frustration
+    example: So ein Mist, ich habe den Schlüssel vergessen!
+
+  - id: p-ehrlich-gesagt
+    type: phrase
+    target: Ehrlich gesagt …
+    level: B1
+    gloss: '"Honestly, …"'
+    note: spoken · opinion opener
+    example: Ehrlich gesagt finde ich den Plan zu teuer.
+
+  - id: p-machs-gut
+    type: phrase
+    target: Mach's gut!
+    level: B1
+    gloss: '"Take care!"'
+    note: spoken · casual goodbye
+    example: „Ich muss los." – „Alles klar, mach's gut!"
