@@ -95,15 +95,6 @@ export default function LevelPickerModal({
         {error ? (
           <p className="mt-4 font-body text-[13px] text-flag-red">{error}</p>
         ) : null}
-
-        <button
-          type="button"
-          disabled={saving !== null}
-          onClick={() => choose(null)}
-          className="mt-5 font-body text-[13px] uppercase tracking-[0.14em] text-ink-soft underline underline-offset-4 disabled:opacity-60"
-        >
-          Not sure — show me everything
-        </button>
       </div>
     </div>,
     document.body,
