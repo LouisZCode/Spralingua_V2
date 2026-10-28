@@ -247,6 +247,31 @@ async def create_portal(
     return {"url": session["url"]}
 
 
+@router.get("/status")
+async def subscription_status(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only view of the caller's ``subscriptions`` mirror — the profile
+    card's plan + renewal date. Deliberately no ``_require_configured`` and
+    no Stripe call: a pure local DB read, so the card renders even where
+    billing is off. A caller with no row (free tier, or a paid mirror lost
+    to a manual DB delete) gets nulls instead of a 404 so the client needs
+    no special case."""
+    subscription = await get_subscription(db, user_id=user_id)
+    if subscription is None:
+        return {"tier": None, "status": None, "current_period_end": None}
+    return {
+        "tier": subscription.tier,
+        "status": subscription.status,
+        "current_period_end": (
+            subscription.current_period_end.isoformat()
+            if subscription.current_period_end is not None
+            else None
+        ),
+    }
+
+
 @router.post("/webhook")
 async def stripe_webhook(request: Request, db: AsyncSession = Depends(get_db)):
     """Stripe calls this directly — there is no session JWT here, the

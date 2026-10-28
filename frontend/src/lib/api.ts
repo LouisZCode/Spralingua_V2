@@ -62,3 +62,29 @@ export async function fetchBillingPortal(token: string): Promise<string> {
   const { url } = await billingRequest("/payments/portal", token);
   return url;
 }
+
+// Read-only subscription mirror for the profile card (plan + renewal date).
+// Nulls when the caller has never had a subscription (free tier) — the
+// backend returns nulls rather than a 404 so this needs no special case.
+export async function fetchSubscriptionStatus(token: string): Promise<{
+  tier: string | null;
+  status: string | null;
+  current_period_end: string | null;
+}> {
+  const res = await fetch(`${HTTP_BASE}/payments/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const detail = (await res.json().catch(() => null))?.detail;
+    throw new Error(
+      typeof detail === "string"
+        ? detail
+        : `/payments/status failed (${res.status})`
+    );
+  }
+  return res.json() as Promise<{
+    tier: string | null;
+    status: string | null;
+    current_period_end: string | null;
+  }>;
+}

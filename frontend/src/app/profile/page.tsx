@@ -3,10 +3,12 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import AppHeader from "@/components/shared/AppHeader";
 import { useAuth } from "@/components/auth/AuthContext";
 import { CoinPill, useCoinBalance } from "@/components/shared/Coins";
+import { safeMessage } from "@/components/shared/copy";
+import { fetchBillingPortal, fetchSubscriptionStatus } from "@/lib/api";
 import { setConsent, useConsent } from "@/lib/consent";
 
 // Same ink-shadow constant every screen defines locally (no shared visuals
@@ -32,6 +34,66 @@ export default function ProfilePage() {
   const { token, ready, user, signOut } = useAuth();
   const router = useRouter();
   const bal = useCoinBalance();
+
+  // The plan card's cancel door: paid users open the Stripe billing
+  // portal DIRECTLY from here — no /pricing detour (the footnote there stays
+  // for tier switchers). The renewal date rides on the same /payments/status
+  // read; nulls mean the caller has no subscription row, so the line and the
+  // button simply don't render and the card keeps its /pricing link.
+  const isPaid = ready && user != null && user.tier !== "free";
+  const [sub, setSub] = useState<Awaited<
+    ReturnType<typeof fetchSubscriptionStatus>
+  > | null>(null);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [portalNote, setPortalNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!ready || !token || !user || user.tier === "free") return;
+    let cancelled = false;
+    fetchSubscriptionStatus(token)
+      .then((s) => {
+        if (!cancelled) setSub(s);
+      })
+      .catch(() => {
+        // Status is cosmetic — a failed read just hides the renewal line;
+        // the portal button still works (it does its own error handling).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, token, user]);
+
+  async function openBillingPortal() {
+    if (!token) return;
+    setPortalBusy(true);
+    setPortalNote(null);
+    try {
+      const url = await fetchBillingPortal(token);
+      window.location.assign(url);
+    } catch (e) {
+      // Same raw-detail convention as /pricing's handleFailure: the 503
+      // "billing not configured" wording is a deliberate signal.
+      if (/not configured/i.test(e instanceof Error ? e.message : "")) {
+        setPortalNote("Billing is not set up right now.");
+      } else {
+        setPortalNote(safeMessage(e, "Could not open billing — try again in a moment."));
+      }
+      setPortalBusy(false);
+    }
+  }
+
+  const renewLine = (() => {
+    if (!sub?.current_period_end) return null;
+    const date = new Date(sub.current_period_end);
+    if (Number.isNaN(date.getTime())) return null;
+    const fmt = new Intl.DateTimeFormat("en-GB", {
+      day: "numeric",
+      month: "short",
+    }).format(date);
+    return sub.status === "active"
+      ? `Renews on ${fmt}.`
+      : `Access ends on ${fmt}.`;
+  })();
 
   // LEGAL-003 (A1): tracking toggle state — derived from the consent store
   // (useSyncExternalStore), so there is no setState-in-effect and no
@@ -149,12 +211,43 @@ export default function ProfilePage() {
               You are on the {TIER_LABELS[user.tier] ?? user.tier} plan. Coins
               power every practice mode.
             </p>
-            <Link
-              href="/pricing"
-              className="mt-3 inline-block font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
-            >
-              {user.tier === "free" ? "Get coins →" : "Manage plan →"}
-            </Link>
+            {isPaid && renewLine && (
+              <p className="mt-1 font-body text-[13px] font-semibold text-ink-muted">
+                {renewLine}
+              </p>
+            )}
+            {isPaid && (
+              <div className="mt-3 flex flex-col items-start gap-3">
+                <Link
+                  href="/pricing"
+                  className="btn-3d rounded-[14px] border-[3px] border-line bg-card px-5 py-2 font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink"
+                  style={inkShadow}
+                >
+                  Compare plans →
+                </Link>
+                {portalNote && (
+                  <p className="font-body text-[13px] font-semibold text-flag-red">
+                    {portalNote}
+                  </p>
+                )}
+                <button
+                  type="button"
+                  onClick={openBillingPortal}
+                  disabled={portalBusy}
+                  className="font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink-muted underline underline-offset-2 transition-colors hover:text-flag-red disabled:cursor-default disabled:opacity-50 disabled:hover:text-ink-muted"
+                >
+                  {portalBusy ? "Opening billing…" : "Manage billing"}
+                </button>
+              </div>
+            )}
+            {!isPaid && (
+              <Link
+                href="/pricing"
+                className="mt-3 inline-block font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+              >
+                Get coins →
+              </Link>
+            )}
           </section>
 
           <section className="rounded-[28px] border-[3px] border-line bg-card px-6 py-5">
