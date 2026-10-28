@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import AppHeader from "@/components/shared/AppHeader";
+import LevelPickerModal from "@/components/LevelPickerModal";
 import { useAuth } from "@/components/auth/AuthContext";
 import { CoinPill, useCoinBalance } from "@/components/shared/Coins";
 import { safeMessage } from "@/components/shared/copy";
@@ -31,9 +32,10 @@ const TIER_LABELS: Record<string, string> = {
 };
 
 export default function ProfilePage() {
-  const { token, ready, user, signOut } = useAuth();
+  const { token, ready, user, signOut, setLevel } = useAuth();
   const router = useRouter();
   const bal = useCoinBalance();
+  const [askLevel, setAskLevel] = useState(false);
 
   // The plan card's cancel door: paid users open the Stripe billing
   // portal DIRECTLY from here — no /pricing detour (the footnote there stays
@@ -207,9 +209,8 @@ export default function ProfilePage() {
             <h2 className="font-display text-[16px] font-black uppercase tracking-[0.06em] text-ink">
               Plan
             </h2>
-            <p className="mt-2 font-body text-[14px] leading-relaxed text-ink-soft">
-              You are on the {TIER_LABELS[user.tier] ?? user.tier} plan. Coins
-              power every practice mode.
+            <p className="mt-2 font-display text-[20px] font-black uppercase tracking-[0.1em] text-ink">
+              {TIER_LABELS[user.tier] ?? user.tier}
             </p>
             {isPaid && renewLine && (
               <p className="mt-1 font-body text-[13px] font-semibold text-ink-muted">
@@ -254,16 +255,17 @@ export default function ProfilePage() {
             <h2 className="font-display text-[16px] font-black uppercase tracking-[0.06em] text-ink">
               Level
             </h2>
-            <p className="mt-2 font-body text-[14px] leading-relaxed text-ink-soft">
-              Your level shapes what every mode serves you — and it can change
-              whenever you improve.
+            <p className="mt-2 font-display text-[20px] font-black uppercase tracking-[0.1em] text-ink">
+              {user.level ?? "Not set"}
             </p>
-            <Link
-              href="/practice"
-              className="mt-3 inline-block font-body text-[12px] font-bold uppercase tracking-[0.22em] text-ink transition-colors hover:text-flag-red"
+            <button
+              type="button"
+              onClick={() => setAskLevel(true)}
+              className="btn-3d mt-3 rounded-[14px] border-[3px] border-line bg-card px-5 py-2 font-display text-[11px] font-black uppercase tracking-[0.14em] text-ink"
+              style={inkShadow}
             >
-              Change your level on the practice menu →
-            </Link>
+              Change level
+            </button>
           </section>
 
           <section className="rounded-[28px] border-[3px] border-line bg-card px-6 py-5">
@@ -271,13 +273,8 @@ export default function ProfilePage() {
               Tracking
             </h2>
             <p className="mt-2 font-body text-[14px] leading-relaxed text-ink-soft">
-              Analytics and advertising measurement (Meta Pixel, Amplitude){" "}
-              {consent === "granted"
-                ? "are ON."
-                : consent === "declined"
-                  ? "are OFF."
-                  : "…"}{" "}
-              Nothing loads while it is off, and switching takes effect
+              Analytics to make your journey better: we track how the app is
+              used to improve it. Turning it off and on takes effect
               immediately.
             </p>
             {consent !== null && (
@@ -303,6 +300,14 @@ export default function ProfilePage() {
           </button>
         </div>
       </main>
+      {askLevel && (
+        <LevelPickerModal
+          onDone={async (level) => {
+            await setLevel(level);
+            setAskLevel(false);
+          }}
+        />
+      )}
     </div>
   );
 }
