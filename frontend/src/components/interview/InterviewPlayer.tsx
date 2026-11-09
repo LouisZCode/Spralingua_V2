@@ -219,7 +219,7 @@ export default function InterviewPlayer({
           onClick={onBack}
           className="font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
         >
-          ← All interviews
+          ← All recordings
         </button>
         <span className="font-body text-[11px] font-semibold uppercase tracking-[0.2em] text-ink-muted">
           {chunkIndex + 1} / {item.chunks.length}
@@ -377,7 +377,7 @@ function BackButton({ onBack }: { onBack: () => void }) {
       onClick={onBack}
       className="mt-4 font-body text-[12px] font-bold uppercase tracking-[0.2em] text-ink-muted transition-colors hover:text-flag-red"
     >
-      ← All interviews
+      ← All recordings
     </button>
   );
 }

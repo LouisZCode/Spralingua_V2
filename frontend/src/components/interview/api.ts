@@ -28,6 +28,9 @@ export type InterviewItemSummary = {
   language: string;
   nChunks: number;
   createdAt: string | null;
+  // Picker grouping: real job interviews vs mentor-call batches
+  // (audio_items.source, interview/routes.py::list_items).
+  kind: "interview" | "daily_call";
 };
 
 export type Segment = { t0: number; t1: number; text: string };
@@ -119,6 +122,7 @@ type RawItemSummary = {
   language: string;
   n_chunks: number;
   created_at: string | null;
+  kind?: "interview" | "daily_call";
 };
 
 type RawChunk = {
@@ -209,6 +213,7 @@ export async function fetchItems(token: string): Promise<InterviewItemSummary[]>
     language: r.language,
     nChunks: r.n_chunks,
     createdAt: r.created_at,
+    kind: r.kind ?? "interview",
   }));
 }
 

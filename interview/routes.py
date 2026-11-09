@@ -266,7 +266,9 @@ async def list_items(
     db: AsyncSession = Depends(get_db),
 ):
     """Caller's own audio_items, with a company/interviewer display label
-    (see interview/display.py) and a chunk count per item."""
+    (see interview/display.py), a chunk count per item, and a `kind` for the
+    picker's grouping: 'daily_call' for mentor-call batches (source column),
+    'interview' for everything else."""
     rows = (
         await db.execute(
             select(AudioItem, func.count(AudioChunk.id))
@@ -289,6 +291,7 @@ async def list_items(
                 "level": item.level,
                 "language": item.language,
                 "n_chunks": n_chunks,
+                "kind": "daily_call" if item.source == "daily_call" else "interview",
                 "created_at": item.created_at.isoformat() if item.created_at else None,
             }
         )

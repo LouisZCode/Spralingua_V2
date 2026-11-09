@@ -134,7 +134,7 @@ def _iter_source_dirs(data_dir: Path, only: list[str] | None) -> list[Path]:
     return sorted(p for p in data_dir.iterdir() if p.is_dir())
 
 
-async def _import_dir(db, rec_dir: Path, owner_user_id: str) -> str:
+async def _import_dir(db, rec_dir: Path, owner_user_id: str, source: str = "workbench") -> str:
     """Import one workbench dir. Adds rows to `db` but never commits --
     the caller commits (or lets the session close and discard on error) so
     the whole dir is one transaction. Returns a one-line summary."""
@@ -174,7 +174,7 @@ async def _import_dir(db, rec_dir: Path, owner_user_id: str) -> str:
             level=level,
             language=language,
             storage_prefix=storage_prefix,
-            source="workbench",
+            source=source,
         )
     )
     # Flush the parent row before adding chunks — the chunk inserts are
@@ -220,7 +220,7 @@ async def _import_dir(db, rec_dir: Path, owner_user_id: str) -> str:
     )
 
 
-async def run(owner: str, data_dir: Path, only: list[str] | None, db_url: str) -> None:
+async def run(owner: str, data_dir: Path, only: list[str] | None, db_url: str, source: str) -> None:
     await init_engine(db_url)
     try:
         sessionmaker = get_sessionmaker()
@@ -231,7 +231,7 @@ async def run(owner: str, data_dir: Path, only: list[str] | None, db_url: str) -
 
         for rec_dir in _iter_source_dirs(data_dir, only):
             async with sessionmaker() as db:
-                summary = await _import_dir(db, rec_dir, owner)
+                summary = await _import_dir(db, rec_dir, owner, source)
                 await db.commit()
             print(summary)
     finally:
@@ -255,6 +255,15 @@ def main() -> None:
         "--database-url", default=None,
         help="Override DATABASE_URL (default: from .env via config.settings).",
     )
+    parser.add_argument(
+        "--source", default="workbench",
+        help=(
+            "Content-pipeline tag written to audio_items.source: 'workbench' "
+            "(real job interviews) or 'daily_call' (mentor-call batches, e.g. "
+            "interview_local/build/daily_calls_batch1.py). Served to the "
+            "frontend as kind=interview|daily_call for picker grouping."
+        ),
+    )
     args = parser.parse_args()
 
     db_url = args.database_url or _settings_database_url
@@ -265,7 +274,7 @@ def main() -> None:
     if not data_dir.is_dir():
         raise SystemExit(f"--data-dir {data_dir}: not a directory.")
 
-    asyncio.run(run(args.owner, data_dir, args.only, db_url))
+    asyncio.run(run(args.owner, data_dir, args.only, db_url, args.source))
 
 
 if __name__ == "__main__":
