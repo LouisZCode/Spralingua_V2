@@ -26,12 +26,20 @@ ARG NEXT_PUBLIC_AMPLITUDE_API_KEY
 # runtime. Absent -> Sentry.init() never fires (inert, by design).
 ARG NEXT_PUBLIC_SENTRY_DSN
 ARG NEXT_PUBLIC_SENTRY_ENVIRONMENT
+# INTV-003: the object-storage origin for presigned interview audio. next
+# build bakes next.config's headers() into routes-manifest at BUILD time, so
+# the CSP's media-src can only include this origin if the var is present
+# during the image build (same build-time rule as the NEXT_PUBLIC_* vars).
+# Set on the frontend service; absent -> media-src stays 'self' blob: data:
+# and the interview player's play clicks stay silently CSP-blocked.
+ARG AUDIO_BUCKET_ENDPOINT
 ENV NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL} \
     NEXT_PUBLIC_GOOGLE_CLIENT_ID=${NEXT_PUBLIC_GOOGLE_CLIENT_ID} \
     NEXT_PUBLIC_META_PIXEL_ID=${NEXT_PUBLIC_META_PIXEL_ID} \
     NEXT_PUBLIC_AMPLITUDE_API_KEY=${NEXT_PUBLIC_AMPLITUDE_API_KEY} \
     NEXT_PUBLIC_SENTRY_DSN=${NEXT_PUBLIC_SENTRY_DSN} \
     NEXT_PUBLIC_SENTRY_ENVIRONMENT=${NEXT_PUBLIC_SENTRY_ENVIRONMENT} \
+    AUDIO_BUCKET_ENDPOINT=${AUDIO_BUCKET_ENDPOINT} \
     NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
