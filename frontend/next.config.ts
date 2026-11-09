@@ -186,7 +186,13 @@ const nextConfig: NextConfig = {
     //   time; nothing fetches fonts.googleapis.com/fonts.gstatic.com.
     // - media-src: 'self' + blob: + data: for the silent-WAV <audio> primer
     //   (ConversationView.tsx / HeroDemo.tsx use a `data:audio/wav;...`
-    //   src to satisfy iOS's autoplay-unlock gesture) and any blob audio.
+    //   src to satisfy iOS's autoplay-unlock gesture), any blob audio, AND
+    //   the object-storage origin when AUDIO_BUCKET_ENDPOINT is set — the
+    //   interview exercise's <audio> element loads presigned chunk mp3s
+    //   straight from the S3 bucket (GET /interview/audio?redirect=0 hands
+    //   it the URL; media loads aren't CORS-gated but they ARE
+    //   media-src-gated). Found live 2026-11-09: the enforced CSP silently
+    //   swallowed every play click — cards rendered, console-only errors.
     // - worker-src: 'self' + blob: kept as the belt-and-suspenders home for
     //   the same worklet blob: URLs in case a browser instead enforces
     //   worklets under this directive (grepped: no dedicated `new
@@ -219,6 +225,24 @@ const nextConfig: NextConfig = {
     // unified package lazy-loads its engagement/autocapture bundle from
     // there, so it is NOT true that script-src needs no new host. If prod
     // Live Events stay empty, check the browser console for blocked hosts.
+    // INTV-003 audio: the bucket origin for presigned interview mp3s, when
+    // the deployment knows it (set on the frontend service; unset locally
+    // keeps the previous media-src untouched).
+    const audioBucketOrigin = (() => {
+      const ep = process.env.AUDIO_BUCKET_ENDPOINT;
+      if (!ep) return null;
+      try {
+        return new URL(ep).origin;
+      } catch {
+        return null;
+      }
+    })();
+    const mediaSrc = [
+      "'self'",
+      "blob:",
+      "data:",
+      ...(audioBucketOrigin ? [audioBucketOrigin] : []),
+    ].join(" ");
     const directives = [
       "default-src 'self'",
       "script-src 'self' 'unsafe-inline' blob: https://accounts.google.com https://connect.facebook.net https://cdn.amplitude.com",
@@ -227,7 +251,7 @@ const nextConfig: NextConfig = {
       "img-src 'self' data: https://lh3.googleusercontent.com https://www.facebook.com",
       "style-src 'self' 'unsafe-inline' https://accounts.google.com",
       "font-src 'self'",
-      "media-src 'self' blob: data:",
+      `media-src ${mediaSrc}`,
       "worker-src 'self' blob:",
       "object-src 'none'",
       "base-uri 'self'",
