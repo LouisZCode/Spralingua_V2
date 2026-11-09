@@ -53,6 +53,14 @@ COMPANY_BY_DIR = {
     "OMQ-SolutionsEngineer-Interview_2026-07-31_162929": "OMQ",
     "FairDigital-Interview_1_DataScientist_2026-07-20_145920": "FairDigital",
     "Elektrovorteil - Interview 1_2026-08-11_125844": "Elektrovorteil",
+    # Manual batch 1 (2026-11-09): the Sopra Steria daily calls from
+    # interview_local/build/daily_calls_batch1.py — not interviews, mentor
+    # calls; keyed here so the picker shows the employer label like the rest.
+    "DailyCall 2026-11-03 setup": "Sopra Steria",
+    "DailyCall 2026-11-04 aufgabe": "Sopra Steria",
+    "DailyCall 2026-11-05 tasks": "Sopra Steria",
+    "DailyCall 2026-11-06 checkup": "Sopra Steria",
+    "DailyCall 2026-11-09 checkup": "Sopra Steria",
 }
 
 
