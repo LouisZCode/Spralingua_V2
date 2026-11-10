@@ -1,0 +1,74 @@
+# Situation pack: tools & English loanwords from real work calls (Thomas) —
+# words Luis did not understand or could not name in German. Hand-authored
+# (the add-word enricher deliberately refuses non-German words, SATZ-005),
+# per .claude/skills/satz-cards/SKILL.md.
+id: tech-talks
+title: Tech Talks
+description: Tools and loanwords from work calls — recognize them, use them in German
+kind: situation
+level: B1
+position: 12
+cards:
+  - id: p-crud
+    type: phrase
+    target: CRUD
+    level: B1
+    gloss: "create, read, update, delete"
+    note: "collocation · dev talk (English loan)"
+    example: Jede App braucht die vier CRUD-Operationen.
+
+  - id: p-doas
+    type: phrase
+    target: doas
+    level: B1
+    gloss: "sudo-like root command on Alpine"
+    note: "collocation · sysadmin talk"
+    example: Auf Alpine nehme ich lieber doas als sudo.
+
+  - id: p-pnpm
+    type: phrase
+    target: pnpm
+    level: B1
+    gloss: "fast npm alternative (package manager)"
+    note: "collocation · dev talk"
+    example: Wir installieren die Pakete mit pnpm.
+
+  - id: p-zsh
+    type: phrase
+    target: ZSH
+    level: B1
+    gloss: "alternative Unix shell (plus Oh My ZSH)"
+    note: "collocation · dev talk"
+    example: Ich benutze die ZSH statt der Bash.
+
+  - id: p-tmux
+    type: phrase
+    target: tmux
+    level: B1
+    gloss: "terminal multiplexer"
+    note: "collocation · dev talk"
+    example: Ich arbeite gern in tmux, alles bleibt offen.
+
+  - id: p-verbose
+    type: phrase
+    target: verbose
+    level: B1
+    gloss: "output mode with detail (vs. quiet)"
+    note: "collocation · dev talk (English loan)"
+    example: Stell das Tool auf verbose, dann sehen wir mehr.
+
+  - id: p-forecast
+    type: phrase
+    target: Forecast
+    level: B1
+    gloss: "planned hours (tracking tool)"
+    note: "collocation · office talk (English loan)"
+    example: Mein Forecast für diese Woche ist schon voll.
+
+  - id: p-record-activity
+    type: phrase
+    target: Record Activity
+    level: B1
+    gloss: "worked hours (tracking tool)"
+    note: "collocation · office talk (English loan)"
+    example: Ich trage die Stunden unter Record Activity ein.
