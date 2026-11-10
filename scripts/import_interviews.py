@@ -47,7 +47,7 @@ from pathlib import Path
 # resolve.
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from config import database_url as _settings_database_url
 from database import dispose_engine, get_sessionmaker, init_engine
@@ -134,17 +134,25 @@ def _iter_source_dirs(data_dir: Path, only: list[str] | None) -> list[Path]:
     return sorted(p for p in data_dir.iterdir() if p.is_dir())
 
 
-async def _import_dir(db, rec_dir: Path, owner_user_id: str, source: str = "workbench") -> str:
+async def _import_dir(
+    db, rec_dir: Path, owner_user_id: str, source: str = "workbench", update: bool = False
+) -> str:
     """Import one workbench dir. Adds rows to `db` but never commits --
     the caller commits (or lets the session close and discard on error) so
-    the whole dir is one transaction. Returns a one-line summary."""
+    the whole dir is one transaction. Returns a one-line summary.
+
+    With update=True an already-imported dir is NOT skipped: the item is
+    kept (id/title/prefix unchanged) and every approved chunk whose
+    source_chunk_id is not yet in the DB is appended after the existing
+    positions. Chunks deleted from the workbench are never removed from
+    the DB, and existing rows (transcript/brief) are never rewritten."""
     dir_name = rec_dir.name
     storage_prefix = f"interviews/{dir_name}"
 
     existing = await db.scalar(
         select(AudioItem).where(AudioItem.storage_prefix == storage_prefix)
     )
-    if existing is not None:
+    if existing is not None and not update:
         return f"{dir_name}: skipped, already imported (item_id={existing.id})"
 
     chunks_path = rec_dir / "chunks.json"
@@ -162,35 +170,55 @@ async def _import_dir(db, rec_dir: Path, owner_user_id: str, source: str = "work
     if not language:
         raise SystemExit(f"{dir_name}: chunks.json has no language — cannot import.")
 
-    level = meta.get("level")
-    level = level if isinstance(level, str) else None
-
-    item_id = uuid.uuid4().hex
-    db.add(
-        AudioItem(
-            id=item_id,
-            owner_user_id=owner_user_id,
-            title=_title_from_dir(dir_name),
-            level=level,
-            language=language,
-            storage_prefix=storage_prefix,
-            source=source,
+    if existing is not None:  # update mode
+        item_id = existing.id
+        known = {
+            row[0]
+            for row in await db.execute(
+                select(AudioChunk.source_chunk_id).where(AudioChunk.item_id == item_id)
+            )
+        }
+        position = (
+            await db.scalar(
+                select(func.max(AudioChunk.position)).where(AudioChunk.item_id == item_id)
+            )
+            or 0
         )
-    )
-    # Flush the parent row before adding chunks — the chunk inserts are
-    # batched (executemany) and need the item row already visible for the
-    # FK check, same reasoning as scripts/test_user.py's create().
-    await db.flush()
+    else:
+        level = meta.get("level")
+        level = level if isinstance(level, str) else None
+
+        item_id = uuid.uuid4().hex
+        db.add(
+            AudioItem(
+                id=item_id,
+                owner_user_id=owner_user_id,
+                title=_title_from_dir(dir_name),
+                level=level,
+                language=language,
+                storage_prefix=storage_prefix,
+                source=source,
+            )
+        )
+        # Flush the parent row before adding chunks — the chunk inserts are
+        # batched (executemany) and need the item row already visible for the
+        # FK check, same reasoning as scripts/test_user.py's create().
+        await db.flush()
+        known = set()
+        position = 0
 
     imported = 0
     rejected = 0
     briefs_missing = 0
-    position = 0
+    already = 0
     for c in chunks:
         chunk_id = c.get("id")
         status = review.get(chunk_id, {}).get("status")
         if status != "approved":
             rejected += 1
+            continue
+        if chunk_id in known:
+            already += 1
             continue
 
         position += 1
@@ -214,13 +242,16 @@ async def _import_dir(db, rec_dir: Path, owner_user_id: str, source: str = "work
         )
         imported += 1
 
+    mode = "updated" if existing is not None else "imported"
     return (
-        f"{dir_name}: imported={imported} rejected_skipped={rejected} "
+        f"{dir_name}: {mode}={imported} already={already} rejected_skipped={rejected} "
         f"briefs_missing={briefs_missing} (item_id={item_id})"
     )
 
 
-async def run(owner: str, data_dir: Path, only: list[str] | None, db_url: str, source: str) -> None:
+async def run(
+    owner: str, data_dir: Path, only: list[str] | None, db_url: str, source: str, update: bool
+) -> None:
     await init_engine(db_url)
     try:
         sessionmaker = get_sessionmaker()
@@ -231,7 +262,7 @@ async def run(owner: str, data_dir: Path, only: list[str] | None, db_url: str, s
 
         for rec_dir in _iter_source_dirs(data_dir, only):
             async with sessionmaker() as db:
-                summary = await _import_dir(db, rec_dir, owner, source)
+                summary = await _import_dir(db, rec_dir, owner, source, update=update)
                 await db.commit()
             print(summary)
     finally:
@@ -264,6 +295,13 @@ def main() -> None:
             "frontend as kind=interview|daily_call for picker grouping."
         ),
     )
+    parser.add_argument(
+        "--update", action="store_true",
+        help=(
+            "For already-imported dirs, append newly approved chunks instead "
+            "of skipping the dir. Existing rows are never rewritten or removed."
+        ),
+    )
     args = parser.parse_args()
 
     db_url = args.database_url or _settings_database_url
@@ -274,7 +312,7 @@ def main() -> None:
     if not data_dir.is_dir():
         raise SystemExit(f"--data-dir {data_dir}: not a directory.")
 
-    asyncio.run(run(args.owner, data_dir, args.only, db_url, args.source))
+    asyncio.run(run(args.owner, data_dir, args.only, db_url, args.source, args.update))
 
 
 if __name__ == "__main__":
