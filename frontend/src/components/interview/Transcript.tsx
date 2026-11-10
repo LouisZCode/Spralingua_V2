@@ -3,22 +3,25 @@
 import { useEffect, useRef } from "react";
 import type { Segment } from "./api";
 
-// Rolling transcript, synced to <audio> playback via `currentTime` (t0/t1
-// are seconds relative to the chunk's own mp3 — see interview/routes.py's
+// Teleprompter, synced to <audio> playback via `currentTime` (t0/t1 are
+// seconds relative to the chunk's own mp3 — see interview/routes.py's
 // GET /items/{id} contract). Round 2 / legacy (brief-less) chunks only:
 // Round 1 never mounts this at all (InterviewPlayer keeps it out of the
 // tree entirely while round 1 is live) — the whole point of that round is
 // retelling from memory, not reading along.
 //
-// A faithful-but-simplified port of the workbench's teleprompter
-// (player.js::getCenterSegment/updateTeleprompter): the segment matching
-// the current time renders crisp and centered; between two segments (a
-// pause) the most recently finished one stays crisp rather than the box
-// going blank; before the first segment starts, segment 0 shows dimmed
-// with nothing crisp yet. The workbench glides a translateY track to hold
-// the center segment at the viewport's vertical middle — this uses
-// scrollIntoView within a scrollable box instead, which reads the same to
-// a learner without reproducing that CSS transform math.
+// A faithful port of the workbench teleprompter (player.js::
+// getCenterSegment/updateTeleprompter + style.css .transcript.teleprompter):
+// the box is a FIXED viewport — it never scrolls. The segment matching the
+// current time is pinned to the viewport's vertical middle and rendered
+// crisp and bold; every other line is blurred and dimmed so the learner
+// cannot read ahead. As playback advances the whole track glides upward
+// (translateY on the track, 350ms), the finished line drifting up out of
+// focus while the next rises into the center — a carousel, not a moving
+// highlight. Between two segments (a pause) the most recently finished one
+// stays centered/crisp rather than the box going blank; before the first
+// segment starts, segment 0 is centered but dimmed with nothing crisp yet.
+// Empty space above the first line / below the last is expected.
 function findActiveIndex(segments: Segment[], t: number): number {
   for (let i = 0; i < segments.length; i++) {
     if (t >= segments[i].t0 && t < segments[i].t1) return i;
@@ -54,10 +57,29 @@ export default function Transcript({
   fallbackText?: string;
 }) {
   const center = centerSegment(segments, currentTime);
+  const viewportRef = useRef<HTMLDivElement | null>(null);
   const activeRef = useRef<HTMLParagraphElement | null>(null);
 
+  // Pin the center segment to the viewport's middle. offsetTop/offsetHeight
+  // are read AFTER the active class has flipped and rendered, so they
+  // include the active line's larger font box (the workbench deliberately
+  // does not transition font-size for exactly this measurement — same
+  // here: only transform/filter/opacity/color transition, never size).
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    const vp = viewportRef.current;
+    const el = activeRef.current;
+    if (!vp || !el) return;
+    const recenter = () => {
+      const track = el.offsetParent as HTMLElement | null;
+      if (!track) return;
+      // offsetTop is relative to the track (position: relative), unaffected
+      // by the track's own transform — measure the untransformed layout.
+      const y = vp.clientHeight / 2 - (el.offsetTop + el.offsetHeight / 2);
+      track.style.transform = `translateY(${y}px)`;
+    };
+    recenter();
+    window.addEventListener("resize", recenter);
+    return () => window.removeEventListener("resize", recenter);
   }, [center?.idx, center?.active]);
 
   if (!segments.length) {
@@ -72,35 +94,40 @@ export default function Transcript({
     );
   }
 
-  // Typography mirrors the workbench's review-mode segment list
-  // (interview_local/web/style.css .segment: 22px rows, active = soft-red
-  // bg + 4px red left bar + semibold, past rows dimmed) — Luis asked for
-  // the exercise's reading box to read the same as the curation area
-  // instead of the old flat 15px/220px box. Tokens only, so dark mode
-  // keeps working (flag-red lifts for text-adjacent use; the fill is not
-  // used here).
   return (
-    <div className="min-h-[200px] max-h-[50vh] overflow-y-auto rounded-[18px] border-[3px] border-line bg-card px-2 py-2">
-      {segments.map((seg, i) => {
-        const isCenter = center?.idx === i;
-        const isActive = isCenter && center?.active;
-        const isPast = center !== null && i < center.idx;
-        return (
-          <p
-            key={i}
-            ref={isCenter ? activeRef : undefined}
-            className={`rounded-[6px] border-l-4 px-3 py-2 font-body text-[22px] leading-relaxed transition-colors duration-300 ${
-              isActive
-                ? "border-flag-red bg-flag-red-soft font-semibold text-ink"
-                : isPast
-                  ? "border-transparent text-ink-soft opacity-60"
-                  : "border-transparent text-ink-muted"
-            }`}
-          >
-            {seg.text}
-          </p>
-        );
-      })}
+    <div
+      ref={viewportRef}
+      className="relative h-[46vh] min-h-[260px] max-h-[480px] overflow-hidden rounded-[28px] border-[3px] border-line bg-card shadow-[0_6px_0_var(--color-line)]"
+    >
+      {/* Top/bottom fade masks: far lines dissolve into the card instead of
+          sitting there blurred at full opacity (workbench ::before/::after). */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 h-[34%] bg-gradient-to-b from-card via-card/60 to-transparent"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 bottom-0 z-10 h-[34%] bg-gradient-to-t from-card via-card/60 to-transparent"
+      />
+      <div className="relative will-change-transform [transition:transform_350ms_ease]">
+        {segments.map((seg, i) => {
+          const isCenter = center?.idx === i;
+          const isActive = isCenter && center?.active;
+          return (
+            <p
+              key={i}
+              ref={isCenter ? activeRef : undefined}
+              className={`border-l-4 px-4 py-3.5 font-body leading-relaxed [transition:filter_320ms_ease,opacity_320ms_ease,color_320ms_ease] ${
+                isActive
+                  ? "border-flag-red bg-flag-red-soft text-[24px] font-bold text-ink opacity-100 blur-0"
+                  : "border-transparent text-[18px] text-ink-soft opacity-40 blur-[3px]"
+              }`}
+            >
+              {seg.text}
+            </p>
+          );
+        })}
+      </div>
     </div>
   );
 }
